@@ -1,0 +1,151 @@
+import type { FastifyInstance } from 'fastify';
+import type { ConfigStore } from './config';
+import type { EventBus } from './bus';
+import type { FsBatch, WatchOptions, WatchStats } from './fs-watch';
+import type { PollOptions, PollStats } from './poll';
+import type { TaskHandler } from './queue';
+import type { ScanResult } from './sidecar/indexer-service';
+import type { BridgeStats } from './sidecar/indexer-bridge';
+import type { I18nRegistry } from './i18n';
+import type { ContractRegistry } from './contract';
+import type { Migration } from './migrator';
+import type { TokenPayload } from './auth';
+
+/** 缓存命中快照（`GET /api/v1/system/cache/stats` 的条目） */
+export interface CacheSnapshotItem {
+  /** 计数器名，约定 `<域>.<对象>`：files.thumb / book.cover / music.cover */
+  name: string;
+  hits: number;
+  misses: number;
+  /** 命中率 0~1（保留 3 位小数）；总数为 0 时为 0 */
+  hitRate: number;
+}
+
+/** 内核暴露给模块的能力（语义化版本 v1） */
+export interface KernelApi {
+  db: any;
+  log: any;
+  events: EventBus;
+  tasks: {
+    enqueue(
+      type: string,
+      payload?: unknown,
+      opts?: { priority?: number; maxAttempts?: number },
+    ): Promise<string>;
+    /** 同类型 + 同 payload 已有 pending/running 时复用（避免扫描风暴堆任务） */
+    enqueueIfIdle(
+      type: string,
+      payload?: unknown,
+      opts?: { priority?: number; maxAttempts?: number },
+    ): Promise<{ id: string; reused: boolean }>;
+    /** 注册任务处理器；同名重复注册直接抛错（启动期暴露，而不是运行期静默丢任务） */
+    register(type: string, handler: TaskHandler): void;
+    registered(): string[];
+    stats(): Promise<Record<string, number>>;
+  };
+  config: ConfigStore;
+  i18n: I18nRegistry;
+  contract: ContractRegistry;
+  /** 内核路径约定（数据目录等），供模块存放临时文件 */
+  paths: { dataDir: string };
+  /**
+   * 缓存命中计数（**只测量，不定策略**）：handler 判断缓存文件在不在时调用 `record(name, hit)`，
+   * `snapshot()` 供 `GET /api/v1/system/cache/stats` 读；进程内累加，重启清零。
+   */
+  cache: {
+    record(name: string, hit: boolean): void;
+    snapshot(): CacheSnapshotItem[];
+    /** 清空进程内命中计数（设置页「清缓存」） */
+    reset(): void;
+  };
+  /**
+   * 媒体能力：经 media sidecar 生成缩略图 / 转码。
+   * `available()` 为 false 表示本机缺 ffmpeg 或 sidecar 脚本，调用方应降级而不是报错；
+   * `thumb()` 在不可用或生成失败时抛错（`MediaUnavailableError.code = 'E_MEDIA_UNAVAILABLE'`）。
+   */
+  media: {
+    thumb(src: string, dst: string, size?: number): Promise<{ ms: number }>;
+    /** 转码：`preset` = audio / web720 / copy（缺省 copy）；`options` 为参数化编码 */
+    transcode(
+      src: string,
+      dst: string,
+      preset?: string,
+      options?: Record<string, unknown>,
+    ): Promise<{ ms: number; reused: boolean }>;
+    /** HLS 转码会话：`dir` 下产出 index.m3u8 + 分片；`subtitle` 为字幕绝对路径（烧录） */
+    hls(
+      src: string,
+      dir: string,
+      opts?: {
+        preset?: string;
+        codec?: string;
+        subtitle?: string;
+        /** 音频滤镜（如 dynaudnorm）；库级「响度归一」开关决定是否传 */
+        audioFilter?: string;
+        timeoutMs?: number;
+      },
+    ): Promise<{ segments: number; ms: number; codec?: string; container?: string }>;
+    available(): boolean;
+  };
+  /** 认证：用内核同一 secret 签发 token（模块登录用） */
+  auth: {
+    sign(payload: { sub: string; scopes: string[] }, ttlSec?: number): string;
+  };
+  /**
+   * 文件监控（蓝图 §56）：已去抖合批，handler 串行执行。
+   * 同一 root 共享底层 watcher（引用计数），返回的函数用于退订。
+   */
+  /** 索引器（蓝图 §8/§9）：按需拉起 sidecar，批次落 files_meta，断点续传 */
+  indexer: {
+    scan(root: string): Promise<ScanResult>;
+    stats(): BridgeStats;
+    readonly running: boolean;
+  };
+  watch: {
+    subscribe(
+      root: string,
+      handler: (batch: FsBatch) => void | Promise<void>,
+      opts?: WatchOptions,
+    ): () => void;
+    stats(): WatchStats;
+  };
+  /**
+   * 远程目录轮询（蓝图 §56）：SMB / WebDAV / rclone 没有可靠事件，
+   * 按周期取快照做 `mtime + size` 比对，产出与 `watch` 同构的批次。
+   */
+  poll: {
+    subscribe(
+      root: string,
+      handler: (batch: FsBatch) => void | Promise<void>,
+      opts?: PollOptions,
+    ): () => void;
+    stats(): PollStats;
+  };
+}
+
+/** 域模块描述符（约定式，非插件） */
+export interface ServerModule {
+  id: string;
+  prefix: string;
+  /** 依赖的模块 id（只允许"上游依赖下游"，禁止反向与环形） */
+  dependsOn?: string[];
+  permissions?: string[];
+  /** 该模块的迁移，按 id 排序由内核统一执行 */
+  migrations?: Migration[];
+  register(app: FastifyInstance, k: KernelApi): Promise<void> | void;
+}
+
+/** Fastify 请求上的认证用户 */
+export type AuthUser = TokenPayload;
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    user?: AuthUser;
+  }
+  interface FastifyContextConfig {
+    /** 该路由要求的 scope；缺省表示公开路由 */
+    scope?: string;
+    /** 路径级 ACL 所需的权限：设置后对该请求的 path 参数做 `checkPathAccess` */
+    pathScope?: 'read' | 'write';
+  }
+}

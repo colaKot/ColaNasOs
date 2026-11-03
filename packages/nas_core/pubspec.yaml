@@ -1,0 +1,11 @@
+name: nas_core
+description: ColaNasOs 核心包（生成的 API 客户端与模型；独立实现，不衍生自任何既有 NAS 客户端）
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+# 无第三方运行时依赖：HTTP 走 dart:io（IoTransport）；
+# web / 测试可注入自定义 Transport 实现。
+# 有意不引入 dev_dependencies：`dart analyze` 用 SDK 默认规则即可离线运行。

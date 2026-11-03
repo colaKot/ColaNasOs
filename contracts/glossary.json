@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "updated": "2026-10-31",
+  "note": "UI 术语基线。新增语言先在此补译法；forbidden 中的写法不得出现在任何 locale 的文案里。",
+  "terms": [
+    {
+      "id": "nas",
+      "zh-CN": "NAS",
+      "en-US": "NAS",
+      "ja-JP": "NAS",
+      "forbidden": ["网络附加存储"],
+      "note": "产品缩写，不翻译"
+    },
+    {
+      "id": "snapshot",
+      "zh-CN": "快照",
+      "en-US": "Snapshot",
+      "ja-JP": "スナップショット",
+      "forbidden": ["Snap shot", "快照备份"]
+    },
+    {
+      "id": "index",
+      "zh-CN": "索引",
+      "en-US": "Index",
+      "ja-JP": "インデックス",
+      "forbidden": ["Indexing data"]
+    },
+    {
+      "id": "thumbnail",
+      "zh-CN": "缩略图",
+      "en-US": "Thumbnail",
+      "ja-JP": "サムネイル",
+      "forbidden": ["Thumb nail", "缩图"]
+    },
+    {
+      "id": "transcode",
+      "zh-CN": "转码",
+      "en-US": "Transcode",
+      "ja-JP": "トランスコード",
+      "forbidden": ["Trans-code"]
+    },
+    {
+      "id": "album",
+      "zh-CN": "相册",
+      "en-US": "Album",
+      "ja-JP": "アルバム",
+      "forbidden": ["Photo book"]
+    },
+    {
+      "id": "resume",
+      "zh-CN": "断点续传",
+      "en-US": "Resumable transfer",
+      "ja-JP": "レジューム転送",
+      "forbidden": ["Breakpoint resume"]
+    },
+    {
+      "id": "idempotent",
+      "zh-CN": "幂等",
+      "en-US": "Idempotent",
+      "ja-JP": "冪等",
+      "forbidden": ["Power equal"]
+    },
+    {
+      "id": "ep",
+      "zh-CN": "执行提供者",
+      "en-US": "Execution provider",
+      "ja-JP": "実行プロバイダー",
+      "forbidden": ["Execution Provider List"]
+    },
+    {
+      "id": "share-link",
+      "zh-CN": "分享链接",
+      "en-US": "Share link",
+      "ja-JP": "共有リンク",
+      "forbidden": ["Share URL link"]
+    },
+    {
+      "id": "encrypted-space",
+      "zh-CN": "加密空间",
+      "en-US": "Encrypted space",
+      "ja-JP": "暗号化スペース",
+      "forbidden": ["Secret space"]
+    },
+    {
+      "id": "sidecar",
+      "zh-CN": "旁车进程",
+      "en-US": "Sidecar",
+      "ja-JP": "サイドカー",
+      "forbidden": ["Side car"]
+    }
+  ]
+}

@@ -1,0 +1,2782 @@
+{
+  "version": 1,
+  "keys": {
+    "accounts.audit.2faDisable": {},
+    "accounts.audit.2faEnable": {},
+    "accounts.audit.policyUpdate": {},
+    "accounts.audit.userCreate": {},
+    "accounts.audit.userDelete": {},
+    "accounts.audit.userUpdate": {},
+    "accounts.auditEmpty": {},
+    "accounts.deleteConfirm": {
+      "name": {}
+    },
+    "accounts.deleteTitle": {},
+    "accounts.edit": {},
+    "accounts.editTitle": {},
+    "accounts.fileLog.action": {},
+    "accounts.fileLog.action.copy": {},
+    "accounts.fileLog.action.delete": {},
+    "accounts.fileLog.action.download": {},
+    "accounts.fileLog.action.empty": {},
+    "accounts.fileLog.action.mkdir": {},
+    "accounts.fileLog.action.move": {},
+    "accounts.fileLog.action.rename": {},
+    "accounts.fileLog.action.restore": {},
+    "accounts.fileLog.action.trash": {},
+    "accounts.fileLog.action.upload": {},
+    "accounts.fileLog.anyAction": {},
+    "accounts.fileLog.anyStatus": {},
+    "accounts.fileLog.empty": {},
+    "accounts.fileLog.failed": {},
+    "accounts.fileLog.next": {},
+    "accounts.fileLog.ok": {},
+    "accounts.fileLog.prev": {},
+    "accounts.fileLog.queryHint": {},
+    "accounts.fileLog.range": {
+      "from": {},
+      "to": {}
+    },
+    "accounts.fileLog.status": {},
+    "accounts.fileLog.total": {
+      "count": {}
+    },
+    "accounts.lastLogin": {
+      "time": {}
+    },
+    "accounts.loginEmpty": {},
+    "accounts.loginFailed": {},
+    "accounts.loginOk": {},
+    "accounts.passwordKeep": {},
+    "accounts.phone": {},
+    "accounts.remark": {},
+    "accounts.active": {},
+    "accounts.disable2faFailed": {
+      "error": {}
+    },
+    "accounts.disabledState": {},
+    "accounts.enable2faFailed": {
+      "error": {}
+    },
+    "accounts.info": {},
+    "accounts.ipBlacklist": {},
+    "accounts.ipRulesCount": {
+      "count": {}
+    },
+    "accounts.joinFailed": {
+      "error": {}
+    },
+    "accounts.logs.audit": {},
+    "accounts.logs.files": {},
+    "accounts.logs.unavailable": {},
+    "accounts.mobileBack": {},
+    "accounts.policy.access.ro": {},
+    "accounts.policy.access.rw": {},
+    "accounts.policy.addPath": {},
+    "accounts.policy.apps": {},
+    "accounts.policy.appsHint": {},
+    "accounts.policy.noApps": {},
+    "accounts.policy.path": {},
+    "accounts.policy.pathHint": {},
+    "accounts.policy.paths": {},
+    "accounts.policy.restrict": {},
+    "accounts.policy.saved": {},
+    "accounts.removeFailed": {
+      "error": {}
+    },
+    "accounts.search": {},
+    "accounts.selectUser": {},
+    "accounts.tab.logins": {},
+    "accounts.tab.logs": {},
+    "accounts.tab.policy": {},
+    "accounts.tab.twofa": {},
+    "accounts.tab.tokens": {},
+    "accounts.tokens.copy": {},
+    "accounts.tokens.copied": {},
+    "accounts.tokens.created": {
+      "time": {}
+    },
+    "accounts.tokens.empty": {},
+    "accounts.tokens.expires": {},
+    "accounts.tokens.expiresAt": {
+      "time": {}
+    },
+    "accounts.tokens.lastUsed": {
+      "time": {}
+    },
+    "accounts.tokens.name": {},
+    "accounts.tokens.nameHint": {},
+    "accounts.tokens.neverUsed": {},
+    "accounts.tokens.new": {},
+    "accounts.tokens.revoke": {},
+    "accounts.tokens.revoked": {},
+    "accounts.tokens.scopes": {},
+    "accounts.tokens.secretHint": {},
+    "accounts.tokens.secretTitle": {},
+    "accounts.toggleFailed": {
+      "action": {},
+      "error": {}
+    },
+    "accounts.twofa.off": {},
+    "accounts.twofa.on": {},
+    "accounts.twofa.disableConfirm": {},
+    "accounts.twofa.scanHint": {},
+    "accounts.twofa.orManual": {},
+    "app.accounts": {},
+    "app.ai": {},
+    "app.backup": {},
+    "app.book": {},
+    "app.discover": {},
+    "app.files": {},
+    "app.mediaTool": {},
+    "app.messages": {},
+    "app.monitor": {},
+    "app.music": {},
+    "app.netdisk": {},
+    "app.notes": {},
+    "app.photo": {},
+    "app.settings": {},
+    "app.share": {},
+    "app.sync": {},
+    "app.terminal": {},
+    "app.transfer": {},
+    "app.video": {},
+    "auth.login": {},
+    "auth.logout": {},
+    "auth.scopes": {},
+    "auth.token": {},
+    "book.fulltextTitle": {
+      "keyword": {}
+    },
+    "book.pruneConfirm": {
+      "count": {}
+    },
+    "book.scanDone": {
+      "added": {},
+      "updated": {},
+      "skipped": {},
+      "parsed": {}
+    },
+    "book.shareCopied": {
+      "minutes": {}
+    },
+    "book.shareFailed": {
+      "error": {}
+    },
+    "book.shelfCount": {
+      "count": {}
+    },
+    "book.stats": {
+      "books": {},
+      "favorites": {}
+    },
+    "capability.limited": {
+      "name": {}
+    },
+    "capability.none": {
+      "name": {}
+    },
+    "capability.webHint": {},
+    "common.cancel": {},
+    "common.cleanupFailed": {
+      "error": {}
+    },
+    "common.close": {},
+    "common.confirm": {},
+    "common.copy": {},
+    "common.createFailed": {
+      "error": {}
+    },
+    "common.delete": {},
+    "common.deleteFailed": {
+      "error": {}
+    },
+    "common.empty": {},
+    "common.error": {},
+    "common.errorWith": {
+      "error": {}
+    },
+    "common.loadFailed": {
+      "error": {}
+    },
+    "common.loading": {},
+    "common.missingOnDisk": {
+      "count": {}
+    },
+    "common.ok": {},
+    "common.progressSaved": {
+      "percent": {}
+    },
+    "common.prunedRecords": {
+      "count": {}
+    },
+    "common.refresh": {},
+    "common.retry": {},
+    "common.retryLater": {},
+    "common.save": {},
+    "common.saveFailed": {
+      "error": {}
+    },
+    "common.scanFailed": {
+      "error": {}
+    },
+    "common.search": {},
+    "common.searchFailed": {
+      "error": {}
+    },
+    "common.select": {},
+    "discover.country.CN": {},
+    "discover.country.DE": {},
+    "discover.country.ES": {},
+    "discover.country.FR": {},
+    "discover.country.GB": {},
+    "discover.country.HK": {},
+    "discover.country.IN": {},
+    "discover.country.JP": {},
+    "discover.country.KR": {},
+    "discover.country.TH": {},
+    "discover.country.TW": {},
+    "discover.board.info": {
+      "name": {}
+    },
+    "discover.country.US": {},
+    "discover.detail.copyLink": {},
+    "discover.detail.episodeCount": {
+      "n": {}
+    },
+    "discover.detail.linkCopied": {},
+    "discover.detail.season": {
+      "n": {}
+    },
+    "discover.detail.seasons": {},
+    "discover.detailFailed": {
+      "error": {}
+    },
+    "discover.detailUnavailable": {
+      "reason": {}
+    },
+    "discover.douban": {},
+    "discover.doubanAnime": {},
+    "discover.doubanHot": {},
+    "discover.doubanMovie": {},
+    "discover.doubanShow": {},
+    "discover.doubanTv": {},
+    "discover.filter.allGenres": {},
+    "discover.filter.allYears": {},
+    "discover.filter.anyCountry": {},
+    "discover.filter.anyScore": {},
+    "discover.filter.anyLanguage": {},
+    "discover.filter.back": {},
+    "discover.filter.browse": {},
+    "discover.filter.country": {},
+    "discover.filter.genre": {},
+    "discover.filter.minScore": {},
+    "discover.filter.minScoreValue": {
+      "score": {}
+    },
+    "discover.filter.reset": {},
+    "discover.filter.sort": {},
+    "discover.filter.language": {},
+    "discover.filter.yearFrom": {},
+    "discover.filter.yearTo": {},
+    "discover.filter.total": {
+      "count": {}
+    },
+    "discover.filter.totalMore": {
+      "count": {}
+    },
+    "discover.filter.year": {},
+    "discover.genre.action": {},
+    "discover.genre.adventure": {},
+    "discover.genre.animation": {},
+    "discover.genre.comedy": {},
+    "discover.genre.crime": {},
+    "discover.genre.documentary": {},
+    "discover.genre.drama": {},
+    "discover.genre.family": {},
+    "discover.genre.fantasy": {},
+    "discover.genre.horror": {},
+    "discover.genre.mystery": {},
+    "discover.genre.reality": {},
+    "discover.genre.romance": {},
+    "discover.genre.scifi": {},
+    "discover.genre.thriller": {},
+    "discover.genre.war": {},
+    "discover.genre.western": {},
+    "discover.kind.onAir": {},
+    "discover.kind.popular": {},
+    "discover.kind.today": {},
+    "discover.kind.topRated": {},
+    "discover.kind.upcoming": {},
+    "discover.kind.week": {},
+    "discover.language.de": {},
+    "discover.language.en": {},
+    "discover.language.es": {},
+    "discover.language.fr": {},
+    "discover.language.ja": {},
+    "discover.language.ko": {},
+    "discover.language.zh": {},
+    "discover.media.movie": {},
+    "discover.media.tv": {},
+    "discover.nav.explore": {},
+    "discover.nav.manage": {},
+    "discover.owned": {},
+    "discover.pt": {},
+    "discover.pt.apiKey": {},
+    "discover.pt.cookie": {},
+    "discover.pt.deleteConfirm": {
+      "name": {}
+    },
+    "discover.pt.editSite": {},
+    "discover.pt.editSub": {},
+    "discover.pt.emptySites": {},
+    "discover.pt.emptySubs": {},
+    "discover.pt.enabled": {},
+    "discover.pt.excluded": {},
+    "discover.pt.hdr": {},
+    "discover.pt.kind": {},
+    "discover.pt.lastResult": {
+      "result": {}
+    },
+    "discover.pt.maxSize": {},
+    "discover.pt.minSeeders": {},
+    "discover.pt.neverRun": {},
+    "discover.pt.newSite": {},
+    "discover.pt.newSub": {},
+    "discover.pt.priority": {},
+    "discover.pt.quality": {},
+    "discover.pt.runNow": {},
+    "discover.pt.saved": {},
+    "discover.pt.season": {},
+    "discover.pt.siteName": {},
+    "discover.pt.sites": {},
+    "discover.pt.siteUrl": {},
+    "discover.pt.subscriptions": {},
+    "discover.pt.title": {},
+    "discover.pt.userAgent": {},
+    "discover.pt.year": {},
+    "discover.pt.actions": {},
+    "discover.pt.results": {},
+    "discover.pt.searchNow": {},
+    "discover.pt.subscribe": {},
+    "discover.pt.subscribed": {},
+    "discover.ptEmpty": {},
+    "discover.ptGo": {},
+    "discover.ptNoSites": {},
+    "discover.ptSearch": {},
+    "discover.ptSites": {},
+    "discover.rss": {},
+    "discover.rss.addFeed": {},
+    "discover.rss.editRule": {},
+    "discover.rss.emptyRules": {},
+    "discover.rss.enabled": {},
+    "discover.rss.feed": {},
+    "discover.rss.lastRun": {
+      "time": {}
+    },
+    "discover.rss.newRule": {},
+    "discover.rss.regex": {},
+    "discover.rss.regexHint": {},
+    "discover.rss.ruleHint": {},
+    "discover.rss.ruleNeverRun": {},
+    "discover.rss.ruleResult": {
+      "created": {},
+      "matched": {}
+    },
+    "discover.rss.ruleRun": {},
+    "discover.rss.rules": {},
+    "discover.rss.empty": {},
+    "discover.rss.feeds": {},
+    "discover.rss.url": {},
+    "discover.runtime": {
+      "minutes": {}
+    },
+    "discover.settings": {},
+    "discover.settings.apiUrl": {},
+    "discover.settings.audio.ko": {},
+    "discover.settings.audio.ja": {},
+    "discover.settings.audio.en": {},
+    "discover.settings.audio.yue": {},
+    "discover.settings.audio.zh": {},
+    "discover.settings.audio.zhTW": {},
+    "discover.settings.audioLangs": {},
+    "discover.settings.autoDownload": {},
+    "discover.settings.any": {},
+    "discover.settings.downloadDirs": {},
+    "discover.settings.downloadFilter": {},
+    "discover.settings.downloadHint": {},
+    "discover.settings.excluded": {},
+    "discover.settings.hdr": {},
+    "discover.settings.doubanCookie": {},
+    "discover.settings.hint": {},
+    "discover.settings.maxSize": {},
+    "discover.settings.minSeeders": {},
+    "discover.settings.movieDir": {},
+    "discover.settings.noLibrary": {},
+    "discover.settings.quality": {},
+    "discover.settings.scanDone": {
+      "ok": {},
+      "total": {}
+    },
+    "discover.settings.scanFavorites": {},
+    "discover.settings.scanInterval": {},
+    "discover.settings.sites": {},
+    "discover.settings.tvDir": {},
+    "discover.settings.imageBase": {},
+    "discover.settings.language": {},
+    "discover.settings.saved": {},
+    "discover.settings.scoreSystem": {},
+    "discover.settings.tmdb": {},
+    "discover.settings.tmdbConfigured": {},
+    "discover.settings.tmdbKey": {},
+    "discover.settings.tmdbNotConfigured": {},
+    "discover.sort.new": {},
+    "discover.sort.popular": {},
+    "discover.sort.rating": {},
+    "discover.staleHint": {
+      "hours": {}
+    },
+    "discover.tasks": {},
+    "discover.tasks.empty": {},
+    "discover.tasks.pause": {},
+    "discover.tasks.resume": {},
+    "discover.tasks.remove": {},
+    "discover.tasks.status.added": {},
+    "discover.tasks.status.paused": {},
+    "discover.tasks.status.removed": {},
+    "discover.tasks.status.failed": {},
+    "discover.tasks.status.proposed": {},
+    "error.conflict": {},
+    "error.forbidden": {},
+    "error.internal": {},
+    "error.notFound": {},
+    "error.unauthorized": {},
+    "error.unprocessable": {},
+    "files.check": {},
+    "files.chunk": {},
+    "files.delete": {},
+    "files.deleteConfirm": {
+      "name": {}
+    },
+    "files.deletedToTrash": {},
+    "files.dir": {},
+    "files.download": {},
+    "files.items": {},
+    "files.kind.archive": {},
+    "files.kind.audio": {},
+    "files.kind.code": {},
+    "files.kind.doc": {},
+    "files.kind.folder": {},
+    "files.kind.image": {},
+    "files.kind.other": {},
+    "files.kind.video": {},
+    "files.list": {},
+    "files.merge": {},
+    "files.name": {},
+    "files.nameHint": {},
+    "files.newFolder": {},
+    "files.path": {},
+    "files.rename": {},
+    "files.root": {},
+    "files.size": {},
+    "files.trash": {},
+    "files.upload": {},
+    "files.upload.progress": {
+      "done": "int",
+      "total": "int"
+    },
+    "files.view.grid": {},
+    "files.view.list": {},
+    "home.apps": {},
+    "home.cores": {},
+    "home.cpu": {},
+    "home.disk": {},
+    "home.disks": {},
+    "home.free": {},
+    "home.gpu": {},
+    "home.gpuUnavailable": {},
+    "home.greeting": {},
+    "home.mem": {},
+    "home.noDisks": {},
+    "home.quick": {},
+    "home.quick.index": {},
+    "home.quick.share": {},
+    "home.quick.task": {},
+    "home.quick.upload": {},
+    "home.summary": {},
+    "home.systemStatus": {},
+    "home.viewGrid": {},
+    "home.viewList": {},
+    "login.autoLogin": {},
+    "login.failed": {
+      "reason": {}
+    },
+    "login.hidePassword": {},
+    "login.password": {},
+    "login.server": {},
+    "login.showPassword": {},
+    "login.submit": {},
+    "login.title": {},
+    "login.totp": {},
+    "login.twoFactor": {},
+    "login.username": {},
+    "media_tool.cancelFailed": {
+      "error": {}
+    },
+    "media_tool.comingSoon": {},
+    "media_tool.comingSoonHint": {},
+    "media_tool.action.edit": {},
+    "media_tool.action.new": {},
+    "media_tool.action.start": {},
+    "media_tool.action.stop": {},
+    "media_tool.empty": {},
+    "media_tool.entry.arrange": {},
+    "media_tool.field.abrate": {},
+    "media_tool.field.acodec": {},
+    "media_tool.field.by": {},
+    "media_tool.field.byDay": {},
+    "media_tool.field.byMonth": {},
+    "media_tool.field.byYear": {},
+    "media_tool.field.channels": {},
+    "media_tool.field.channelsMono": {},
+    "media_tool.field.channelsSource": {},
+    "media_tool.field.channelsStereo": {},
+    "media_tool.field.format": {},
+    "media_tool.field.fps": {},
+    "media_tool.field.policy": {},
+    "media_tool.field.policyCopy": {},
+    "media_tool.field.policySkip": {},
+    "media_tool.field.quality": {},
+    "media_tool.field.resolution": {},
+    "media_tool.field.sameName": {},
+    "media_tool.field.sameOverwrite": {},
+    "media_tool.field.sameRename": {},
+    "media_tool.field.sameSkip": {},
+    "media_tool.field.sampleRate": {},
+    "media_tool.field.size": {},
+    "media_tool.field.source": {},
+    "media_tool.field.target": {},
+    "media_tool.field.threads": {},
+    "media_tool.field.thumbSize": {},
+    "media_tool.field.vbitrate": {},
+    "media_tool.field.vcodec": {},
+    "media_tool.status.stopped": {},
+    "media_tool.upload": {},
+    "media_tool.uploadFailed": {
+      "error": {}
+    },
+    "media_tool.uploadHint": {},
+    "media_tool.uploaded": {
+      "count": {}
+    },
+    "media_tool.zip": {},
+    "media_tool.zipHint": {},
+    "media_tool.stats": {
+      "done": {},
+      "total": {},
+      "skipped": {},
+      "failed": {}
+    },
+    "media_tool.entry.audioTrans": {},
+    "media_tool.entry.batchCompress": {},
+    "media_tool.entry.singleCompress": {},
+    "media_tool.entry.tasks": {},
+    "media_tool.entry.thumbnails": {},
+    "media_tool.entry.videoTrans": {},
+    "media_tool.group.audio": {},
+    "media_tool.group.image": {},
+    "media_tool.group.other": {},
+    "media_tool.group.video": {},
+    "media_tool.jobFailed": {
+      "failed": {}
+    },
+    "messages.markFailed": {
+      "error": {}
+    },
+    "messages.titleUnread": {
+      "count": {}
+    },
+    "monitor.cpu": {
+      "cores": {},
+      "load": {}
+    },
+    "monitor.free": {
+      "bytes": {}
+    },
+    "monitor.perCore": {},
+    "monitor.uptime": {
+      "hours": {},
+      "platform": {},
+      "arch": {}
+    },
+    "mount.connectFailed": {
+      "error": {}
+    },
+    "mount.deleteConfirm": {
+      "name": {}
+    },
+    "mount.deleteEntryConfirm": {
+      "name": {}
+    },
+    "mount.downloadCopied": {
+      "minutes": {}
+    },
+    "mount.getFailed": {
+      "error": {}
+    },
+    "mount.testFailed": {
+      "error": {}
+    },
+    "music.addedTo": {
+      "name": {}
+    },
+    "music.cache.cached": {},
+    "music.cache.done": {},
+    "music.cache.download": {},
+    "music.cache.downloading": {},
+    "music.cache.failed": {
+      "error": {}
+    },
+    "music.copyUrl": {
+      "minutes": {}
+    },
+    "music.deleteConfirm": {
+      "name": {}
+    },
+    "music.group.albumCount": {
+      "count": {}
+    },
+    "music.group.playAll": {},
+    "music.joinFailed": {
+      "error": {}
+    },
+    "music.lyricsFailed": {
+      "error": {}
+    },
+    "music.lyricsTitle": {
+      "title": {}
+    },
+    "music.nav.albums": {},
+    "music.nav.artists": {},
+    "music.nav.empty": {},
+    "music.nav.emptyFavorites": {},
+    "music.nav.emptyHistory": {},
+    "music.nav.history": {},
+    "music.nav.library": {},
+    "music.nav.settings": {},
+    "music.nav.settingsHint": {},
+    "music.play.repeatAll": {},
+    "music.play.repeatOff": {},
+    "music.play.repeatOne": {},
+    "music.play.shuffle": {},
+    "music.playUrlFailed": {
+      "error": {}
+    },
+    "music.pruneConfirm": {
+      "count": {}
+    },
+    "music.queue.add": {},
+    "music.queue.added": {},
+    "music.queue.clear": {},
+    "music.queue.count": {
+      "count": {}
+    },
+    "music.queue.empty": {},
+    "music.queue.nextAdded": {},
+    "music.queue.playNext": {},
+    "music.queue.remove": {},
+    "music.queue.title": {},
+    "music.removeFailed": {
+      "error": {}
+    },
+    "music.scanDone": {
+      "added": {},
+      "updated": {},
+      "skipped": {},
+      "probed": {}
+    },
+    "music.sort.album": {},
+    "music.sort.artist": {},
+    "music.sort.asc": {},
+    "music.sort.created": {},
+    "music.sort.desc": {},
+    "music.sort.duration": {},
+    "music.sort.title": {},
+    "music.sort.year": {},
+    "music.stats": {
+      "tracks": {},
+      "albums": {},
+      "artists": {}
+    },
+    "nav.collapse": {},
+    "nav.expand": {},
+    "nav.group.data": {},
+    "nav.group.media": {},
+    "nav.group.service": {},
+    "nav.group.system": {},
+    "nav.home": {},
+    "nav.logout": {},
+    "nav.more": {},
+    "notes.conflict.body": {},
+    "notes.conflict.overwrite": {},
+    "notes.conflict.reload": {},
+    "notes.conflict.reloaded": {},
+    "notes.conflict.title": {},
+    "notes.pinFailed": {
+      "error": {}
+    },
+    "notes.restoreFailed": {
+      "error": {}
+    },
+    "notes.savedAt": {
+      "time": {}
+    },
+    "notes.versionAuthor": {
+      "author": {}
+    },
+    "notes.versionLoadFailed": {
+      "error": {}
+    },
+    "notes.versionTitle": {
+      "count": {}
+    },
+    "photo.ai.activities": {},
+    "photo.ai.allDone": {},
+    "photo.ai.autoHide": {},
+    "photo.ai.autoHideHint": {},
+    "photo.ai.backfillDone": {
+      "photos": {},
+      "faces": {},
+      "remaining": {}
+    },
+    "photo.ai.backfillHint": {},
+    "photo.ai.backfillRun": {},
+    "photo.ai.backfillTitle": {},
+    "photo.ai.done": {},
+    "photo.ai.enableActivity": {},
+    "photo.ai.enableFace": {},
+    "photo.ai.enableOcr": {},
+    "photo.ai.enablePlace": {},
+    "photo.ai.enableSimilar": {},
+    "photo.ai.faceTuning": {},
+    "photo.ai.faceTuningHint": {},
+    "photo.ai.faces": {},
+    "photo.ai.gpu": {},
+    "photo.ai.gpuHint": {},
+    "photo.ai.hideLess": {
+      "count": {}
+    },
+    "photo.ai.hideNone": {},
+    "photo.ai.hint": {},
+    "photo.ai.matchSim": {},
+    "photo.ai.matchSimHint": {},
+    "photo.ai.mcp": {},
+    "photo.ai.mcp.copied": {},
+    "photo.ai.mcp.copy": {},
+    "photo.ai.mcp.endpoint": {},
+    "photo.ai.mcp.noUid": {},
+    "photo.ai.mcp.readonly": {},
+    "photo.ai.mcp.rotate": {},
+    "photo.ai.mcp.rotateConfirm": {},
+    "photo.ai.mcp.token": {},
+    "photo.ai.mcp.tools": {},
+    "photo.ai.mcp.uid": {},
+    "photo.ai.mcpTokenPlaceholder": {},
+    "photo.ai.mergeSimilar": {},
+    "photo.ai.minVotes": {},
+    "photo.ai.minVotesHint": {},
+    "photo.ai.ocr": {},
+    "photo.ai.pause": {},
+    "photo.ai.paused": {},
+    "photo.ai.progressSuffix": {
+      "percent": {}
+    },
+    "photo.ai.progressWithPending": {
+      "percent": {},
+      "pending": {}
+    },
+    "photo.ai.purge": {},
+    "photo.ai.recluster": {},
+    "photo.ai.rescanMissing": {},
+    "photo.ai.reset": {},
+    "photo.ai.resetAll": {},
+    "photo.ai.resetAllConfirm": {},
+    "photo.ai.resume": {},
+    "photo.ai.running": {},
+    "photo.ai.save": {},
+    "photo.ai.saved": {},
+    "photo.ai.scanCompare": {
+      "scan": {},
+      "compare": {}
+    },
+    "photo.ai.scenes": {},
+    "photo.ai.startActivity": {},
+    "photo.ai.startFaceScene": {},
+    "photo.ai.startOcr": {},
+    "photo.ai.status.disabled": {},
+    "photo.ai.status.idle": {},
+    "photo.ai.status.running": {},
+    "photo.ai.sub.activity": {},
+    "photo.ai.sub.face": {},
+    "photo.ai.sub.ocr": {},
+    "photo.ai.sub.place": {},
+    "photo.ai.sub.similar": {},
+    "photo.ai.taskProgress": {},
+    "photo.ai.threads": {},
+    "photo.ai.threadsHint": {},
+    "photo.album.coverBadge": {},
+    "photo.album.coverSet": {},
+    "photo.album.description": {},
+    "photo.album.descriptionHint": {},
+    "photo.album.edit": {},
+    "photo.album.moveDown": {},
+    "photo.album.moveUp": {},
+    "photo.album.name": {},
+    "photo.album.removePhoto": {},
+    "photo.album.setCover": {},
+    "photo.analyzeActivity": {
+      "count": {},
+      "remaining": {}
+    },
+    "photo.analyzeAll": {
+      "count": {},
+      "faces": {},
+      "scenes": {},
+      "remaining": {}
+    },
+    "photo.analyzeFailed": {
+      "error": {}
+    },
+    "photo.analyzeOcr": {
+      "count": {},
+      "remaining": {}
+    },
+    "photo.backup.done": {
+      "uploaded": {},
+      "skipped": {},
+      "failed": {}
+    },
+    "photo.backup.failed": {
+      "error": {}
+    },
+    "photo.backup.job": {
+      "total": {},
+      "uploaded": {},
+      "skipped": {}
+    },
+    "photo.backup.total": {
+      "total": {},
+      "count": {}
+    },
+    "photo.backup.uploading": {
+      "index": {},
+      "total": {},
+      "name": {}
+    },
+    "photo.cleanup.md5Hint": {
+      "missing": {},
+      "candidates": {}
+    },
+    "photo.cleanup.phash": {},
+    "photo.cleanup.phashDone": {
+      "groups": {},
+      "threshold": {}
+    },
+    "photo.cleanup.phashRunning": {
+      "phase": {},
+      "percent": {}
+    },
+    "photo.cleanup.phashScan": {},
+    "photo.cleanup.phashUnknown": {},
+    "photo.cleanup.trashCount": {
+      "count": {}
+    },
+    "photo.cleanupBatch": {
+      "id": {}
+    },
+    "photo.cleanupConfirm": {
+      "groups": {}
+    },
+    "photo.cleanupDone": {
+      "count": {}
+    },
+    "photo.cleanupPick": {
+      "count": {}
+    },
+    "photo.cleanupRestored": {
+      "count": {}
+    },
+    "photo.collection.addPhotos": {},
+    "photo.collection.added": {
+      "n": {}
+    },
+    "photo.collection.confirmDelete": {},
+    "photo.collection.count": {
+      "n": {}
+    },
+    "photo.collection.delete": {},
+    "photo.collection.empty": {},
+    "photo.collection.new": {},
+    "photo.collection.pickTitle": {},
+    "photo.count": {
+      "count": {}
+    },
+    "photo.delete.confirm": {
+      "count": {}
+    },
+    "photo.delete.done": {
+      "count": {}
+    },
+    "photo.delete.failed": {
+      "error": {}
+    },
+    "photo.delete.permanentHint": {},
+    "photo.delete.title": {},
+    "photo.delete.toTrash": {},
+    "photo.deleteConfirm": {
+      "name": {}
+    },
+    "photo.face.candidateMeta": {
+      "sim": {},
+      "evidence": {},
+      "a": {},
+      "b": {}
+    },
+    "photo.face.candidates": {},
+    "photo.face.candidatesTitle": {},
+    "photo.face.clusterCount": {
+      "count": {}
+    },
+    "photo.face.dissolve": {},
+    "photo.face.dissolveBody": {
+      "count": {}
+    },
+    "photo.face.dissolved": {},
+    "photo.face.manage": {},
+    "photo.face.manageTitle": {
+      "name": {}
+    },
+    "photo.face.mergeOne": {},
+    "photo.face.mergeUndo": {},
+    "photo.face.mergeUndoBody": {},
+    "photo.face.mergeUndone": {
+      "restored": {},
+      "faces": {}
+    },
+    "photo.face.moveOut": {},
+    "photo.face.moveTo": {},
+    "photo.face.moved": {},
+    "photo.face.noCandidates": {},
+    "photo.face.noFaces": {},
+    "photo.face.noOtherCluster": {},
+    "photo.faceCluster.unnamed": {
+      "id": {}
+    },
+    "photo.filter.all": {},
+    "photo.filter.apply": {},
+    "photo.filter.chipFavorite": {},
+    "photo.filter.clear": {},
+    "photo.filter.count": {
+      "n": {}
+    },
+    "photo.filter.favorite": {},
+    "photo.filter.hint": {},
+    "photo.filter.last3Years": {},
+    "photo.filter.lastYear": {},
+    "photo.filter.nonePerson": {},
+    "photo.filter.noneScene": {},
+    "photo.filter.person": {},
+    "photo.filter.pickPlace": {},
+    "photo.filter.placeChip": {
+      "km": {}
+    },
+    "photo.filter.placeClear": {},
+    "photo.filter.scene": {},
+    "photo.filter.time": {},
+    "photo.filter.title": {},
+    "photo.folders.count": {
+      "count": {}
+    },
+    "photo.folders.dirs": {},
+    "photo.folders.empty": {},
+    "photo.folders.emptyHint": {},
+    "photo.folders.here": {
+      "count": {}
+    },
+    "photo.folders.noSource": {},
+    "photo.folders.noSourceHint": {},
+    "photo.folders.sortName": {},
+    "photo.folders.sortTime": {},
+    "photo.folders.up": {},
+    "photo.footprintSummary": {
+      "places": {},
+      "cells": {}
+    },
+    "photo.geo.allDone": {},
+    "photo.geo.allDoneHint": {},
+    "photo.geo.applyBatch": {
+      "count": {}
+    },
+    "photo.geo.applying": {},
+    "photo.geo.batchDone": {
+      "count": {}
+    },
+    "photo.geo.batchHint": {
+      "count": {},
+      "selected": {}
+    },
+    "photo.geo.empty": {},
+    "photo.geo.hint": {},
+    "photo.geo.lat": {},
+    "photo.geo.lng": {},
+    "photo.geo.map": {},
+    "photo.geo.mapHint": {},
+    "photo.geo.noPending": {},
+    "photo.geo.noPoint": {},
+    "photo.geo.noReference": {},
+    "photo.geo.pending": {},
+    "photo.geo.pendingHint": {},
+    "photo.geo.references": {},
+    "photo.geo.referencesHint": {},
+    "photo.geo.save": {},
+    "photo.geo.saved": {
+      "n": {}
+    },
+    "photo.geo.skip": {},
+    "photo.geo.vision": {},
+    "photo.geo.visionConfirm": {},
+    "photo.geo.visionConfirmTitle": {},
+    "photo.geo.visionEmpty": {},
+    "photo.geo.visionHint": {},
+    "photo.geo.visionReject": {},
+    "photo.geo.visionRunning": {
+      "count": {}
+    },
+    "photo.geo.visionScan": {},
+    "photo.geo.workbench": {},
+    "photo.groupCount": {
+      "count": {}
+    },
+    "photo.groupWasted": {
+      "count": {},
+      "bytes": {}
+    },
+    "photo.home.allPeople": {},
+    "photo.home.cities": {},
+    "photo.home.confirmNow": {},
+    "photo.home.days": {},
+    "photo.home.empty": {},
+    "photo.home.emptyHint": {},
+    "photo.home.footprint": {},
+    "photo.home.footprintHint": {},
+    "photo.home.footprintSub": {},
+    "photo.home.heatHint": {},
+    "photo.home.keepMoment": {},
+    "photo.home.keepMomentSub": {},
+    "photo.home.library": {},
+    "photo.home.librarySub": {},
+    "photo.home.mapTime": {},
+    "photo.home.mapTimeSub": {},
+    "photo.home.memorySub": {
+      "count": {},
+      "place": {}
+    },
+    "photo.home.newMemories": {},
+    "photo.home.newMemoriesSub": {},
+    "photo.home.noPeople": {},
+    "photo.home.onThisDay": {},
+    "photo.home.onThisDaySub": {},
+    "photo.home.otherYears": {},
+    "photo.home.peakMonth": {
+      "year": {},
+      "month": {},
+      "count": {}
+    },
+    "photo.home.pendingFaces": {
+      "count": {}
+    },
+    "photo.home.people": {},
+    "photo.home.peopleSub": {},
+    "photo.home.photoCount": {
+      "count": {}
+    },
+    "photo.home.photos": {},
+    "photo.home.places": {},
+    "photo.home.recent": {},
+    "photo.home.recentSub": {},
+    "photo.home.searchHint": {},
+    "photo.home.shotTime": {},
+    "photo.home.shotTimeSub": {
+      "count": {},
+      "days": {}
+    },
+    "photo.home.stats.bytes": {
+      "bytes": {}
+    },
+    "photo.home.stats.photos": {
+      "count": {}
+    },
+    "photo.home.stats.today": {
+      "count": {}
+    },
+    "photo.home.stats.videos": {
+      "count": {}
+    },
+    "photo.home.subtitle": {},
+    "photo.home.title": {},
+    "photo.home.unnamed": {},
+    "photo.home.viewAll": {},
+    "photo.home.viewFootprint": {},
+    "photo.home.viewStorage": {},
+    "photo.home.yearPhotos": {
+      "year": {},
+      "count": {}
+    },
+    "photo.home.yearRecap": {},
+    "photo.home.yearRecapSub": {
+      "year": {}
+    },
+    "photo.hybrid.degraded": {},
+    "photo.hybrid.recognized": {},
+    "photo.hybrid.total": {
+      "count": {}
+    },
+    "photo.hybrid.unmatched": {},
+    "photo.keepLabel": {
+      "value": {}
+    },
+    "photo.keepSelected": {
+      "index": {}
+    },
+    "photo.longPress.copyLink": {},
+    "photo.longPress.delete": {},
+    "photo.longPress.favorite": {},
+    "photo.longPress.linkCopied": {},
+    "photo.longPress.open": {},
+    "photo.longPress.save": {},
+    "photo.longPress.saveFailed": {
+      "error": {}
+    },
+    "photo.longPress.saved": {
+      "path": {}
+    },
+    "photo.longPress.unfavorite": {},
+    "photo.map.journey": {},
+    "photo.map.journeyEmpty": {},
+    "photo.map.journeyFailed": {
+      "error": {}
+    },
+    "photo.map.journeySummary": {
+      "points": {},
+      "days": {},
+      "km": {}
+    },
+    "photo.mapLoadFailed": {
+      "error": {}
+    },
+    "photo.mapSwitchFailed": {
+      "error": {}
+    },
+    "photo.md5Failed": {
+      "error": {}
+    },
+    "photo.md5Progress": {
+      "hashed": {},
+      "remaining": {}
+    },
+    "photo.memory.chapters": {},
+    "photo.memory.chaptersHint": {},
+    "photo.memory.confirm": {},
+    "photo.memory.empty": {},
+    "photo.memory.emptyHint": {},
+    "photo.memory.hint": {},
+    "photo.memory.ignore": {},
+    "photo.memory.open": {},
+    "photo.memory.photoCount": {
+      "count": {}
+    },
+    "photo.memory.rediscover": {},
+    "photo.memory.remove": {},
+    "photo.memory.restore": {},
+    "photo.memory.tab.ignored": {},
+    "photo.memory.tab.mine": {},
+    "photo.memory.tab.pending": {},
+    "photo.memory.yearBook": {
+      "year": {}
+    },
+    "photo.memoryDay": {
+      "date": {},
+      "count": {}
+    },
+    "photo.memoryRecent": {
+      "days": {}
+    },
+    "photo.memoryScan": {
+      "scanned": {},
+      "tickets": {},
+      "trips": {}
+    },
+    "photo.memoryTrip": {
+      "count": {},
+      "kinds": {}
+    },
+    "photo.memoryYear": {
+      "year": {},
+      "days": {},
+      "count": {}
+    },
+    "photo.memoryYearEmpty": {
+      "year": {}
+    },
+    "photo.memoryYearRecord": {
+      "year": {}
+    },
+    "photo.mergeFailed": {
+      "error": {}
+    },
+    "photo.merged": {
+      "moved": {}
+    },
+    "photo.models.empty": {},
+    "photo.models.found": {
+      "n": {}
+    },
+    "photo.nameFailed": {
+      "error": {}
+    },
+    "photo.nav.activities": {},
+    "photo.nav.ai": {},
+    "photo.nav.aiSettings": {},
+    "photo.nav.backup": {},
+    "photo.nav.chapter": {},
+    "photo.nav.collection": {},
+    "photo.nav.dayFrame": {},
+    "photo.nav.favorites": {},
+    "photo.nav.files": {},
+    "photo.nav.gps": {},
+    "photo.nav.home": {},
+    "photo.nav.memory": {},
+    "photo.nav.models": {},
+    "photo.nav.pending": {},
+    "photo.nav.pendingHint": {},
+    "photo.nav.preview": {},
+    "photo.nav.similar": {},
+    "photo.nav.similarCleanup": {},
+    "photo.nav.smart": {},
+    "photo.nav.source": {},
+    "photo.nav.tickets": {},
+    "photo.nav.today": {},
+    "photo.nav.trash": {},
+    "photo.nav.year": {},
+    "photo.onThisDay.empty": {},
+    "photo.onThisDay.emptyHint": {},
+    "photo.onThisDay.title": {},
+    "photo.onThisDay.viewAll": {},
+    "photo.original": {},
+    "photo.photoCount": {
+      "count": {}
+    },
+    "photo.placePicker.confirm": {},
+    "photo.placePicker.hint": {},
+    "photo.placePicker.radius": {},
+    "photo.placePicker.title": {},
+    "photo.preview": {},
+    "photo.preview.extent": {},
+    "photo.preview.hint": {},
+    "photo.preview.pageSize": {},
+    "photo.preview.save": {},
+    "photo.preview.saved": {},
+    "photo.pruneConfirm": {
+      "count": {}
+    },
+    "photo.pruneConfirmNoCount": {},
+    "photo.relations.empty": {},
+    "photo.relations.emptyHint": {},
+    "photo.relations.hint": {
+      "nodes": {},
+      "edges": {}
+    },
+    "photo.relations.noEdges": {},
+    "photo.relations.noPhotos": {},
+    "photo.relations.photos": {
+      "count": {}
+    },
+    "photo.relations.title": {},
+    "photo.relations.unnamed": {},
+    "photo.removeFailed": {
+      "error": {}
+    },
+    "photo.scan.autoWatch": {},
+    "photo.scan.off": {},
+    "photo.scan.skipHidden": {},
+    "photo.scan.verify": {},
+    "photo.scanDone": {
+      "added": {},
+      "updated": {},
+      "skipped": {}
+    },
+    "photo.scanFinished": {},
+    "photo.scanQueued": {},
+    "photo.scanTimeout": {},
+    "photo.scene.confidentOnly": {},
+    "photo.scene.gateCount": {
+      "cl": {},
+      "total": {}
+    },
+    "photo.searchRecognized": {
+      "labels": {}
+    },
+    "photo.searchRecognizedUnmatched": {
+      "labels": {},
+      "unmatched": {}
+    },
+    "photo.searchTitle": {
+      "q": {}
+    },
+    "photo.searchUnmatchedSeparator": {},
+    "photo.similar.any": {},
+    "photo.similar.count": {
+      "n": {}
+    },
+    "photo.similar.empty": {},
+    "photo.similar.emptyHint": {},
+    "photo.similar.found": {
+      "count": {}
+    },
+    "photo.similar.group": {},
+    "photo.similar.run": {},
+    "photo.similar.threshold": {},
+    "photo.similar.title": {},
+    "photo.smartRule.activity": {},
+    "photo.smartRule.anyActivity": {},
+    "photo.smartRule.anyPerson": {},
+    "photo.smartRule.anyScene": {},
+    "photo.smartRule.anyTime": {},
+    "photo.smartRule.count": {
+      "count": {}
+    },
+    "photo.smartRule.delete": {},
+    "photo.smartRule.deleteConfirm": {
+      "name": {}
+    },
+    "photo.smartRule.deleted": {},
+    "photo.smartRule.edit": {},
+    "photo.smartRule.empty": {},
+    "photo.smartRule.emptyHint": {},
+    "photo.smartRule.favorite": {},
+    "photo.smartRule.from": {},
+    "photo.smartRule.hint": {},
+    "photo.smartRule.latitude": {},
+    "photo.smartRule.longitude": {},
+    "photo.smartRule.name": {},
+    "photo.smartRule.nameHint": {},
+    "photo.smartRule.needCondition": {},
+    "photo.smartRule.needName": {},
+    "photo.smartRule.new": {},
+    "photo.smartRule.person": {},
+    "photo.smartRule.radiusKm": {},
+    "photo.smartRule.range": {
+      "from": {},
+      "to": {}
+    },
+    "photo.smartRule.saved": {},
+    "photo.smartRule.scene": {},
+    "photo.smartRule.title": {},
+    "photo.smartRule.to": {},
+    "photo.source.add": {},
+    "photo.source.added": {},
+    "photo.source.available": {},
+    "photo.source.exists": {},
+    "photo.source.hint": {},
+    "photo.source.none": {},
+    "photo.source.owner": {},
+    "photo.source.pickHere": {},
+    "photo.source.pickTitle": {},
+    "photo.source.refresh": {},
+    "photo.source.remove": {},
+    "photo.source.roots": {},
+    "photo.source.save": {},
+    "photo.source.savePolicyFailed": {
+      "error": {}
+    },
+    "photo.source.saved": {},
+    "photo.source.scanAll": {},
+    "photo.source.unavailable": {},
+    "photo.suggest.activity": {},
+    "photo.suggest.camera": {},
+    "photo.suggest.filename": {},
+    "photo.suggest.ocr": {},
+    "photo.suggest.person": {},
+    "photo.suggest.scene": {},
+    "photo.suggest.year": {},
+    "photo.timeline.addToCollection": {},
+    "photo.timeline.all": {},
+    "photo.timeline.batchFavorite": {},
+    "photo.timeline.noCollection": {},
+    "photo.timeline.select": {},
+    "photo.timeline.selected": {
+      "n": {}
+    },
+    "photo.timeline.sortAsc": {},
+    "photo.timeline.sortDesc": {},
+    "photo.timeline.today": {},
+    "photo.timeline.zoomIn": {},
+    "photo.timeline.zoomOut": {},
+    "photo.trash.batchEmpty": {},
+    "photo.trash.batchMeta": {
+      "n": {},
+      "days": {}
+    },
+    "photo.trash.batches": {
+      "n": {},
+      "b": {}
+    },
+    "photo.trash.clear": {},
+    "photo.trash.clearBatch": {},
+    "photo.trash.clearBatchConfirm": {},
+    "photo.trash.clearConfirm": {},
+    "photo.trash.cleared": {},
+    "photo.trash.count": {
+      "n": {}
+    },
+    "photo.trash.empty": {},
+    "photo.trash.legacy": {},
+    "photo.trash.restore": {},
+    "photo.trash.restoreBatch": {},
+    "photo.trash.restored": {
+      "n": {}
+    },
+    "photo.undoFailed": {
+      "error": {}
+    },
+    "photo.upload.button": {},
+    "photo.upload.done": {
+      "ok": {}
+    },
+    "photo.upload.noSource": {},
+    "photo.upload.partial": {
+      "ok": {},
+      "failed": {}
+    },
+    "photo.yearView.count": {
+      "count": {}
+    },
+    "photo.yearView.empty": {},
+    "photo.yearView.emptyHint": {},
+    "photo.yearView.month": {
+      "month": {}
+    },
+    "photo.yearView.title": {},
+    "photo.yearView.wholeYear": {},
+    "safety.backupDone": {
+      "files": {},
+      "bytes": {}
+    },
+    "safety.backupFailed": {
+      "error": {}
+    },
+    "safety.binary": {
+      "bytes": {}
+    },
+    "safety.deleteConfirm": {
+      "path": {}
+    },
+    "safety.files": {
+      "count": {}
+    },
+    "safety.readFailed": {
+      "error": {}
+    },
+    "safety.restoreDone": {
+      "restored": {},
+      "skipped": {}
+    },
+    "safety.restoreFailed": {
+      "error": {}
+    },
+    "safety.restoreTitle": {
+      "id": {}
+    },
+    "safety.source": {
+      "source": {}
+    },
+    "safety.unlockFailed": {
+      "error": {}
+    },
+    "safety.unlocked": {
+      "id": {}
+    },
+    "safety.writeFailed": {
+      "error": {}
+    },
+    "settings.about": {},
+    "settings.account": {
+      "name": {}
+    },
+    "settings.appearance": {},
+    "settings.cache": {},
+    "settings.cacheClear": {},
+    "settings.cacheCleared": {
+      "size": {}
+    },
+    "settings.cacheUsage": {
+      "size": {},
+      "files": {}
+    },
+    "settings.concurrency": {},
+    "settings.font": {},
+    "settings.font.mono": {},
+    "settings.font.sans": {},
+    "settings.font.serif": {},
+    "settings.font.system": {},
+    "settings.hostname": {},
+    "settings.hostnameHint": {},
+    "settings.https": {},
+    "settings.httpsEnabled": {},
+    "settings.httpsHint": {},
+    "settings.httpsPort": {},
+    "settings.tlsCert": {},
+    "settings.tlsClear": {},
+    "settings.tlsNone": {},
+    "settings.tlsSubject": {
+      "subject": {}
+    },
+    "settings.tlsUploaded": {},
+    "settings.tlsValid": {
+      "from": {},
+      "to": {}
+    },
+    "settings.javFallback": {},
+    "settings.javFallbackHint": {},
+    "settings.legal": {},
+    "settings.legalHint": {},
+    "settings.librariesMoved": {},
+    "settings.needAdmin": {},
+    "settings.port": {},
+    "settings.proxy": {},
+    "settings.proxyActive": {
+      "proxy": {}
+    },
+    "settings.proxyHint": {},
+    "settings.proxyOff": {},
+    "settings.restart": {},
+    "settings.restartConfirm": {},
+    "settings.restartHint": {},
+    "settings.restarting": {},
+    "settings.saved": {},
+    "settings.server": {},
+    "settings.update": {},
+    "settings.updateAvailable": {
+      "version": {}
+    },
+    "settings.updateNone": {},
+    "settings.version": {
+      "version": {}
+    },
+    "settings.welcome": {},
+    "settings.welcomeHint": {},
+    "settings.deleteTitle": {
+      "name": {}
+    },
+    "settings.language": {},
+    "settings.libSummary": {
+      "path": {},
+      "count": {}
+    },
+    "settings.mediaSection": {},
+    "settings.newLibrary": {
+      "kind": {}
+    },
+    "settings.notLoggedIn": {},
+    "settings.rebuildFailed": {
+      "error": {}
+    },
+    "settings.reindexDone": {
+      "indexed": {},
+      "skipped": {}
+    },
+    "settings.scanBook": {
+      "added": {},
+      "updated": {},
+      "skipped": {},
+      "parsed": {}
+    },
+    "settings.scanDone": {
+      "message": {}
+    },
+    "settings.scanMusic": {
+      "added": {},
+      "updated": {},
+      "skipped": {},
+      "probed": {}
+    },
+    "settings.scanPhoto": {
+      "added": {},
+      "updated": {},
+      "skipped": {}
+    },
+    "settings.scanVideo": {
+      "added": {},
+      "updated": {},
+      "skipped": {},
+      "probed": {}
+    },
+    "settings.sessionOnly": {
+      "locale": {}
+    },
+    "settings.switched": {
+      "url": {}
+    },
+    "setup.alreadyDone": {},
+    "setup.checkAgain": {},
+    "setup.confirm": {},
+    "setup.failed": {},
+    "setup.hint": {},
+    "setup.mismatch": {},
+    "setup.password": {},
+    "setup.submit": {},
+    "setup.title": {},
+    "setup.tooShort": {},
+    "setup.username": {},
+    "setup.usernameRequired": {},
+    "share.created": {
+      "url": {}
+    },
+    "share.expiry": {
+      "date": {}
+    },
+    "share.revokeFailed": {
+      "error": {}
+    },
+    "share.summary": {
+      "expires": {},
+      "downloads": {}
+    },
+    "style.apply": {},
+    "style.aurora": {},
+    "style.aurora.desc": {},
+    "style.card": {},
+    "style.card.desc": {},
+    "style.fluent": {},
+    "style.fluent.desc": {},
+    "style.preview": {},
+    "style.previewHint": {},
+    "style.title": {},
+    "sync.auto.checkNow": {},
+    "sync.auto.enable": {},
+    "sync.auto.hint": {},
+    "sync.auto.interval": {},
+    "sync.auto.minutes": {
+      "n": {}
+    },
+    "sync.auto.runCheck": {},
+    "sync.auto.title": {},
+    "sync.autostart.enable": {},
+    "sync.autostart.failed": {},
+    "sync.autostart.hint": {},
+    "sync.autostart.unsupported": {},
+    "sync.autostart.web": {},
+    "sync.cancelRun": {},
+    "sync.createTask": {},
+    "sync.delete.body": {},
+    "sync.delete.title": {},
+    "sync.device": {},
+    "sync.dirMissing": {},
+    "sync.editTask": {},
+    "sync.emptyRuns": {},
+    "sync.emptyTasks": {},
+    "sync.exclude": {},
+    "sync.help.body": {},
+    "sync.help.title": {},
+    "sync.hint": {},
+    "sync.include": {},
+    "sync.lastRunAt": {
+      "time": {}
+    },
+    "sync.localDir": {},
+    "sync.menu.help": {},
+    "sync.menu.tasks": {},
+    "sync.mode": {},
+    "sync.modeBoth": {},
+    "sync.modeDown": {},
+    "sync.modeUp": {},
+    "sync.neverRun": {},
+    "sync.newTask": {},
+    "sync.phase.cleaning": {},
+    "sync.phase.done": {},
+    "sync.phase.failed": {},
+    "sync.phase.planning": {},
+    "sync.phase.reporting": {},
+    "sync.phase.scanning": {},
+    "sync.phase.transferring": {},
+    "sync.records": {},
+    "sync.remoteDir": {},
+    "sync.rulesMore": {
+      "count": {}
+    },
+    "sync.run.failed": {
+      "error": {}
+    },
+    "sync.run.ok": {
+      "up": {},
+      "down": {},
+      "del": {},
+      "skip": {}
+    },
+    "sync.runNow": {},
+    "sync.runs": {},
+    "sync.stat.conflict": {},
+    "sync.stat.delete": {},
+    "sync.stat.download": {},
+    "sync.stat.skip": {},
+    "sync.stat.upload": {},
+    "sync.status.error": {},
+    "sync.status.idle": {},
+    "sync.status.running": {},
+    "sync.summary.deleteExtra": {},
+    "sync.summary.interval": {
+      "n": {}
+    },
+    "sync.summary.manual": {},
+    "sync.summary.manualSchedule": {},
+    "sync.summary.noDeleteExtra": {},
+    "sync.summary.preferLocal": {},
+    "sync.summary.preferNewer": {},
+    "sync.summary.preferRemote": {},
+    "sync.summary.realtime": {},
+    "sync.taskCount": {
+      "count": {}
+    },
+    "sync.webUnsupported": {},
+    "sync.wizard.deviceHint": {},
+    "sync.wizard.exclude": {},
+    "sync.wizard.include": {},
+    "sync.wizard.interval": {},
+    "sync.wizard.intervalHint": {},
+    "sync.wizard.intervalMinutes": {},
+    "sync.wizard.localHint": {},
+    "sync.wizard.modeHint": {},
+    "sync.wizard.next": {},
+    "sync.wizard.pickDir": {},
+    "sync.wizard.prev": {},
+    "sync.wizard.remoteHint": {},
+    "sync.wizard.required": {},
+    "sync.wizard.ruleHint": {},
+    "sync.wizard.rulePreset": {},
+    "sync.wizard.advanced": {},
+    "sync.wizard.comingSoon": {},
+    "sync.wizard.conflict": {},
+    "sync.wizard.conflictLocal": {},
+    "sync.wizard.conflictNewer": {},
+    "sync.wizard.conflictRemote": {},
+    "sync.wizard.conflictManual": {},
+    "sync.wizard.deleteExtra": {},
+    "sync.wizard.deleteExtraHint": {},
+    "sync.wizard.editFilter": {},
+    "sync.wizard.filterTitle": {},
+    "sync.wizard.filterExt": {},
+    "sync.wizard.filterHidden": {},
+    "sync.wizard.filterLarge": {},
+    "sync.wizard.filterNone": {},
+    "sync.wizard.filterSize": {},
+    "sync.wizard.filterSmall": {},
+    "sync.wizard.filterSummary": {
+      "summary": {}
+    },
+    "sync.wizard.deviceConfirmHint": {},
+    "sync.wizard.deviceTitle": {},
+    "sync.wizard.loggedIn": {},
+    "sync.wizard.name": {},
+    "sync.wizard.nameHint": {},
+    "sync.wizard.nameRequired": {},
+    "sync.wizard.nasTitle": {},
+    "sync.wizard.pathSummary": {},
+    "sync.wizard.probeEscape": {},
+    "sync.wizard.probeReadonly": {},
+    "sync.wizard.ready": {},
+    "sync.wizard.realtime": {},
+    "sync.wizard.realtimeHint": {},
+    "sync.wizard.safety": {},
+    "sync.wizard.step.device": {},
+    "sync.wizard.step.paths": {},
+    "sync.wizard.step.rules": {},
+    "system.degraded": {},
+    "system.health": {},
+    "system.ready": {},
+    "terminal.allowHint": {
+      "allow": {}
+    },
+    "terminal.denied": {
+      "allow": {}
+    },
+    "terminal.failed": {
+      "error": {}
+    },
+    "transfer.failed": {
+      "error": {}
+    },
+    "transfer.titleActive": {
+      "count": {}
+    },
+    "transfer.uploading": {
+      "percent": {}
+    },
+    "tray.quit": {},
+    "tray.show": {},
+    "ui.accounts.001": {},
+    "ui.accounts.002": {},
+    "ui.accounts.003": {},
+    "ui.accounts.004": {},
+    "ui.accounts.005": {},
+    "ui.accounts.006": {},
+    "ui.accounts.007": {},
+    "ui.accounts.008": {},
+    "ui.accounts.009": {},
+    "ui.accounts.010": {},
+    "ui.accounts.011": {},
+    "ui.accounts.012": {},
+    "ui.accounts.013": {},
+    "ui.accounts.014": {},
+    "ui.accounts.015": {},
+    "ui.accounts.016": {},
+    "ui.accounts.017": {},
+    "ui.accounts.018": {},
+    "ui.accounts.019": {},
+    "ui.accounts.020": {},
+    "ui.accounts.021": {},
+    "ui.accounts.h00dbf4": {},
+    "ui.accounts.h2476e7": {},
+    "ui.accounts.h3f790d": {},
+    "ui.accounts.ha0a92d": {},
+    "ui.accounts.hcaaca9": {},
+    "ui.book.001": {},
+    "ui.book.002": {},
+    "ui.book.003": {},
+    "ui.book.004": {},
+    "ui.book.005": {},
+    "ui.book.006": {},
+    "ui.book.007": {},
+    "ui.book.008": {},
+    "ui.book.009": {},
+    "ui.book.010": {},
+    "ui.book.011": {},
+    "ui.book.012": {},
+    "ui.book.013": {},
+    "ui.book.014": {},
+    "ui.book.015": {},
+    "ui.book.016": {},
+    "ui.book.017": {},
+    "ui.book.018": {},
+    "ui.book.019": {},
+    "ui.book.020": {},
+    "ui.book.021": {},
+    "ui.book.022": {},
+    "ui.book.023": {},
+    "ui.book.024": {},
+    "ui.book.025": {},
+    "ui.book.026": {},
+    "ui.book.027": {},
+    "ui.book.028": {},
+    "ui.book.029": {},
+    "ui.book.030": {},
+    "ui.book.031": {},
+    "ui.book.032": {},
+    "ui.book.h062e5e": {},
+    "ui.book.h2662b5": {},
+    "ui.book.h2c598c": {},
+    "ui.book.h39ee20": {},
+    "ui.book.h4b60a3": {},
+    "ui.book.h693575": {},
+    "ui.book.h698bea": {},
+    "ui.book.h6a16ee": {},
+    "ui.book.h8eccf0": {},
+    "ui.book.h9c5bde": {},
+    "ui.book.h9d2601": {},
+    "ui.book.hacf014": {},
+    "ui.book.hb4f0a0": {},
+    "ui.book.hbadd9d": {},
+    "ui.book.hd403d5": {},
+    "ui.book.hd9c32a": {},
+    "ui.book.hde1cb6": {},
+    "ui.discover.001": {},
+    "ui.discover.002": {},
+    "ui.discover.003": {},
+    "ui.discover.004": {},
+    "ui.discover.005": {},
+    "ui.discover.006": {},
+    "ui.discover.007": {},
+    "ui.discover.008": {},
+    "ui.discover.009": {},
+    "ui.discover.010": {},
+    "ui.discover.011": {},
+    "ui.discover.012": {},
+    "ui.discover.013": {},
+    "ui.discover.h0269c8": {},
+    "ui.discover.h1bfb3a": {},
+    "ui.discover.h350351": {},
+    "ui.discover.h56f7c6": {},
+    "ui.discover.h67a271": {},
+    "ui.discover.h839ce1": {},
+    "ui.discover.h8b26af": {},
+    "ui.discover.hb9d0a6": {},
+    "ui.discover.hfa4d18": {},
+    "ui.files.001": {},
+    "ui.files.002": {},
+    "ui.files.h439f15": {},
+    "ui.login.h1b8cb2": {},
+    "ui.login.hfbaa29": {},
+    "ui.media_tool.001": {},
+    "ui.media_tool.002": {},
+    "ui.media_tool.003": {},
+    "ui.media_tool.004": {},
+    "ui.media_tool.005": {},
+    "ui.media_tool.006": {},
+    "ui.media_tool.007": {},
+    "ui.media_tool.008": {},
+    "ui.media_tool.009": {},
+    "ui.media_tool.010": {},
+    "ui.media_tool.011": {},
+    "ui.media_tool.012": {},
+    "ui.media_tool.013": {},
+    "ui.media_tool.014": {},
+    "ui.media_tool.015": {},
+    "ui.media_tool.016": {},
+    "ui.media_tool.017": {},
+    "ui.media_tool.h1f425b": {},
+    "ui.media_tool.h32cef6": {},
+    "ui.media_tool.h3e3c80": {},
+    "ui.media_tool.h4dcbbc": {},
+    "ui.media_tool.ha5ffdc": {},
+    "ui.media_tool.hb4c185": {},
+    "ui.media_tool.he99b48": {},
+    "ui.messages.001": {},
+    "ui.messages.002": {},
+    "ui.messages.003": {},
+    "ui.messages.004": {},
+    "ui.messages.005": {},
+    "ui.messages.006": {},
+    "ui.monitor.001": {},
+    "ui.monitor.002": {},
+    "ui.monitor.003": {},
+    "ui.mount.001": {},
+    "ui.mount.002": {},
+    "ui.mount.003": {},
+    "ui.mount.004": {},
+    "ui.mount.005": {},
+    "ui.mount.006": {},
+    "ui.mount.007": {},
+    "ui.mount.008": {},
+    "ui.mount.009": {},
+    "ui.mount.010": {},
+    "ui.mount.011": {},
+    "ui.mount.012": {},
+    "ui.mount.013": {},
+    "ui.mount.014": {},
+    "ui.mount.015": {},
+    "ui.mount.016": {},
+    "ui.mount.017": {},
+    "ui.mount.018": {},
+    "ui.mount.019": {},
+    "ui.mount.020": {},
+    "ui.mount.021": {},
+    "ui.mount.022": {},
+    "ui.mount.023": {},
+    "ui.mount.024": {},
+    "ui.mount.h11ed55": {},
+    "ui.mount.h8da879": {},
+    "ui.mount.he48389": {},
+    "ui.music.001": {},
+    "ui.music.002": {},
+    "ui.music.003": {},
+    "ui.music.004": {},
+    "ui.music.005": {},
+    "ui.music.006": {},
+    "ui.music.007": {},
+    "ui.music.008": {},
+    "ui.music.009": {},
+    "ui.music.010": {},
+    "ui.music.011": {},
+    "ui.music.012": {},
+    "ui.music.013": {},
+    "ui.music.014": {},
+    "ui.music.015": {},
+    "ui.music.016": {},
+    "ui.music.017": {},
+    "ui.music.018": {},
+    "ui.music.019": {},
+    "ui.music.020": {},
+    "ui.music.021": {},
+    "ui.music.022": {},
+    "ui.music.023": {},
+    "ui.music.024": {},
+    "ui.music.025": {},
+    "ui.music.026": {},
+    "ui.music.027": {},
+    "ui.music.028": {},
+    "ui.music.029": {},
+    "ui.music.030": {},
+    "ui.music.031": {},
+    "ui.music.032": {},
+    "ui.music.033": {},
+    "ui.music.034": {},
+    "ui.music.035": {},
+    "ui.music.036": {},
+    "ui.music.037": {},
+    "ui.music.038": {},
+    "ui.music.039": {
+      "n": {}
+    },
+    "ui.music.040": {
+      "error": {}
+    },
+    "ui.music.h038f7a": {},
+    "ui.music.h14f4d5": {},
+    "ui.music.h1e684d": {},
+    "ui.music.h266f73": {},
+    "ui.music.h29d055": {},
+    "ui.music.h2d84c5": {},
+    "ui.music.h3077a5": {},
+    "ui.music.h324451": {},
+    "ui.music.h7a430c": {},
+    "ui.music.h7f0ce4": {},
+    "ui.music.h952253": {},
+    "ui.music.hc668c7": {},
+    "ui.music.hd19e86": {},
+    "ui.music.hdb4c02": {},
+    "ui.music.hea2dd3": {},
+    "ui.music.hfa69ac": {},
+    "ui.music.hfcc741": {},
+    "ui.music.hff934c": {},
+    "ui.notes.001": {},
+    "ui.notes.002": {},
+    "ui.notes.003": {},
+    "ui.notes.004": {},
+    "ui.notes.005": {},
+    "ui.notes.006": {},
+    "ui.notes.007": {},
+    "ui.notes.008": {},
+    "ui.notes.009": {},
+    "ui.notes.010": {},
+    "ui.notes.011": {},
+    "ui.notes.012": {},
+    "ui.notes.013": {},
+    "ui.notes.014": {},
+    "ui.notes.015": {},
+    "ui.notes.016": {},
+    "ui.notes.017": {},
+    "ui.notes.018": {},
+    "ui.notes.019": {},
+    "ui.notes.020": {},
+    "ui.notes.021": {},
+    "ui.notes.022": {},
+    "ui.notes.h13cc56": {},
+    "ui.notes.h355630": {},
+    "ui.notes.h3bebd0": {},
+    "ui.notes.h5174c5": {},
+    "ui.notes.h6a5c4d": {},
+    "ui.notes.h78f683": {},
+    "ui.notes.h7aeae1": {},
+    "ui.photo.001": {},
+    "ui.photo.002": {},
+    "ui.photo.003": {},
+    "ui.photo.004": {},
+    "ui.photo.005": {},
+    "ui.photo.006": {},
+    "ui.photo.007": {},
+    "ui.photo.008": {},
+    "ui.photo.009": {},
+    "ui.photo.010": {},
+    "ui.photo.011": {},
+    "ui.photo.012": {},
+    "ui.photo.013": {},
+    "ui.photo.014": {},
+    "ui.photo.015": {},
+    "ui.photo.016": {},
+    "ui.photo.017": {},
+    "ui.photo.018": {},
+    "ui.photo.019": {},
+    "ui.photo.020": {},
+    "ui.photo.021": {},
+    "ui.photo.022": {},
+    "ui.photo.023": {},
+    "ui.photo.024": {},
+    "ui.photo.025": {},
+    "ui.photo.026": {},
+    "ui.photo.027": {},
+    "ui.photo.028": {},
+    "ui.photo.029": {},
+    "ui.photo.030": {},
+    "ui.photo.031": {},
+    "ui.photo.032": {},
+    "ui.photo.033": {},
+    "ui.photo.034": {},
+    "ui.photo.035": {},
+    "ui.photo.036": {},
+    "ui.photo.037": {},
+    "ui.photo.038": {},
+    "ui.photo.039": {},
+    "ui.photo.040": {},
+    "ui.photo.041": {},
+    "ui.photo.042": {},
+    "ui.photo.043": {},
+    "ui.photo.044": {},
+    "ui.photo.045": {},
+    "ui.photo.046": {},
+    "ui.photo.047": {},
+    "ui.photo.048": {},
+    "ui.photo.049": {},
+    "ui.photo.050": {},
+    "ui.photo.051": {},
+    "ui.photo.052": {},
+    "ui.photo.053": {},
+    "ui.photo.054": {},
+    "ui.photo.055": {},
+    "ui.photo.056": {},
+    "ui.photo.057": {},
+    "ui.photo.058": {},
+    "ui.photo.059": {},
+    "ui.photo.060": {},
+    "ui.photo.061": {},
+    "ui.photo.062": {},
+    "ui.photo.063": {},
+    "ui.photo.064": {},
+    "ui.photo.065": {},
+    "ui.photo.066": {},
+    "ui.photo.067": {},
+    "ui.photo.068": {},
+    "ui.photo.069": {},
+    "ui.photo.070": {},
+    "ui.photo.071": {},
+    "ui.photo.072": {},
+    "ui.photo.073": {},
+    "ui.photo.074": {},
+    "ui.photo.075": {},
+    "ui.photo.h02e23f": {},
+    "ui.photo.h1fbca6": {},
+    "ui.photo.h2230a1": {},
+    "ui.photo.h242e8b": {},
+    "ui.photo.h2644db": {},
+    "ui.photo.h531110": {},
+    "ui.photo.h567da6": {},
+    "ui.photo.h5d432d": {},
+    "ui.photo.h5ee2f9": {},
+    "ui.photo.h6a8cef": {},
+    "ui.photo.h74ba6d": {},
+    "ui.photo.h7ed401": {},
+    "ui.photo.h7f61f2": {},
+    "ui.photo.h88a820": {},
+    "ui.photo.h93fa35": {},
+    "ui.photo.h9f80b0": {},
+    "ui.photo.ha61879": {},
+    "ui.photo.hae3ce5": {},
+    "ui.photo.hc12c60": {},
+    "ui.photo.hc324d6": {},
+    "ui.photo.hc8d09c": {},
+    "ui.photo.hcec215": {},
+    "ui.photo.he4d611": {},
+    "ui.photo.hed257c": {},
+    "ui.photo.hf39ac5": {},
+    "ui.photo.hfadc6b": {},
+    "ui.photo.hfe6c48": {},
+    "ui.safety.001": {},
+    "ui.safety.002": {},
+    "ui.safety.003": {},
+    "ui.safety.004": {},
+    "ui.safety.006": {},
+    "ui.safety.007": {},
+    "ui.safety.008": {},
+    "ui.safety.009": {},
+    "ui.safety.010": {},
+    "ui.safety.011": {},
+    "ui.safety.012": {},
+    "ui.safety.013": {},
+    "ui.safety.014": {},
+    "ui.safety.015": {},
+    "ui.safety.016": {},
+    "ui.safety.017": {},
+    "ui.safety.018": {},
+    "ui.safety.019": {},
+    "ui.safety.020": {},
+    "ui.safety.021": {},
+    "ui.safety.022": {},
+    "ui.safety.h2c65a2": {},
+    "ui.safety.h393f28": {},
+    "ui.safety.h468120": {},
+    "ui.safety.h9f82f5": {},
+    "ui.settings.001": {},
+    "ui.settings.002": {},
+    "ui.settings.003": {},
+    "ui.settings.004": {},
+    "ui.settings.005": {},
+    "ui.settings.006": {},
+    "ui.settings.007": {},
+    "ui.settings.008": {},
+    "ui.settings.009": {},
+    "ui.settings.010": {},
+    "ui.settings.011": {},
+    "ui.settings.012": {},
+    "ui.settings.013": {},
+    "ui.settings.014": {},
+    "ui.settings.015": {},
+    "ui.settings.016": {},
+    "ui.settings.017": {},
+    "ui.settings.018": {},
+    "ui.settings.019": {},
+    "ui.settings.020": {},
+    "ui.settings.h4b0e3b": {},
+    "ui.settings.h525229": {},
+    "ui.settings.h59156f": {},
+    "ui.settings.h6536fe": {},
+    "ui.settings.h93f888": {},
+    "ui.settings.hc591ec": {},
+    "ui.settings.hc9ca33": {},
+    "ui.settings.he700d5": {},
+    "ui.share.001": {},
+    "ui.share.002": {},
+    "ui.share.003": {},
+    "ui.share.004": {},
+    "ui.share.005": {},
+    "ui.share.006": {},
+    "ui.share.h409752": {},
+    "ui.shell.h2aea9e": {},
+    "ui.shell.h8d6e63": {},
+    "ui.shell.hsync": {},
+    "ui.sync.001": {},
+    "ui.sync.002": {},
+    "ui.sync.003": {},
+    "ui.sync.004": {},
+    "ui.sync.005": {},
+    "ui.sync.006": {},
+    "ui.sync.007": {},
+    "ui.sync.008": {},
+    "ui.sync.009": {},
+    "ui.sync.010": {},
+    "ui.sync.011": {},
+    "ui.sync.012": {},
+    "ui.sync.013": {},
+    "ui.sync.014": {},
+    "ui.sync.015": {},
+    "ui.sync.016": {},
+    "ui.sync.017": {},
+    "ui.sync.018": {},
+    "ui.sync.019": {},
+    "ui.sync.h1f4bb8": {},
+    "ui.sync.h6601b8": {},
+    "ui.sync.ha66059": {},
+    "ui.sync.ha79ba5": {},
+    "ui.sync.hbcf912": {},
+    "ui.sync.hcdea50": {},
+    "ui.sync.hdd2202": {},
+    "ui.sync.hed8fe6": {},
+    "ui.sync.hf9d5ca": {},
+    "ui.sync.hffa2fa": {},
+    "ui.terminal.001": {},
+    "ui.terminal.002": {},
+    "ui.terminal.003": {},
+    "ui.terminal.004": {},
+    "ui.terminal.005": {},
+    "ui.terminal.006": {},
+    "ui.terminal.007": {},
+    "ui.terminal.h666b4a": {},
+    "ui.transfer.001": {},
+    "ui.transfer.002": {},
+    "ui.transfer.003": {},
+    "ui.transfer.004": {},
+    "ui.transfer.005": {},
+    "ui.transfer.006": {},
+    "ui.transfer.007": {},
+    "ui.transfer.008": {},
+    "ui.transfer.ha1bb0d": {},
+    "ui.transfer.hbd3488": {},
+    "ui.video.001": {},
+    "ui.video.002": {},
+    "ui.video.003": {},
+    "ui.video.004": {},
+    "ui.video.005": {},
+    "ui.video.006": {},
+    "ui.video.007": {},
+    "ui.video.008": {},
+    "ui.video.009": {},
+    "ui.video.010": {},
+    "ui.video.011": {},
+    "ui.video.012": {},
+    "ui.video.013": {},
+    "ui.video.014": {},
+    "ui.video.015": {},
+    "ui.video.016": {},
+    "ui.video.017": {},
+    "ui.video.018": {},
+    "ui.video.019": {},
+    "ui.video.020": {},
+    "ui.video.021": {
+      "episodes": {}
+    },
+    "ui.video.022": {},
+    "ui.video.023": {},
+    "ui.video.024": {},
+    "ui.video.h1137ee": {},
+    "ui.video.h390648": {},
+    "ui.video.h4ad584": {},
+    "ui.video.h5186a2": {},
+    "ui.video.h720777": {},
+    "ui.video.h721271": {},
+    "ui.video.h891441": {},
+    "ui.video.h9c8283": {},
+    "ui.video.ha3af1c": {},
+    "ui.video.haaa5f2": {},
+    "ui.video.hb3ed11": {},
+    "ui.video.hbe1c0c": {},
+    "ui.video.hcde9b5": {},
+    "ui.video.hcff5e9": {},
+    "ui.video.hd179a3": {},
+    "ui.video.he348df": {},
+    "ui.video.he63140": {},
+    "video.action.copyPath": {},
+    "video.action.excludeScrape": {},
+    "video.action.favorite": {},
+    "video.action.locateFile": {},
+    "video.action.markTvWatched": {},
+    "video.action.markUnwatched": {},
+    "video.action.markWatched": {},
+    "video.action.matchTmdb": {},
+    "video.action.scrape": {},
+    "video.action.scrapeCleanup": {},
+    "video.action.scrapeForce": {},
+    "video.action.unfavorite": {},
+    "video.browse.empty": {},
+    "video.browse.noLibrary": {},
+    "video.browse.root": {},
+    "video.browse.selectLibrary": {},
+    "video.browse.smbPreviewUnsupported": {},
+    "video.browse.title": {},
+    "video.browse.unindexed": {},
+    "video.browse.up": {},
+    "video.badge.chinese": {},
+    "video.badge.subtitle": {},
+    "video.badge.uncensored": {},
+    "video.card.more": {},
+    "video.card.rankBadge": {
+      "rank": {}
+    },
+    "video.card.rankDetail": {
+      "daily": {},
+      "weekly": {},
+      "monthly": {}
+    },
+    "video.card.unwatched": {},
+    "video.card.watched": {},
+    "video.collection.addTo": {},
+    "video.collection.added": {
+      "count": {}
+    },
+    "video.collection.coverBadge": {},
+    "video.collection.coverSet": {},
+    "video.collection.delete": {},
+    "video.collection.deleteBody": {},
+    "video.collection.description": {},
+    "video.collection.descriptionHint": {},
+    "video.collection.edit": {},
+    "video.collection.empty": {},
+    "video.collection.emptyItems": {},
+    "video.collection.emptyItemsHint": {},
+    "video.collection.group": {},
+    "video.collection.hint": {},
+    "video.collection.itemsCount": {
+      "count": {}
+    },
+    "video.collection.moveDown": {},
+    "video.collection.moveUp": {},
+    "video.collection.name": {},
+    "video.collection.nameHint": {},
+    "video.collection.new": {},
+    "video.collection.removeItem": {},
+    "video.collection.rename": {},
+    "video.collection.setCover": {},
+    "video.collection.title": {},
+    "video.copyUrl": {
+      "minutes": {}
+    },
+    "video.detail.actor": {},
+    "video.detail.director": {},
+    "video.detail.genre": {},
+    "video.detail.minutes": {
+      "count": {}
+    },
+    "video.detail.notScraped": {},
+    "video.detail.notScrapedHint": {},
+    "video.detail.overview": {},
+    "video.detail.people": {},
+    "video.detail.region": {},
+    "video.detail.releaseDate": {},
+    "video.detail.runtime": {},
+    "video.detail.score": {},
+    "video.detail.source": {},
+    "video.detail.studio": {},
+    "video.detail.year": {},
+    "video.dup.autoSelect": {},
+    "video.dup.autoSelectEmpty": {},
+    "video.dup.clearSelection": {},
+    "video.dup.deleteConfirm": {
+      "count": {}
+    },
+    "video.dup.deleteDone": {
+      "count": {}
+    },
+    "video.dup.deletePartial": {
+      "done": {},
+      "failed": {}
+    },
+    "video.dup.deleteSelected": {
+      "count": {}
+    },
+    "video.dup.fanart": {},
+    "video.dup.hint2": {},
+    "video.dup.keep": {},
+    "video.dup.keys": {},
+    "video.dup.poster": {},
+    "video.dup.selectRest": {},
+    "video.dup.total": {
+      "groups": {},
+      "scanned": {},
+      "ms": {}
+    },
+    "video.duplicate.allLibraries": {},
+    "video.duplicate.empty": {},
+    "video.duplicate.groupCount": {
+      "count": {}
+    },
+    "video.duplicate.hint": {},
+    "video.duplicate.scanned": {
+      "count": {}
+    },
+    "video.duplicate.title": {},
+    "video.favoriteFailed": {
+      "error": {}
+    },
+    "video.flag.chineseSub": {},
+    "video.flag.uncensored": {},
+    "video.history.all": {},
+    "video.history.clear": {},
+    "video.history.clearAll": {},
+    "video.history.clearAllBody": {},
+    "video.history.clearFinished": {},
+    "video.history.clearFinishedBody": {},
+    "video.history.cleared": {
+      "n": {}
+    },
+    "video.history.finished": {},
+    "video.history.unfinished": {},
+    "video.home.continue": {},
+    "video.home.empty": {},
+    "video.home.emptyHint": {},
+    "video.home.recentAdd": {},
+    "video.home.recommend": {},
+    "video.home.scrapeAll": {},
+    "video.home.sources": {},
+    "video.jp.actor": {},
+    "video.jp.actorTitle": {},
+    "video.jp.back": {},
+    "video.jp.birthday": {},
+    "video.jp.birthplace": {},
+    "video.jp.bust": {},
+    "video.jp.daily": {},
+    "video.jp.empty": {},
+    "video.jp.emptyActors": {},
+    "video.jp.fanart": {},
+    "video.jp.favorite": {},
+    "video.jp.favorites": {},
+    "video.jp.height": {},
+    "video.jp.hips": {},
+    "video.jp.inLibrary": {},
+    "video.jp.items": {},
+    "video.jp.monthly": {},
+    "video.jp.movie": {},
+    "video.jp.noWorks": {},
+    "video.jp.onlyUnwatched": {},
+    "video.jp.poster": {},
+    "video.jp.rankTitle": {},
+    "video.jp.searchHint": {},
+    "video.jp.sort": {},
+    "video.jp.sortCount": {},
+    "video.jp.sortHot": {},
+    "video.jp.sortName": {},
+    "video.jp.sortSmart": {},
+    "video.jp.sortUnwatched": {},
+    "video.jp.source": {},
+    "video.jp.unfavorite": {},
+    "video.jp.waist": {},
+    "video.jp.weekly": {},
+    "video.jp.works": {
+      "count": {}
+    },
+    "video.libSummary": {
+      "path": {},
+      "count": {}
+    },
+    "video.library.add": {},
+    "video.library.addSource": {},
+    "video.library.audioNormalize": {},
+    "video.library.audioNormalizeHint": {},
+    "video.library.autoScrape": {},
+    "video.library.autoScrapeHint": {},
+    "video.library.autoSubtitle": {},
+    "video.library.autoSubtitleHint": {},
+    "video.library.chooseDir": {},
+    "video.library.delete": {},
+    "video.library.deleteBody": {
+      "name": {}
+    },
+    "video.library.edit": {},
+    "video.library.empty": {},
+    "video.library.emptyHint": {},
+    "video.library.flags": {},
+    "video.library.flagsSaved": {},
+    "video.library.flagsTitle": {
+      "name": {}
+    },
+    "video.library.hint": {},
+    "video.library.meta": {
+      "type": {},
+      "sources": {},
+      "count": {}
+    },
+    "video.library.needName": {},
+    "video.library.needPath": {},
+    "video.library.needSmb": {},
+    "video.library.needSource": {},
+    "video.library.needSourcePath": {
+      "n": {}
+    },
+    "video.library.needSourceSmb": {
+      "n": {}
+    },
+    "video.library.passwordKeep": {},
+    "video.library.pathHint": {},
+    "video.library.removeSource": {},
+    "video.library.saved": {},
+    "video.library.savedScanning": {},
+    "video.library.scrapeEnabled": {},
+    "video.library.scrapeEnabledHint": {},
+    "video.library.showInHome": {},
+    "video.library.showInHomeHint": {},
+    "video.library.sortOrder": {},
+    "video.library.sourceN": {
+      "n": {}
+    },
+    "video.library.sourcesHint": {},
+    "video.library.type": {},
+    "video.library.type.image": {},
+    "video.library.type.jp": {},
+    "video.library.type.mixed": {},
+    "video.library.type.movie": {},
+    "video.library.type.tv": {},
+    "video.list.count": {
+      "count": {},
+      "scraped": {}
+    },
+    "video.list.filter": {},
+    "video.list.filter.all": {},
+    "video.list.filter.empty": {},
+    "video.list.filter.genres": {},
+    "video.list.filter.noYear": {},
+    "video.list.filter.regions": {},
+    "video.list.filter.scraped": {},
+    "video.list.filter.unscraped": {},
+    "video.list.filter.unwatched": {},
+    "video.list.filter.watched": {},
+    "video.list.filter.years": {},
+    "video.list.posterSize": {},
+    "video.list.reset": {},
+    "video.list.searchHint": {},
+    "video.list.selected": {
+      "count": {}
+    },
+    "video.list.showFanart": {},
+    "video.list.showPoster": {},
+    "video.list.sort": {},
+    "video.list.sort.createAsc": {},
+    "video.list.sort.createDesc": {},
+    "video.media.all": {},
+    "video.media.close": {},
+    "video.media.copyLink": {},
+    "video.media.delete": {},
+    "video.media.download": {},
+    "video.media.empty": {},
+    "video.media.folder": {},
+    "video.media.folderCount": {
+      "count": {}
+    },
+    "video.media.grid": {},
+    "video.media.hideName": {},
+    "video.media.next": {},
+    "video.media.open": {},
+    "video.media.prev": {},
+    "video.media.searchHint": {},
+    "video.media.showName": {},
+    "video.media.sort": {},
+    "video.media.sortCreateAsc": {},
+    "video.media.sortCreateDesc": {},
+    "video.media.sortNameAsc": {},
+    "video.media.sortNameDesc": {},
+    "video.media.sortTakenAsc": {},
+    "video.media.sortTakenDesc": {},
+    "video.media.sortViewAsc": {},
+    "video.media.sortViewDesc": {},
+    "video.media.viewerHint": {},
+    "video.media.waterfall": {},
+    "video.list.sort.nameAsc": {},
+    "video.list.sort.nameDesc": {},
+    "video.list.sort.scoreAsc": {},
+    "video.list.sort.scoreDesc": {},
+    "video.list.sort.viewDesc": {},
+    "video.list.sort.yearAsc": {},
+    "video.list.sort.yearDesc": {},
+    "video.nav.emptyFavorites": {},
+    "video.nav.emptyFiles": {},
+    "video.nav.emptyHistory": {},
+    "video.nav.files": {},
+    "video.nav.history": {},
+    "video.nav.home": {},
+    "video.nav.jpActor": {},
+    "video.nav.jpRank": {},
+    "video.nav.libraries": {},
+    "video.nav.librarySettings": {},
+    "video.nav.otherSettings": {},
+    "video.nav.scanDone": {},
+    "video.nav.scrapeSettings": {},
+    "video.nav.series": {},
+    "video.nav.settings": {},
+    "video.nav.settingsGroup": {},
+    "video.nav.settingsHint": {},
+    "video.nav.sourceSettings": {},
+    "video.openFailed": {
+      "error": {}
+    },
+    "video.playUrlFailed": {
+      "error": {}
+    },
+    "video.pruneConfirm": {
+      "count": {}
+    },
+    "video.scanDone": {
+      "added": {},
+      "updated": {},
+      "skipped": {},
+      "probed": {}
+    },
+    "video.scrape.apply": {},
+    "video.scrape.batchConfirm": {
+      "count": {}
+    },
+    "video.scrape.batchDone": {
+      "scraped": {},
+      "skipped": {},
+      "notfound": {},
+      "unavailable": {}
+    },
+    "video.scrape.cleaned": {},
+    "video.scrape.configured": {},
+    "video.scrape.done": {
+      "title": {},
+      "source": {}
+    },
+    "video.scrape.excluded": {},
+    "video.scrape.key": {},
+    "video.scrape.keyHint": {},
+    "video.scrape.language": {},
+    "video.scrape.minScore": {},
+    "video.scrape.minScoreHint": {},
+    "video.scrape.noResult": {},
+    "video.scrape.notConfigured": {},
+    "video.scrape.notfound": {},
+    "video.scrape.saved": {},
+    "video.scrape.searchHint": {},
+    "video.scrape.searchTitle": {},
+    "video.scrape.sidecarKept": {},
+    "video.scrape.toSettings": {},
+    "video.scrape.writeSidecar": {},
+    "video.scrape.writeSidecarHint": {},
+    "video.season.missing": {
+      "list": {}
+    },
+    "video.season.missingOne": {
+      "season": {},
+      "episodes": {}
+    },
+    "video.seasonEpisodes": {
+      "season": {},
+      "episodes": {}
+    },
+    "video.seasonsEpisodes": {
+      "seasons": {},
+      "episodes": {}
+    },
+    "video.seriesLoadFailed": {
+      "error": {}
+    },
+    "video.smart.4k": {},
+    "video.smart.atmos": {},
+    "video.smart.continue": {},
+    "video.smart.count": {
+      "count": {}
+    },
+    "video.smart.empty": {},
+    "video.smart.hdr": {},
+    "video.smart.hint": {},
+    "video.smart.long": {},
+    "video.smart.recent30": {},
+    "video.smart.title": {},
+    "video.smart.unwatched": {},
+    "video.smb.host": {},
+    "video.smb.password": {},
+    "video.smb.share": {},
+    "video.smb.subPath": {},
+    "video.smb.user": {},
+    "video.smb.username": {},
+    "video.source.add": {},
+    "video.source.edit": {},
+    "video.source.hint": {},
+    "video.source.local": {},
+    "video.source.localOnly": {},
+    "video.source.neverProbed": {},
+    "video.source.none": {},
+    "video.source.noneHint": {},
+    "video.source.offline": {},
+    "video.source.online": {},
+    "video.source.probe": {},
+    "video.source.probed": {},
+    "video.source.probedAt": {
+      "time": {}
+    },
+    "video.source.rescan": {},
+    "video.source.scanFailedWith": {
+      "error": {}
+    },
+    "video.source.scanned": {},
+    "video.source.smb": {},
+    "video.source.type": {},
+    "video.source.unknown": {},
+    "video.stats": {
+      "count": {},
+      "duration": {}
+    },
+    "video.subtitleFailed": {
+      "error": {}
+    },
+    "video.transcode.codec": {},
+    "video.transcode.none": {},
+    "video.transcode.preset": {},
+    "video.transcode.start": {},
+    "video.transcode.subtitle": {},
+    "video.transcode.title": {},
+    "video.transcodeFailed": {
+      "error": {}
+    },
+    "video.transcodeIncomplete": {
+      "status": {},
+      "error": {}
+    },
+    "settings.capabilityNotice": {},
+    "settings.capabilityNoticeHint": {}
+  }
+}

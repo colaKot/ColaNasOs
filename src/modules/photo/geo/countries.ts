@@ -1,0 +1,78 @@
+/**
+ * 常见国家/地区的中文名（GeoNames country_code → 中文）。
+ *
+ * 照片可能拍在国外，GeoNames 只有当地语言名/英文名；用户要求「地点不要英文」，
+ * 这里把国外位置收敛成国家中文名（如「马来西亚」），不展示英文城市名。
+ */
+const COUNTRY_ZH: Record<string, string> = {
+  CN: '中国',
+  HK: '中国香港',
+  MO: '中国澳门',
+  TW: '中国台湾',
+  JP: '日本',
+  KR: '韩国',
+  KP: '朝鲜',
+  SG: '新加坡',
+  MY: '马来西亚',
+  ID: '印度尼西亚',
+  TH: '泰国',
+  VN: '越南',
+  PH: '菲律宾',
+  KH: '柬埔寨',
+  LA: '老挝',
+  MM: '缅甸',
+  BN: '文莱',
+  IN: '印度',
+  NP: '尼泊尔',
+  BT: '不丹',
+  LK: '斯里兰卡',
+  MV: '马尔代夫',
+  PK: '巴基斯坦',
+  BD: '孟加拉国',
+  MN: '蒙古',
+  KZ: '哈萨克斯坦',
+  RU: '俄罗斯',
+  US: '美国',
+  CA: '加拿大',
+  MX: '墨西哥',
+  BR: '巴西',
+  AR: '阿根廷',
+  CL: '智利',
+  PE: '秘鲁',
+  GB: '英国',
+  IE: '爱尔兰',
+  FR: '法国',
+  DE: '德国',
+  IT: '意大利',
+  ES: '西班牙',
+  PT: '葡萄牙',
+  NL: '荷兰',
+  BE: '比利时',
+  CH: '瑞士',
+  AT: '奥地利',
+  SE: '瑞典',
+  NO: '挪威',
+  DK: '丹麦',
+  FI: '芬兰',
+  IS: '冰岛',
+  PL: '波兰',
+  CZ: '捷克',
+  HU: '匈牙利',
+  GR: '希腊',
+  TR: '土耳其',
+  AE: '阿联酋',
+  SA: '沙特阿拉伯',
+  IL: '以色列',
+  EG: '埃及',
+  ZA: '南非',
+  AU: '澳大利亚',
+  NZ: '新西兰',
+  FJ: '斐济',
+  GU: '关岛',
+};
+
+export function countryNameZh(code: string | null | undefined): string {
+  const key = String(code || '').trim().toUpperCase();
+  if (!key) return '';
+  return COUNTRY_ZH[key] || '';
+}

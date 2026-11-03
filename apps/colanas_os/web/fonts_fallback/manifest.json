@@ -1,0 +1,467 @@
+{
+  "generatedAt": "2026-10-29T09:11:52.813Z",
+  "sdk": "C:/dev/flutter/bin/cache/flutter_web_sdk/lib/ui/src/engine/font_fallback_data.dart",
+  "count": 115,
+  "items": [
+    {
+      "name": "Noto Color Emoji 0",
+      "path": "s/notocoloremoji/v32/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.0.woff2"
+    },
+    {
+      "name": "Noto Color Emoji 1",
+      "path": "s/notocoloremoji/v32/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.1.woff2"
+    },
+    {
+      "name": "Noto Color Emoji 2",
+      "path": "s/notocoloremoji/v32/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.2.woff2"
+    },
+    {
+      "name": "Noto Color Emoji 3",
+      "path": "s/notocoloremoji/v32/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.3.woff2"
+    },
+    {
+      "name": "Noto Color Emoji 4",
+      "path": "s/notocoloremoji/v32/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.4.woff2"
+    },
+    {
+      "name": "Noto Color Emoji 5",
+      "path": "s/notocoloremoji/v32/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.5.woff2"
+    },
+    {
+      "name": "Noto Color Emoji 6",
+      "path": "s/notocoloremoji/v32/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.6.woff2"
+    },
+    {
+      "name": "Noto Color Emoji 7",
+      "path": "s/notocoloremoji/v32/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.7.woff2"
+    },
+    {
+      "name": "Noto Color Emoji 8",
+      "path": "s/notocoloremoji/v32/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.8.woff2"
+    },
+    {
+      "name": "Noto Color Emoji 9",
+      "path": "s/notocoloremoji/v32/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.9.woff2"
+    },
+    {
+      "name": "Noto Color Emoji 10",
+      "path": "s/notocoloremoji/v32/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.10.woff2"
+    },
+    {
+      "name": "Noto Color Emoji 11",
+      "path": "s/notocoloremoji/v32/Yq6P-KqIXTD0t4D9z1ESnKM3-HpFabsE4tq3luCC7p-aXxcn.11.woff2"
+    },
+    {
+      "name": "Noto Sans SC 0",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.4.woff2"
+    },
+    {
+      "name": "Noto Sans SC 1",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.5.woff2"
+    },
+    {
+      "name": "Noto Sans SC 2",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.6.woff2"
+    },
+    {
+      "name": "Noto Sans SC 3",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.21.woff2"
+    },
+    {
+      "name": "Noto Sans SC 4",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.22.woff2"
+    },
+    {
+      "name": "Noto Sans SC 5",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.23.woff2"
+    },
+    {
+      "name": "Noto Sans SC 6",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.24.woff2"
+    },
+    {
+      "name": "Noto Sans SC 7",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.25.woff2"
+    },
+    {
+      "name": "Noto Sans SC 8",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.26.woff2"
+    },
+    {
+      "name": "Noto Sans SC 9",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.27.woff2"
+    },
+    {
+      "name": "Noto Sans SC 10",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.28.woff2"
+    },
+    {
+      "name": "Noto Sans SC 11",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.29.woff2"
+    },
+    {
+      "name": "Noto Sans SC 12",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.30.woff2"
+    },
+    {
+      "name": "Noto Sans SC 13",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.31.woff2"
+    },
+    {
+      "name": "Noto Sans SC 14",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.32.woff2"
+    },
+    {
+      "name": "Noto Sans SC 15",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.33.woff2"
+    },
+    {
+      "name": "Noto Sans SC 16",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.34.woff2"
+    },
+    {
+      "name": "Noto Sans SC 17",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.35.woff2"
+    },
+    {
+      "name": "Noto Sans SC 18",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.36.woff2"
+    },
+    {
+      "name": "Noto Sans SC 19",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.37.woff2"
+    },
+    {
+      "name": "Noto Sans SC 20",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.38.woff2"
+    },
+    {
+      "name": "Noto Sans SC 21",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.39.woff2"
+    },
+    {
+      "name": "Noto Sans SC 22",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.40.woff2"
+    },
+    {
+      "name": "Noto Sans SC 23",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.41.woff2"
+    },
+    {
+      "name": "Noto Sans SC 24",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.42.woff2"
+    },
+    {
+      "name": "Noto Sans SC 25",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.43.woff2"
+    },
+    {
+      "name": "Noto Sans SC 26",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.44.woff2"
+    },
+    {
+      "name": "Noto Sans SC 27",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.45.woff2"
+    },
+    {
+      "name": "Noto Sans SC 28",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.46.woff2"
+    },
+    {
+      "name": "Noto Sans SC 29",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.47.woff2"
+    },
+    {
+      "name": "Noto Sans SC 30",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.48.woff2"
+    },
+    {
+      "name": "Noto Sans SC 31",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.49.woff2"
+    },
+    {
+      "name": "Noto Sans SC 32",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.50.woff2"
+    },
+    {
+      "name": "Noto Sans SC 33",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.51.woff2"
+    },
+    {
+      "name": "Noto Sans SC 34",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.52.woff2"
+    },
+    {
+      "name": "Noto Sans SC 35",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.53.woff2"
+    },
+    {
+      "name": "Noto Sans SC 36",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.54.woff2"
+    },
+    {
+      "name": "Noto Sans SC 37",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.55.woff2"
+    },
+    {
+      "name": "Noto Sans SC 38",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.56.woff2"
+    },
+    {
+      "name": "Noto Sans SC 39",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.57.woff2"
+    },
+    {
+      "name": "Noto Sans SC 40",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.58.woff2"
+    },
+    {
+      "name": "Noto Sans SC 41",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.59.woff2"
+    },
+    {
+      "name": "Noto Sans SC 42",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.60.woff2"
+    },
+    {
+      "name": "Noto Sans SC 43",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.61.woff2"
+    },
+    {
+      "name": "Noto Sans SC 44",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.62.woff2"
+    },
+    {
+      "name": "Noto Sans SC 45",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.63.woff2"
+    },
+    {
+      "name": "Noto Sans SC 46",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.64.woff2"
+    },
+    {
+      "name": "Noto Sans SC 47",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.65.woff2"
+    },
+    {
+      "name": "Noto Sans SC 48",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.66.woff2"
+    },
+    {
+      "name": "Noto Sans SC 49",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.67.woff2"
+    },
+    {
+      "name": "Noto Sans SC 50",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.68.woff2"
+    },
+    {
+      "name": "Noto Sans SC 51",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.69.woff2"
+    },
+    {
+      "name": "Noto Sans SC 52",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.70.woff2"
+    },
+    {
+      "name": "Noto Sans SC 53",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.71.woff2"
+    },
+    {
+      "name": "Noto Sans SC 54",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.72.woff2"
+    },
+    {
+      "name": "Noto Sans SC 55",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.73.woff2"
+    },
+    {
+      "name": "Noto Sans SC 56",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.74.woff2"
+    },
+    {
+      "name": "Noto Sans SC 57",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.75.woff2"
+    },
+    {
+      "name": "Noto Sans SC 58",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.76.woff2"
+    },
+    {
+      "name": "Noto Sans SC 59",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.77.woff2"
+    },
+    {
+      "name": "Noto Sans SC 60",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.78.woff2"
+    },
+    {
+      "name": "Noto Sans SC 61",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.79.woff2"
+    },
+    {
+      "name": "Noto Sans SC 62",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.80.woff2"
+    },
+    {
+      "name": "Noto Sans SC 63",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.81.woff2"
+    },
+    {
+      "name": "Noto Sans SC 64",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.82.woff2"
+    },
+    {
+      "name": "Noto Sans SC 65",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.83.woff2"
+    },
+    {
+      "name": "Noto Sans SC 66",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.84.woff2"
+    },
+    {
+      "name": "Noto Sans SC 67",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.85.woff2"
+    },
+    {
+      "name": "Noto Sans SC 68",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.86.woff2"
+    },
+    {
+      "name": "Noto Sans SC 69",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.87.woff2"
+    },
+    {
+      "name": "Noto Sans SC 70",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.88.woff2"
+    },
+    {
+      "name": "Noto Sans SC 71",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.89.woff2"
+    },
+    {
+      "name": "Noto Sans SC 72",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.90.woff2"
+    },
+    {
+      "name": "Noto Sans SC 73",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.91.woff2"
+    },
+    {
+      "name": "Noto Sans SC 74",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.97.woff2"
+    },
+    {
+      "name": "Noto Sans SC 75",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.98.woff2"
+    },
+    {
+      "name": "Noto Sans SC 76",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.99.woff2"
+    },
+    {
+      "name": "Noto Sans SC 77",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.100.woff2"
+    },
+    {
+      "name": "Noto Sans SC 78",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.101.woff2"
+    },
+    {
+      "name": "Noto Sans SC 79",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.102.woff2"
+    },
+    {
+      "name": "Noto Sans SC 80",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.103.woff2"
+    },
+    {
+      "name": "Noto Sans SC 81",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.104.woff2"
+    },
+    {
+      "name": "Noto Sans SC 82",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.105.woff2"
+    },
+    {
+      "name": "Noto Sans SC 83",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.106.woff2"
+    },
+    {
+      "name": "Noto Sans SC 84",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.107.woff2"
+    },
+    {
+      "name": "Noto Sans SC 85",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.108.woff2"
+    },
+    {
+      "name": "Noto Sans SC 86",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.109.woff2"
+    },
+    {
+      "name": "Noto Sans SC 87",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.110.woff2"
+    },
+    {
+      "name": "Noto Sans SC 88",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.111.woff2"
+    },
+    {
+      "name": "Noto Sans SC 89",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.112.woff2"
+    },
+    {
+      "name": "Noto Sans SC 90",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.113.woff2"
+    },
+    {
+      "name": "Noto Sans SC 91",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.114.woff2"
+    },
+    {
+      "name": "Noto Sans SC 92",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.115.woff2"
+    },
+    {
+      "name": "Noto Sans SC 93",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.116.woff2"
+    },
+    {
+      "name": "Noto Sans SC 94",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.117.woff2"
+    },
+    {
+      "name": "Noto Sans SC 95",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.118.woff2"
+    },
+    {
+      "name": "Noto Sans SC 96",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FnYkldv7JjxkkgFsFSSOPMOkySAZ73y9ViAt3acb8NexQ2w.119.woff2"
+    },
+    {
+      "name": "Noto Sans SC 97",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FrY9HbczS.woff2"
+    },
+    {
+      "name": "Noto Sans SC 98",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FrYRHbczS.woff2"
+    },
+    {
+      "name": "Noto Sans SC 99",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FrYVHbczS.woff2"
+    },
+    {
+      "name": "Noto Sans SC 100",
+      "path": "s/notosanssc/v37/k3kCo84MPvpLmixcA63oeAL7Iqp5IZJF9bmaG9_FrYtHbQ.woff2"
+    },
+    {
+      "name": "Noto Sans",
+      "path": "s/notosans/v37/o-0mIpQlx3QUlC5A4PNB6Ryti20_6n1iPHjcz6L1SoM-jCpoiyD9A99Y41P6zHtY.woff2"
+    },
+    {
+      "name": "Roboto",
+      "path": "s/roboto/v32/KFOmCnqEu92Fr1Me4GZLCzYlKw.woff2"
+    }
+  ]
+}

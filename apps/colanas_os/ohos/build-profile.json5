@@ -1,0 +1,50 @@
+// ColaNasOs 鸿蒙端工程（CL4-01，flutter_ohos）。
+//
+// 结构对齐 HarmonyOS NEXT（modelVersion 6.0.2 / API 22，见 docs/01 §10、docs/05 §11）。
+// bundleName 固定为 com.colanas.os（docs/01 §234），与 water 参考工程区分。
+//
+// 签名：证书与 profile 不入库。release 需要本项目（bundleName=com.colanas.os）的
+// p7b/p12 —— 现用的 water profile 绑定的是 water 的 bundleName，release 会签名失败，
+// 因此这里不预置 signingConfigs，交给 DevEco 的自动调试签名或 CI 注入。
+{
+  "app": {
+    "signingConfigs": [],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "targetSdkVersion": "6.0.2(22)",
+        "compatibleSdkVersion": "6.0.2(22)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

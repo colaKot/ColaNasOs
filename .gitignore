@@ -1,0 +1,47 @@
+node_modules/
+dist/
+# tsc 增量编译缓存（下次 `npm run build` 只重编改动文件）
+.tsbuildinfo
+build/
+.devdata/
+*.log
+.env
+.DS_Store
+.dart_tool/
+**/pubspec.lock
+*.pem
+.opencode/
+
+# 第三方二进制/数据（从各自上游引入，不入库）：
+#   ffmpeg、ONNX 模型、GeoNames 地名库（CC-BY 4.0，需随包分发时单独签名）
+vendor/ffmpeg/
+vendor/models/
+vendor/geo/
+# 安装器产物（体积大，不入库）
+dist_installer/
+# 鸿蒙端（flutter_ohos）构建中间物与 SDK 拷入的 har，只保留工程骨架
+apps/colanas_os/ohos/entry/har/
+apps/colanas_os/ohos/**/oh_modules/
+apps/colanas_os/ohos/**/.hvigor/
+apps/colanas_os/ohos/**/oh-package-lock.json5
+
+# 内部核对记录（对照既有实现逐项比对的施工过程稿，含第三方源码路径与行号引用）。
+# 仅供本机留档，不随仓库发布。
+docs/11-改进移植差距矩阵.md
+docs/12-影视与发现差距核对.md
+docs/13-相册与音乐差距核对.md
+docs/16-功能1对1对照-同步媒体工具用户配置发现.md
+docs/_archive/
+
+# 本地工具与临时产物（不含项目源码，不入库）
+.codeartsdoer/
+.workbuddy/
+.dumate/
+.codegraph/
+.arts/
+.cursor/
+.trae/
+.screenshots/
+.tmp-chrome-profile/
+.merkle-snapshot.json
+vr9.txt

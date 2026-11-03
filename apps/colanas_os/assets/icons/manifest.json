@@ -1,0 +1,161 @@
+{
+  "version": 4,
+  "size": 512,
+  "note": "由用户处理好的成品（mypic/chuli）接入",
+  "icons": [
+    {
+      "slug": "album",
+      "name": "相册",
+      "asset": "assets/icons/album.png",
+      "source": "mypic/chuli/相册.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "backup",
+      "name": "备份",
+      "asset": "assets/icons/backup.png",
+      "source": "mypic/chuli/备份.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "client",
+      "name": "客户端",
+      "asset": "assets/icons/client.png",
+      "source": "mypic/chuli/客户端.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "discover",
+      "name": "影视发现",
+      "asset": "assets/icons/discover.png",
+      "source": "mypic/chuli/影视发现.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "docker",
+      "name": "docker",
+      "asset": "assets/icons/docker.png",
+      "source": "mypic/chuli/docker.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "download",
+      "name": "下载",
+      "asset": "assets/icons/download.png",
+      "source": "mypic/chuli/下载.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "folder",
+      "name": "文件夹",
+      "asset": "assets/icons/folder.png",
+      "source": "mypic/chuli/文件夹.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "library",
+      "name": "图书馆",
+      "asset": "assets/icons/library.png",
+      "source": "mypic/chuli/图书馆.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "media-tool",
+      "name": "媒体工具",
+      "asset": "assets/icons/media-tool.png",
+      "source": "mypic/chuli/媒体工具.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "mount",
+      "name": "远程挂载",
+      "asset": "assets/icons/mount.png",
+      "source": "mypic/chuli/远程挂载.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "music",
+      "name": "音乐",
+      "asset": "assets/icons/music.png",
+      "source": "mypic/chuli/音乐.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "notes",
+      "name": "笔记",
+      "asset": "assets/icons/notes.png",
+      "source": "mypic/chuli/笔记.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "photo-viewer",
+      "name": "图片查看",
+      "asset": "assets/icons/photo-viewer.png",
+      "source": "mypic/chuli/图片查看.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "security",
+      "name": "安全中心",
+      "asset": "assets/icons/security.png",
+      "source": "mypic/chuli/安全中心.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "server",
+      "name": "服务端",
+      "asset": "assets/icons/server.png",
+      "source": "mypic/chuli/服务端.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "services",
+      "name": "服务管理",
+      "asset": "assets/icons/services.png",
+      "source": "mypic/chuli/服务管理.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "share",
+      "name": "分享管理",
+      "asset": "assets/icons/share.png",
+      "source": "mypic/chuli/分享管理.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "sync",
+      "name": "同步管理",
+      "asset": "assets/icons/sync.png",
+      "source": "mypic/chuli/同步管理.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "tasks",
+      "name": "任务中心",
+      "asset": "assets/icons/tasks.png",
+      "source": "mypic/chuli/任务中心.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "users",
+      "name": "用户",
+      "asset": "assets/icons/users.png",
+      "source": "mypic/chuli/用户.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "vault",
+      "name": "加密空间",
+      "asset": "assets/icons/vault.png",
+      "source": "mypic/chuli/加密空间.png",
+      "original": "1024x1024"
+    },
+    {
+      "slug": "video",
+      "name": "影视",
+      "asset": "assets/icons/video.png",
+      "source": "mypic/chuli/影视.png",
+      "original": "1024x1024"
+    }
+  ]
+}

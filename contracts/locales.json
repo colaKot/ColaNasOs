@@ -1,0 +1,132 @@
+[
+  {
+    "code": "zh-CN",
+    "native": "简体中文",
+    "enabled": true,
+    "files": {
+      "electron": "zh-CN.json",
+      "flutter": "zh_cn.dart",
+      "harmony": "zh-cn.json"
+    }
+  },
+  {
+    "code": "en-US",
+    "native": "English",
+    "enabled": true,
+    "files": {
+      "electron": "en-US.json",
+      "flutter": "en_us.dart",
+      "harmony": "en-us.json"
+    }
+  },
+  {
+    "code": "ja-JP",
+    "native": "日本語",
+    "enabled": false,
+    "files": {
+      "electron": "ja-JP.json",
+      "flutter": "ja_jp.dart",
+      "harmony": "ja-jp.json"
+    }
+  },
+  {
+    "code": "ko-KR",
+    "native": "한국어",
+    "enabled": false,
+    "files": {
+      "electron": "ko-KR.json",
+      "flutter": "ko_kr.dart",
+      "harmony": "ko-kr.json"
+    }
+  },
+  {
+    "code": "fr-FR",
+    "native": "Français",
+    "enabled": false,
+    "files": {
+      "electron": "fr-FR.json",
+      "flutter": "fr_fr.dart",
+      "harmony": "fr-fr.json"
+    }
+  },
+  {
+    "code": "de-DE",
+    "native": "Deutsch",
+    "enabled": false,
+    "files": {
+      "electron": "de-DE.json",
+      "flutter": "de_de.dart",
+      "harmony": "de-de.json"
+    }
+  },
+  {
+    "code": "es-ES",
+    "native": "Español",
+    "enabled": false,
+    "files": {
+      "electron": "es-ES.json",
+      "flutter": "es_es.dart",
+      "harmony": "es-es.json"
+    }
+  },
+  {
+    "code": "pt-BR",
+    "native": "Português",
+    "enabled": false,
+    "files": {
+      "electron": "pt-BR.json",
+      "flutter": "pt_br.dart",
+      "harmony": "pt-br.json"
+    }
+  },
+  {
+    "code": "ru-RU",
+    "native": "Русский",
+    "enabled": false,
+    "files": {
+      "electron": "ru-RU.json",
+      "flutter": "ru_ru.dart",
+      "harmony": "ru-ru.json"
+    }
+  },
+  {
+    "code": "ar-SA",
+    "native": "العربية",
+    "enabled": false,
+    "files": {
+      "electron": "ar-SA.json",
+      "flutter": "ar_ar.dart",
+      "harmony": "ar-sa.json"
+    }
+  },
+  {
+    "code": "th-TH",
+    "native": "ไทย",
+    "enabled": false,
+    "files": {
+      "electron": "th-TH.json",
+      "flutter": "th_th.dart",
+      "harmony": "th-th.json"
+    }
+  },
+  {
+    "code": "vi-VN",
+    "native": "Tiếng Việt",
+    "enabled": false,
+    "files": {
+      "electron": "vi-VN.json",
+      "flutter": "vi_vn.dart",
+      "harmony": "vi-vn.json"
+    }
+  },
+  {
+    "code": "id-ID",
+    "native": "Bahasa Indonesia",
+    "enabled": false,
+    "files": {
+      "electron": "id-ID.json",
+      "flutter": "id_id.dart",
+      "harmony": "id-id.json"
+    }
+  }
+]

@@ -1,0 +1,884 @@
+{
+  "version": 1,
+  "endpoints": [
+    "desktop",
+    "tablet",
+    "mobile",
+    "tv",
+    "web",
+    "appleTv"
+  ],
+  "apps": [
+    {
+      "id": "photo",
+      "nameKey": "app.photo",
+      "route": "/photo",
+      "icon": "photo",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "tv",
+        "web",
+        "appleTv"
+      ],
+      "available": true,
+      "group": "media",
+      "accent": [
+        "#FF6B6B",
+        "#FF9F43"
+      ],
+      "nav": {
+        "style": "side",
+        "sections": [
+          {
+            "id": "photos",
+            "titleKey": "ui.photo.041",
+            "icon": "photo_library_outlined",
+            "items": [
+              {
+                "id": "home",
+                "labelKey": "photo.nav.home",
+                "icon": "home_outlined"
+              },
+              {
+                "id": "timeline",
+                "labelKey": "ui.photo.056",
+                "icon": "timeline_outlined"
+              },
+              {
+                "id": "footprint",
+                "labelKey": "ui.photo.021",
+                "icon": "place_outlined"
+              },
+              {
+                "id": "favorites",
+                "labelKey": "photo.nav.favorites",
+                "icon": "favorite_outline"
+              },
+              {
+                "id": "folders",
+                "labelKey": "photo.nav.files",
+                "icon": "folder_outlined"
+              }
+            ]
+          },
+          {
+            "id": "memories",
+            "titleKey": "ui.photo.026",
+            "icon": "auto_stories_outlined",
+            "items": [
+              {
+                "id": "memory",
+                "labelKey": "photo.nav.memory",
+                "icon": "auto_stories_outlined"
+              },
+              {
+                "id": "dayFrame",
+                "labelKey": "photo.nav.dayFrame",
+                "icon": "auto_awesome_mosaic_outlined"
+              },
+              {
+                "id": "tickets",
+                "labelKey": "photo.nav.tickets",
+                "icon": "confirmation_number_outlined"
+              },
+              {
+                "id": "year",
+                "labelKey": "photo.nav.year",
+                "icon": "bar_chart"
+              }
+            ]
+          },
+          {
+            "id": "albums",
+            "titleKey": "ui.photo.053",
+            "icon": "collections_bookmark_outlined",
+            "items": [
+              {
+                "id": "album",
+                "labelKey": "ui.photo.053",
+                "icon": "photo_album_outlined"
+              },
+              {
+                "id": "collection",
+                "labelKey": "photo.nav.collection",
+                "icon": "collections_outlined"
+              }
+            ]
+          },
+          {
+            "id": "ai",
+            "titleKey": "photo.nav.ai",
+            "icon": "auto_awesome_outlined",
+            "items": [
+              {
+                "id": "faces",
+                "labelKey": "ui.photo.038",
+                "icon": "face_retouching_natural_outlined"
+              },
+              {
+                "id": "relations",
+                "labelKey": "photo.relations.title",
+                "icon": "hub_outlined"
+              },
+              {
+                "id": "scenes",
+                "labelKey": "ui.photo.036",
+                "icon": "landscape_outlined"
+              },
+              {
+                "id": "activities",
+                "labelKey": "photo.nav.activities",
+                "icon": "sports_handball_outlined"
+              },
+              {
+                "id": "smartRules",
+                "labelKey": "photo.smartRule.title",
+                "icon": "rule"
+              },
+              {
+                "id": "search",
+                "labelKey": "common.search",
+                "icon": "search"
+              },
+              {
+                "id": "gps",
+                "labelKey": "photo.nav.gps",
+                "icon": "gps_fixed_outlined"
+              },
+              {
+                "id": "cleanup",
+                "labelKey": "photo.nav.similarCleanup",
+                "icon": "cleaning_services_outlined"
+              }
+            ]
+          },
+          {
+            "id": "settings",
+            "titleKey": "ui.settings.017",
+            "icon": "settings_outlined",
+            "items": [
+              {
+                "id": "source",
+                "labelKey": "photo.nav.source",
+                "icon": "folder_special_outlined"
+              },
+              {
+                "id": "preview",
+                "labelKey": "photo.nav.preview",
+                "icon": "photo_size_select_large_outlined"
+              },
+              {
+                "id": "aiSettings",
+                "labelKey": "photo.nav.aiSettings",
+                "icon": "tag_faces_outlined"
+              },
+              {
+                "id": "trash",
+                "labelKey": "photo.nav.trash",
+                "icon": "delete_sweep_outlined"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "files",
+      "nameKey": "app.files",
+      "route": "/files",
+      "icon": "folder",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "tv",
+        "web",
+        "appleTv"
+      ],
+      "available": true,
+      "group": "data",
+      "accent": [
+        "#3B82F6",
+        "#60A5FA"
+      ]
+    },
+    {
+      "id": "video",
+      "nameKey": "app.video",
+      "route": "/video",
+      "icon": "movie",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "tv",
+        "web",
+        "appleTv"
+      ],
+      "available": true,
+      "group": "media",
+      "accent": [
+        "#6366F1",
+        "#9F7AEA"
+      ],
+      "nav": {
+        "style": "side",
+        "sections": [
+          {
+            "id": "libraries",
+            "titleKey": "video.nav.libraries",
+            "icon": "movie_outlined",
+            "items": [
+              {
+                "id": "home",
+                "labelKey": "video.nav.home",
+                "icon": "home_outlined"
+              },
+              {
+                "id": "lib",
+                "dynamic": "video.libraries",
+                "idPrefix": "lib:",
+                "labelFrom": "name",
+                "iconFrom": "libType"
+              },
+              {
+                "id": "history",
+                "labelKey": "video.nav.history",
+                "icon": "history"
+              },
+              {
+                "id": "favorites",
+                "labelKey": "photo.nav.favorites",
+                "icon": "favorite_outline"
+              },
+              {
+                "id": "jp_rank",
+                "labelKey": "video.nav.jpRank",
+                "icon": "leaderboard_outlined",
+                "when": "hasJpLibrary"
+              },
+              {
+                "id": "jp_actor",
+                "labelKey": "video.nav.jpActor",
+                "icon": "people_outline",
+                "when": "hasJpLibrary"
+              },
+              {
+                "id": "series",
+                "labelKey": "video.nav.series",
+                "icon": "video_library_outlined"
+              },
+              {
+                "id": "browse",
+                "labelKey": "video.browse.title",
+                "icon": "photo_library_outlined"
+              }
+            ]
+          },
+          {
+            "id": "collections",
+            "titleKey": "video.collection.group",
+            "icon": "collections_bookmark_outlined",
+            "items": [
+              {
+                "id": "collections",
+                "labelKey": "video.collection.title",
+                "icon": "collections_bookmark_outlined"
+              },
+              {
+                "id": "smartAlbums",
+                "labelKey": "video.smart.title",
+                "icon": "auto_awesome_outlined"
+              },
+              {
+                "id": "duplicates",
+                "labelKey": "video.duplicate.title",
+                "icon": "content_copy_outlined"
+              }
+            ]
+          },
+          {
+            "id": "settings",
+            "titleKey": "video.nav.settingsGroup",
+            "icon": "settings_outlined",
+            "items": [
+              {
+                "id": "settings.library",
+                "labelKey": "video.nav.librarySettings",
+                "icon": "video_library_outlined"
+              },
+              {
+                "id": "settings.scrape",
+                "labelKey": "video.nav.scrapeSettings",
+                "icon": "auto_awesome_outlined"
+              },
+              {
+                "id": "settings.other",
+                "labelKey": "video.nav.otherSettings",
+                "icon": "tune"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "discover",
+      "nameKey": "app.discover",
+      "route": "/discover",
+      "icon": "compass",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "web"
+      ],
+      "available": true,
+      "group": "media",
+      "accent": [
+        "#F59E0B",
+        "#F97316"
+      ],
+      "nav": {
+        "style": "side",
+        "sections": [
+          {
+            "id": "explore",
+            "titleKey": "discover.nav.explore",
+            "icon": "travel_explore_outlined",
+            "items": [
+              {
+                "id": "discover",
+                "labelKey": "ui.discover.006",
+                "icon": "explore_outlined"
+              },
+              {
+                "id": "pt",
+                "labelKey": "discover.pt",
+                "icon": "download_outlined"
+              },
+              {
+                "id": "rss",
+                "labelKey": "discover.rss",
+                "icon": "rss_feed"
+              }
+            ]
+          },
+          {
+            "id": "manage",
+            "titleKey": "discover.nav.manage",
+            "icon": "tune",
+            "items": [
+              {
+                "id": "tasks",
+                "labelKey": "discover.tasks",
+                "icon": "task_alt_outlined"
+              },
+              {
+                "id": "settings",
+                "labelKey": "discover.settings",
+                "icon": "settings_outlined"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "music",
+      "nameKey": "app.music",
+      "route": "/music",
+      "icon": "music",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "tv",
+        "web",
+        "appleTv"
+      ],
+      "available": true,
+      "group": "media",
+      "accent": [
+        "#06B6D4",
+        "#3B82F6"
+      ],
+      "nav": {
+        "style": "side",
+        "sections": [
+          {
+            "id": "library",
+            "titleKey": "music.nav.library",
+            "icon": "library_music_outlined",
+            "items": [
+              {
+                "id": "songs",
+                "labelKey": "ui.music.009",
+                "icon": "music_note_outlined"
+              },
+              {
+                "id": "favorites",
+                "labelKey": "photo.nav.favorites",
+                "icon": "favorite_outline"
+              },
+              {
+                "id": "history",
+                "labelKey": "music.nav.history",
+                "icon": "history_outlined"
+              },
+              {
+                "id": "albums",
+                "labelKey": "music.nav.albums",
+                "icon": "album_outlined"
+              },
+              {
+                "id": "artists",
+                "labelKey": "music.nav.artists",
+                "icon": "people_outlined"
+              },
+              {
+                "id": "files",
+                "labelKey": "photo.nav.files",
+                "icon": "folder_outlined"
+              }
+            ]
+          },
+          {
+            "id": "playlists",
+            "titleKey": "ui.music.010",
+            "icon": "queue_music",
+            "items": [
+              {
+                "id": "playlists",
+                "labelKey": "ui.music.030",
+                "icon": "queue_music_outlined"
+              },
+              {
+                "id": "recentAdded",
+                "labelKey": "ui.music.026",
+                "icon": "new_releases_outlined"
+              },
+              {
+                "id": "recentPlayed",
+                "labelKey": "ui.music.027",
+                "icon": "history"
+              },
+              {
+                "id": "mostPlayed",
+                "labelKey": "ui.music.028",
+                "icon": "trending_up"
+              },
+              {
+                "id": "neverPlayed",
+                "labelKey": "ui.music.029",
+                "icon": "play_circle_outline"
+              }
+            ]
+          },
+          {
+            "id": "settings",
+            "titleKey": "ui.settings.017",
+            "icon": "settings_outlined",
+            "items": [
+              {
+                "id": "settings",
+                "labelKey": "music.nav.settings",
+                "icon": "tune"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "book",
+      "nameKey": "app.book",
+      "route": "/book",
+      "icon": "book",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "web"
+      ],
+      "available": true,
+      "group": "media",
+      "accent": [
+        "#10B981",
+        "#059669"
+      ]
+    },
+    {
+      "id": "notes",
+      "nameKey": "app.notes",
+      "route": "/notes",
+      "icon": "note",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "web"
+      ],
+      "available": true,
+      "group": "data",
+      "accent": [
+        "#FBBF24",
+        "#F59E0B"
+      ]
+    },
+    {
+      "id": "netdisk",
+      "nameKey": "app.netdisk",
+      "route": "/netdisk",
+      "icon": "cloud",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "web"
+      ],
+      "available": true,
+      "group": "data",
+      "accent": [
+        "#0EA5E9",
+        "#22D3EE"
+      ]
+    },
+    {
+      "id": "share",
+      "nameKey": "app.share",
+      "route": "/share",
+      "icon": "share",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "web"
+      ],
+      "available": true,
+      "group": "data",
+      "accent": [
+        "#A855F7",
+        "#EC4899"
+      ]
+    },
+    {
+      "id": "backup",
+      "nameKey": "app.backup",
+      "route": "/backup",
+      "icon": "backup",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "web"
+      ],
+      "available": true,
+      "group": "data",
+      "accent": [
+        "#14B8A6",
+        "#10B981"
+      ]
+    },
+    {
+      "id": "ai",
+      "nameKey": "app.ai",
+      "route": "/ai",
+      "icon": "sparkles",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "web"
+      ],
+      "available": false,
+      "group": "system",
+      "accent": [
+        "#A855F7",
+        "#6366F1"
+      ]
+    },
+    {
+      "id": "monitor",
+      "nameKey": "app.monitor",
+      "route": "/monitor",
+      "icon": "pulse",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "web"
+      ],
+      "available": true,
+      "group": "system",
+      "accent": [
+        "#EF4444",
+        "#F97316"
+      ]
+    },
+    {
+      "id": "sync",
+      "nameKey": "app.sync",
+      "route": "/sync",
+      "icon": "sync",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "web"
+      ],
+      "available": true,
+      "group": "service",
+      "accent": [
+        "#8B5CF6",
+        "#6366F1"
+      ]
+    },
+    {
+      "id": "transfer",
+      "nameKey": "app.transfer",
+      "route": "/transfer",
+      "icon": "transfer",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "web"
+      ],
+      "available": true,
+      "group": "service",
+      "accent": [
+        "#22C55E",
+        "#84CC16"
+      ]
+    },
+    {
+      "id": "messages",
+      "nameKey": "app.messages",
+      "route": "/messages",
+      "icon": "bell",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "web"
+      ],
+      "available": false,
+      "group": "service",
+      "accent": [
+        "#F43F5E",
+        "#FB7185"
+      ]
+    },
+    {
+      "id": "accounts",
+      "nameKey": "app.accounts",
+      "route": "/accounts",
+      "icon": "users",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "web"
+      ],
+      "available": true,
+      "group": "service",
+      "accent": [
+        "#64748B",
+        "#94A3B8"
+      ]
+    },
+    {
+      "id": "mediaTool",
+      "nameKey": "app.mediaTool",
+      "route": "/media-tool",
+      "icon": "wand",
+      "endpoints": [
+        "desktop",
+        "web"
+      ],
+      "available": true,
+      "group": "service",
+      "accent": [
+        "#D946EF",
+        "#8B5CF6"
+      ]
+    },
+    {
+      "id": "terminal",
+      "nameKey": "app.terminal",
+      "route": "/terminal",
+      "icon": "terminal",
+      "endpoints": [
+        "desktop"
+      ],
+      "available": false,
+      "group": "service",
+      "accent": [
+        "#475569",
+        "#1E293B"
+      ]
+    },
+    {
+      "id": "settings",
+      "nameKey": "app.settings",
+      "route": "/settings",
+      "icon": "gear",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "tv",
+        "web",
+        "appleTv"
+      ],
+      "available": true,
+      "group": "system",
+      "accent": [
+        "#94A3B8",
+        "#64748B"
+      ]
+    }
+  ],
+  "capabilities": {
+    "endpoints": [
+      "desktop",
+      "mobile",
+      "web",
+      "tv_android",
+      "tv_apple",
+      "harmony"
+    ],
+    "levels": [
+      "full",
+      "limited",
+      "none"
+    ],
+    "items": [
+      {
+        "id": "files",
+        "nameKey": "app.files",
+        "apps": [
+          "files",
+          "netdisk",
+          "share"
+        ],
+        "levels": {
+          "desktop": "full",
+          "mobile": "full",
+          "web": "limited",
+          "tv_android": "limited",
+          "tv_apple": "none",
+          "harmony": "full"
+        }
+      },
+      {
+        "id": "photo",
+        "nameKey": "app.photo",
+        "apps": [
+          "photo"
+        ],
+        "levels": {
+          "desktop": "full",
+          "mobile": "full",
+          "web": "full",
+          "tv_android": "full",
+          "tv_apple": "full",
+          "harmony": "full"
+        }
+      },
+      {
+        "id": "video",
+        "nameKey": "app.video",
+        "apps": [
+          "video",
+          "mediaTool"
+        ],
+        "levels": {
+          "desktop": "full",
+          "mobile": "full",
+          "web": "full",
+          "tv_android": "full",
+          "tv_apple": "full",
+          "harmony": "full"
+        }
+      },
+      {
+        "id": "music",
+        "nameKey": "app.music",
+        "apps": [
+          "music"
+        ],
+        "levels": {
+          "desktop": "full",
+          "mobile": "full",
+          "web": "full",
+          "tv_android": "full",
+          "tv_apple": "full",
+          "harmony": "full"
+        }
+      },
+      {
+        "id": "book",
+        "nameKey": "app.book",
+        "apps": [
+          "book"
+        ],
+        "levels": {
+          "desktop": "full",
+          "mobile": "full",
+          "web": "full",
+          "tv_android": "none",
+          "tv_apple": "none",
+          "harmony": "full"
+        }
+      },
+      {
+        "id": "terminal",
+        "nameKey": "app.terminal",
+        "apps": [
+          "terminal"
+        ],
+        "levels": {
+          "desktop": "full",
+          "mobile": "none",
+          "web": "none",
+          "tv_android": "none",
+          "tv_apple": "none",
+          "harmony": "none"
+        }
+      },
+      {
+        "id": "editor",
+        "nameKey": "app.notes",
+        "apps": [
+          "notes"
+        ],
+        "levels": {
+          "desktop": "full",
+          "mobile": "limited",
+          "web": "full",
+          "tv_android": "none",
+          "tv_apple": "none",
+          "harmony": "limited"
+        }
+      },
+      {
+        "id": "system",
+        "nameKey": "app.settings",
+        "apps": [
+          "settings",
+          "accounts",
+          "monitor"
+        ],
+        "levels": {
+          "desktop": "full",
+          "mobile": "none",
+          "web": "limited",
+          "tv_android": "none",
+          "tv_apple": "none",
+          "harmony": "limited"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="ColaNasOs - NAS 一体化客户端">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="ColaNasOs">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>ColaNasOs</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <!--
+    canvaskit 与回退字体都在 `web/flutter_bootstrap.js` 里配置成走本地：
+      - canvaskit -> `canvaskit/`（默认会去 gstatic CDN，内网/无外网时取不到，
+        loader 拿不到引擎就只剩白屏）；
+      - 字体 -> `fonts_fallback/s/**`（由 `tool/fetch-fallback-fonts.js` 从 Flutter
+        SDK 的 Noto 分片镜像而来，避免汉字渲染成「方块里一个 X」）。
+    不要在 index.html 里改写 `window._flutter`：bootstrap 会复用已存在的
+    `_flutter.loader`，劫持后真正的 loader 永远不会被创建，页面同样白屏。
+  -->
+  <!--
+    旧版本用默认 bootstrap 注册过 service worker，它会把旧产物缓存下来，
+    导致内核重启后浏览器仍拿到过期页面（同样是白屏）。现在明确不再注册 SW，
+    顺手把历史注册与缓存清掉。
+  -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (reg) {
+          reg.unregister();
+        });
+      });
+    }
+    if (window.caches) {
+      caches.keys().then(function (keys) {
+        keys.forEach(function (key) {
+          caches.delete(key);
+        });
+      });
+    }
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

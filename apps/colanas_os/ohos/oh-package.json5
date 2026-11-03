@@ -1,0 +1,7 @@
+{
+  "modelVersion": "6.0.2",
+  "description": "ColaNasOs HarmonyOS shell (flutter_ohos). Flutter 代码见同级 ../lib。",
+  "dependencies": {},
+  "devDependencies": {},
+  "dynamicDependencies": {}
+}

@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "noImplicitAny": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "sourceMap": true,
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuildinfo",
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": ["kernel/**/*.ts", "src/**/*.ts", "electron/**/*.ts", "tool/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

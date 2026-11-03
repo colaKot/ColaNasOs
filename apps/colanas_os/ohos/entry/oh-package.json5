@@ -1,0 +1,12 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "ColaNasOs entry module (flutter_ohos).",
+  "main": "",
+  "author": "colanas",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@ohos/flutter_ohos": "file:./har/ohos-release.har"
+  },
+  "devDependencies": {}
+}

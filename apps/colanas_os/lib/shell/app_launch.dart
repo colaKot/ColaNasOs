@@ -1,0 +1,130 @@
+import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:nas_ui/nas_ui.dart';
+
+import '../core/app_settings.dart';
+import '../core/i18n_setup.dart';
+import '../core/session.dart';
+import '../core/tv_mode.dart';
+import '../features/login/login_page.dart';
+import '../features/music/music_page.dart';
+import '../features/photo/photo_page.dart';
+import '../features/sync/sync_page.dart';
+import 'app_shell.dart';
+import 'desktop_tray.dart';
+
+/// 启动模式：完整客户端 / 相册独立端 / 音乐独立端 / 同步独立端。
+///
+/// 独立端**复用主客户端**：`photo_client` / `music_client` / `sync_client`
+/// 通过 path 依赖复用本包，入口只有一行 `runColanasApp(mode: ...)`。
+/// 改主客户端，各端同步生效。
+enum AppLaunchMode { full, photo, music, sync }
+
+/// 统一入口：初始化设置、恢复会话、初始化播放内核，然后启动应用
+Future<void> runColanasApp({AppLaunchMode mode = AppLaunchMode.full}) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // 先加载设置与会话：避免启动时先用默认主题闪一下、再跳到用户主题
+  await AppSettings.instance.load();
+  await initI18n();
+  await ApiSession.instance.restore();
+  MediaKit.ensureInitialized();
+  // 桌面端托盘：关窗缩到托盘常驻；初始化失败自动降级为普通关闭
+  await desktopTray.init();
+  runApp(ColaNasApp(launchMode: mode));
+}
+
+class ColaNasApp extends StatelessWidget {
+  const ColaNasApp({super.key, this.launchMode = AppLaunchMode.full});
+
+  final AppLaunchMode launchMode;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = AppSettings.instance;
+    return ListenableBuilder(
+      listenable: Listenable.merge([settings.listenable, i18nRevision]),
+      builder: (context, _) => MaterialApp(
+        title: switch (launchMode) {
+          AppLaunchMode.full => 'ColaNasOs',
+          AppLaunchMode.photo => tr('ui.shell.h2aea9e'),
+          AppLaunchMode.music => tr('ui.shell.h8d6e63'),
+          AppLaunchMode.sync => tr('ui.shell.hsync'),
+        },
+        debugShowCheckedModeBanner: false,
+        theme: NasTheme.styled(
+          styleId: settings.styleId.value,
+          schemeId: settings.schemeId.value,
+          skinId: settings.skinId.value,
+          fontFamily: nasFontFamily(settings.fontId.value),
+          brightness: Brightness.light,
+        ),
+        darkTheme: NasTheme.styled(
+          styleId: settings.styleId.value,
+          schemeId: settings.schemeId.value,
+          skinId: settings.skinId.value,
+          fontFamily: nasFontFamily(settings.fontId.value),
+          brightness: Brightness.dark,
+        ),
+        themeMode: settings.themeMode.value,
+        // 背景层铺在 MaterialApp 之下、页面之上：Scaffold 透明，切换风格即刻生效
+        builder: (context, child) {
+          final spec = NasStyles.spec(
+            NasStyles.parse(settings.styleId.value),
+            Theme.of(context).brightness,
+            Theme.of(context).colorScheme,
+          );
+          final tv = settings.tvMode.value;
+          // TV 模式：整体放大字号（10-foot UI），并把遥控器确认键补进快捷键表
+          final media = MediaQuery.of(context);
+          return NasStyleScope(
+            spec: spec,
+            child: TvScope(
+              enabled: tv,
+              child: Shortcuts(
+                shortcuts: tv
+                    ? kTvShortcuts
+                    : const <ShortcutActivator, Intent>{},
+                child: MediaQuery(
+                  data: tv
+                      ? media.copyWith(
+                          textScaler: const TextScaler.linear(kTvTextScale),
+                        )
+                      : media,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      spec.background,
+                      child ?? const SizedBox.shrink(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+        home: ValueListenableBuilder<bool>(
+          valueListenable: ApiSession.instance.autoLoginChecking,
+          builder: (context, checking, _) {
+            if (checking) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+            return ValueListenableBuilder<bool>(
+              valueListenable: ApiSession.instance.authState,
+              builder: (context, authed, _) {
+                if (!authed) return const LoginPage();
+                return switch (launchMode) {
+                  AppLaunchMode.full => const AppShell(),
+                  AppLaunchMode.photo => const PhotoPage(),
+                  AppLaunchMode.music => const MusicPage(),
+                  AppLaunchMode.sync => const SyncPage(),
+                };
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "ColaNasOs 客户端（Flutter 单栈）"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "ColaNasOs 主入口"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "ColaNasOs"
+    },
+    {
+      "name": "permission_internet_reason",
+      "value": "连接局域网内的 ColaNasOs 服务端"
+    },
+    {
+      "name": "permission_network_info_reason",
+      "value": "判断当前是否在局域网内以优化连接"
+    },
+    {
+      "name": "permission_wifi_info_reason",
+      "value": "展示当前网络状态"
+    },
+    {
+      "name": "permission_background_audio_reason",
+      "value": "后台继续播放音乐"
+    }
+  ]
+}

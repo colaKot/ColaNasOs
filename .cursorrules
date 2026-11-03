@@ -1,0 +1,15 @@
+ColaNasOs 日常节奏（唯一真源：AGENTS.md §4）
+
+| 场景 | 用什么 | 耗时 |
+| --- | --- | --- |
+| 写代码 / 看页面 | dev.bat（一次启动，之后热重载） | 保存后 <1 s（Flutter）/ 1~2 s（内核重启） |
+| 单个功能改完 | npm run verify:fast | ~23 s（只跑改动域） |
+| 提交前 | npm run verify | ~63 s（全量） |
+| 发布打包 | git tag v1.x.x; git push origin v1.x.x | CI 约 3~4 分钟（缓存后） |
+
+硬规则：
+- 不要手敲 npm run dev / npm start / flutter build web，用 dev.bat / start.bat / build-web.bat。
+- 日常不跑全量 npm run verify（除非提交前或跨域改动），不要等 CI。
+- CI 只在打 v* tag 或手动 workflow_dispatch 时跑，日常 git push 不触发。
+- release 构建必须带 --no-wasm-dry-run（build-web.bat 已内置）。
+- 详细约定（端口、契约、i18n、打包脚本）见 AGENTS.md。

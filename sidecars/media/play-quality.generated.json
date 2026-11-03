@@ -1,0 +1,42 @@
+{
+  "defaultPreset": "web720",
+  "defaultCodec": "h264",
+  "audioBitrateKbps": 128,
+  "presets": [
+    {
+      "key": "web480",
+      "label": "480p",
+      "height": 480,
+      "videoBitrateKbps": 1400
+    },
+    {
+      "key": "web720",
+      "label": "720p",
+      "height": 720,
+      "videoBitrateKbps": 2800
+    },
+    {
+      "key": "web1080",
+      "label": "1080p",
+      "height": 1080,
+      "videoBitrateKbps": 5000
+    }
+  ],
+  "codecs": [
+    {
+      "key": "h264",
+      "label": "H.264",
+      "container": "mpegts"
+    },
+    {
+      "key": "h265",
+      "label": "H.265",
+      "container": "fmp4"
+    },
+    {
+      "key": "av1",
+      "label": "AV1",
+      "container": "fmp4"
+    }
+  ]
+}

@@ -1,0 +1,604 @@
+import { sql } from 'kysely';
+import type { Migration } from '../../../kernel/migrator';
+
+export const VIDEO_MIGRATIONS: Migration[] = [
+    {
+      id: '031_video',
+      async up(db) {
+        await sql`
+          create table if not exists video_libraries (
+            id text primary key,
+            name text not null,
+            root_path text not null unique,
+            created_at integer not null,
+            last_scan_at integer,
+            items integer not null default 0
+          )
+        `.execute(db);
+
+        await sql`
+          create table if not exists video_items (
+            id text primary key,
+            library_id text not null,
+            rel_path text not null,
+            title text not null,
+            duration integer,
+            width integer,
+            height integer,
+            video_codec text,
+            audio_codec text,
+            container text not null default '',
+            has_subtitle integer not null default 0,
+            size integer not null,
+            mtime integer not null,
+            created_at integer not null,
+            unique(library_id, rel_path)
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_video_items_title
+            on video_items(title, id)
+        `.execute(db);
+        await sql`
+          create index if not exists idx_video_items_library
+            on video_items(library_id, title, id)
+        `.execute(db);
+      },
+    },
+    {
+      id: '035_video_series',
+      async up(db) {
+        // 剧集字段：能解析出季 / 集号的文件才填 series，其余按影片（全 null）
+        await sql`alter table video_items add column series text`.execute(db);
+        await sql`alter table video_items add column season integer`.execute(db);
+        await sql`alter table video_items add column episode integer`.execute(db);
+        await sql`
+          create index if not exists idx_video_items_series
+            on video_items(series, season, episode, title, id)
+        `.execute(db);
+      },
+    },
+    {
+      id: '036_video_progress',
+      async up(db) {
+        // 观看进度：按用户隔离（owner_id = JWT sub），百分比 + 播放位置字符串
+        await sql`
+          create table if not exists video_progress (
+            item_id text not null,
+            owner_id text not null,
+            position text not null default '',
+            percent integer not null default 0,
+            updated_at integer not null,
+            primary key (item_id, owner_id)
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_video_progress_owner
+            on video_progress(owner_id, updated_at desc)
+        `.execute(db);
+      },
+    },
+    {
+      id: '060_video_libtype',
+      async up(db) {
+        // 库类型：movie / jp_movie / tv / image / mixed（创建后不可改，类型即行为）
+        await sql`alter table video_libraries add column lib_type text not null default 'movie'`.execute(
+          db,
+        );
+        // 兼容老字段：jp_movie = 1 等价于 lib_type='jp_movie'
+        await sql`alter table video_libraries add column jp_movie integer not null default 0`.execute(
+          db,
+        );
+        await sql`alter table video_items add column media_type text not null default 'video'`.execute(
+          db,
+        );
+        await sql`alter table video_items add column code text`.execute(db);
+        await sql`alter table video_items add column uncensored integer not null default 0`.execute(
+          db,
+        );
+        await sql`alter table video_items add column chinese_sub integer not null default 0`.execute(
+          db,
+        );
+        await sql`
+          create index if not exists idx_video_items_code on video_items(code)
+        `.execute(db);
+
+        // 图片库 / 混合库的图片索引（与 photo 库分开：影视的图片是「作品集」而不是相册）
+        await sql`
+          create table if not exists image_items (
+            id text primary key,
+            library_id text not null,
+            rel_path text not null,
+            title text not null,
+            taken_at integer,
+            size integer not null,
+            mtime integer not null,
+            width integer,
+            height integer,
+            mime text not null,
+            favorite integer not null default 0,
+            created_at integer not null,
+            unique(library_id, rel_path)
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_image_items_library
+            on image_items(library_id, taken_at desc, id)
+        `.execute(db);
+
+        await sql`
+          create table if not exists video_favorites (
+            owner_id text not null,
+            media_type text not null,
+            item_id text not null,
+            created_at integer not null,
+            primary key (owner_id, media_type, item_id)
+          )
+        `.execute(db);
+
+        // 日本库演员（只存名字与头像地址；档案抓取失败不影响列表）
+        await sql`
+          create table if not exists jp_actors (
+            id text primary key,
+            name text not null,
+            thumb_path text,
+            profile text,
+            updated_at integer not null
+          )
+        `.execute(db);
+        await sql`
+          create table if not exists jp_actor_items (
+            actor_id text not null,
+            item_id text not null,
+            primary key (actor_id, item_id)
+          )
+        `.execute(db);
+      },
+    },
+    {
+      id: '066_video_smb_source',
+      async up(db) {
+        // SMB 网络目录作为片源：连接参数 + 在线状态缓存。
+        // 列表接口只读 online_state（离线机器 stat 会卡十几秒），探测交给 probe 接口。
+        const cols = (
+          (await sql`pragma table_info(video_libraries)`.execute(db)).rows as Array<{
+            name: string;
+          }>
+        ).map((r) => r.name);
+        const wanted: Array<[string, string]> = [
+          ['conn_type', "text not null default 'local'"],
+          ['host', 'text'],
+          ['share', 'text'],
+          ['sub_path', 'text'],
+          ['unc_path', 'text'],
+          ['smb_user', 'text'],
+          ['smb_password_enc', 'text'],
+          ['online_state', 'integer not null default 0'],
+          ['online_checked_at', 'integer'],
+        ];
+        for (const [name, type] of wanted) {
+          if (cols.includes(name)) continue;
+          await sql.raw(`alter table video_libraries add column ${name} ${type}`).execute(db);
+        }
+      },
+    },
+    {
+      id: '068_jp_auto_subtitle',
+      async up(db) {
+        // 日本片自动字幕：库开关 + 条目状态机（0待/1成功/2无番号/3站内无/4无中文/5失败）
+        const libCols = (
+          (await sql`pragma table_info(video_libraries)`.execute(db)).rows as Array<{
+            name: string;
+          }>
+        ).map((r) => r.name);
+        if (!libCols.includes('auto_subtitle')) {
+          await sql`alter table video_libraries add column auto_subtitle integer not null default 0`.execute(
+            db,
+          );
+        }
+        const itemCols = (
+          (await sql`pragma table_info(video_items)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        if (!itemCols.includes('sub_fetch_state')) {
+          await sql`alter table video_items add column sub_fetch_state integer not null default 0`.execute(
+            db,
+          );
+        }
+        if (!itemCols.includes('sub_fetch_at')) {
+          await sql`alter table video_items add column sub_fetch_at integer`.execute(db);
+        }
+        // 演员收藏（per-user）；演员名按归一化 key 去重
+        await sql`
+          create table if not exists video_actor_favorite (
+            uid text not null,
+            actor_key text not null,
+            actor_name text not null,
+            created_at integer not null,
+            primary key (uid, actor_key)
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_video_actor_favorite_uid
+          on video_actor_favorite (uid, created_at desc)
+        `.execute(db);
+      },
+    },
+    {
+      id: '076_video_collections',
+      async up(db) {
+        // 自定义合集（每用户）：合集名 + 条目。条目按 added_at 倒序展示。
+        await sql`
+          create table if not exists video_collections (
+            id text primary key,
+            uid text not null,
+            name text not null,
+            kind text not null default 'custom',
+            created_at integer not null,
+            updated_at integer not null
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_video_collections_uid
+          on video_collections (uid, updated_at desc)
+        `.execute(db);
+        await sql`
+          create table if not exists video_collection_items (
+            collection_id text not null,
+            item_id text not null,
+            added_at integer not null,
+            primary key (collection_id, item_id)
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_video_collection_items
+          on video_collection_items (collection_id, added_at desc)
+        `.execute(db);
+      },
+    },
+    {
+      id: '075_video_media_flags',
+      async up(db) {
+        // 影片信息卡徽章：4K / HDR10 / HDR10+ / HLG / 杜比视界 / 全景声。
+        // 全部来自扫描期 ffmpeg stderr，落库后列表与详情直接读，不需要重扫库。
+        const cols = (
+          (await sql`pragma table_info(video_items)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        const wanted = ['is_4k', 'hdr10', 'hdr10plus', 'hlg', 'dolby_vision', 'dolby_atmos'];
+        for (const name of wanted) {
+          if (cols.includes(name)) continue;
+          await sql.raw(`alter table video_items add column ${name} integer not null default 0`).execute(db);
+        }
+      },
+    },
+    {
+      // 剧集级收藏（每用户）：series 名 + 库，避免同名剧跨库冲突
+      id: '078_video_series_favorites',
+      async up(db) {
+        await sql`
+          create table if not exists video_series_favorites (
+            owner_id text not null,
+            library_id text not null default '',
+            series text not null,
+            created_at integer not null,
+            primary key (owner_id, library_id, series)
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_video_series_favorites_owner
+          on video_series_favorites (owner_id, created_at desc)
+        `.execute(db);
+      },
+    },
+    {
+      // 媒体信息层（nfo_* 一组列）。
+      //
+      // 为什么一次补全而不是分批：SQLite 的 add column 极便宜，分批反而要写三次迁移、
+      // 三次改契约、三次重新生成 Dart 模型。列名与参考实现保持同义，
+      // 便于将来对抄/迁移数据。
+      id: '080_video_nfo',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(video_items)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        const add = async (table: string, name: string, type: string) => {
+          if (cols.includes(name)) return;
+          await sql.raw(`alter table ${table} add column ${name} ${type}`).execute(db);
+        };
+
+        // —— 片名与基础信息
+        await add('video_items', 'nfo_name', 'text');
+        await add('video_items', 'nfo_original_name', 'text');
+        await add('video_items', 'nfo_year', 'integer');
+        await add('video_items', 'nfo_score', 'real');
+        await add('video_items', 'nfo_overview', 'text');
+        await add('video_items', 'nfo_runtime', 'integer');
+        await add('video_items', 'nfo_release_date', 'text');
+        await add('video_items', 'nfo_studio', 'text');
+
+        // —— 分类与人物（JSON 数组文本；查询时用 like / json_each 兜底，不做额外关联表）
+        await add('video_items', 'nfo_genres', 'text');
+        await add('video_items', 'nfo_regions', 'text');
+        await add('video_items', 'nfo_actors', 'text');
+        await add('video_items', 'nfo_directors', 'text');
+
+        // —— 图片（本地相对路径或远端 URL；/video/art 统一出口）
+        await add('video_items', 'nfo_poster', 'text');
+        await add('video_items', 'nfo_fanart', 'text');
+        await add('video_items', 'nfo_thumb', 'text');
+
+        // —— 外部 id（排重硬钥匙 + 发现页「已拥有」判定）
+        await add('video_items', 'nfo_imdb_id', 'text');
+        await add('video_items', 'nfo_douban_id', 'text');
+        await add('video_items', 'nfo_tmdb_id', 'integer');
+
+        // —— 刮削状态：source = nfo / tmdb / javdb / javbus / avsox / manual；
+        //    match_nfo = 0 表示用户显式排除，不再参与自动刮削
+        await add('video_items', 'nfo_source', 'text');
+        await add('video_items', 'nfo_updated_at', 'integer');
+        await add('video_items', 'match_nfo', 'integer default 1');
+
+        // 列表默认按「刮削片名 > 文件名」展示，排序与筛选都打在这两列上
+        await sql`
+          create index if not exists idx_video_items_nfo_year
+          on video_items(nfo_year, id)
+        `.execute(db);
+        await sql`
+          create index if not exists idx_video_items_nfo_score
+          on video_items(nfo_score, id)
+        `.execute(db);
+      },
+    },
+    {
+      // 已观看（每用户）。存在即已看，不做软删除：取消标记直接删行。
+      //
+      // 为什么独立成表而不是复用 video_progress：进度是「看到哪」，观看标记是
+      // 「看完了/不想看」的用户判断，两者会打架（看 5 分钟退出的人应该能标已看）。
+      id: '081_video_watch',
+      async up(db) {
+        await sql`
+          create table if not exists video_watch (
+            owner_id text not null,
+            item_id text not null,
+            watched_at integer not null,
+            primary key (owner_id, item_id)
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_video_watch_owner
+          on video_watch (owner_id, watched_at desc)
+        `.execute(db);
+      },
+    },
+    {
+      // 库级设置：首页是否出现（show_in_home）、左栏排序（sort_order）、
+      // 响度归一（audio_normalize，参考实现同名开关）
+      id: '082_video_library_settings',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(video_libraries)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        const add = async (name: string, type: string) => {
+          if (cols.includes(name)) return;
+          await sql.raw(`alter table video_libraries add column ${name} ${type}`).execute(db);
+        };
+        await add('show_in_home', 'integer not null default 1');
+        await add('sort_order', 'integer not null default 0');
+        await add('audio_normalize', 'integer not null default 0');
+        await add('scrape_enabled', 'integer not null default 1');
+      },
+    },
+    {
+      // 影视收尾两件：
+      //   1) 合集自己的封面 / 简介 / 手排顺序（此前只有名字，列表只能按更新时间排）；
+      //   2) 「入库即刮」开关 auto_scrape —— **不复用 scrape_enabled**：
+      //      那是"允许刮削"（手动点也受它约束），默认 1；拿它当自动开关等于
+      //      替所有存量库打开了联网刮削，用户只会觉得"NAS 自己在跑流量"。
+      id: '085_video_collection_meta',
+      async up(db) {
+        const ccols = (
+          (await sql`pragma table_info(video_collections)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        const addCol = async (name: string, type: string) => {
+          if (ccols.includes(name)) return;
+          await sql.raw(`alter table video_collections add column ${name} ${type}`).execute(db);
+        };
+        await addCol('description', 'text');
+        await addCol('cover_item_id', 'text');
+        await addCol('sort_order', 'integer not null default 0');
+
+        const lcols = (
+          (await sql`pragma table_info(video_libraries)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        if (!lcols.includes('auto_scrape')) {
+          await sql`alter table video_libraries add column auto_scrape integer not null default 0`.execute(
+            db,
+          );
+        }
+      },
+    },
+    {
+      id: '088_video_query_indexes',
+      async up(db) {
+        // 列表排序全部走表达式，原有 (title,id) 与 (library_id,title,id) 一条都吃不到：
+        //   name      → coalesce(nullif(nfo_name,''), title)   「刮削名优先」
+        //   takenTime → cast(mtime/1000 as integer)
+        // 数万部片时每次翻页都退化成全表扫 + 临时 B 树排序。
+        //
+        // 用**表达式索引**而不是加一列冗余 display_title：后者要在扫描 / 刮削 / 改名
+        // 三处写入点同步维护，漏一处就会静默错位；SQLite 3.9+ 的表达式索引由优化器
+        // 按表达式树匹配，查询那边一个字都不用改。
+        await sql`
+          create index if not exists idx_video_items_display_title
+            on video_items(coalesce(nullif(nfo_name, ''), title), id)
+        `.execute(db);
+        await sql`
+          create index if not exists idx_video_items_library_display_title
+            on video_items(library_id, coalesce(nullif(nfo_name, ''), title), id)
+        `.execute(db);
+        // takenTime 侧：把查询里的 cast(mtime/1000 as integer) 改成裸 mtime（除以 1000
+        // 不改变单调性），这样能直接命中下面两条。
+        await sql`
+          create index if not exists idx_video_items_mtime
+            on video_items(mtime desc, id)
+        `.execute(db);
+        await sql`
+          create index if not exists idx_video_items_library_mtime
+            on video_items(library_id, mtime desc, id)
+        `.execute(db);
+      },
+    },
+    {
+      id: '091_drop_image_favorite',
+      async up(db) {
+        // `image_items.favorite` 是个纯死列：031 建表时就有，但扫描从不写它，
+        // 查询里也没有人读（收藏实际存在 video_favorites(owner_id, media_type, item_id)，
+        // 按用户隔离）。留着只会让下一个读代码的人以为「图片库支持收藏」。
+        const cols = (
+          (await sql`pragma table_info(image_items)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        if (cols.includes('favorite')) {
+          await sql`alter table image_items drop column favorite`.execute(db);
+        }
+      },
+    },
+    {
+      // 一个库多个来源。
+      //
+      // 旧模型 `video_libraries.root_path` 是单值 + UNIQUE，导致「同一类片子分散在几个盘」
+      // 只能建好几个同名库。改成来源表后，库 = 一类片子，来源 = 它扫哪几个目录。
+      //
+      // `video_libraries.root_path` 继续保留（写第一个来源），不动约束：
+      // 已有的读取点（SMB 探测缓存、监控兜底、老客户端）还在用它，
+      // 拆掉重建表的代价远大于保留一列冗余。
+      id: '092_video_library_sources',
+      async up(db) {
+        await sql`
+          create table if not exists video_library_sources (
+            id text primary key,
+            library_id text not null,
+            root_path text not null,
+            conn_type text not null default 'local',
+            host text,
+            share text,
+            sub_path text,
+            unc_path text,
+            smb_user text,
+            smb_password_enc text,
+            online_state integer not null default 0,
+            online_checked_at integer,
+            sort_order integer not null default 0,
+            items integer not null default 0,
+            last_scan_at integer,
+            created_at integer not null,
+            unique(library_id, root_path)
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_video_sources_lib
+            on video_library_sources(library_id, sort_order, id)
+        `.execute(db);
+
+        // 回填：每个现存库的 root_path 就是它的第一个来源。
+        // 用 insert or ignore 兜住「重跑迁移」的情况（unique 冲突即已回填过）。
+        const libs = (
+          await sql<{
+            id: string;
+            root_path: string;
+            created_at: number;
+            last_scan_at: number | null;
+            items: number;
+            conn_type: string | null;
+            host: string | null;
+            share: string | null;
+            sub_path: string | null;
+            unc_path: string | null;
+            smb_user: string | null;
+            smb_password_enc: string | null;
+            online_state: number | null;
+            online_checked_at: number | null;
+          }>`select * from video_libraries`.execute(db)
+        ).rows;
+        for (const lib of libs) {
+          if (!lib.root_path) continue;
+          await sql`
+            insert or ignore into video_library_sources
+              (id, library_id, root_path, conn_type, host, share, sub_path, unc_path,
+               smb_user, smb_password_enc, online_state, online_checked_at,
+               sort_order, items, last_scan_at, created_at)
+            values (${`src_${lib.id}_0`}, ${lib.id}, ${lib.root_path},
+                    ${lib.conn_type || 'local'}, ${lib.host ?? null}, ${lib.share ?? null},
+                    ${lib.sub_path ?? null}, ${lib.unc_path ?? null}, ${lib.smb_user ?? null},
+                    ${lib.smb_password_enc ?? null}, ${Number(lib.online_state) || 0},
+                    ${lib.online_checked_at ?? null}, ${0}, ${Number(lib.items) || 0},
+                    ${lib.last_scan_at ?? null}, ${Number(lib.created_at) || 0})
+          `.execute(db);
+        }
+      },
+    },
+    {
+      // 日本片的「热度」两列（jp_hot_votes / jp_hot_score）。
+      //
+      // 为什么非要有：日系演员列表与「她的作品」两处的综合排序都以
+      // 「JavDB 评价人数」为首要档位（评论多的排前面），没有这两列时
+      // 排序会一路退化到「名字」，看起来就像随机顺序。
+      // 抓不到就保持 0，排序自然降级，不编造数据。
+      id: '093_video_jp_hot',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(video_items)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        if (!cols.includes('jp_hot_votes')) {
+          await sql`alter table video_items add column jp_hot_votes integer not null default 0`.execute(
+            db,
+          );
+        }
+        if (!cols.includes('jp_hot_score')) {
+          await sql`alter table video_items add column jp_hot_score real not null default 0`.execute(
+            db,
+          );
+        }
+      },
+    },
+    {
+      // 图片库 / 混合库的排序与首字母检索列（image_index）。
+      // natural_name：数字补零后的名字，img2 < img10；filename_fl：A-Z / #。
+      id: '094_video_image_search',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(image_items)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        for (const [name, type] of [
+          ['natural_name', 'text'],
+          ['filename_fl', 'text'],
+          ['view_at', 'integer not null default 0'],
+        ] as const) {
+          if (!cols.includes(name)) {
+            await sql.raw(`alter table image_items add column ${name} ${type}`).execute(db);
+          }
+        }
+        const rows = (
+          await sql<{ id: string; title: string }>`select id, title from image_items`.execute(db)
+        ).rows;
+        const natural = (s: string) =>
+          String(s || '')
+            .toLowerCase()
+            .replace(/\d+/g, (m) => m.padStart(6, '0'));
+        const fl = (s: string) => {
+          const first = String(s || '').trim().charAt(0).toUpperCase();
+          return /^[A-Z]$/.test(first) ? first : '#';
+        };
+        for (let i = 0; i < rows.length; i += 500) {
+          const chunk = rows.slice(i, i + 500);
+          await db.transaction().execute(async (trx: any) => {
+            for (const r of chunk) {
+              await sql`
+                update image_items
+                   set natural_name = ${natural(r.title)}, filename_fl = ${fl(r.title)}
+                 where id = ${r.id}
+              `.execute(trx);
+            }
+          });
+        }
+      },
+    },
+];

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "description": "统一错误码清单（docs/03-契约与接口 §9.2）。代码里一律用 kernel/errors.ts 的常量，禁止裸字符串。",
+  "codes": {
+    "badRequest": { "status": 400, "message": "请求参数不合法" },
+    "unauthorized": { "status": 401, "message": "未登录或令牌失效" },
+    "forbidden": { "status": 403, "message": "缺少所需权限" },
+    "appForbidden": { "status": 403, "message": "该子账号无权访问此应用" },
+    "pathForbidden": { "status": 403, "message": "路径超出允许范围" },
+    "notFound": { "status": 404, "message": "资源不存在" },
+    "conflict": { "status": 409, "message": "资源冲突（重复创建）" },
+    "gone": { "status": 410, "message": "资源已失效（过期 / 已撤销）" },
+    "corrupted": { "status": 400, "message": "数据校验失败（清单与文件不一致）" },
+    "unsupported": { "status": 400, "message": "当前格式或能力不受支持" },
+    "empty": { "status": 400, "message": "内容为空" },
+    "tooLarge": { "status": 413, "message": "内容超过大小上限" },
+    "unavailable": { "status": 503, "message": "依赖服务不可用" },
+    "mediaUnavailable": { "status": 503, "message": "缺少 ffmpeg 或媒体 sidecar" },
+    "aiUnavailable": { "status": 503, "message": "缺少模型或 AI sidecar" },
+    "internal": { "status": 500, "message": "服务端内部错误" }
+  }
+}

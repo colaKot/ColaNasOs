@@ -1,0 +1,14 @@
+dist/
+node_modules/
+docs/
+contracts/openapi.json
+package-lock.json
+_archive/
+# Flutter Web 引导脚本用 `{{flutter_js}}` / `{{flutter_build_config}}` 模板占位符，
+# Prettier 会把它们当成 block 语法拆成 `{ { flutter_js; } }`，构建后占位符替换失效。
+apps/colanas_os/web/flutter_bootstrap.js
+# 鸿蒙端工程：`.ets` 没有 Prettier parser，`.json5` 由 DevEco 维护格式，整体跳过
+apps/colanas_os/ohos/
+# electron-builder 产物（含打包后的 Web 与第三方资源）
+dist_installer/# 工具/经验库的临时副本（accept 补丁会复制原文件）
+.codeartsdoer/

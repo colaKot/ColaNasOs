@@ -1,0 +1,174 @@
+name: ci
+
+# 只在「发布」时跑：打 tag（v*）或手动 workflow_dispatch。
+# 日常开发不跑 CI —— 本地用 dev.bat（热重载）+ npm run verify:fast（按改动选步，~23s），
+# 提交前用 npm run verify（全量并行，~63s）。CI 只负责发版前的全量 + 打包验收。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# 契约是单一真源：发版前若引入破坏性变更则直接失败。
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      # node_modules 含 Electron ABI 的 better-sqlite3 产物，命中缓存时连 rebuild 一起省掉
+      - name: Cache node_modules + Electron
+        id: nm
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-nm-${{ hashFiles('package-lock.json', 'package.json') }}
+
+      - name: Install dependencies
+        if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci --no-audit --no-fund
+
+      - name: Rebuild native modules for Electron ABI
+        if: steps.nm.outputs.cache-hit != 'true'
+        run: npm run rebuild
+
+      - name: Verify (build / lint / test / contracts / smokes)
+        # 发布门禁一律全量（发版前不省步骤）
+        run: node tool/verify.js --jobs=4
+
+      - name: Contract breaking-change gate
+        # 与上一个 tag 比：发布前引入破坏性变更直接失败
+        shell: pwsh
+        run: |
+          $prev = (git describe --tags --abbrev=0 HEAD^ 2>$null)
+          if ($LASTEXITCODE -eq 0 -and $prev) {
+            node tool/check/openapi-diff.js --strict --base $prev
+          } else {
+            Write-Host '没有上一个 tag，跳过破坏性变更对比'
+          }
+
+      - name: Upload contracts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contracts
+          path: |
+            contracts/
+            packages/nas_core/lib/api/
+          retention-days: 7
+
+  # 客户端门禁：`verify` 不覆盖 apps/，这里补 analyze / test / 一个可跨平台的端构建。
+  # 本机实测为 Flutter 3.47.8（stable）；CI 用 stable 通道，避免版本号不存在时任务直接失败。
+  flutter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: apps/colanas_os
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build web
+        run: flutter build web --release --no-wasm-dry-run
+
+      - name: Upload web build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: apps/colanas_os/build/web
+          retention-days: 7
+
+  # 出包（SP4-03）：Windows NSIS 安装器 + 安装 / 运行 / 卸载验收。
+  # CI 没有 vendor/models（被 gitignore），因此只出精简包；
+  # 完整包（含本地 AI 模型）在有模型的构建机上用 dist.bat。
+  package:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Cache node_modules + Electron
+        id: nm
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-nm-${{ hashFiles('package-lock.json', 'package.json') }}
+
+      - name: Install dependencies
+        if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci --no-audit --no-fund
+
+      - name: Rebuild native modules for Electron ABI
+        if: steps.nm.outputs.cache-hit != 'true'
+        run: npm run rebuild
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build web
+        working-directory: apps/colanas_os
+        run: flutter build web --release --no-wasm-dry-run
+
+      - name: Version sync check
+        run: npm run version:check
+
+      - name: Pack (unpacked)
+        run: npm run pack
+
+      - name: Packaged runtime smoke
+        run: npm run smoke:packaged
+
+      - name: Build lite installer
+        run: npm run dist:lite
+
+      - name: Installer check
+        run: npm run installer.check
+
+      - name: Install / run / uninstall smoke
+        run: npm run smoke:install
+
+      - name: Upload installer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-lite
+          path: |
+            dist_installer/*.exe
+            dist_installer/*.blockmap
+          retention-days: 7
