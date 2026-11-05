@@ -11810,6 +11810,7 @@ class PlayerSessionCreateBody {
   final bool? audioDownmix;
   final int? audioIndex;
   final bool? forceSdr;
+  final int? leadMinutes;
 
   const PlayerSessionCreateBody({
     required this.id,
@@ -11820,6 +11821,7 @@ class PlayerSessionCreateBody {
     this.audioDownmix,
     this.audioIndex,
     this.forceSdr,
+    this.leadMinutes,
   });
 
   factory PlayerSessionCreateBody.fromJson(Map<String, dynamic> json) => PlayerSessionCreateBody(
@@ -11831,6 +11833,7 @@ class PlayerSessionCreateBody {
         audioDownmix: json['audioDownmix'] == null ? null : json['audioDownmix'] as bool,
         audioIndex: json['audioIndex'] == null ? null : json['audioIndex'] as int,
         forceSdr: json['forceSdr'] == null ? null : json['forceSdr'] as bool,
+        leadMinutes: json['leadMinutes'] == null ? null : json['leadMinutes'] as int,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -11842,6 +11845,7 @@ class PlayerSessionCreateBody {
         if (audioDownmix != null) 'audioDownmix': audioDownmix!,
         if (audioIndex != null) 'audioIndex': audioIndex!,
         if (forceSdr != null) 'forceSdr': forceSdr!,
+        if (leadMinutes != null) 'leadMinutes': leadMinutes!,
       };
 }
 
@@ -11874,6 +11878,8 @@ class PlayerSessionItem {
   final String? subtitle;
   final dynamic status;
   final int segments;
+  final int? transcodedMs;
+  final int? leadMs;
   final String? error;
   final String url;
   final int createdAt;
@@ -11890,6 +11896,8 @@ class PlayerSessionItem {
     required this.subtitle,
     required this.status,
     required this.segments,
+    this.transcodedMs,
+    this.leadMs,
     required this.error,
     required this.url,
     required this.createdAt,
@@ -11907,6 +11915,8 @@ class PlayerSessionItem {
         subtitle: json['subtitle'] as String?,
         status: (json['status'] as dynamic),
         segments: json['segments'] as int,
+        transcodedMs: json['transcodedMs'] == null ? null : json['transcodedMs'] as int,
+        leadMs: json['leadMs'] == null ? null : json['leadMs'] as int,
         error: json['error'] as String?,
         url: json['url'] as String,
         createdAt: json['createdAt'] as int,
@@ -11924,6 +11934,8 @@ class PlayerSessionItem {
         'subtitle': subtitle,
         'status': status,
         'segments': segments,
+        if (transcodedMs != null) 'transcodedMs': transcodedMs!,
+        if (leadMs != null) 'leadMs': leadMs!,
         'error': error,
         'url': url,
         'createdAt': createdAt,

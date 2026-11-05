@@ -3509,6 +3509,7 @@ export type PlayerSessionCreateBody = {
   "audioDownmix"?: boolean;
   "audioIndex"?: number;
   "forceSdr"?: boolean;
+  "leadMinutes"?: number;
 };
 
 export type PlayerSessionCreated = {
@@ -3523,8 +3524,10 @@ export type PlayerSessionItem = {
   "codec"?: string;
   "container"?: string;
   "subtitle": string;
-  "status": "pending" | "running" | "done" | "failed" | "canceled";
+  "status": "pending" | "running" | "paused" | "done" | "failed" | "canceled";
   "segments": number;
+  "transcodedMs"?: number;
+  "leadMs"?: number;
   "error": string;
   "url": string;
   "createdAt": number;
@@ -3535,6 +3538,7 @@ export type PlayerSessionItem = {
 
 export type PlayerSessionQuery = {
   "id": string;
+  "pos"?: number;
 };
 
 export type PlayerErrorResponse = {

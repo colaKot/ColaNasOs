@@ -157,6 +157,8 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '133_photo_ai_skip',
   // HDR/DV 标记的解析口径版本（老行重探一次，修 DV P5 偏色的历史脏数据）
   '134_video_hdr_meta_version',
+  // 转码会话的提前转码时长（lead_ms，0 = 整片）
+  '135_player_lead',
 ]);
 
 export interface OrderCheck {

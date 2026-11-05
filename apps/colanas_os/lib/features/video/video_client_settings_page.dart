@@ -37,6 +37,10 @@ class _VideoClientSettingsPageState extends State<VideoClientSettingsPage> {
 
   late bool _normalize = PlayPreferences.audioNormalize;
   late bool _downmix = PlayPreferences.audioDownmix;
+  late int _lead = PlayPreferences.leadMinutes;
+
+  /// 提前转码时长的可选档；0 = 整片一次转完（默认）。
+  static const _leadOptions = [0, 1, 3, 5, 10, 20];
 
   /// 本机有编码被砍掉时才提示原因，全都支持就别啰嗦。
   bool get _hasUnplayableCodec => playableCodecs().length < playCodecs.length;
@@ -115,6 +119,32 @@ class _VideoClientSettingsPageState extends State<VideoClientSettingsPage> {
               if (v == null) return;
               setState(() => _codec = v);
               await PlayPreferences.saveCodec(v);
+            },
+          ),
+        ),
+
+        _setting(
+          title: tr('video.client.leadMinutes'),
+          hint: tr('video.client.leadMinutesHint'),
+          trailing: NasDropdown<int>(
+            value: _leadOptions.contains(_lead) ? _lead : 0,
+            isDense: true,
+            underline: const SizedBox.shrink(),
+            items: [
+              for (final n in _leadOptions)
+                DropdownMenuItem<int>(
+                  value: n,
+                  child: Text(
+                    n == 0
+                        ? tr('video.client.leadFull')
+                        : tr('video.client.leadN', {'n': '$n'}),
+                  ),
+                ),
+            ],
+            onChanged: (v) async {
+              if (v == null) return;
+              setState(() => _lead = v);
+              await PlayPreferences.saveLeadMinutes(v);
             },
           ),
         ),

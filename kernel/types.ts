@@ -90,11 +90,16 @@ export interface KernelApi {
         hdrToSdr?: boolean;
         /** 片源视频编码（h264 / hevc / av1）：决定「原画」能否直接 copy */
         srcVideoCodec?: string;
+        /** 分段续转：从片源第 seekMs 毫秒起转，只转 limitMs 毫秒（0 = 整片） */
+        seekMs?: number;
+        limitMs?: number;
         timeoutMs?: number;
       },
     ): Promise<{
       segments: number;
       ms: number;
+      /** 本段实际产出时长（毫秒） */
+      durationMs: number;
       codec?: string;
       container?: string;
       /** 实际用的编码器 / 解码链路（排障日志） */

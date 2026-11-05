@@ -90,4 +90,49 @@ void main() {
       );
     });
   });
+
+  group('leadMarker：已转出刻度', () {
+    test('转了 10 分钟 / 整片 100 分钟 → 0.1', () {
+      expect(
+        leadMarker(
+          isTranscode: true,
+          transcodedMs: const Duration(minutes: 10).inMilliseconds,
+          total: const Duration(minutes: 100),
+        ),
+        closeTo(0.1, 0.0001),
+      );
+    });
+
+    test('直链播放不画', () {
+      expect(
+        leadMarker(isTranscode: false, transcodedMs: 600_000, total: _pinocchio),
+        isNull,
+      );
+    });
+
+    test('整片一次转完（没有分段会话回值）不画', () {
+      expect(
+        leadMarker(isTranscode: true, transcodedMs: 0, total: _pinocchio),
+        isNull,
+      );
+    });
+
+    test('已经转完整片不画，别在右端留一根竖线', () {
+      expect(
+        leadMarker(
+          isTranscode: true,
+          transcodedMs: _pinocchio.inMilliseconds,
+          total: _pinocchio,
+        ),
+        isNull,
+      );
+    });
+
+    test('片源时长未知时不画', () {
+      expect(
+        leadMarker(isTranscode: true, transcodedMs: 600_000, total: Duration.zero),
+        isNull,
+      );
+    });
+  });
 }

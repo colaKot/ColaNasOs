@@ -36,3 +36,18 @@ Duration seekLimit({
   if (reported <= Duration.zero) return full;
   return reported < full ? reported : full;
 }
+
+/// 进度条上「已转出」刻度的位置（0..1）；不需要画时返回 null。
+///
+/// 分段续转时右端仍显示整片时长，但可拖范围只到已转出位置，
+/// 不画个标记用户会以为「拖不到头」是坏了。整片转完 / 直链播放都不画。
+double? leadMarker({
+  required bool isTranscode,
+  required int transcodedMs,
+  required Duration total,
+}) {
+  if (!isTranscode || transcodedMs <= 0) return null;
+  final full = total.inMilliseconds;
+  if (full <= 0 || transcodedMs >= full - 1000) return null;
+  return (transcodedMs / full).clamp(0.0, 1.0);
+}

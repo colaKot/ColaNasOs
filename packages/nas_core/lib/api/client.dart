@@ -3397,9 +3397,10 @@ class ApiClient {
   }
 
   /// 查询转码会话状态与播放地址
-  Future<PlayerSessionItem> playerSessionGet({required String id}) async {
+  Future<PlayerSessionItem> playerSessionGet({required String id, double? pos}) async {
     final query = <String, String>{
       'id': id,
+      if (pos != null) 'pos': '$pos',
     };
     final res = await transport.send('GET', _uri('/api/v1/player/sessions', query), headers: await _headers());
     return PlayerSessionItem.fromJson(_asMap(_decode(res)));

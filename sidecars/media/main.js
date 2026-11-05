@@ -643,6 +643,17 @@ async function hls(params) {
   if (!fs.existsSync(src))
     throw Object.assign(new Error('src not found: ' + src), { code: 'E_NO_SRC' });
 
+  // 分段续转：从片源的第 seekMs 毫秒开始，只转 limitMs 毫秒。
+  // 两个都是**输入侧**选项（必须排在 -i 之前）；0 / 缺省 = 从片头转到片尾（原行为）。
+  // 每段是独立的 init.mp4 + 分片，由上层把多段拼成一份播放列表，
+  // 段与段之间用 #EXT-X-DISCONTINUITY 隔开（实测 hls.js 会自动追加新的 init）。
+  const seekMs = Math.max(0, Number(params.seekMs) || 0);
+  const limitMs = Math.max(0, Number(params.limitMs) || 0);
+  const rangeArgs = [
+    ...(seekMs > 0 ? ['-ss', (seekMs / 1000).toFixed(3)] : []),
+    ...(limitMs > 0 ? ['-t', (limitMs / 1000).toFixed(3)] : []),
+  ];
+
   fs.mkdirSync(dir, { recursive: true });
   // 新会话复用同一目录时先把「已取消」标记清掉；同一次 hls() 内部的重试不清，
   // 否则被抢占的旧会话会在重试里继续跑、和新会话抢 GPU。
@@ -758,7 +769,8 @@ async function hls(params) {
       '-loglevel',
       'error',
       '-y',
-      // `-hwaccel*` 是输入选项，必须在 `-i` 之前；零拷贝时多带一个 output_format
+      // `-ss` / `-t` 是输入选项，必须在 `-i` 之前；`-hwaccel*` 同样。
+      ...rangeArgs,
       ...plan.inputArgs,
       '-i',
       src,
@@ -851,8 +863,16 @@ async function hls(params) {
       throw Object.assign(new Error('fmp4 playlist missing EXT-X-MAP'), { code: 'E_FFMPEG' });
     }
     const segments = fs.readdirSync(dir).filter((f) => f.endsWith('.ts') || f.endsWith('.m4s')).length;
+    // 本段实际产出时长：上层靠它判断「已经转到哪儿了」，以及片源是不是转完了。
+    // `-t` 掐出来的最后一片可能比 hls_time 短，所以不能拿 segments × 6s 估。
+    const durationMs = Math.round(
+      [...text.matchAll(/#EXTINF:([\d.]+)/g)]
+        .map((m) => Number(m[1]))
+        .reduce((a, b) => a + b, 0) * 1000,
+    );
     return {
       segments,
+      durationMs,
       ms: Number(process.hrtime.bigint() - started) / 1e6,
       codec,
       container: fmp4 ? 'fmp4' : 'mpegts',

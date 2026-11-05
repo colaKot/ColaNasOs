@@ -150,6 +150,10 @@ class _PlayerPageState extends State<PlayerPage> {
   String? _sessionId;
   String? _jobStatus;
 
+  /// 已转出的总时长（毫秒）：分段续转时进度条上画一条淡色刻度。
+  /// 0 = 没开分段 / 还没转出来。
+  int _transcodedMs = 0;
+
   /// 服务端回传的**实际**编码（降级后以它为准）；为空表示还没出片。
   String? _actualCodec;
 
@@ -430,6 +434,8 @@ class _PlayerPageState extends State<PlayerPage> {
         forceSdr: null,
         audioNormalize: PlayPreferences.audioNormalize ? true : null,
         audioDownmix: PlayPreferences.audioDownmix ? true : null,
+        // 0 = 整片一次转完；>0 时服务端按段转，播放位置靠近末尾才续下一段
+        leadMinutes: PlayPreferences.leadMinutes,
       ),
     );
     final u = created.url.startsWith('http')
@@ -438,6 +444,7 @@ class _PlayerPageState extends State<PlayerPage> {
     // 记下会话：媒体信息面板要拿它查「转码中 / 完成」和实际编码
     _sessionId = created.id;
     _jobStatus = null;
+    _transcodedMs = 0;
     // 实际编码换会话后必须清空，否则换了档还显示上一轮的结果
     _actualCodec = null;
     // 后台只盯失败：转码挂了要明确说出来，别让用户对着无限缓冲猜。
@@ -450,21 +457,36 @@ class _PlayerPageState extends State<PlayerPage> {
   /// 顺手把「转码中 / 完成」和**实际编码**写进 State：媒体信息面板直接读这两个
   /// 字段。用户选的 AV1 可能已经被服务端降级成 H.264（编码器起不来 / 硬编不支持），
   /// 面板必须显示真的那个，否则就是「我设了 AV1，为什么跑的是 264」。
+  ///
+  /// 分段续转下这个轮询还兼着两件事：把当前播放位置上报给服务端（它据此决定
+  /// 要不要接着转下一段），以及拿回「已转出时长」画进度条刻度。所以**不能
+  /// 只轮询 10 分钟就停**，也不能一看到 paused 就收手。
   Future<void> _watchSession(String id) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
-    for (var i = 0; i < 120; i++) {
-      await Future<void>.delayed(const Duration(seconds: 5));
+    for (;;) {
+      await Future<void>.delayed(const Duration(seconds: 3));
       // 换档 / 换片后旧会话的轮询要立刻停手，否则会把新会话的字段覆盖成旧值
       if (!mounted || _sessionId != id) return;
       try {
-        final job = await ApiSession.instance.client.playerSessionGet(id: id);
+        final pos = _player.state.position.inMilliseconds;
+        final job = await ApiSession.instance.client.playerSessionGet(
+          id: id,
+          pos: pos > 0 ? pos.toDouble() : 0,
+        );
         if (!mounted || _sessionId != id) return;
         final st = '${job.status}';
         final codec = job.codec ?? '';
-        setState(() {
-          _jobStatus = st;
-          if (codec.isNotEmpty) _actualCodec = codec;
-        });
+        final transcoded = job.transcodedMs ?? 0;
+        // 分段会话会一直 paused 着轮询，值没变就别每 3 秒重排整页
+        if (_jobStatus != st ||
+            _transcodedMs != transcoded ||
+            (codec.isNotEmpty && _actualCodec != codec)) {
+          setState(() {
+            _jobStatus = st;
+            _transcodedMs = transcoded;
+            if (codec.isNotEmpty) _actualCodec = codec;
+          });
+        }
         if (st == 'done' || st == 'canceled') return;
         if (st == 'failed') {
           if (messenger != null) {
@@ -476,8 +498,11 @@ class _PlayerPageState extends State<PlayerPage> {
           }
           return;
         }
+        // paused：这一段转完了，等播放位置靠近再续，继续轮询
       } catch (_) {
-        return;
+        // 单次请求失败不能收手：分段续转靠持续轮询唤醒，断一次就停会
+        // 让播放卡在「已转出」的末尾
+        continue;
       }
     }
   }
@@ -784,6 +809,14 @@ class _PlayerPageState extends State<PlayerPage> {
         reported: raw,
         source: _sourceDuration,
         isTranscode: _isTranscode,
+      );
+
+  /// 进度条上「已转出」刻度的位置（0..1）；不需要画时返回 null。
+  /// 只在分段续转（会话回报过 transcodedMs）且还没转完整片时才画。
+  double? _leadMarker(Duration total) => leadMarker(
+        isTranscode: _isTranscode,
+        transcodedMs: _transcodedMs,
+        total: total,
       );
 
   // -------------------------------------------------------------------- 控件
@@ -1441,30 +1474,63 @@ class _PlayerPageState extends State<PlayerPage> {
                 Text(_fmt(p),
                     style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 Expanded(
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 6,
-                      ),
-                    ),
-                    child: Slider(
-                      value: max > 0
-                          ? (p.inMilliseconds / max).clamp(0.0, 1.0)
-                          : 0.0,
-                      // 拖到还没转出来的位置就停在转码进度上，别让 hls.js 干等分片
-                      onChanged: max > 0
-                          ? (v) {
-                              final limit =
-                                  _seekLimit(dur.data ?? Duration.zero);
-                              var target =
-                                  Duration(milliseconds: (max * v).round());
-                              if (limit > Duration.zero && target > limit) {
-                                target = limit;
-                              }
-                              _player.seek(target);
-                            }
-                          : null,
-                    ),
+                  child: LayoutBuilder(
+                    builder: (_, box) {
+                      final marker = _leadMarker(d);
+                      // Slider 轨道左右各留了一个 thumb 半径（≈12px），
+                      // 刻度按这个有效宽度换算才不会和滑块错位。
+                      const pad = 12.0;
+                      final trackW =
+                          box.maxWidth > pad * 2 ? box.maxWidth - pad * 2 : 0.0;
+                      return Stack(
+                        children: [
+                          SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              thumbShape: const RoundSliderThumbShape(
+                                enabledThumbRadius: 6,
+                              ),
+                            ),
+                            child: Slider(
+                              value: max > 0
+                                  ? (p.inMilliseconds / max).clamp(0.0, 1.0)
+                                  : 0.0,
+                              // 拖到还没转出来的位置就停在转码进度上，别让 hls.js 干等分片
+                              onChanged: max > 0
+                                  ? (v) {
+                                      final limit =
+                                          _seekLimit(dur.data ?? Duration.zero);
+                                      var target =
+                                          Duration(milliseconds: (max * v).round());
+                                      if (limit > Duration.zero && target > limit) {
+                                        target = limit;
+                                      }
+                                      _player.seek(target);
+                                    }
+                                  : null,
+                            ),
+                          ),
+                          // 淡色刻度：这一刻只转到了这里，右边还是片源时长。
+                          if (marker != null)
+                            Positioned(
+                              left: pad + trackW * marker,
+                              top: 0,
+                              bottom: 0,
+                              child: IgnorePointer(
+                                child: Center(
+                                  child: Container(
+                                    width: 2,
+                                    height: 16,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0x66FFFFFF),
+                                      borderRadius: BorderRadius.circular(1),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 ),
                 Text(_fmt(d),

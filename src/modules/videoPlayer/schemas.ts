@@ -46,6 +46,13 @@ export const SessionCreateBody = Type.Object(
     forceSdr: Type.Optional(
       Type.Boolean({ description: '强制 HDR→SDR；不传时由服务端按片源标记自动判定' }),
     ),
+    /**
+     * 默认提前转码时长（分钟）。0 / 不传 = 整片一次转完（旧行为）；
+     * >0 时按段转：每段只转这么多分钟，播放位置接近已转出末尾才接着转下一段。
+     */
+    leadMinutes: Type.Optional(
+      Type.Integer({ minimum: 0, maximum: 60, description: '提前转码时长（分钟），0 = 整片' }),
+    ),
   },
   { $id: 'PlayerSessionCreateBody' },
 );
@@ -66,11 +73,17 @@ export const SessionItem = Type.Object(
     status: Type.Union([
       Type.Literal('pending'),
       Type.Literal('running'),
+      /** 分段续转：这一段转完了，等播放位置靠近再续下一段 */
+      Type.Literal('paused'),
       Type.Literal('done'),
       Type.Literal('failed'),
       Type.Literal('canceled'),
     ]),
     segments: Type.Integer(),
+    /** 已转出的总时长（毫秒）：进度条画「已转到这里」的刻度用 */
+    transcodedMs: Type.Optional(Type.Integer()),
+    /** 本会话的提前转码时长（毫秒），0 = 整片 */
+    leadMs: Type.Optional(Type.Integer()),
     error: Type.Union([Type.String(), Type.Null()]),
     url: Type.String(),
     createdAt: Type.Integer(),
@@ -82,7 +95,11 @@ export const SessionItem = Type.Object(
 );
 
 export const SessionQuery = Type.Object(
-  { id: Type.String({ minLength: 1 }) },
+  {
+    id: Type.String({ minLength: 1 }),
+    /** 当前播放位置（毫秒）：分段续转据此判断要不要接着转下一段 */
+    pos: Type.Optional(Type.Number({ minimum: 0 })),
+  },
   { $id: 'PlayerSessionQuery' },
 );
 

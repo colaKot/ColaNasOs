@@ -15,6 +15,7 @@ class PlayPreferences {
   static const _codecKey = 'player.codec';
   static const _normalizeKey = 'player.audioNormalize';
   static const _downmixKey = 'player.audioDownmix';
+  static const _leadKey = 'player.leadMinutes';
 
   static String get preset {
     final saved =
@@ -33,6 +34,16 @@ class PlayPreferences {
   static bool get audioNormalize => SettingsStore.instance.getBool(_normalizeKey) == true;
 
   static bool get audioDownmix => SettingsStore.instance.getBool(_downmixKey) == true;
+
+  /// 默认提前转码时长（分钟）。0 = 整片一次转完（老行为，也是默认值）。
+  /// 只转播放位置前面的一小段，看到哪儿转到哪儿，不浪费 CPU。
+  static int get leadMinutes {
+    final v = int.tryParse(SettingsStore.instance.getString(_leadKey) ?? '') ?? 0;
+    return v <= 0 ? 0 : (v > 60 ? 60 : v);
+  }
+
+  static Future<void> saveLeadMinutes(int minutes) =>
+      SettingsStore.instance.setString(_leadKey, '${minutes <= 0 ? 0 : minutes}');
 
   static Future<void> save({required String preset, required String codec}) async {
     await SettingsStore.instance.setString(_presetKey, preset);

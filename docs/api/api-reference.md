@@ -2147,7 +2147,7 @@ GPS 视觉候选生成进度 · `photoGeoVisionStatus`
 
 查询转码会话状态与播放地址 · `playerSessionGet`
 
-- 参数：`id` · 查询 · string · **必填**
+- 参数：`id` · 查询 · string · **必填**<br>`pos` · 查询 · number · 可选
 - 响应：200 `PlayerSessionItem` · 错误 404
 
 #### `POST /api/v1/player/sessions`

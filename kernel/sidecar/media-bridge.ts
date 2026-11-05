@@ -43,6 +43,8 @@ export interface TranscodeResult {
 export interface HlsResult {
   segments: number;
   ms: number;
+  /** 本段实际产出时长（毫秒）：分段续转时用来推进下一段的起点 */
+  durationMs: number;
   /** 实际使用的视频编码（h264 / h265 / av1）；转码降级后以这里为准 */
   codec?: string;
   /** mpegts | fmp4 */
@@ -130,6 +132,9 @@ export class MediaBridge {
       hdrToSdr?: boolean;
       /** 片源视频编码（h264 / hevc / av1）：决定「原画」能否直接 copy */
       srcVideoCodec?: string;
+      /** 分段续转：从片源第 seekMs 毫秒起转，只转 limitMs 毫秒（0 = 整片） */
+      seekMs?: number;
+      limitMs?: number;
     } = {},
   ): Promise<HlsResult> {
     const sup = await this.ensure();
@@ -138,10 +143,17 @@ export class MediaBridge {
     const res = await sup.request<{
       segments: number;
       ms: number;
+      durationMs: number;
       codec?: string;
       container?: string;
     }>('hls', { src, dir, ...opts }, timeoutMs);
-    return { segments: res.segments, ms: res.ms, codec: res.codec, container: res.container };
+    return {
+      segments: res.segments,
+      ms: res.ms,
+      durationMs: Number(res.durationMs) || 0,
+      codec: res.codec,
+      container: res.container,
+    };
   }
 
   /**

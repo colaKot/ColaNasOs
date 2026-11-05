@@ -10,6 +10,7 @@ import { isOfflinePath, offlineSmbPrefixes } from '../video/sources';
 import { listSubtitles } from '../video/subtitles';
 import { embeddedIndex, ensureEmbeddedFile } from '../video/embedded-subs';
 import { PLAYER_SCHEMAS } from './schemas';
+import { mergePlaylists, playlistDurationMs, type PlaylistPart } from './playlist';
 import {
   DEFAULT_PLAY_CODEC,
   DEFAULT_PLAY_PRESET,
@@ -46,6 +47,8 @@ interface SessionRow {
   force_sdr: number | null;
   /** pump 按片源标记算出的最终 HDR→SDR 决策（供响应回显） */
   hdr_to_sdr: number | null;
+  /** 提前转码时长（毫秒）；0 = 整片一次转完（默认，旧行为） */
+  lead_ms: number | null;
   status: string;
   segments: number;
   error: string | null;
@@ -101,27 +104,42 @@ function hlsRootOf(k: KernelApi): string {
  * 一直显示 AV1，用户看到的现象是「我选了 AV1，为什么实际是 264」。
  */
 function actualCodecOf(k: KernelApi, id: string): { codec?: string; container?: string } {
-  const dirs = [path.join(hlsRootOf(k), id), path.join(k.paths.dataDir, 'hls', id)];
-  for (const dir of dirs) {
+  const roots = [sessionDirOf(k, id), path.join(k.paths.dataDir, 'hls', id)];
+  for (const root of roots) {
+    // 分段续转时 `.session.json` 写在 pN 子目录里，根目录下没有
+    const dirs = [root];
     try {
-      const j = JSON.parse(fs.readFileSync(path.join(dir, '.session.json'), 'utf8')) as {
-        codec?: unknown;
-        container?: unknown;
-      };
-      if (typeof j?.codec === 'string' && j.codec) {
-        return {
-          codec: j.codec,
-          container: typeof j.container === 'string' ? j.container : undefined,
-        };
+      for (const n of fs.readdirSync(root)) {
+        if (/^p\d+$/.test(n)) dirs.push(path.join(root, n));
       }
     } catch {
-      // 还没出片 / 文件被清掉了：保持会话行里的请求值
+      // 目录还没建
+    }
+    for (const dir of dirs) {
+      try {
+        const j = JSON.parse(fs.readFileSync(path.join(dir, '.session.json'), 'utf8')) as {
+          codec?: unknown;
+          container?: unknown;
+        };
+        if (typeof j?.codec === 'string' && j.codec) {
+          return {
+            codec: j.codec,
+            container: typeof j.container === 'string' ? j.container : undefined,
+          };
+        }
+      } catch {
+        // 还没出片 / 文件被清掉了：保持会话行里的请求值
+      }
     }
   }
   return {};
 }
 
-const toItem = (r: SessionRow, token?: string) => ({
+const toItem = (
+  r: SessionRow,
+  token?: string,
+  transcodedMs = 0,
+) => ({
   id: r.id,
   itemId: r.item_id,
   preset: r.preset,
@@ -130,6 +148,8 @@ const toItem = (r: SessionRow, token?: string) => ({
   subtitle: r.subtitle,
   status: r.status,
   segments: Number(r.segments),
+  transcodedMs,
+  leadMs: Number(r.lead_ms ?? 0),
   error: r.error,
   url: urlOf(r.id, token),
   createdAt: Number(r.created_at),
@@ -143,6 +163,53 @@ async function statusOf(k: KernelApi, id: string): Promise<string | null> {
     await sql<{ status: string }>`select status from player_sessions where id = ${id}`.execute(k.db)
   ).rows;
   return rows[0]?.status ?? null;
+}
+
+/** 会话产物目录（与 HLS 路由共用同一套 tempDir 解析） */
+const sessionDirOf = (k: KernelApi, id: string) => path.join(hlsRootOf(k), id);
+
+/**
+ * 分段续转：按 p0 / p1 / ... 顺序读出各段自己的播放列表。
+ * 只有真正写出 #EXTINF 的段才算数（ffmpeg 可能正在写半截文件）。
+ */
+function partsOf(k: KernelApi, id: string): PlaylistPart[] {
+  // tempDir 改过配置的库：产物可能留在旧目录，和 HLS 路由的回落顺序保持一致
+  const roots = [sessionDirOf(k, id), path.join(k.paths.dataDir, 'hls', id)];
+  for (const root of roots) {
+    let names: string[];
+    try {
+      names = fs.readdirSync(root).filter((n) => /^p\d+$/.test(n));
+    } catch {
+      continue;
+    }
+    names.sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+    const out: PlaylistPart[] = [];
+    for (const name of names) {
+      try {
+        const text = fs.readFileSync(path.join(root, name, 'index.m3u8'), 'utf8');
+        if (text.includes('#EXTINF')) out.push({ name, text });
+      } catch {
+        // 这一段还在落盘，先不算
+      }
+    }
+    if (out.length > 0) return out;
+  }
+  return [];
+}
+
+const transcodedMsOf = (parts: PlaylistPart[]) =>
+  parts.reduce((sum, p) => sum + playlistDurationMs(p.text), 0);
+
+const segmentCountOf = (parts: PlaylistPart[]) =>
+  parts.reduce((sum, p) => sum + (p.text.match(/#EXTINF/g) || []).length, 0);
+
+async function sourceDurationMsOf(k: KernelApi, itemId: string): Promise<number> {
+  const rows = (
+    await sql<{ duration: number | null }>`
+      select duration from video_items where id = ${itemId}
+    `.execute(k.db)
+  ).rows;
+  return Math.max(0, Number(rows[0]?.duration) || 0);
 }
 
 /**
@@ -227,7 +294,14 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
     if (normalize) filters.push('dynaudnorm');
     // 降混双声道：aformat 把 5.1 / 7.1 压成 stereo，单声道不会再被升混
     if (Number(job.audio_downmix) === 1) filters.push('aformat=channel_layouts=stereo');
-    const res = await k.media.hls(src, dir, {
+    // 分段续转：leadMs=0 时完全走原来的「一次转完整片」路径（产物在会话根目录）；
+    // >0 时每段一个 pN 子目录，ffmpeg 只转 [已转出位置, +leadMs) 这一截。
+    const leadMs = Math.max(0, Number(job.lead_ms) || 0);
+    const parts = leadMs > 0 ? partsOf(k, job.id) : [];
+    const alreadyMs = transcodedMsOf(parts);
+    const totalMs = leadMs > 0 ? await sourceDurationMsOf(k, job.item_id) : 0;
+    const outDir = leadMs > 0 ? path.join(dir, `p${parts.length}`) : dir;
+    const res = await k.media.hls(src, outDir, {
       preset: job.preset,
       codec: job.codec ?? undefined,
       subtitle: job.subtitle ?? undefined,
@@ -237,6 +311,8 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
       hdrToSdr,
       // 「原画」能否直接 copy 取决于片源：AV1/HEVC 复制进 TS 解不出来
       srcVideoCodec: media?.video_codec ?? undefined,
+      seekMs: leadMs > 0 ? alreadyMs : undefined,
+      limitMs: leadMs > 0 ? leadMs : undefined,
     });
     k.log.info(
       {
@@ -253,9 +329,15 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
       },
       'player hls done',
     );
+    // 这一段转完：片源还没到头就标 paused，等播放位置靠近了再续下一段。
+    // 这样用户看 10 分钟就关掉，服务端最多只多转一个 leadMs，不会再烧整片。
+    const doneParts = leadMs > 0 ? partsOf(k, job.id) : [];
+    const transcodedMs = transcodedMsOf(doneParts);
+    const more = leadMs > 0 && totalMs > 0 && transcodedMs < totalMs - 1000;
+    const segments = leadMs > 0 ? segmentCountOf(doneParts) : res.segments;
     await sql`
       update player_sessions
-      set status = 'done', segments = ${res.segments},
+      set status = ${more ? 'paused' : 'done'}, segments = ${segments},
           codec = ${res.codec ?? job.codec ?? 'h264'},
           container = ${res.container ?? 'mpegts'},
           updated_at = ${now()}
@@ -313,7 +395,12 @@ async function supersedeOlder(k: KernelApi, itemId: string): Promise<void> {
       where id = ${row.id}
     `.execute(k.db);
     if (row.status === 'running') {
-      await k.media.cancel(path.join(hlsRootOf(k), row.id));
+      // 分段会话的 ffmpeg 写在 pN 子目录里，取消要精确指向那一段
+      const parts = partsOf(k, row.id);
+      const dir = parts.length
+        ? path.join(sessionDirOf(k, row.id), parts[parts.length - 1].name)
+        : sessionDirOf(k, row.id);
+      await k.media.cancel(dir);
     }
   }
 }
@@ -412,6 +499,20 @@ export const videoPlayer: ServerModule = {
         }
       },
     },
+    {
+      id: '135_player_lead',
+      async up(db) {
+        // 提前转码时长（毫秒）。0 = 整片一次转完；老数据默认 0，行为不变。
+        const cols = (
+          (await sql`pragma table_info(player_sessions)`.execute(db)).rows as Array<{
+            name: string;
+          }>
+        ).map((r) => r.name);
+        if (!cols.includes('lead_ms')) {
+          await sql`alter table player_sessions add column lead_ms integer not null default 0`.execute(db);
+        }
+      },
+    },
   ],
 
   async register(app, k) {
@@ -445,6 +546,7 @@ export const videoPlayer: ServerModule = {
           audioDownmix?: boolean;
           audioIndex?: number;
           forceSdr?: boolean;
+          leadMinutes?: number;
         };
         const item = body.id ? await itemPath(k, body.id) : null;
         if (!item) return reply.code(404).send({ error: Err.notFound, message: 'video not found' });
@@ -497,6 +599,12 @@ export const videoPlayer: ServerModule = {
         const n = Number(body.audioIndex);
         const audioIndex = Number.isInteger(n) && n >= 0 ? n : 0;
         const forceSdr = body.forceSdr === true ? 1 : 0;
+        // 提前转码时长：分钟 → 毫秒，0 / 非法值 = 整片一次转完（旧行为）
+        const leadMin = Number(body.leadMinutes);
+        const leadMs =
+          Number.isFinite(leadMin) && leadMin > 0
+            ? Math.min(60, Math.round(leadMin)) * 60_000
+            : 0;
         // 同参数会话复用：pump 是串行的，重复点播放会不断往队列里塞「全片转码」，
         // 后面所有片都得等前面跑完。done 的直接秒开，pending/running 共用同一份
         // 产物边转边播。
@@ -507,7 +615,8 @@ export const videoPlayer: ServerModule = {
                and coalesce(audio_index, 0) = ${audioIndex}
                and coalesce(force_sdr, 0) = ${forceSdr}
                and coalesce(subtitle, '') = ${subtitle ?? ''}
-               and status in ('pending', 'running', 'done')
+               and coalesce(lead_ms, 0) = ${leadMs}
+               and status in ('pending', 'running', 'paused', 'done')
                and created_at > ${ts - 7 * 86400}
              order by created_at desc limit 1
           `.execute(k.db)
@@ -523,10 +632,10 @@ export const videoPlayer: ServerModule = {
         await sql`
           insert into player_sessions
             (id, item_id, preset, codec, subtitle, audio_normalize, audio_downmix,
-             audio_index, force_sdr, hdr_to_sdr, status, created_at, updated_at)
+             audio_index, force_sdr, hdr_to_sdr, lead_ms, status, created_at, updated_at)
           values (${id}, ${body.id}, ${preset}, ${codec},
                   ${subtitle}, ${audioNormalize}, ${audioDownmix},
-                  ${audioIndex}, ${forceSdr}, ${forceSdr}, 'pending', ${ts}, ${ts})
+                  ${audioIndex}, ${forceSdr}, ${forceSdr}, ${leadMs}, 'pending', ${ts}, ${ts})
         `.execute(k.db);
         pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
         return { id, url: urlOf(id, hlsToken(k, id)) };
@@ -545,7 +654,8 @@ export const videoPlayer: ServerModule = {
         },
       }),
       async (req, reply) => {
-        const q = (req.query || {}) as { id?: string };
+        const q = (req.query || {}) as { id?: string; pos?: number };
+        const pos = Math.max(0, Number(q.pos) || 0);
         const rows = (
           await sql<SessionRow>`select * from player_sessions where id = ${q.id ?? ''}`.execute(
             k.db,
@@ -554,8 +664,26 @@ export const videoPlayer: ServerModule = {
         if (!rows[0])
           return reply.code(404).send({ error: Err.notFound, message: 'session not found' });
         const row = rows[0];
+        const leadMs = Math.max(0, Number(row.lead_ms) || 0);
+        const parts = leadMs > 0 ? partsOf(k, row.id) : [];
+        const transcodedMs = transcodedMsOf(parts);
+        // 分段续转的「续」：播放位置离已转出末尾不足半个提前量时，
+        // 把 paused 会话放回队列再转一段。没人轮询就一直 paused，
+        // ffmpeg 不会在后台空转 —— 这正是省 CPU 的关键。
+        if (leadMs > 0 && row.status === 'paused' && transcodedMs > 0) {
+          const total = await sourceDurationMsOf(k, row.item_id);
+          const threshold = Math.max(30_000, Math.round(leadMs / 2));
+          if (transcodedMs < total - 1000 && pos + threshold >= transcodedMs) {
+            await sql`
+              update player_sessions set status = 'pending', updated_at = ${now()}
+               where id = ${row.id} and status = 'paused'
+            `.execute(k.db);
+            row.status = 'pending';
+            pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
+          }
+        }
         // 转码中：把 sidecar 自报的实际编码带出来（降级是静默的，不读就看不出来）
-        if (row.status === 'running' || row.status === 'pending') {
+        if (row.status === 'running' || row.status === 'pending' || row.status === 'paused') {
           const actual = actualCodecOf(k, row.id);
           if (actual.codec && actual.codec !== row.codec) {
             row.codec = actual.codec;
@@ -566,7 +694,7 @@ export const videoPlayer: ServerModule = {
             `.execute(k.db);
           }
         }
-        return toItem(row, hlsToken(k, row.id));
+        return toItem(row, hlsToken(k, row.id), transcodedMs);
       },
     );
 
@@ -603,36 +731,48 @@ export const videoPlayer: ServerModule = {
         }
         const sessionStatus = rows[0].status;
 
+        const query = (req.query || {}) as { part?: string };
+        // 分段续转：URI 里带 `?part=pN`，分片从对应子目录取。
+        // 白名单卡死，避免拿这个参数做目录穿越。
+        const part = /^p\d{1,3}$/.test(String(query.part || '')) ? String(query.part) : '';
+        const scoped = (root: string) => (part ? path.join(root, part) : root);
+
         // 与 pump() 共用同一套 tempDir 解析；配置变更过的会话再回落默认目录兜底
-        let abs = path.join(hlsRootOf(k), session, file);
+        let abs = path.join(scoped(path.join(hlsRootOf(k), session)), file);
         if (!fs.existsSync(abs)) {
-          const fallback = path.join(k.paths.dataDir, 'hls', session, file);
+          const fallback = path.join(scoped(path.join(k.paths.dataDir, 'hls', session)), file);
           if (fs.existsSync(fallback)) abs = fallback;
         }
 
         const isPlaylist = file === 'index.m3u8';
-        let body: Buffer | null;
+        // 有 pN 分段时，播放列表由服务端实时拼：各段独立的 init / 分片 +
+        // 接缝处 DISCONTINUITY，末尾不写 ENDLIST（后面还会续段）。
+        const parts = isPlaylist ? partsOf(k, session) : [];
+        let body: Buffer | null =
+          isPlaylist && parts.length > 0 ? Buffer.from(mergePlaylists(parts), 'utf8') : null;
         // 首片还没落盘时**短暂等一下**：直接返回空 EVENT 播放列表，很多播放器
         // （实测 Web 的 hls.js）拿到「没有任何分片」就停在黑屏，而 ffmpeg 其实
         // 1~2 秒后就有首片了。等最多 15s，能等到就直接给真实播放列表。
-        const deadline = Date.now() + 15_000;
-        for (;;) {
-          try {
-            body = await fsp.readFile(abs);
-          } catch {
-            body = null;
+        if (body === null) {
+          const deadline = Date.now() + 15_000;
+          for (;;) {
+            try {
+              body = await fsp.readFile(abs);
+            } catch {
+              body = null;
+            }
+            const ready = isPlaylist
+              ? body !== null && body.toString('utf8').includes('#EXTINF')
+              : body !== null;
+            if (ready) break;
+            const stillWorking =
+              sessionStatus === 'pending' || sessionStatus === 'running';
+            if (!isPlaylist || !stillWorking || Date.now() >= deadline) break;
+            // 会话可能在这期间失败 / 被取消，别死等
+            const st = await statusOf(k, session);
+            if (st === 'failed' || st === 'canceled') break;
+            await new Promise((resolve) => setTimeout(resolve, 200));
           }
-          const ready = isPlaylist
-            ? body !== null && body.toString('utf8').includes('#EXTINF')
-            : body !== null;
-          if (ready) break;
-          const stillWorking =
-            sessionStatus === 'pending' || sessionStatus === 'running';
-          if (!isPlaylist || !stillWorking || Date.now() >= deadline) break;
-          // 会话可能在这期间失败 / 被取消，别死等
-          const st = await statusOf(k, session);
-          if (st === 'failed' || st === 'canceled') break;
-          await new Promise((resolve) => setTimeout(resolve, 200));
         }
 
         if (body === null) {

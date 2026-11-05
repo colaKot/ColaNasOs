@@ -13560,6 +13560,12 @@
           "forceSdr": {
             "description": "强制 HDR→SDR；不传时由服务端按片源标记自动判定",
             "type": "boolean"
+          },
+          "leadMinutes": {
+            "minimum": 0,
+            "maximum": 60,
+            "description": "提前转码时长（分钟），0 = 整片",
+            "type": "integer"
           }
         }
       },
@@ -13631,6 +13637,12 @@
               {
                 "type": "string",
                 "enum": [
+                  "paused"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
                   "done"
                 ]
               },
@@ -13649,6 +13661,12 @@
             ]
           },
           "segments": {
+            "type": "integer"
+          },
+          "transcodedMs": {
+            "type": "integer"
+          },
+          "leadMs": {
             "type": "integer"
           },
           "error": {
@@ -13683,6 +13701,10 @@
           "id": {
             "minLength": 1,
             "type": "string"
+          },
+          "pos": {
+            "minimum": 0,
+            "type": "number"
           }
         }
       },
@@ -42367,6 +42389,15 @@
             "in": "query",
             "name": "id",
             "required": true
+          },
+          {
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "in": "query",
+            "name": "pos",
+            "required": false
           }
         ],
         "security": [
