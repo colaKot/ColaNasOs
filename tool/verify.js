@@ -212,8 +212,13 @@ const CONTRACT_STEPS = [
 ];
 
 function changedFiles() {
+  // 关掉 quotepath：中文路径否则会变成 `"docs/\350\227..."` 这种带引号的
+  // 转义串，路径规则全部匹配不到，保守逻辑直接把 --fast 推成全量。
   const run = (args) =>
-    spawnSync('git', args, { cwd: root, encoding: 'utf-8' }).stdout || '';
+    spawnSync('git', ['-c', 'core.quotepath=false', ...args], {
+      cwd: root,
+      encoding: 'utf-8',
+    }).stdout || '';
   const out = new Set();
   for (const line of run(['diff', '--name-only', '--diff-filter=ACMRTUXB', base]).split('\n')) {
     if (line.trim()) out.add(line.trim());
