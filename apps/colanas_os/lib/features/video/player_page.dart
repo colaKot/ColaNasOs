@@ -40,6 +40,7 @@ class PlayerPage extends StatefulWidget {
     this.durationMs,
     this.sourceHeight,
     this.sourceBytes,
+    this.initialSessionId,
   });
 
   /// 带短期令牌的原画直链（`/api/v1/video/stream-url` 签发）
@@ -70,6 +71,10 @@ class PlayerPage extends StatefulWidget {
   /// 片源字节数。媒体信息面板用它算「源码率 → 目标码率」
   /// （库表没有码率列，`size ÷ duration` 就是整片平均码率）。
   final int? sourceBytes;
+
+  /// 从详情页「转码」入口进来时已经建好的会话 id —— 有了它，
+  /// 媒体信息面板才能查「转码中 / 完成」和实际编码（否则只剩本地猜）。
+  final String? initialSessionId;
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
@@ -178,6 +183,13 @@ class _PlayerPageState extends State<PlayerPage> {
     );
     // 详情页「转码」入口给的已经是 HLS 地址，不能再当直链处理
     _isTranscode = widget.initialPreset != null;
+    _sessionId = widget.initialSessionId;
+    // 会话是调用方建的，状态得自己盯：不然面板上永远是「转码中」
+    if (_sessionId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _sessionId != null) _watchSession(_sessionId!);
+      });
+    }
     _url = widget.url;
     _directUrl = widget.url;
     _player = Player();

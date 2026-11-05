@@ -386,6 +386,8 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             itemId: _item.id,
             // 这个地址已经是选定档位的 HLS 会话，别让播放器再按直链处理
             initialPreset: preset,
+            // 会话 id 带进去：媒体信息面板要显示转码状态和实际编码
+            initialSessionId: created.id,
             sourceHeight: _item.height,
             sourceBytes: _item.size,
             durationMs: _item.durationMs,
