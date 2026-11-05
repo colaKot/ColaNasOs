@@ -10,16 +10,21 @@ import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/play_preferences.dart';
 import '../../core/play_quality.dart';
+import '../../core/play_quality_scope.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import '../../core/video_subtitle_prefs.dart';
+import 'player_screen.dart';
 
 /// 内置播放器：media_kit 作为跨平台内核，**控制层全部自绘**。
 ///
 /// 之前直接套 SDK 默认控件，右下角一个参数项都没有，画质/码率只能在详情页
 /// 「更多 → 转码」里选一次、播放中不能改；倍速、音轨、铺满、列表、信息全缺。
-/// 现在对齐参考实现：底部左侧播放/切集/快进退，右侧倍速·画质·字幕·音轨·
-/// 列表·音量·铺满·信息·设置·全屏，窄屏收进「更多」底部面板。
+///
+/// 底部右侧固定顺序（从左到右）：倍速 · 画质 · 字幕 · 音轨 · 音量 · 播放列表 ·
+/// 信息 · 设置 · 全屏，窄屏把后六项收进「更多」。
+/// 原来还挂了一个「画面比例（铺满/适应）」按钮，2026-11-05 按要求去掉：
+/// 铺满会裁掉画面边缘，而 HDR 片源本来就要靠 tonemap 保住高光，裁切得不偿失。
 ///
 /// 杜比 / HDR / HEVC / EAC3：stream-url 会带 `compat.needTranscode`。命中时
 /// 自动建 HLS 转码会话（服务端做 HDR→SDR + yuv420p + BT.709 + AAC），
@@ -33,6 +38,7 @@ class PlayerPage extends StatefulWidget {
     this.compat,
     this.initialPreset,
     this.durationMs,
+    this.sourceHeight,
   });
 
   /// 带短期令牌的原画直链（`/api/v1/video/stream-url` 签发）
@@ -55,6 +61,10 @@ class PlayerPage extends StatefulWidget {
   /// 从详情页「转码」入口进来时，url 已经是某个档位的 HLS 会话；
   /// 传这个档位是为了让画质菜单显示真实档位、换档时不再误用直链。
   final String? initialPreset;
+
+  /// 片源高度（像素）。画质菜单按它收敛：转不出 1080p 的片就不列 1080P。
+  /// 直链进来时 `compat.height` 也有，两者取先有的那个。
+  final int? sourceHeight;
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
@@ -83,7 +93,11 @@ class _PlayerPageState extends State<PlayerPage> {
   int _audioIndex = 0;
   double _rate = 1.0;
   double _volume = 100.0;
-  BoxFit _fit = BoxFit.contain;
+
+  /// 画面填充方式。**没有 UI 入口**：铺满（cover）会裁掉画面边缘，而 HDR 片源
+  /// 本来就要靠 tonemap 保住高光，裁切得不偿失，2026-11-05 按用户要求去掉按钮。
+  /// 字段留着是因为 `Video(fit:)` 还要传，且别处可能按需覆盖。
+  final BoxFit _fit = BoxFit.contain;
   PlaylistMode _loop = PlaylistMode.none;
   bool _shuffle = false;
   bool _isTranscode = false;
@@ -120,6 +134,12 @@ class _PlayerPageState extends State<PlayerPage> {
   List<String> get _reasons =>
       ((widget.compat?['reasons'] as List?) ?? const []).map((e) => '$e').toList();
 
+  /// 片源高度：显式参数优先，其次 stream-url 的 compat，最后当未知（0）。
+  int get _srcHeight {
+    final h = widget.sourceHeight ?? (widget.compat?['height'] as int?);
+    return h == null || h <= 0 ? 0 : h;
+  }
+
   String get _reasonText {
     if (_reasons.isEmpty) return tr('player.hdr');
     return _reasons
@@ -135,7 +155,13 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   void initState() {
     super.initState();
-    _preset = widget.initialPreset ?? PlayPreferences.preset;
+    // 偏好档位先按片源收敛：片源只有 720p 时，1080P 档转出来只是放大后的
+    // 假高清，白白多花一倍流量。收敛放在建会话之前，界面显示的档位才和实际一致。
+    _preset = clampPresetForSource(
+      widget.initialPreset ?? PlayPreferences.preset,
+      _srcHeight,
+      codec: _codec,
+    );
     // 详情页「转码」入口给的已经是 HLS 地址，不能再当直链处理
     _isTranscode = widget.initialPreset != null;
     _url = widget.url;
@@ -158,8 +184,11 @@ class _PlayerPageState extends State<PlayerPage> {
       if (!mounted) return;
       if (_needTranscode && widget.itemId != null) {
         // 「原画」在必须转码时等价于「不降分辨率」，直接按 4K/原尺寸转太慢；
-        // 统一收敛到默认档位，界面显示的档位也才是真正在跑的档位。
-        if (_preset == 'original') _preset = defaultPlayPreset;
+        // 统一收敛到默认档位（并再按片源高度收一次），界面显示的档位也才是
+        // 真正在跑的档位。
+        if (_preset == 'original') {
+          _preset = clampPresetForSource(defaultPlayPreset, _srcHeight, codec: _codec);
+        }
         _prepareCompatible();
       } else {
         _openUrl(_url);
@@ -175,14 +204,14 @@ class _PlayerPageState extends State<PlayerPage> {
     if (rate != null && rate > 0) _rate = rate;
     final vol = double.tryParse(store.getString('player.volume') ?? '');
     if (vol != null && vol >= 0 && vol <= 100) _volume = vol;
-    _fit = store.getBool('player.fitCover') == true ? BoxFit.cover : BoxFit.contain;
+    // `player.fitCover` 不再读：铺满按钮已去掉，老用户存过的 cover 值不该继续生效，
+    // 否则画面永远是裁切过的，而且界面上已经没有办法改回来。
   }
 
   Future<void> _saveUiPrefs() async {
     final store = SettingsStore.instance;
     await store.setString('player.speed', '$_rate');
     await store.setString('player.volume', '$_volume');
-    await store.setBool('player.fitCover', _fit == BoxFit.cover);
   }
 
   @override
@@ -195,7 +224,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   // ------------------------------------------------------------------ 播放源
 
-  Future<void> _openUrl(String u, {Duration? seekTo}) async {
+  Future<void> _openUrl(String u, {Duration? seekTo, int retries = 0}) async {
     _url = u;
     try {
       await _player.open(Media(u));
@@ -217,6 +246,16 @@ class _PlayerPageState extends State<PlayerPage> {
       }
       if (mounted) setState(() => _error = null);
     } catch (e) {
+      // 边转边播的第一次打开会「打不开」：播放器拉 index.m3u8 时首片可能还没落盘
+      // （服务端最多等 15s，超时就先给空 EVENT 列表），内核当场就报错退出。
+      // 转码本身没失败，过一两秒分片就有了 —— 直接弹「播放失败」太冤。
+      // 《匹诺曹》这种 4K DV 片首片要 5s 上下（HDR→SDR + 4K 解码初始化），
+      // 正是最容易踩到这条的片源。重试 2 次（+3s）能给足首片时间。
+      if (retries > 0 && _isTranscode && mounted) {
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        if (!mounted) return;
+        return _openUrl(u, seekTo: seekTo, retries: retries - 1);
+      }
       if (mounted) setState(() => _error = e.toString());
       _renewIfTokenExpired(e.toString());
     }
@@ -290,7 +329,8 @@ class _PlayerPageState extends State<PlayerPage> {
         _preparing = false;
         _isTranscode = true;
       });
-      await _openUrl(u);
+      // retries: 首片还没落盘时内核会「打不开」，不是转码失败，给两次重试
+      await _openUrl(u, retries: 2);
     } catch (e) {
       if (!mounted) return;
       // 不能退回直链：走到这里就说明片源直链本来解不了（HEVC / MKV / HDR），
@@ -310,8 +350,10 @@ class _PlayerPageState extends State<PlayerPage> {
     final toDirect = preset == 'original' && widget.compat != null && !_needTranscode;
     if (!toDirect && widget.itemId == null) return;
     // 必须转码时「原画」没法真原样播，实际跑默认档；界面也跟着显示实际档位，
-    // 不要出现「显示原画、跑的是 1080p」。
-    final effective = preset == 'original' && !toDirect ? defaultPlayPreset : preset;
+    // 不要出现「显示原画、跑的是 1080p」。同样按片源高度收敛。
+    final effective = preset == 'original' && !toDirect
+        ? clampPresetForSource(defaultPlayPreset, _srcHeight, codec: targetCodec)
+        : preset;
     final pos = _player.state.position;
     setState(() => _switching = true);
     try {
@@ -320,7 +362,8 @@ class _PlayerPageState extends State<PlayerPage> {
       final u = toDirect
           ? _directUrl
           : await _ensureTranscode(effective, targetCodec);
-      await _openUrl(u, seekTo: pos);
+      // 换档也是新建会话，同样可能撞上「首片还没落盘」，给两次重试
+      await _openUrl(u, seekTo: pos, retries: toDirect ? 0 : 2);
       if (!mounted) return;
       setState(() {
         _preset = effective;
@@ -480,18 +523,24 @@ class _PlayerPageState extends State<PlayerPage> {
     if (mounted) setState(() {});
   }
 
-  void _toggleFit() {
-    setState(() => _fit = _fit == BoxFit.cover ? BoxFit.contain : BoxFit.cover);
-    _saveUiPrefs();
+  /// 全屏 / 退出全屏。
+  ///
+  /// 朝向跟着**视频自身**的宽高比走：竖屏片子（手机拍的、竖构图动画短片）进全屏
+  /// 后应该还是竖屏，否则整屏都是黑边、正片只剩中间一条。以前只切
+  /// `SystemUiMode`，手机上竖屏视频进全屏后依然是横屏 + 大黑边。
+  /// Web 端没有朝向可锁，改调浏览器 Fullscreen API（见 `player_screen_web.dart`），
+  /// 否则点了「全屏」页面纹丝不动，像是按钮坏了。
+  Future<void> _toggleImmersive() async {
+    final next = !_immersive;
+    setState(() => _immersive = next);
     _poke();
-  }
-
-  void _toggleImmersive() {
-    setState(() => _immersive = !_immersive);
-    SystemChrome.setEnabledSystemUIMode(
-      _immersive ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
-    );
-    _poke();
+    final w = _player.state.width ?? 0;
+    final h = _player.state.height ?? 0;
+    if (next) {
+      await enterPlayerFullscreen(videoWidth: w, videoHeight: h);
+    } else {
+      await exitPlayerFullscreen();
+    }
   }
 
   Future<void> _seekBy(int seconds) async {
@@ -617,7 +666,11 @@ class _PlayerPageState extends State<PlayerPage> {
       );
 
   Widget _qualityButton() {
-    final cur = playQualityPresetOf(_preset)?.label ?? _preset;
+    // 一档一行：`1080P 1.4Mbps`（码率跟着当前编码走）。别再把分辨率和码率
+    // 拆成两段拼「·」，同一档位并排两个码率看着像重复行。
+    final cur = playQualityPresetOf(_preset)?.labelFor(_codec) ?? _preset;
+    // 只列这部片转得出来的档位：没有 1080p 的片就别给 1080P 选项。
+    final options = presetsForSource(_srcHeight);
     return PopupMenuButton<String>(
       tooltip: tr('player.quality'),
       color: const Color(0xFF222222),
@@ -636,10 +689,10 @@ class _PlayerPageState extends State<PlayerPage> {
             style: const TextStyle(color: Colors.white54, fontSize: 12),
           ),
         ),
-        for (final p in playQualityPresets)
+        for (final p in options)
           PopupMenuItem<String>(
             value: p.key,
-            child: _checked('${p.label} · ${p.bitrateLabel}', _preset == p.key),
+            child: _checked(p.labelFor(_codec), _preset == p.key),
           ),
         const PopupMenuDivider(),
         // Web 端只保留 H.264：AV1 / HEVC 的 fMP4 在 hls.js 里解不出来
@@ -815,7 +868,8 @@ class _PlayerPageState extends State<PlayerPage> {
             const SizedBox(height: NasTokens.spaceMd),
             _infoRow(tr('player.sourceTranscode'),
                 _isTranscode ? tr('player.sourceTranscode') : tr('player.sourceDirect')),
-            _infoRow(tr('player.quality'), playQualityPresetOf(_preset)?.label ?? _preset),
+            _infoRow(tr('player.quality'),
+                playQualityPresetOf(_preset)?.labelFor(_codec) ?? _preset),
             _infoRow(tr('player.videoCodec'), v(c['videoCodec']) ?? '—'),
             _infoRow(tr('player.audioCodec'), v(c['audioCodec']) ?? '—'),
             _infoRow(
@@ -977,19 +1031,15 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   List<Widget> _rightControls(bool wide) {
+    // 顺序就是用户看到的从左到右顺序，**别再 reversed**：反过一次以后
+    // 整排按钮跟常见的播放器（倍速在最左、全屏在最右）完全对不上。
     final all = <Widget>[
       _speedButton(),
       _qualityButton(),
       _subtitleButton(),
       _audioButton(),
-      _btn(Icons.playlist_play, tr('player.playlist'), _showPlaylist),
       _btn(Icons.volume_up, tr('player.volume'), _showVolume),
-      _btn(
-        _fit == BoxFit.cover ? Icons.fit_screen : Icons.aspect_ratio,
-        tr('player.fit'),
-        _toggleFit,
-        active: _fit == BoxFit.cover,
-      ),
+      _btn(Icons.playlist_play, tr('player.playlist'), _showPlaylist),
       _btn(Icons.info_outline, tr('player.info'), _showInfo),
       _btn(Icons.settings_outlined, tr('player.settings'), _showSettings),
       _btn(
@@ -1002,14 +1052,19 @@ class _PlayerPageState extends State<PlayerPage> {
         setState(() => _locked = true);
       }),
     ];
-    if (wide) return all.reversed.toList();
-    // 窄屏：核心四项常驻，其余收进「更多」
+    if (wide) return all;
+    // 窄屏：前三项常驻（倍速 / 画质 / 字幕）+「更多」，其余全进底部面板。
+    // 顺序必须和宽屏同向 —— 外层横向滚动条是 `reverse: true`（内容靠右对齐、
+    // 溢出时优先保住最右边那个），所以**列表顺序就是从左到右的视觉顺序**，
+    // 别再倒着写（写成 [more, subtitle, quality, speed] 会真的显示成
+    // 更多 · 字幕 · 画质 · 倍速）。
+    // `all.skip(3)` 的 3 = 前面常驻的倍速/画质/字幕三项，改上面顺序时一起改。
     return [
-      _btn(Icons.more_horiz, tr('player.settings'), () => _showMore(all.skip(4).toList())),
-      _subtitleButton(),
-      _qualityButton(),
       _speedButton(),
-    ].reversed.toList();
+      _qualityButton(),
+      _subtitleButton(),
+      _btn(Icons.more_horiz, tr('common.more'), () => _showMore(all.skip(3).toList())),
+    ];
   }
 
   void _showMore(List<Widget> extras) {
@@ -1467,7 +1522,9 @@ class _PlayerPageState extends State<PlayerPage> {
               _subtitleLayer(),
               _statusLayer(),
               if (_controls && !_locked) ...[
-                if (!_immersive) _topBar(wide),
+                // Web 上「全屏」是浏览器 Fullscreen API，顶栏即使留着也在全屏页里，
+                // 藏掉反而让用户按 Esc 退出后回不到上一页 —— 所以 Web 不藏顶栏。
+                if (!_immersive || kIsWeb) _topBar(wide),
                 _centerControls(wide),
                 _bottomBar(wide),
               ],

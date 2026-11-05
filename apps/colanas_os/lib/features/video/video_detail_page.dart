@@ -8,6 +8,7 @@ import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/play_preferences.dart';
 import '../../core/play_quality.dart';
+import '../../core/play_quality_scope.dart';
 import '../../core/session.dart';
 import 'player_page.dart';
 import 'video_card.dart';
@@ -208,6 +209,8 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             itemId: _item.id,
             // 兼容判定（DV / HDR / HEVC / EAC3）交给播放器决定要不要自动转码
             compat: res.compat,
+            // 档位菜单按片源分辨率收敛，别列出这部片转不出来的档
+            sourceHeight: _item.height,
             // 转码是边转边播，播放器拿不到总长，用片源时长兜进度条
             durationMs: _item.durationMs,
           ),
@@ -251,9 +254,16 @@ class VideoDetailPageState extends State<VideoDetailPage> {
     }
     if (!mounted) return;
 
-    var preset = PlayPreferences.preset;
     // Web 端只能播 H.264（hls.js 对 AV1 / HEVC 的 fMP4 没有 CODECS 会黑屏）
     var codec = kIsWeb ? 'h264' : PlayPreferences.codec;
+    // 档位按片源收敛：片源只有 720p 时，4K / 2K / 1080P 这些档根本转不出来，
+    // 列在菜单里既选不动也误导（选 1080P 只是把 720p 放大再压一遍，纯浪费 CPU）。
+    final sourceHeight = _item.height ?? 0;
+    var preset = clampPresetForSource(
+      PlayPreferences.preset,
+      sourceHeight,
+      codec: codec,
+    );
     String? subtitle;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -269,10 +279,10 @@ class VideoDetailPageState extends State<VideoDetailPage> {
                   labelText: tr('video.transcode.preset'),
                 ),
                 items: [
-                  for (final p in playQualityPresets)
+                  for (final p in presetsForSource(sourceHeight))
                     DropdownMenuItem(
                       value: p.key,
-                      child: Text('${p.label} · ${p.bitrateLabel}'),
+                      child: Text(p.labelFor(codec)),
                     ),
                 ],
                 onChanged: (v) => setLocal(() => preset = v ?? preset),
@@ -374,6 +384,7 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             itemId: _item.id,
             // 这个地址已经是选定档位的 HLS 会话，别让播放器再按直链处理
             initialPreset: preset,
+            sourceHeight: _item.height,
             durationMs: _item.durationMs,
           ),
         ),

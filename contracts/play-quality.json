@@ -21,7 +21,7 @@
     },
     {
       "key": "1440p_10m",
-      "label": "2K 10M",
+      "label": "2K",
       "height": 1440,
       "copy": false,
       "videoBitrateKbps": 10000,
@@ -29,7 +29,7 @@
     },
     {
       "key": "1440p_8m",
-      "label": "2K 8M",
+      "label": "2K",
       "height": 1440,
       "copy": false,
       "videoBitrateKbps": 8000,
@@ -37,7 +37,7 @@
     },
     {
       "key": "1440p_5m",
-      "label": "2K 5M",
+      "label": "2K",
       "height": 1440,
       "copy": false,
       "videoBitrateKbps": 5000,
@@ -45,7 +45,7 @@
     },
     {
       "key": "1440p_3m",
-      "label": "2K 3M",
+      "label": "2K",
       "height": 1440,
       "copy": false,
       "videoBitrateKbps": 3000,
@@ -53,7 +53,7 @@
     },
     {
       "key": "1080p_8m",
-      "label": "1080P 8M",
+      "label": "1080P",
       "height": 1080,
       "copy": false,
       "videoBitrateKbps": 8000,
@@ -61,7 +61,7 @@
     },
     {
       "key": "1080p_5m",
-      "label": "1080P 5M",
+      "label": "1080P",
       "height": 1080,
       "copy": false,
       "videoBitrateKbps": 5000,
@@ -69,7 +69,7 @@
     },
     {
       "key": "1080p_3m",
-      "label": "1080P 3M",
+      "label": "1080P",
       "height": 1080,
       "copy": false,
       "videoBitrateKbps": 3000,
@@ -77,7 +77,7 @@
     },
     {
       "key": "1080p_2m",
-      "label": "1080P 2M",
+      "label": "1080P",
       "height": 1080,
       "copy": false,
       "videoBitrateKbps": 2000,
@@ -85,7 +85,7 @@
     },
     {
       "key": "720p_3m",
-      "label": "720P 3M",
+      "label": "720P",
       "height": 720,
       "copy": false,
       "videoBitrateKbps": 3000,
@@ -93,7 +93,7 @@
     },
     {
       "key": "720p_2m",
-      "label": "720P 2M",
+      "label": "720P",
       "height": 720,
       "copy": false,
       "videoBitrateKbps": 2000,
@@ -101,7 +101,7 @@
     },
     {
       "key": "720p_1m",
-      "label": "720P 1M",
+      "label": "720P",
       "height": 720,
       "copy": false,
       "videoBitrateKbps": 1000,
@@ -109,7 +109,7 @@
     },
     {
       "key": "480p_1m",
-      "label": "480P 1M",
+      "label": "480P",
       "height": 480,
       "copy": false,
       "videoBitrateKbps": 1000,

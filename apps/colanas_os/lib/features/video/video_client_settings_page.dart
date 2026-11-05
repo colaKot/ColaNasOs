@@ -55,7 +55,10 @@ class _VideoClientSettingsPageState extends State<VideoClientSettingsPage> {
         _section(tr('video.client.group.play')),
         _setting(
           title: tr('video.client.playQuality'),
-          hint: tr('video.client.playQualityHint'),
+          // 原画时把「不转码」写进这一行，不再单独占一行
+          hint: _presetSpec.copy
+              ? tr('video.client.copyNoTranscode')
+              : tr('video.client.playQualityHint'),
           trailing: NasDropdown<String>(
             value: _preset,
             isDense: true,
@@ -64,8 +67,11 @@ class _VideoClientSettingsPageState extends State<VideoClientSettingsPage> {
               for (final p in playQualityPresets)
                 DropdownMenuItem<String>(
                   value: p.key,
-                  // 同一档位在不同编码下流量不同，所以码率跟着「当前编码」显示
-                  child: Text('${p.label} · ${p.bitrateLabelFor(_codec)}'),
+                  // 一档一行：`1080P 1.4Mbps`。
+                  // 以前是「label · bitrateLabelFor」两段（1080P 3M · 1.4 Mbps），
+                  // 同一档位并排两个码率，看着像重复，用户 2026-11-05 明确要求只留
+                  // 当前编码下真正生效的那个；H.264 的旧数字已从 label 里去掉。
+                  child: Text(p.labelFor(_codec)),
                 ),
             ],
             onChanged: (v) async {
@@ -91,17 +97,6 @@ class _VideoClientSettingsPageState extends State<VideoClientSettingsPage> {
               setState(() => _codec = v);
               await PlayPreferences.saveCodec(v);
             },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(left: 2, bottom: 2),
-          child: Text(
-            _presetSpec.copy
-                ? tr('video.client.copyNoTranscode')
-                : tr('video.client.bitrateNow', {
-                    'rate': _presetSpec.bitrateLabelFor(_codec),
-                  }),
-            style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
           ),
         ),
 
