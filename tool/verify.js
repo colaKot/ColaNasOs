@@ -287,6 +287,12 @@ function selectSteps(files) {
       continue;
     }
     if (/^(docs\/|mypic\/)/.test(p)) continue;
+    // media sidecar 只影响转码 / 缩略图链路，改它不需要把全网 smoke 跑一遍。
+    if (/^sidecars\/media\//.test(p)) {
+      ['smoke:media', 'smoke:thumb', 'smoke:player', 'smoke:video'].forEach((s) => pick.add(s));
+      domains.add('video');
+      continue;
+    }
     if (/^src\//.test(p) || /^sidecars\//.test(p)) {
       full = true;
       break;

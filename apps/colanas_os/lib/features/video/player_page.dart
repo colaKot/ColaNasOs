@@ -13,6 +13,7 @@ import '../../core/codec_support.dart';
 import '../../core/play_preferences.dart';
 import '../../core/play_quality.dart';
 import '../../core/play_quality_scope.dart';
+import '../../core/play_related.dart';
 import '../../core/play_timeline.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
@@ -24,8 +25,9 @@ import 'player_screen.dart';
 /// 之前直接套 SDK 默认控件，右下角一个参数项都没有，画质/码率只能在详情页
 /// 「更多 → 转码」里选一次、播放中不能改；倍速、音轨、铺满、列表、信息全缺。
 ///
-/// 底部右侧固定顺序（从左到右）：倍速 · 画质 · 字幕 · 音轨 · 音量 · 播放列表 ·
-/// 信息 · 设置 · 全屏，窄屏把后六项收进「更多」。
+/// 底部右侧顺序（从左到右）：倍速 · 画质 · 字幕 · 音轨 · 音量 · 〔播放列表〕·
+/// 信息 · 设置 · 全屏，窄屏把后几项收进「更多」。〔播放列表〕只在真的存在
+/// 同系列剧集 / 同目录分卷时出现，其余按钮依次左移，不留空位。
 /// 原来还挂了一个「画面比例（铺满/适应）」按钮，2026-11-05 按要求去掉：
 /// 铺满会裁掉画面边缘，而 HDR 片源本来就要靠 tonemap 保住高光，裁切得不偿失。
 ///
@@ -111,6 +113,12 @@ class _PlayerPageState extends State<PlayerPage> {
   /// 源文件的音轨清单（语言 / 音轨名 / 声道），菜单里显示成「1 · 中文 · TrueHD 7.1」。
   /// 空表示还没探到或探失败，此时退回 media_kit 的轨道列表。
   List<VideoAudioTrack> _audioTracks = const [];
+
+  /// 播放列表：电视剧给同系列各集，电影给同目录下的分卷（cd1/cd2、-1/-2）。
+  /// 少于 2 项时连按钮都不显示，别摆一个只有「正在播放」的空菜单。
+  List<VideoItem> _playlist = const [];
+  bool _playlistIsSeries = false;
+  bool get _hasPlaylist => _playlist.length > 1;
 
   /// 音量浮窗的锚点：浮窗要贴在音量按钮正上方弹出来。
   final GlobalKey _volumeAnchor = GlobalKey();
@@ -238,6 +246,7 @@ class _PlayerPageState extends State<PlayerPage> {
       }
       _loadSubtitles();
       _loadAudioTracks();
+      _loadPlaylist();
       _resetHideTimer();
     });
   }
@@ -257,6 +266,80 @@ class _PlayerPageState extends State<PlayerPage> {
     } catch (_) {
       // 探不到就退回「音轨 N」的旧样式，不影响播放
     }
+  }
+
+  /// 组装播放列表。
+  ///
+  /// 以前这里直接拉「最新 50 部影片」，跟正在播的片子毫无关系。现在按两条路取：
+  ///   - `series` 非空（电视剧）→ 同一系列的全部季 / 集，服务端已按季号集号排好；
+  ///   - 否则 → 同目录下共用同一前缀的分卷文件（`abd-121-cd1` 配 `cd2`/`cd3`，
+  ///     或 `abd-121-1` 配 `-2`），命名规则见 `core/play_related.dart`。
+  /// 列表里没有当前片、或只剩当前片一条，就保持按钮隐藏。
+  Future<void> _loadPlaylist() async {
+    final id = widget.itemId;
+    if (id == null || id.isEmpty) return;
+    try {
+      final client = ApiSession.instance.client;
+      final cur = await client.videoItem(id: id);
+      final series = (cur.series ?? '').trim();
+      if (series.isNotEmpty) {
+        final res = await client.videoSeriesItems(
+          name: series,
+          libraryId: cur.libraryId,
+          limit: 500,
+        );
+        _setPlaylist(res.items, isSeries: true);
+        return;
+      }
+      final dir = relatedDir(cur.path);
+      final prefix = relatedPrefix(relatedBasename(cur.path));
+      if (dir.isEmpty || prefix == null) return;
+      // 目录筛选走 folderPath 更精确；SMB 绝对路径过不了来源根校验时，
+      // 退回关键词搜索，再用「同目录 + 同前缀」在客户端钉一遍。
+      VideoListResponse res;
+      try {
+        // `libraryId` 必须带：服务端要用库的来源根校验 folderPath，
+        // 不带时 roots 为空 → 403。`mediaType=video` 是为了别把混合库里的
+        // 同名剧照（image）一起捞进来。
+        res = await client.videoList(
+          libraryId: cur.libraryId,
+          mediaType: 'video',
+          folderPath: dir,
+          folderMode: 'exact',
+          limit: 200,
+        );
+      } catch (_) {
+        res = await client.videoList(
+          libraryId: cur.libraryId,
+          mediaType: 'video',
+          q: prefix,
+          limit: 200,
+        );
+      }
+      final picked = res.items
+          .where(
+            (it) =>
+                relatedDir(it.path).toLowerCase() == dir.toLowerCase() &&
+                relatedMatches(prefix, relatedBasename(it.path)),
+          )
+          .toList()
+        ..sort((a, b) => compareRelatedNames(
+              relatedBasename(a.path),
+              relatedBasename(b.path),
+            ));
+      _setPlaylist(picked, isSeries: false);
+    } catch (_) {
+      // 探不到就不显示播放列表按钮，不影响播放
+    }
+  }
+
+  void _setPlaylist(List<VideoItem> items, {required bool isSeries}) {
+    if (items.length < 2 || !items.any((e) => e.id == widget.itemId)) return;
+    if (!mounted) return;
+    setState(() {
+      _playlist = items;
+      _playlistIsSeries = isSeries;
+    });
   }
 
   void _loadUiPrefs() {
@@ -1154,49 +1237,101 @@ class _PlayerPageState extends State<PlayerPage> {
     );
   }
 
+  /// 弹播放列表：内容是 `_loadPlaylist()` 预取好的同系列 / 同目录分卷，
+  /// 正在播放的那一条高亮 + 打勾，点它不做事（别把自己重启一遍）。
   Future<void> _showPlaylist() async {
-    List<VideoItem> items = const [];
-    try {
-      final res = await ApiSession.instance.client.videoList(limit: 50);
-      items = res.items;
-    } catch (_) {
-      // 拿不到列表就只提示，不摆空菜单
-    }
-    if (!mounted) return;
+    final items = _playlist;
+    if (items.isEmpty || !mounted) return;
+    final scheme = Theme.of(context).colorScheme;
+    // 长剧集列表要把当前集滚进视野，否则「选中」的那条在屏幕外看不见。
+    final currentIndex = items.indexWhere((e) => e.id == widget.itemId);
+    final controller = ScrollController(
+      initialScrollOffset: currentIndex > 2 ? (currentIndex - 2) * 64.0 : 0.0,
+    );
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF1B1B1B),
-      builder: (_) => items.isEmpty
-          ? Padding(
+      isScrollControlled: true,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
               padding: const EdgeInsets.all(NasTokens.spaceLg),
               child: Text(
-                tr('player.noPlaylist'),
-                style: const TextStyle(color: Colors.white70),
+                tr('player.playlist'),
+                style: const TextStyle(color: Colors.white, fontSize: 16),
               ),
-            )
-          : ListView.builder(
-              shrinkWrap: true,
-              itemCount: items.length,
-              itemBuilder: (_, i) {
-                final it = items[i];
-                return ListTile(
-                  selected: it.id == widget.itemId,
-                  title: Text(
-                    it.title,
-                    style: TextStyle(
-                      color: it.id == widget.itemId
-                          ? Theme.of(context).colorScheme.primary
-                          : Colors.white,
-                    ),
-                  ),
-                  onTap: () => _playOther(it),
-                );
-              },
             ),
+            Flexible(
+              child: ListView.builder(
+                controller: controller,
+                shrinkWrap: true,
+                itemCount: items.length,
+                itemBuilder: (_, i) {
+                  final it = items[i];
+                  final current = it.id == widget.itemId;
+                  return ListTile(
+                    selected: current,
+                    leading: Icon(
+                      current ? Icons.play_arrow : Icons.movie_outlined,
+                      color: current ? scheme.primary : Colors.white54,
+                      size: 20,
+                    ),
+                    title: Text(
+                      it.title,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: current ? scheme.primary : Colors.white,
+                      ),
+                    ),
+                    subtitle: Text(
+                      _playlistSubtitle(it),
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 11,
+                      ),
+                    ),
+                    trailing: current
+                        ? Icon(Icons.check, size: 18, color: scheme.primary)
+                        : null,
+                    onTap: current ? null : () => _playOther(it),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: NasTokens.spaceMd),
+          ],
+        ),
+      ),
     );
+    controller.dispose();
   }
 
-  Future<void> _playOther(VideoItem it) async {
+  String _playlistSubtitle(VideoItem it) {
+    if (_playlistIsSeries) {
+      final s = it.season;
+      final e = it.episode;
+      if (s != null && e != null) return 'S$s · E$e';
+      if (e != null) return 'E$e';
+    }
+    return relatedBasename(it.path);
+  }
+
+  /// 上一集 / 下一集：只在真的有播放列表时才有这两个按钮。
+  void _playAdjacent(int delta) {
+    final items = _playlist;
+    final i = items.indexWhere((e) => e.id == widget.itemId);
+    if (i < 0) return;
+    final j = i + delta;
+    if (j < 0 || j >= items.length) return;
+    _playOther(items[j], popSheet: false);
+  }
+
+  /// `popSheet`：从播放列表弹窗里点时要先关弹窗；从控制栏「上一集」直接切时
+  /// 不能 pop，否则会把播放器页面本身关掉。
+  Future<void> _playOther(VideoItem it, {bool popSheet = true}) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     try {
       final res = await ApiSession.instance.client.videoStreamUrl(id: it.id);
@@ -1204,7 +1339,7 @@ class _PlayerPageState extends State<PlayerPage> {
           ? res.url
           : '${ApiSession.instance.baseUrl}${res.url}';
       if (!mounted) return;
-      Navigator.of(context).pop();
+      if (popSheet) Navigator.of(context).pop();
       await Navigator.of(context).pushReplacement(
         MaterialPageRoute<void>(
           builder: (_) => PlayerPage(
@@ -1248,7 +1383,9 @@ class _PlayerPageState extends State<PlayerPage> {
           ),
         ),
       ),
-      _btn(Icons.playlist_play, tr('player.playlist'), _showPlaylist),
+      // 没有同系列 / 同目录分卷时，这个按钮直接不出现，后面的按钮自然往左靠。
+      if (_hasPlaylist)
+        _btn(Icons.playlist_play, tr('player.playlist'), _showPlaylist),
       _btn(Icons.info_outline, tr('player.info'), _showInfo),
       _btn(Icons.settings_outlined, tr('player.settings'), _showSettings),
       _btn(
@@ -1350,11 +1487,13 @@ class _PlayerPageState extends State<PlayerPage> {
                 playing ? tr('player.pause') : tr('player.play'),
                 () => _player.playOrPause(),
               ),
-              if (wide) ...[
+              // 有播放列表才给「上一集 / 下一集」；没有时这两个位置直接消失，
+              // 控制栏不会因为少了按钮而留空。
+              if (wide && _hasPlaylist) ...[
                 _btn(Icons.skip_previous, tr('player.prev'),
-                    () => _showPlaylist()),
+                    () => _playAdjacent(-1)),
                 _btn(Icons.skip_next, tr('player.next'),
-                    () => _showPlaylist()),
+                    () => _playAdjacent(1)),
               ],
               _btn(Icons.replay_10, tr('player.rewind10'),
                   () => _seekBy(-10)),
