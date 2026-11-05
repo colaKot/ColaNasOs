@@ -14,6 +14,10 @@ import { registerBookReading } from './routes/reading';
 import { registerBookFavorites } from './routes/favorites';
 import { registerBookCollections } from './routes/collections';
 import { registerBookLists } from './routes/lists';
+import { registerBookHistory } from './routes/history';
+import { registerBookUserCollections } from './routes/user-collections';
+import { absoluteInput, isAbsoluteInput, registerExtraRoot } from '../files/fs-root';
+import { applyBookScanSchedule, scheduleStartupScan } from './schedule';
 
 /**
  * SP3-05 book：库 / 索引 / 列表 / 搜索 / 封面 / 阅读文件 / 收藏 / 进度（一期）。
@@ -46,6 +50,13 @@ export const book: ServerModule = {
 
   async register(app, k) {
     for (const schema of BOOK_SCHEMAS) app.addSchema(schema);
+    // 绝对路径来源的 extraRoots 是内存白名单，重启后要按库里已有来源重建
+    const libs = await sql<{ root_path: string }>`
+      select root_path from book_libraries
+    `.execute(k.db);
+    for (const lib of libs.rows) {
+      if (isAbsoluteInput(lib.root_path)) registerExtraRoot(absoluteInput(lib.root_path));
+    }
     const libWatch = bindLibraryWatch<BookLibraryRow>({
       k,
       domain: 'book',
@@ -61,5 +72,9 @@ export const book: ServerModule = {
     await registerBookFavorites(app, k, h);
     await registerBookCollections(app, k, h);
     await registerBookLists(app, k, h);
+    await registerBookHistory(app, k, h);
+    await registerBookUserCollections(app, k, h);
+    await applyBookScanSchedule(k);
+    scheduleStartupScan(k);
   },
 };

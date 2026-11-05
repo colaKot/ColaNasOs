@@ -48,19 +48,13 @@ Future<void> showAddToCollectionDialog(
                               action: 'add',
                             ),
                           );
-                          messenger.showSnackBar(
-                            SnackBar(
-                              content: Text(
+                          NasSnack.showOn(messenger, 
                                 tr('video.collection.added', {
                                   'count': itemIds.length,
                                 }),
-                              ),
-                            ),
-                          );
+                              );
                         } catch (e) {
-                          messenger.showSnackBar(
-                            SnackBar(content: Text('$e')),
-                          );
+                          NasSnack.showOn(messenger, '$e');
                         }
                       },
                     );
@@ -77,6 +71,6 @@ Future<void> showAddToCollectionDialog(
     );
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    NasSnack.show(context, '$e');
   }
 }

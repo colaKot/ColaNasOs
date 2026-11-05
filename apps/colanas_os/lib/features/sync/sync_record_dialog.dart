@@ -91,9 +91,12 @@ class _SyncRecordDialogState extends State<SyncRecordDialog> {
             ((run['deletedRemote'] as num?)?.toInt() ?? 0);
     final skipped = (run['skipped'] as num?)?.toInt() ?? 0;
     final conflicts = (run['conflicts'] as num?)?.toInt() ?? 0;
+    final failed = (run['failed'] as num?)?.toInt() ?? 0;
     final bytes = (run['bytes'] as num?)?.toInt() ?? 0;
+    final error = '${run['error'] ?? ''}'.trim();
     return ListTile(
       dense: true,
+      isThreeLine: error.isNotEmpty,
       leading: Icon(
         status == 'failed'
             ? Icons.error_outline
@@ -105,20 +108,48 @@ class _SyncRecordDialogState extends State<SyncRecordDialog> {
             ? Theme.of(context).colorScheme.error
             : null,
       ),
-      title: Text('${tr('sync.stat.upload')} $uploaded · '
-          '${tr('sync.stat.download')} $downloaded · '
-          '${tr('sync.stat.delete')} $deleted · '
-          '${tr('sync.stat.skip')} $skipped'),
-      subtitle: Text(
-        '${_time(finishedAt)} · ${formatBytes(bytes)}'
-        '${conflicts > 0 ? ' · ${tr('sync.stat.conflict')} $conflicts' : ''}',
+      title: Text(
+        '${tr('sync.stat.upload')} $uploaded · '
+        '${tr('sync.stat.download')} $downloaded · '
+        '${tr('sync.stat.delete')} $deleted · '
+        '${tr('sync.stat.skip')} $skipped'
+        '${failed > 0 ? ' · ${tr('sync.stat.failed')} $failed' : ''}',
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${_time(finishedAt)} · ${formatBytes(bytes)}'
+            '${conflicts > 0 ? ' · ${tr('sync.stat.conflict')} $conflicts' : ''}',
+          ),
+          // 失败原因就写在这一轮下面：之前只存 applied，红了也看不出为什么
+          if (error.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Tooltip(
+                message: error,
+                child: Text(
+                  error,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: NasTokens.fontCaption,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  static String _time(int ms) {
-    if (ms <= 0) return '-';
-    final d = DateTime.fromMillisecondsSinceEpoch(ms);
+  /// 服务端 `sync_runs.finished_at` 是 **Unix 秒**（不是毫秒）。
+  /// 以前直接丢进 `fromMillisecondsSinceEpoch`，1.79e9 毫秒 = 1970-01-21，
+  /// 记录里那行「1970-01-22 02:16」就是这么来的。
+  static String _time(int seconds) {
+    if (seconds <= 0) return '-';
+    final d = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
     String two(int v) => v.toString().padLeft(2, '0');
     return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
   }

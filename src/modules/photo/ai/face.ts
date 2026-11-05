@@ -440,8 +440,8 @@ export async function registerPhotoFaces(app: any, k: KernelApi): Promise<void> 
   /**
    * 人脸裁剪图（簇头像 / 照片里的人脸角标）。
    *
-   * 构图照参考实现：以人脸框中心为基准，按最长边外扩 `FACE_IMAGE_EXTEND`（默认 30%），
-   * 再向上偏移 `FACE_IMAGE_TOP_EXTRA`（默认 10%）—— 人脸在头像里偏下一点才自然，
+   * 构图照参考实现：以人脸框中心为基准，按最长边外扩 `FACE_IMAGE_EXTEND`（默认 20%），
+   * 再向上偏移 `FACE_IMAGE_TOP_EXTRA`（默认 12%）—— 人脸在头像里偏下一点才自然，
    * 否则头顶被切一半。裁剪结果落文件缓存，key 带 box 与 size，box 变了自然失效。
    */
   app.get(
@@ -515,8 +515,10 @@ export async function registerPhotoFaces(app: any, k: KernelApi): Promise<void> 
         }
         const bw = Number(row.box_width);
         const bh = Number(row.box_height);
-        const extend = 0.3;
-        const topExtra = 0.1;
+        // 构图对齐参考实现：最长边外扩 20%、再向上偏移 12%。
+        // 之前写死 30% 会把肩膀/背景一起裁进来，头像墙看起来像「碎图」。
+        const extend = Number(process.env.COLANAS_FACE_IMAGE_EXTEND ?? 0.2);
+        const topExtra = Number(process.env.COLANAS_FACE_IMAGE_TOP_EXTRA ?? 0.12);
         const cx = Number(row.box_left) + bw / 2;
         const cy = Number(row.box_top) + bh / 2;
         const base = Math.max(bw, bh);

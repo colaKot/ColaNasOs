@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_media/nas_media.dart';
 import 'package:nas_ui/nas_ui.dart';
+import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
 import 'photo_viewer_page.dart';
@@ -91,11 +92,7 @@ class _PhotoSimilarPageState extends State<PhotoSimilarPage> {
       appBar: AppBar(
         title: Text(widget.title ?? tr('photo.similar.title')),
         actions: [
-          IconButton(
-            tooltip: tr('common.refresh'),
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _load,
-          ),
+          NasRefreshButton(onPressed: _loading ? null : _load),
         ],
       ),
       body: Column(
@@ -118,7 +115,7 @@ class _PhotoSimilarPageState extends State<PhotoSimilarPage> {
                 for (final t in _thresholds)
                   Padding(
                     padding: const EdgeInsets.only(right: NasTokens.spaceXs),
-                    child: ChoiceChip(
+                    child: NasChip(
                       visualDensity: VisualDensity.compact,
                       label: Text(t == null ? tr('photo.similar.any') : t.toStringAsFixed(1)),
                       selected: _minScore == t,

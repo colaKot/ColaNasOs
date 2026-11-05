@@ -321,8 +321,9 @@ class SyncTaskCard extends StatelessWidget {
     }
   }
 
-  static String _time(int ms) {
-    final d = DateTime.fromMillisecondsSinceEpoch(ms);
+  /// `sync_tasks.last_run_at` 是 Unix 秒，乘 1000 再格式化（以前当毫秒 → 1970）
+  static String _time(int seconds) {
+    final d = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
     String two(int v) => v.toString().padLeft(2, '0');
     return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
   }

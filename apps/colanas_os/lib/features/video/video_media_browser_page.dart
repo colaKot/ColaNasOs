@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
+import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
 import 'video_page.dart';
@@ -106,9 +108,7 @@ class _VideoMediaBrowserPageState extends State<VideoMediaBrowserPage> {
 
   Future<void> _openVideo(VideoBrowseItem item) async {
     if (item.id == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('video.browse.unindexed'))),
-      );
+      NasSnack.show(context, tr('video.browse.unindexed'));
       return;
     }
     try {
@@ -117,8 +117,7 @@ class _VideoMediaBrowserPageState extends State<VideoMediaBrowserPage> {
       openVideoDetail(context, detail);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -148,6 +147,47 @@ class _VideoMediaBrowserPageState extends State<VideoMediaBrowserPage> {
         ),
       ),
     );
+  }
+
+  /// 右键菜单：目录只给「打开 / 复制路径」；视频和图片多一条「查看/播放」的
+  /// 语义化入口，其余动作（刮削、改匹配）在详情页里做。
+  List<NasMenuEntry> _browseMenuEntries(
+    VideoBrowseItem item,
+    VideoLibraryItem? lib,
+  ) {
+    final full = _fullPath(item, lib);
+    return [
+      NasMenuEntry(
+        label: tr('common.open'),
+        icon: item.dir ? Icons.folder_open_outlined : Icons.play_arrow_outlined,
+        onSelected: item.dir
+            ? () => _enter(item)
+            : item.mediaType == 'video'
+                ? () => _openVideo(item)
+                : item.mediaType == 'image'
+                    ? () => _openImage(item)
+                    : null,
+      ),
+      NasMenuEntry(
+        label: tr('video.action.copyPath'),
+        icon: Icons.copy_all_outlined,
+        onSelected: full == null ? null : () => _copyPath(full),
+      ),
+    ];
+  }
+
+  /// 库根 + 相对路径；没选中库时退回相对路径本身
+  String? _fullPath(VideoBrowseItem item, VideoLibraryItem? lib) {
+    final rel = item.path;
+    if (rel.isEmpty) return null;
+    if (lib == null) return rel;
+    return '${lib.path}/$rel'.replaceAll(RegExp(r'^/+'), '');
+  }
+
+  Future<void> _copyPath(String path) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await Clipboard.setData(ClipboardData(text: path));
+    NasSnack.showOn(messenger, tr('common.copied'));
   }
 
   @override
@@ -205,7 +245,7 @@ class _VideoMediaBrowserPageState extends State<VideoMediaBrowserPage> {
         children: [
           SizedBox(
             width: 200,
-            child: DropdownButtonFormField<String>(
+            child: NasDropdown<String>(
               initialValue: _libraryId,
               isDense: true,
               decoration: InputDecoration(
@@ -243,11 +283,7 @@ class _VideoMediaBrowserPageState extends State<VideoMediaBrowserPage> {
               ),
             ),
           ),
-          IconButton(
-            tooltip: tr('common.refresh'),
-            onPressed: _load,
-            icon: const Icon(Icons.refresh),
-          ),
+          NasRefreshButton(onPressed: _load),
         ],
       ),
     );
@@ -273,26 +309,29 @@ class _VideoMediaBrowserPageState extends State<VideoMediaBrowserPage> {
           itemCount: _items.length,
           itemBuilder: (context, i) {
             final item = _items[i];
-            return InkWell(
-              onTap: item.dir
-                  ? () => _enter(item)
-                  : item.mediaType == 'video'
-                      ? () => _openVideo(item)
-                      : item.mediaType == 'image'
-                          ? () => _openImage(item)
-                          : null,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _thumb(item, base, lib, headers)),
-                  const SizedBox(height: NasTokens.spaceXs),
-                  Text(
-                    item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: NasTokens.fontCaption),
-                  ),
-                ],
+            return NasContextMenuRegion(
+              entries: _browseMenuEntries(item, lib),
+              child: InkWell(
+                onTap: item.dir
+                    ? () => _enter(item)
+                    : item.mediaType == 'video'
+                        ? () => _openVideo(item)
+                        : item.mediaType == 'image'
+                            ? () => _openImage(item)
+                            : null,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _thumb(item, base, lib, headers)),
+                    const SizedBox(height: NasTokens.spaceXs),
+                    Text(
+                      item.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: NasTokens.fontCaption),
+                    ),
+                  ],
+                ),
               ),
             );
           },

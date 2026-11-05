@@ -11,6 +11,7 @@ import {
 import {
   ONLINE_NO,
   ONLINE_UNKNOWN,
+  ONLINE_YES,
   buildUnc,
   normalizeConnType,
   uncPathOf,
@@ -370,14 +371,23 @@ export function primaryOf(sources: VideoSourceRow[]): VideoSourceRow | null {
  *
  * 同时看来源表与库表：老数据可能只有库上的单来源字段，没有 `video_library_sources` 行。
  */
+/**
+ * 已知离线的 SMB 来源根（列表 / 搜索 / 海报都按它过滤）。
+ *
+ * 判据是「**不是** ONLINE_YES」而不是「= ONLINE_NO」：
+ * 只有探测确认在线（YES）才认为能读；UNKNOWN（刚重启、还没探到）也按离线处理。
+ * 理由：UNKNOWN 时去碰网络盘 = 每个请求等一次 SMB 超时，列表和搜索都会被拖死；
+ * 而内核启动与之后每 20s 都会探测，探到 YES 后内容自然出现（客户端收到
+ * `video.smb.online` 事件后刷新）。用户要的是「连上才出现」，不是「乐观显示再报错」。
+ */
 export async function offlineSmbPrefixes(db: any): Promise<string[]> {
   const rows = (
     await sql<{ root_path: string }>`
       select root_path from video_library_sources
-       where conn_type = 'smb' and coalesce(online_state, 0) = ${ONLINE_NO}
+       where conn_type = 'smb' and coalesce(online_state, 0) <> ${ONLINE_YES}
       union
       select root_path from video_libraries
-       where conn_type = 'smb' and coalesce(online_state, 0) = ${ONLINE_NO}
+       where conn_type = 'smb' and coalesce(online_state, 0) <> ${ONLINE_YES}
     `.execute(db)
   ).rows;
   const out = new Set<string>();

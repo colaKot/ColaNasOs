@@ -1,16 +1,21 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../core/endpoint_host.dart';
 import '../core/app_settings.dart';
+import '../core/app_visibility.dart';
 import '../core/session.dart';
+import '../core/settings_store.dart';
 import '../features/accounts/accounts_page.dart';
-import '../features/book/book_page.dart';
+import '../features/book/book_shell.dart';
 import '../features/discover/discover_shell.dart';
 import '../features/files/files_page.dart';
 import '../features/home/home_page.dart';
 import '../features/media_tool/media_tool_page.dart';
+import '../features/messages/messages_page.dart';
 import '../features/monitor/monitor_page.dart';
 import '../features/mount/mount_page.dart';
 import '../features/music/music_shell.dart';
@@ -21,9 +26,13 @@ import '../features/settings/settings_page.dart';
 import '../features/share/share_page.dart';
 import '../features/sync/sync_page.dart';
 import '../features/sync/sync_scheduler.dart';
+import '../features/sync/sync_tray_bridge.dart';
+import '../features/terminal/terminal_page.dart';
 import '../features/transfer/transfer_page.dart';
 import '../features/video/video_shell.dart';
+import 'app_nav_shell.dart';
 import 'app_visuals.dart';
+import 'shell_back.dart';
 import '../features/music/mini_player_bar.dart';
 
 /// 响应式外壳：一套逻辑，两套布局。
@@ -35,6 +44,15 @@ import '../features/music/mini_player_bar.dart';
 /// `_pageById` 补一行页面映射；`available: false` 的 App 不出现在导航里。
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
+
+  /// 外部入口请求切到某个 App（目前只有 Electron 托盘的「同步任务」）。
+  ///
+  /// 用回调而不是 GlobalKey：托盘的调用方在 `sync_tray_bridge` 里，
+  /// 拿不到 State，也不该 import 整个 shell 的私有类型。
+  static void Function(String appId)? openAppRequest;
+
+  /// 切到指定 App；没挂载（还在登录页）时静默忽略
+  static void openApp(String appId) => openAppRequest?.call(appId);
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -51,8 +69,11 @@ class _AppShellState extends State<AppShell> {
   static const _navCollapsedWidth = 56.0;
   static const _navExpandedWidth = 128.0;
 
-  /// compact 底部导航直接展示的入口数
-  static const _primaryCount = 5;
+  /// 手机底部曾经固定的四项（相册 / 影视 / 音乐 / 发现）。
+  ///
+  /// 2026-11-04 起手机端不再有一级底部导航：工作台是唯一入口，App 内全屏、
+  /// 由 App 自己的底部二级菜单承担切换（对齐移动端基线的形态）。
+  /// 这一段留空常量会被 `flutter analyze` 判成未使用，故连注释一起保留说明。
 
   /// 工作台缓存一份：`IndexedStack` 每次 build 新建 widget 会丢状态
   late final HomePage _home = HomePage(onOpenApp: _open);
@@ -66,8 +87,44 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    // 外部入口（Electron 托盘的「同步任务」）请求切 App 时走这里
+    AppShell.openAppRequest = _open;
+    // 手机端二级页左上角的房子：点它回工作台（桌面端用不到）
+    AppNavShell.onExitToHome = () => _open('home');
     // 用户开启过「自动同步」才启动调度；默认关，避免悄悄读写本地磁盘
     if (SyncScheduler.instance.enabled) SyncScheduler.instance.start();
+    // 托盘桥在 `runColanasApp` 里已经装好；这里补报一次状态 —— 登录之后才拿得到
+    // 任务数，「立即同步」该不该置灰取决于它。
+    unawaited(syncTrayBridge.refresh());
+    // 首启引导只出现一次（SettingsStore：桌面写 settings.json，Web 写 localStorage）
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowGuide());
+  }
+
+  Future<void> _maybeShowGuide() async {
+    if (!mounted) return;
+    if (SettingsStore.instance.getBool('guide.seen.v1') == true) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('guide.title')),
+        content: Text(tr('guide.body')),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(tr('guide.ok')),
+          ),
+        ],
+      ),
+    );
+    // 用户看过就记下来；即使直接关掉也不再重复弹出（引导不是每次启动的阻塞项）
+    await SettingsStore.instance.setBool('guide.seen.v1', true);
+  }
+
+  @override
+  void dispose() {
+    if (AppShell.openAppRequest == _open) AppShell.openAppRequest = null;
+    AppNavShell.onExitToHome = null;
+    super.dispose();
   }
 
   /// App id → 页面。契约里有、这里没有的 App 不会出现在导航（例如 `ai` 仍是占位）
@@ -77,12 +134,14 @@ class _AppShellState extends State<AppShell> {
     'video': const VideoShellPage(),
     'discover': const DiscoverShellPage(),
     'music': const MusicShellPage(),
-    'book': const BookPage(),
+    'book': const BookShellPage(),
     'notes': const NotesPage(),
     'netdisk': const MountPage(),
     'share': const SharePage(),
     'backup': const SafetyPage(),
     'monitor': const MonitorPage(),
+    'messages': const MessagesPage(),
+    'terminal': const TerminalPage(),
     'sync': const SyncPage(),
     'transfer': const TransferPage(),
     'accounts': const AccountsPage(),
@@ -91,7 +150,14 @@ class _AppShellState extends State<AppShell> {
   };
 
   static List<AppDescriptor> get _apps => AppRegistry.apps
-      .where((a) => a.available && _pageById.containsKey(a.id))
+      .where(
+        (a) =>
+            a.available &&
+            _pageById.containsKey(a.id) &&
+            // 契约的 endpoints 之前没人用，等于所有端都看到全部入口；
+            // 现在按当前客户端过滤（见 core/app_visibility.dart）
+            appVisibleOnThisClient(a),
+      )
       .toList(growable: false);
 
   /// 页面顺序：工作台在最前，其余按契约顺序
@@ -105,12 +171,7 @@ class _AppShellState extends State<AppShell> {
     return app == null ? id : tr(app.nameKey);
   }
 
-  IconData _iconOf(String id) {
-    if (id == 'home') return Icons.dashboard_outlined;
-    final app = AppRegistry.byId(id);
-    return AppVisuals.iconFor(app?.icon ?? '');
-  }
-
+  /// 一级导航与工作台都从契约取图标（`AppVisuals.iconFor`），手机端不再有底部一级栏。
   Widget _pageOf(String id) =>
       id == 'home' ? _home : (_pageById[id] ?? const SizedBox.shrink());
 
@@ -178,39 +239,6 @@ class _AppShellState extends State<AppShell> {
     return groups;
   }
 
-  void _showMore(BuildContext context, List<String> ids) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = _primaryCount; i < ids.length; i++)
-                ListTile(
-                  leading: Icon(_iconOf(ids[i])),
-                  title: Text(_labelOf(ids[i])),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _open(ids[i]);
-                  },
-                ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: Text(tr('nav.logout')),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  ApiSession.instance.logout();
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final ids = _ids;
@@ -229,41 +257,19 @@ class _AppShellState extends State<AppShell> {
         final mode = layoutFor(constraints.maxWidth);
 
         if (mode == LayoutMode.compact) {
-          final selected = index < _primaryCount ? index : _primaryCount;
+          // 手机端：**工作台是唯一入口**，App 全屏（自带 56 顶栏 + 底部二级菜单）。
+          // 因此这里不再有一级底部导航，也没有「更多」弹层 —— 两层底部栏没法共存。
           return Scaffold(
             backgroundColor: Colors.transparent,
             body: SafeArea(
+              // 工作台自己不带顶栏，交给这里避开状态栏；
+              // App 页的顶栏要把底色铺到状态栏下面，所以 top: false。
+              top: currentId == 'home',
               bottom: false,
               child: _withCapabilityNotice(currentId, body, NasTokens.spaceSm),
             ),
-            bottomNavigationBar: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 常驻播放条：窄屏贴在底部导航之上
-                const MiniPlayerBar(),
-                NavigationBar(
-                  selectedIndex: selected,
-                  onDestinationSelected: (i) {
-                    if (i < _primaryCount) {
-                      _open(ids[i]);
-                    } else {
-                      _showMore(context, ids);
-                    }
-                  },
-                  destinations: [
-                    for (final id in ids.take(_primaryCount))
-                      NavigationDestination(
-                        icon: Icon(_iconOf(id)),
-                        label: _labelOf(id),
-                      ),
-                    NavigationDestination(
-                      icon: const Icon(Icons.more_horiz),
-                      label: tr('nav.more'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+            // 常驻播放条：无曲目时高度为 0，不占位
+            bottomNavigationBar: const MiniPlayerBar(),
           );
         }
 
@@ -313,24 +319,26 @@ class _AppShellState extends State<AppShell> {
                           subtitle: currentId == 'home'
                               ? tr('home.summary')
                               : tr(AppVisuals.groupOf(currentId).i18nKey),
-                          // 遥控器没有软键盘，TV 模式收起顶栏搜索
-                          search: tv
-                              ? null
-                              : NasSearchBox(
-                                  hintText: tr('common.search'),
-                                  onSubmitted: _jumpTo,
-                                ),
+                          // 顶部搜索暂时不显示（2026-11-04）：它只按 App 名字跳转，
+                          // 但每个二级页面顶上都要占一条输入框，用户反馈「怪怪的」。
+                          // 需要时把 `search: NasSearchBox(...)` 加回来即可，_jumpTo 还在。
                           actions: [
-                            NasIconAction(
-                              icon: Icons.swap_vert,
-                              tooltip: tr('app.transfer'),
-                              onPressed: () => _open('transfer'),
+                            // 传输入口已移除（侧栏里有「传输」App，顶栏重复且占位）；
+                            // 同一位置改为「返回上一层」：只在当前 App 处于三级 / 四级下钻时出现。
+                            ValueListenableBuilder<int>(
+                              valueListenable: ShellBack.revision,
+                              builder: (context, _, _) {
+                                final back = ShellBack.handlerFor(currentId);
+                                if (back == null) return const SizedBox.shrink();
+                                return NasIconAction(
+                                  icon: Icons.arrow_back,
+                                  tooltip: tr('common.back'),
+                                  onPressed: back,
+                                );
+                              },
                             ),
-                            NasIconAction(
-                              icon: Icons.settings_outlined,
-                              tooltip: tr('app.settings'),
-                              onPressed: () => _open('settings'),
-                            ),
+                            // 「设置」按钮已移除：它是侧栏里的一个 App，顶栏再来一个入口
+                            // 是重复的，而且点它直接崩（用户 2026-11-04 反馈）。
                           ],
                         ),
                         SizedBox(height: gap),
@@ -352,6 +360,8 @@ class _AppShellState extends State<AppShell> {
   }
 
   /// 顶栏搜索：输入应用名 / 中文名直接跳转（子串匹配，回车生效）
+  // 顶部搜索框暂时隐藏，保留这个方法方便恢复（见 NasTopBar 处的注释）
+  // ignore: unused_element
   void _jumpTo(String keyword) {
     final q = keyword.trim().toLowerCase();
     if (q.isEmpty) return;
@@ -366,18 +376,14 @@ class _AppShellState extends State<AppShell> {
 
   Widget _brand({required bool compact}) {
     final scheme = Theme.of(context).colorScheme;
-    final logo = Container(
+    // 与应用图标同一张图（`tool/gen-icons.js` 从 resources/icon-source.png 派生），
+    // 不再自绘渐变块，避免侧栏 logo 和任务栏图标不是同一个东西。
+    final logo = Image.asset(
+      'assets/branding/app_icon.png',
       width: 32,
       height: 32,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [scheme.primary, const Color(0xFF8B5CF6)],
-        ),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: const Icon(Icons.album_rounded, size: 18, color: Colors.white),
+      cacheWidth: 96,
+      filterQuality: FilterQuality.medium,
     );
     // 收起时不显示任何文字（含 ColaNasOs 与地址），悬停展开才出现
     if (compact) return Center(child: logo);

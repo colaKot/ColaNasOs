@@ -13,6 +13,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
+const { sql } = require('kysely');
 
 if (!process.versions.electron) {
   const exe = path.join(
@@ -80,6 +81,9 @@ process.chdir(root);
         path.join(filesRoot, 'photos', name),
       ]);
     }
+    // 损坏图片：识别必然失败。以前「没有 embedding 就重新做」会让它每轮都被
+    // 重新挑中，photo.ai.scan 变成 0.2s 一轮的热循环 —— 这里回归失败记账。
+    fs.writeFileSync(path.join(filesRoot, 'photos', 'bad.jpg'), 'not a real jpeg');
   }
 
   process.env.COLANAS_DEV_TOKEN = '1';
@@ -123,7 +127,7 @@ process.chdir(root);
     fs.existsSync(path.join(root, 'vendor', 'models', 'places365', 'resnet50_places365.onnx')) &&
     Boolean(ffmpeg);
 
-  r = await inject('POST', '/api/v1/photo/ai/analyze', admin, { limit: 2 });
+  r = await inject('POST', '/api/v1/photo/ai/analyze', admin, { limit: 10 });
   if (r.statusCode === 503) {
     check('analyze_batch', true, 'skipped: models/ffmpeg unavailable');
   } else {
@@ -138,6 +142,20 @@ process.chdir(root);
       'scene_gate',
       gateTotal === r.json().processed,
       `confident=${gates.confident} ambiguous=${gates.ambiguous} unknown=${gates.unknown}`,
+    );
+    const bad = (
+      await sql`select ai_skip_at from photo_items where rel_path like '%bad.jpg'`.execute(k.db)
+    ).rows[0];
+    check(
+      'analyze_bad_skip_recorded',
+      Number(bad?.ai_skip_at || 0) > 0,
+      `ai_skip_at=${bad?.ai_skip_at ?? '-'}`,
+    );
+    const again = await inject('POST', '/api/v1/photo/ai/analyze', admin, { limit: 10 });
+    check(
+      'analyze_bad_not_retried',
+      again.statusCode === 200 && again.json().processed === 0 && again.json().skipped === 0,
+      `status=${again.statusCode} ${again.body.slice(0, 120)}`,
     );
   }
 

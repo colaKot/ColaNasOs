@@ -58,8 +58,11 @@ dependencies:
   # 交互式终端（PTY）的 WebSocket 通道：桌面走 dart:io，Web 走浏览器实现
   web_socket_channel: ^3.0.0
   qr_flutter: ^4.1.0
+  # 笔记 Markdown 预览（flutter_markdown 的维护分支；原包已标记 discontinued）
+  flutter_markdown_plus: ^1.0.3
   tray_manager: ^0.8.2
   window_manager: ^0.6.0
+  archive: ^4.6.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -83,6 +86,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - assets/branding/
     - assets/icons/
     - assets/i18n/
 

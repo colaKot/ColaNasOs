@@ -187,6 +187,33 @@ export async function registerMusicPlaylists(app: FastifyInstance, k: KernelApi,
     );
 
     app.post(
+      '/api/v1/music/playlists/rename',
+      secured('music:write', {
+        schema: {
+          operationId: 'musicPlaylistRename',
+          tags: TAG,
+          summary: '重命名歌单',
+          body: h.ref('MusicPlaylistRenameBody'),
+          response: { 200: h.ref('MusicOkResponse'), 404: h.ref('MusicErrorResponse') },
+        },
+      }),
+      async (req, reply) => {
+        const body = (req.body || {}) as { playlistId?: string; name?: string };
+        const name = (body.name || '').trim();
+        if (!name) return reply.code(400).send({ error: Err.badRequest, message: 'name required' });
+        const owner = req.user?.sub || '';
+        const playlist = body.playlistId ? await h.loadPlaylist(body.playlistId, owner) : null;
+        if (!playlist) return reply.code(404).send({ error: Err.notFound, message: 'playlist not found' });
+
+        const now = Math.floor(Date.now() / 1000);
+        await sql`
+          update music_playlists set name = ${name}, updated_at = ${now} where id = ${playlist.id}
+        `.execute(k.db);
+        return { ok: true };
+      },
+    );
+
+    app.post(
       '/api/v1/music/playlists/delete',
       secured('music:write', {
         schema: {

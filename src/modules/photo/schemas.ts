@@ -315,7 +315,12 @@ export const AiQueueJob = Type.Object(
     key: Type.String(),
     label: Type.String(),
     status: Type.String({ description: 'running / idle / disabled' }),
+    /** 剩余条数（= total - done），保留给旧客户端 */
     pending: Type.Integer(),
+    /** 已完成条数：面板显示「已完成/总数」 */
+    done: Type.Integer(),
+    /** 该模块的总条数（照片库总量） */
+    total: Type.Integer(),
     percent: Type.Integer(),
   },
   { $id: 'PhotoAiQueueJob' },
@@ -667,6 +672,23 @@ export const CalendarResponse = Type.Object(
     months: Type.Array(Type.Ref(CalendarMonth)),
   },
   { $id: 'PhotoCalendarResponse' },
+);
+
+/** 年视图卡片封面：每年一张「有人像」的代表图（优先常出现的 3 个人） */
+export const YearCover = Type.Object(
+  {
+    year: Type.Integer({ minimum: 1970, maximum: 2200 }),
+    count: Type.Integer(),
+    coverPath: Type.Union([Type.String(), Type.Null()], {
+      description: '该年代表图的相对路径；没有任何照片时为 null',
+    }),
+  },
+  { $id: 'PhotoYearCover' },
+);
+
+export const YearCoversResponse = Type.Object(
+  { years: Type.Array(Type.Ref(YearCover)) },
+  { $id: 'PhotoYearCoversResponse' },
 );
 
 export const PhotoDeleteBody = Type.Object(
@@ -1035,6 +1057,8 @@ export const PHOTO_SCHEMAS = [
   CalendarQuery,
   CalendarMonth,
   CalendarResponse,
+  YearCover,
+  YearCoversResponse,
   PhotoScanPolicySchema,
   PhotoScanPolicyUpdateBody,
   SmartRulePlace,

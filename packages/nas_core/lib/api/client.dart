@@ -95,7 +95,7 @@ class ApiClient {
 
   /// 单个任务状态与进度
   Future<Map<String, dynamic>> tasksGet({required String id}) async {
-    final res = await transport.send('GET', _uri('/api/v1/tasks/{id}'), headers: await _headers());
+    final res = await transport.send('GET', _uri('/api/v1/tasks/${Uri.encodeComponent(id)}'), headers: await _headers());
     return _asMap(_decode(res));
   }
 
@@ -285,6 +285,12 @@ class ApiClient {
     return BookLibraryItem.fromJson(_asMap(_decode(res)));
   }
 
+  /// 改名 / 切换书籍或漫画类型
+  Future<BookLibraryItem> bookLibraryUpdate({required BookLibraryUpdateBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/book/libraries/update'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BookLibraryItem.fromJson(_asMap(_decode(res)));
+  }
+
   /// 删除书库（级联清理收藏 / 进度 / 归档 / 列表条目）
   Future<BookOkResponse> bookLibraryRemove({required BookLibraryRemoveBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/book/libraries/remove'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
@@ -298,9 +304,10 @@ class ApiClient {
   }
 
   /// 书架（标题序 + 排序键 cursor；可按格式 / 收藏过滤）
-  Future<BookListResponse> bookList({String? libraryId, String? q, String? format, String? favorite, String? archived, String? listId, String? cursor, int? limit}) async {
+  Future<BookListResponse> bookList({String? libraryId, dynamic type, String? q, String? format, String? favorite, String? archived, String? listId, String? cursor, int? limit}) async {
     final query = <String, String>{
       if (libraryId != null) 'libraryId': libraryId,
+      if (type != null) 'type': type,
       if (q != null) 'q': q,
       if (format != null) 'format': format,
       if (favorite != null) 'favorite': favorite,
@@ -379,6 +386,18 @@ class ApiClient {
     return _asMap(_decode(res));
   }
 
+  /// 封面 / PDF 页图缓存占用
+  Future<BookCacheStatsResponse> bookCacheStats() async {
+    final res = await transport.send('GET', _uri('/api/v1/book/cache'), headers: await _headers());
+    return BookCacheStatsResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 清空封面 / PDF 页图缓存
+  Future<BookCacheClearResponse> bookCacheClear() async {
+    final res = await transport.send('POST', _uri('/api/v1/book/cache/clear'), headers: await _headers());
+    return BookCacheClearResponse.fromJson(_asMap(_decode(res)));
+  }
+
   /// 收藏
   Future<BookOkResponse> bookFavoriteAdd({required BookFavoriteBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/book/favorites/add'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
@@ -453,6 +472,12 @@ class ApiClient {
     return BookListItem.fromJson(_asMap(_decode(res)));
   }
 
+  /// 重命名自定义列表
+  Future<BookListItem> bookListRename({required BookListRenameBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/book/lists/rename'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BookListItem.fromJson(_asMap(_decode(res)));
+  }
+
   /// 删除自定义列表（级联清条目）
   Future<BookOkResponse> bookListRemove({required BookListRemoveBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/book/lists/remove'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
@@ -480,6 +505,55 @@ class ApiClient {
     return BookListItemsResponse.fromJson(_asMap(_decode(res)));
   }
 
+  /// 阅读历史（最近读的在最前）
+  Future<BookListResponse> bookHistory({int? limit}) async {
+    final query = <String, String>{
+      if (limit != null) 'limit': '$limit',
+    };
+    final res = await transport.send('GET', _uri('/api/v1/book/history', query), headers: await _headers());
+    return BookListResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 清空当前用户的阅读历史（不影响阅读进度）
+  Future<BookOkResponse> bookHistoryClear() async {
+    final res = await transport.send('POST', _uri('/api/v1/book/history/clear'), headers: await _headers());
+    return BookOkResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 当前用户的图书合集（含书数与封面）
+  Future<BookUserCollectionListResponse> bookUserCollectionList() async {
+    final res = await transport.send('GET', _uri('/api/v1/book/user-collections'), headers: await _headers());
+    return BookUserCollectionListResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 新建图书合集
+  Future<BookUserCollection> bookUserCollectionCreate({required BookUserCollectionBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/book/user-collections'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BookUserCollection.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 改名 / 换目录
+  Future<BookUserCollection> bookUserCollectionUpdate({required BookUserCollectionUpdateBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/book/user-collections/update'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BookUserCollection.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 删除合集（不动书与索引）
+  Future<BookOkResponse> bookUserCollectionRemove({required BookLibraryRemoveBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/book/user-collections/remove'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BookOkResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 合集里的书
+  Future<BookListResponse> bookUserCollectionItems({required String id, int? limit}) async {
+    final query = <String, String>{
+      'id': id,
+      if (limit != null) 'limit': '$limit',
+    };
+    final res = await transport.send('GET', _uri('/api/v1/book/user-collections/items', query), headers: await _headers());
+    return BookListResponse.fromJson(_asMap(_decode(res)));
+  }
+
   /// 豆瓣榜单（热门/选电影等 tag）
   Future<Map<String, dynamic>> discoverDouban({String? tag, String? limit}) async {
     final query = <String, String>{
@@ -500,9 +574,21 @@ class ApiClient {
     return _asMap(_decode(res));
   }
 
+  /// 读取豆瓣配置（Cookie 明文回传）
+  Future<Map<String, dynamic>> discoverDoubanSettingsGet() async {
+    final res = await transport.send('GET', _uri('/api/v1/discover/douban/settings'), headers: await _headers());
+    return _asMap(_decode(res));
+  }
+
   /// 设置豆瓣 Cookie（可选）
   Future<Map<String, dynamic>> discoverDoubanSettings({required Map<String, dynamic> body}) async {
     final res = await transport.send('POST', _uri('/api/v1/discover/douban/settings'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body)));
+    return _asMap(_decode(res));
+  }
+
+  /// 测试豆瓣连通性（用当前 Cookie）
+  Future<Map<String, dynamic>> discoverDoubanTest({required Map<String, dynamic> body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/discover/douban/test'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body)));
     return _asMap(_decode(res));
   }
 
@@ -627,6 +713,12 @@ class ApiClient {
     };
     final res = await transport.send('GET', _uri('/api/v1/files/list', query), headers: await _headers());
     return FilesListResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 可浏览的根（盘符 / 文件根 / 来源根）
+  Future<FilesRootsResponse> filesRoots() async {
+    final res = await transport.send('GET', _uri('/api/v1/files/roots'), headers: await _headers());
+    return FilesRootsResponse.fromJson(_asMap(_decode(res)));
   }
 
   /// 分片上传预检（秒传判定 + 已收分片）
@@ -988,10 +1080,10 @@ class ApiClient {
     return MusicStateOk.fromJson(_asMap(_decode(res)));
   }
 
-  /// 我的收藏（按收藏时间倒序）
-  Future<MusicStateList> musicFavorites() async {
+  /// 我的收藏（按收藏时间倒序，返回完整曲目）
+  Future<MusicListResponse> musicFavorites() async {
     final res = await transport.send('GET', _uri('/api/v1/music/favorites'), headers: await _headers());
-    return MusicStateList.fromJson(_asMap(_decode(res)));
+    return MusicListResponse.fromJson(_asMap(_decode(res)));
   }
 
   /// 记录一次播放（写历史）
@@ -1000,13 +1092,13 @@ class ApiClient {
     return MusicStateOk.fromJson(_asMap(_decode(res)));
   }
 
-  /// 播放历史（按时间倒序）
-  Future<MusicHistoryList> musicHistory({int? limit}) async {
+  /// 播放历史（按时间倒序，返回完整曲目）
+  Future<MusicListResponse> musicHistory({int? limit}) async {
     final query = <String, String>{
       if (limit != null) 'limit': '$limit',
     };
     final res = await transport.send('GET', _uri('/api/v1/music/history', query), headers: await _headers());
-    return MusicHistoryList.fromJson(_asMap(_decode(res)));
+    return MusicListResponse.fromJson(_asMap(_decode(res)));
   }
 
   /// 音乐库列表
@@ -1031,6 +1123,24 @@ class ApiClient {
   Future<MusicScanResponse> musicScan({required MusicScanBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/music/scan'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
     return MusicScanResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 入队扫描（立即返回任务 id；进度与失败记录见 /tasks）
+  Future<Map<String, dynamic>> musicScanEnqueue({required MusicScanBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/music/scan/enqueue'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return _asMap(_decode(res));
+  }
+
+  /// 音乐转码缓存占用
+  Future<MusicCacheStatsResponse> musicCacheStats() async {
+    final res = await transport.send('GET', _uri('/api/v1/music/cache'), headers: await _headers());
+    return MusicCacheStatsResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 清空音乐转码缓存
+  Future<MusicCacheClearResponse> musicCacheClear() async {
+    final res = await transport.send('POST', _uri('/api/v1/music/cache/clear'), headers: await _headers());
+    return MusicCacheClearResponse.fromJson(_asMap(_decode(res)));
   }
 
   /// 曲目列表（可排序 + 排序键 cursor）
@@ -1169,6 +1279,12 @@ class ApiClient {
     return MusicOkResponse.fromJson(_asMap(_decode(res)));
   }
 
+  /// 重命名歌单
+  Future<MusicOkResponse> musicPlaylistRename({required MusicPlaylistRenameBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/music/playlists/rename'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return MusicOkResponse.fromJson(_asMap(_decode(res)));
+  }
+
   /// 删除歌单
   Future<MusicOkResponse> musicPlaylistDelete({required MusicPlaylistDeleteBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/music/playlists/delete'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
@@ -1189,6 +1305,40 @@ class ApiClient {
     };
     final res = await transport.send('GET', _uri('/api/v1/music/auto-playlist', query), headers: await _headers());
     return MusicAutoPlaylistTracksResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 当前用户的音乐合集（含曲目数与封面）
+  Future<MusicCollectionListResponse> musicCollectionList() async {
+    final res = await transport.send('GET', _uri('/api/v1/music/collections'), headers: await _headers());
+    return MusicCollectionListResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 新建音乐合集
+  Future<MusicCollection> musicCollectionCreate({required MusicCollectionBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/music/collections'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return MusicCollection.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 改名 / 换目录
+  Future<MusicCollection> musicCollectionUpdate({required MusicCollectionUpdateBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/music/collections/update'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return MusicCollection.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 删除合集（不动磁盘文件与曲库索引）
+  Future<MusicOkResponse> musicCollectionRemove({required MusicLibraryRemoveBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/music/collections/remove'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return MusicOkResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 合集里的曲目
+  Future<MusicListResponse> musicCollectionItems({required String id, int? limit}) async {
+    final query = <String, String>{
+      'id': id,
+      if (limit != null) 'limit': '$limit',
+    };
+    final res = await transport.send('GET', _uri('/api/v1/music/collections/items', query), headers: await _headers());
+    return MusicListResponse.fromJson(_asMap(_decode(res)));
   }
 
   /// 新建笔记
@@ -1248,6 +1398,12 @@ class ApiClient {
   Future<PhotoAiAnalyzeResponse> photoAiAnalyze({required PhotoAiAnalyzeBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/photo/ai/analyze'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
     return PhotoAiAnalyzeResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 整库后台识别（入队，重启后可续跑）
+  Future<PhotoAiScanResponse> photoAiScan({required PhotoAiScanBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/photo/ai/scan'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return PhotoAiScanResponse.fromJson(_asMap(_decode(res)));
   }
 
   /// 分批做文字识别（票夹与语义搜索的原料）
@@ -1853,6 +2009,15 @@ class ApiClient {
     return PhotoItem.fromJson(_asMap(_decode(res)));
   }
 
+  /// 照片属性与 EXIF（按需解析文件头；无 EXIF 字段返回 null）
+  Future<Map<String, dynamic>> photoExif({required String id}) async {
+    final query = <String, String>{
+      'id': id,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/photo/exif', query), headers: await _headers());
+    return _asMap(_decode(res));
+  }
+
   /// 按路径关键词与时间范围搜索
   Future<PhotoTimelineResponse> photoSearch({String? q, int? from, int? to, String? libraryId, String? folder, dynamic order, String? cursor, int? limit}) async {
     final query = <String, String>{
@@ -1893,6 +2058,12 @@ class ApiClient {
     };
     final res = await transport.send('GET', _uri('/api/v1/photo/calendar', query), headers: await _headers());
     return PhotoCalendarResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 每年一张「有人像」的代表图（年视图卡片封面）
+  Future<PhotoYearCoversResponse> photoYearCovers() async {
+    final res = await transport.send('GET', _uri('/api/v1/photo/year-covers'), headers: await _headers());
+    return PhotoYearCoversResponse.fromJson(_asMap(_decode(res)));
   }
 
   /// 文件视图：按目录聚合照片
@@ -2609,6 +2780,12 @@ class ApiClient {
     return SystemCacheClearResponse.fromJson(_asMap(_decode(res)));
   }
 
+  /// 数据库碎片整理（VACUUM，重写数据文件回收空洞空间）
+  Future<SystemDbCompactResponse> systemDbCompact() async {
+    final res = await transport.send('POST', _uri('/api/v1/system/db/compact'), headers: await _headers());
+    return SystemDbCompactResponse.fromJson(_asMap(_decode(res)));
+  }
+
   /// 重启内核（桌面端由外壳自动拉起；浏览器需手动刷新）
   Future<SystemRestartResponse> systemRestart() async {
     final res = await transport.send('POST', _uri('/api/v1/system/restart'), headers: await _headers());
@@ -2619,6 +2796,23 @@ class ApiClient {
   Future<SystemUpdateCheckResponse> systemUpdateCheck() async {
     final res = await transport.send('GET', _uri('/api/v1/system/update/check'), headers: await _headers());
     return SystemUpdateCheckResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 服务端日志尾部（logs/kernel.log，按时间正序返回最后 N 行）
+  Future<SystemLogsResponse> systemLogs({int? lines, String? file, dynamic level}) async {
+    final query = <String, String>{
+      if (lines != null) 'lines': '$lines',
+      if (file != null) 'file': file,
+      if (level != null) 'level': level,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/system/logs', query), headers: await _headers());
+    return SystemLogsResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 上报一条客户端日志（前端错误 / 警告）
+  Future<Map<String, dynamic>> systemClientLog({required Map<String, dynamic> body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/system/client-log'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body)));
+    return _asMap(_decode(res));
   }
 
   /// 开关日本片自动字幕（打开时异步补一轮，不等下次扫描）
@@ -2732,10 +2926,31 @@ class ApiClient {
     return VideoOkResponse.fromJson(_asMap(_decode(res)));
   }
 
+  /// 入队扫描（立即返回任务 id；进度与失败记录见 /tasks）
+  Future<Map<String, dynamic>> videoScanEnqueue({required Map<String, dynamic> body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/video/scan/enqueue'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body)));
+    return _asMap(_decode(res));
+  }
+
   /// 扫描索引（ffmpeg 提取元数据；未变文件跳过）
   Future<VideoScanResponse> videoScan({required VideoScanBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/video/scan'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
     return VideoScanResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 刮削进度（每日快照，含按库明细；最新的在前）
+  Future<Map<String, dynamic>> videoScrapeProgress({int? days}) async {
+    final query = <String, String>{
+      if (days != null) 'days': '$days',
+    };
+    final res = await transport.send('GET', _uri('/api/v1/video/scrape/progress', query), headers: await _headers());
+    return _asMap(_decode(res));
+  }
+
+  /// 立即重算一次刮削进度（入队，不阻塞请求）
+  Future<Map<String, dynamic>> videoScrapeProgressRefresh() async {
+    final res = await transport.send('POST', _uri('/api/v1/video/scrape/progress/refresh'), headers: await _headers());
+    return _asMap(_decode(res));
   }
 
   /// 影片列表（标题序 + 排序键 cursor）
@@ -2917,6 +3132,12 @@ class ApiClient {
     return VideoSeriesFavoriteListResponse.fromJson(_asMap(_decode(res)));
   }
 
+  /// 按演员名批量取头像与档案（详情页演职人员区用）
+  Future<Map<String, dynamic>> videoActorAvatars({required Map<String, dynamic> body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/video/actor/avatars'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body)));
+    return _asMap(_decode(res));
+  }
+
   /// 影片海报（首次访问生成，之后走文件缓存）
   Future<Map<String, dynamic>> videoPoster({required String id, String? token}) async {
     final query = <String, String>{
@@ -2967,6 +3188,12 @@ class ApiClient {
     return _asMap(_decode(res));
   }
 
+  /// 按库补全字幕（入队 video.subtitle.fetch）
+  Future<Map<String, dynamic>> videoSubtitleFetchLibrary({required Map<String, dynamic> body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/video/subtitle/fetch-library'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body)));
+    return _asMap(_decode(res));
+  }
+
   /// 我的合集（按更新时间倒序，带条目数）
   Future<VideoCollectionListResponse> videoCollectionList() async {
     final res = await transport.send('GET', _uri('/api/v1/video/collections'), headers: await _headers());
@@ -2983,6 +3210,12 @@ class ApiClient {
   Future<VideoOkResponse> videoCollectionDelete({required VideoCollectionIdBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/video/collections/delete'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
     return VideoOkResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 合并两个合集（来源的影片并入目标，来源合集被删除）
+  Future<VideoCollection> videoCollectionMerge({required Map<String, dynamic> body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/video/collections/merge'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body)));
+    return VideoCollection.fromJson(_asMap(_decode(res)));
   }
 
   /// 合集内影片（按加入时间倒序）
@@ -3011,19 +3244,36 @@ class ApiClient {
   }
 
   /// 重复视频（豆瓣 / IMDB / 番号 / 标题+年份 四把钥匙，并查集分组）
-  Future<VideoDuplicatesResponse> videoDuplicates({String? libraryId, int? limit}) async {
+  Future<VideoDuplicatesResponse> videoDuplicates({String? libraryId, int? limit, String? excludeActors}) async {
     final query = <String, String>{
       if (libraryId != null) 'libraryId': libraryId,
       if (limit != null) 'limit': '$limit',
+      if (excludeActors != null) 'excludeActors': excludeActors,
     };
     final res = await transport.send('GET', _uri('/api/v1/video/duplicates', query), headers: await _headers());
     return VideoDuplicatesResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 演员候选（从 NFO 演员聚合，供查重页排除指定演员）
+  Future<Map<String, dynamic>> videoActors({String? q, int? limit}) async {
+    final query = <String, String>{
+      if (q != null) 'q': q,
+      if (limit != null) 'limit': '$limit',
+    };
+    final res = await transport.send('GET', _uri('/api/v1/video/actors', query), headers: await _headers());
+    return _asMap(_decode(res));
   }
 
   /// 删除视频（移入回收站，并清掉索引 / 观看进度 / 收藏）
   Future<VideoDeleteItemsResponse> videoItemsDelete({required VideoDeleteItemsBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/video/items/delete'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
     return VideoDeleteItemsResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 删除视频（后台任务，返回 taskId，用 /tasks/:id 看进度）
+  Future<Map<String, dynamic>> videoItemsDeleteTask({required VideoDeleteItemsBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/video/items/delete-task'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return _asMap(_decode(res));
   }
 
   /// 图片库 / 混合库的文件夹层级（子文件夹 / 封面 / 数量）
@@ -3101,13 +3351,38 @@ class ApiClient {
     return VideoTmdbSettings.fromJson(_asMap(_decode(res)));
   }
 
+  /// 测试 TMDB 连通性（用当前配置的 Key）
+  Future<Map<String, dynamic>> videoTmdbTest({required Map<String, dynamic> body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/video/tmdb/test'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body)));
+    return _asMap(_decode(res));
+  }
+
   /// 刮削海报 / 剧照（本地文件读流，远端 URL 302 跳转）
-  Future<Map<String, dynamic>> videoArt({required String id, dynamic kind}) async {
+  Future<Map<String, dynamic>> videoArt({required String id, dynamic kind, int? size}) async {
     final query = <String, String>{
       'id': id,
       if (kind != null) 'kind': kind,
+      if (size != null) 'size': '$size',
     };
     final res = await transport.send('GET', _uri('/api/v1/video/art', query), headers: await _headers());
+    return _asMap(_decode(res));
+  }
+
+  /// 影视设置（字幕抓取 + 转码）
+  Future<Map<String, dynamic>> videoSettingsGet() async {
+    final res = await transport.send('GET', _uri('/api/v1/video/settings'), headers: await _headers());
+    return _asMap(_decode(res));
+  }
+
+  /// 写影视设置（只传要改的段 / 字段）
+  Future<Map<String, dynamic>> videoSettingsSet({required Map<String, dynamic> body}) async {
+    final res = await transport.send('PUT', _uri('/api/v1/video/settings'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body)));
+    return _asMap(_decode(res));
+  }
+
+  /// 测试各字幕源链接（连通性，不下载）
+  Future<Map<String, dynamic>> videoSubtitleSourcesTest({required Map<String, dynamic> body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/video/subtitle/test-sources'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body)));
     return _asMap(_decode(res));
   }
 

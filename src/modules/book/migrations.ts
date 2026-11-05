@@ -115,4 +115,60 @@ export const BOOK_MIGRATIONS: Migration[] = [
         `.execute(db);
       },
     },
+    {
+      id: '108_book_type_history',
+      async up(db) {
+        // 落到 books 上是为了让 `select b.*` 的既有查询不用每处再 join 一次。
+        await sql`alter table book_libraries add column type text not null default 'book'`.execute(db);
+        await sql`alter table books add column type text not null default 'book'`.execute(db);
+        await sql`
+          create index if not exists idx_books_type on books(type, title, id)
+        `.execute(db);
+
+        // 阅读历史单独一张表：进度保存会写一条，清空历史不动阅读位置。
+        await sql`
+          create table if not exists book_history (
+            id text primary key,
+            book_id text not null,
+            owner_id text not null,
+            read_at integer not null
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_book_history_owner
+            on book_history(owner_id, read_at desc)
+        `.execute(db);
+
+        // 用户自建合集：按目录整理（和音乐合集同一模型），按 owner 隔离。
+        await sql`
+          create table if not exists book_user_collections (
+            id text primary key,
+            owner_id text not null,
+            name text not null,
+            paths text not null,
+            created_at integer not null,
+            updated_at integer not null
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_book_user_collections_owner
+            on book_user_collections(owner_id, created_at desc)
+        `.execute(db);
+      },
+    },
+    {
+      id: '109_book_scan_schedule',
+      async up(db) {
+        // 来源级扫描策略（默认全关，保守设计；用户显式打开后才自动扫描）
+        await sql`
+          alter table book_libraries add column scan_when_start integer not null default 0
+        `.execute(db);
+        await sql`
+          alter table book_libraries add column scan_when_change integer not null default 0
+        `.execute(db);
+        await sql`
+          alter table book_libraries add column scan_interval_hours integer not null default 0
+        `.execute(db);
+      },
+    },
 ];

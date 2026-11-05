@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../shell/app_widgets.dart';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/mount_transfer.dart';
 import '../../core/session.dart';
+import '../../shell/mobile_frame.dart';
 
 /// 远程挂载：WebDAV / rclone（SMB·NFS·网盘）的配置与浏览。
 ///
@@ -75,7 +77,7 @@ class _MountPageState extends State<MountPage> {
                   decoration: InputDecoration(labelText: tr('ui.book.004')),
                 ),
                 const SizedBox(height: NasTokens.spaceSm),
-                DropdownButtonFormField<String>(
+                NasDropdown<String>(
                   initialValue: kind,
                   decoration: InputDecoration(labelText: tr('ui.mount.002')),
                   items: [
@@ -136,7 +138,7 @@ class _MountPageState extends State<MountPage> {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(tr('ui.accounts.006')),
+              child: Text(tr('common.create')),
             ),
           ],
         ),
@@ -161,8 +163,7 @@ class _MountPageState extends State<MountPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.createFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.createFailed', {'error': '$e'}));
     }
   }
 
@@ -172,18 +173,14 @@ class _MountPageState extends State<MountPage> {
       final fresh = await ApiSession.instance.client.mountTest(
         body: MountTestBody(id: item.id),
       );
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
+      NasSnack.showOn(messenger, 
             fresh.status == 'ok'
                 ? tr('ui.mount.008')
                 : tr('mount.connectFailed', {'error': fresh.lastError ?? tr('ui.mount.009')}),
-          ),
-        ),
-      );
+          );
       await _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('mount.testFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('mount.testFailed', {'error': '$e'}));
     }
   }
 
@@ -203,8 +200,7 @@ class _MountPageState extends State<MountPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.deleteFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.deleteFailed', {'error': '$e'}));
     }
   }
 
@@ -217,19 +213,16 @@ class _MountPageState extends State<MountPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(tr('ui.mount.011')),
+      appBar: nasPageAppBar(
+        context,
+        title: tr('ui.mount.011'),
         actions: [
           IconButton(
             tooltip: tr('ui.mount.012'),
             icon: const Icon(Icons.add_link),
             onPressed: _create,
           ),
-          IconButton(
-            tooltip: tr('ui.accounts.021'),
-            icon: const Icon(Icons.refresh),
-            onPressed: _load,
-          ),
+          NasRefreshButton(onPressed: _load),
         ],
       ),
       body: _loading
@@ -275,7 +268,7 @@ class _MountPageState extends State<MountPage> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   trailing: PopupMenuButton<String>(
-                    tooltip: tr('ui.mount.014'),
+                    tooltip: tr('common.more'),
                     onSelected: (v) {
                       if (v == 'test') _test(item);
                       if (v == 'remove') _remove(item);
@@ -367,11 +360,9 @@ class _MountBrowsePageState extends State<_MountBrowsePage> {
       await Clipboard.setData(
         ClipboardData(text: '${ApiSession.instance.baseUrl}${res.url}'),
       );
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('mount.downloadCopied', {'minutes': '${res.expiresInSec ~/ 60}'}))),
-      );
+      NasSnack.showOn(messenger, tr('mount.downloadCopied', {'minutes': '${res.expiresInSec ~/ 60}'}));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('mount.getFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('common.getFailed', {'error': '$e'}));
     }
   }
 
@@ -392,7 +383,7 @@ class _MountBrowsePageState extends State<_MountBrowsePage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('ui.accounts.006')),
+            child: Text(tr('common.create')),
           ),
         ],
       ),
@@ -409,8 +400,7 @@ class _MountBrowsePageState extends State<_MountBrowsePage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.createFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.createFailed', {'error': '$e'}));
     }
   }
 
@@ -457,12 +447,10 @@ class _MountBrowsePageState extends State<_MountBrowsePage> {
       );
       if (mounted && navigator.canPop()) navigator.pop();
       await _load();
-      messenger.showSnackBar(SnackBar(content: Text(tr('ui.mount.023'))));
+      NasSnack.showOn(messenger, tr('ui.mount.023'));
     } catch (e) {
       if (mounted && navigator.canPop()) navigator.pop();
-      messenger.showSnackBar(
-        SnackBar(content: Text('${tr('ui.mount.024')}：$e')),
-      );
+      NasSnack.showOn(messenger, '${tr('ui.mount.024')}：$e');
     } finally {
       progress.dispose();
     }
@@ -484,8 +472,7 @@ class _MountBrowsePageState extends State<_MountBrowsePage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.deleteFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.deleteFailed', {'error': '$e'}));
     }
   }
 
@@ -518,11 +505,7 @@ class _MountBrowsePageState extends State<_MountBrowsePage> {
               icon: const Icon(Icons.create_new_folder_outlined),
               onPressed: _mkdir,
             ),
-          IconButton(
-            tooltip: tr('ui.accounts.021'),
-            icon: const Icon(Icons.refresh),
-            onPressed: _load,
-          ),
+          NasRefreshButton(onPressed: _load),
         ],
       ),
       body: _loading
@@ -564,7 +547,7 @@ class _MountBrowsePageState extends State<_MountBrowsePage> {
                   trailing: entry.dir
                       ? const Icon(Icons.chevron_right)
                       : PopupMenuButton<String>(
-                          tooltip: tr('ui.mount.014'),
+                          tooltip: tr('common.more'),
                           onSelected: (v) {
                             if (v == 'url') _copyDownloadUrl(entry);
                             if (v == 'delete') _delete(entry);

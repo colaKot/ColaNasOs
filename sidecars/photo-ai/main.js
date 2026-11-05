@@ -166,8 +166,13 @@ function rawRgb(src, size) {
       'error',
       '-i',
       src,
-      '-vf',
-      `scale=${size}:${size}:force_original_aspect_ratio=decrease,pad=${size}:${size}:(ow-iw)/2:(oh-ih)/2`,
+      // HEIC 解码时 ffmpeg 内部会自建 complex filtergraph（网格 / 透明通道），
+      // 这时再给 `-vf` 会直接报「Simple and complex filtering cannot be used
+      // together」，HEIC 一张都识别不了。统一走 `-filter_complex` + map。
+      '-filter_complex',
+      `[0:v]scale=${size}:${size}:force_original_aspect_ratio=decrease,pad=${size}:${size}:(ow-iw)/2:(oh-ih)/2,format=rgb24[out]`,
+      '-map',
+      '[out]',
       '-frames:v',
       '1',
       '-f',
@@ -206,8 +211,11 @@ function rawGray(src, w, h) {
       'error',
       '-i',
       src,
-      '-vf',
-      `scale=${w}:${h}:flags=area,format=gray`,
+      // 同上：HEIC 只能用 complex filtergraph
+      '-filter_complex',
+      `[0:v]scale=${w}:${h}:flags=area,format=gray[out]`,
+      '-map',
+      '[out]',
       '-frames:v',
       '1',
       '-f',
@@ -315,9 +323,10 @@ function chwTensor(rgb, size, mean, std) {
   const hw = size * size;
   const out = new Float32Array(3 * hw);
   for (let i = 0; i < hw; i += 1) {
-    const r = rgb[i * 3];
-    const g = rgb[i * 3 + 1];
-    const b = rgb[i * 3 + 2];
+    // rgb 是 0~255 uint8，mean/std 是 0~1 归一化参数：必须先 /255（2026-11-04 修）
+    const r = rgb[i * 3] / 255;
+    const g = rgb[i * 3 + 1] / 255;
+    const b = rgb[i * 3 + 2] / 255;
     out[i] = (r - mean[0]) / std[0];
     out[hw + i] = (g - mean[1]) / std[1];
     out[2 * hw + i] = (b - mean[2]) / std[2];
@@ -329,19 +338,51 @@ function chwTensor(rgb, size, mean, std) {
 function alignTo112(rgb224) {
   const src = 224;
   const dst = 112;
-  const out = new Float32Array(3 * dst * dst);
+  const rgb112 = new Uint8Array(dst * dst * 3);
   for (let y = 0; y < dst; y += 1) {
     for (let x = 0; x < dst; x += 1) {
-      const sx = x * 2;
-      const sy = y * 2;
-      const si = (sy * src + sx) * 3;
-      const di = y * dst + x;
-      out[di] = (rgb224[si] - 127.5) / 127.5;
-      out[dst * dst + di] = (rgb224[si + 1] - 127.5) / 127.5;
-      out[2 * dst * dst + di] = (rgb224[si + 2] - 127.5) / 127.5;
+      const si = (y * 2 * src + x * 2) * 3;
+      const di = (y * dst + x) * 3;
+      rgb112[di] = rgb224[si];
+      rgb112[di + 1] = rgb224[si + 1];
+      rgb112[di + 2] = rgb224[si + 2];
     }
   }
+  if (FACE_LUMA_NORM) lumaNormalizeRgbInplace(rgb112);
+  const out = new Float32Array(3 * dst * dst);
+  for (let i = 0; i < dst * dst; i += 1) {
+    out[i] = (rgb112[i * 3] - 127.5) / 127.5;
+    out[dst * dst + i] = (rgb112[i * 3 + 1] - 127.5) / 127.5;
+    out[2 * dst * dst + i] = (rgb112[i * 3 + 2] - 127.5) / 127.5;
+  }
   return new ort.Tensor('float32', out, [1, 3, dst, dst]);
+}
+
+/**
+ * 亮度归一化：把对齐人脸的 Y 均值拉到 127.5（std 64）。
+ *
+ * 逆光 / 夜间照片的特征会整体偏暗，跨照片相似度被压低，表现为同一个人裂成多组。
+ */
+function lumaNormalizeRgbInplace(rgb) {
+  const pixels = rgb.length / 3;
+  if (!pixels) return;
+  let sum = 0;
+  let sum2 = 0;
+  for (let i = 0; i < rgb.length; i += 3) {
+    const y = 0.299 * rgb[i] + 0.587 * rgb[i + 1] + 0.114 * rgb[i + 2];
+    sum += y;
+    sum2 += y * y;
+  }
+  const mean = sum / pixels;
+  const variance = Math.max(0, sum2 / pixels - mean * mean);
+  const std = Math.sqrt(variance);
+  if (!(std > 1e-6)) return;
+  const scale = 64.0 / std;
+  const offset = 127.5 - scale * mean;
+  for (let i = 0; i < rgb.length; i += 1) {
+    const v = Math.round(rgb[i] * scale + offset);
+    rgb[i] = v <= 0 ? 0 : v >= 255 ? 255 : v;
+  }
 }
 
 function l2normalize(vec) {
@@ -354,6 +395,39 @@ function l2normalize(vec) {
 /** int64 张量在 onnxruntime-node 里是 BigInt64Array，统一转 number */
 function numOf(v) {
   return typeof v === 'bigint' ? Number(v) : Number(v) || 0;
+}
+
+/** 亮度归一化开关（对齐参考实现的 EdgeFace 预处理） */
+const FACE_LUMA_NORM = String(process.env.COLANAS_FACE_LUMA_NORM ?? '1') !== '0';
+
+/**
+ * 之前本 sidecar 把模型输出的**所有**框都收进库，低分纹理误检也会变成「人脸碎片」，
+ * 于是头像墙里大量莫名其妙的半张脸 / 背景光斑。这组阈值把这类框挡在识别之前。
+ *
+ * - score < 0.55：直接丢弃（孩子侧脸、夜间虚影真人脸通常还在 0.55~0.8）
+ * - 框短边 < 80px：特征不稳定，丢弃
+ * - 框宽 < 图宽 1.5%：极小伪脸；低分框（<0.8）还要求 ≥3%
+ * - 单图超过 20 张脸：基本是图案误检，整张丢弃
+ */
+const FACE_DET_SCORE_THRESH = Number(process.env.COLANAS_FACE_DET_SCORE ?? 0.55);
+const FACE_DET_SCORE_STRICT = Number(process.env.COLANAS_FACE_DET_STRICT ?? 0.8);
+const FACE_MIN_BOX_SIZE_PX = Number(process.env.COLANAS_FACE_MIN_BOX_PX ?? 80);
+const FACE_MIN_BOX_WIDTH_RATIO = Number(process.env.COLANAS_FACE_MIN_BOX_RATIO ?? 0.015);
+const FACE_MIN_BOX_WIDTH_RATIO_LOOSE = Number(
+  process.env.COLANAS_FACE_MIN_BOX_RATIO_LOOSE ?? 0.03,
+);
+const FACE_MAX_FACES_PER_IMAGE = Number(process.env.COLANAS_FACE_MAX_PER_IMAGE ?? 20);
+
+/** 检测框是否可信（宽度占比用原图宽度，和参考实现同一口径） */
+function faceBoxAcceptable(box, score, imgWidth) {
+  if (score < FACE_DET_SCORE_THRESH) return false;
+  if (!box) return true;
+  const minSide = Math.min(box.width, box.height);
+  if (FACE_MIN_BOX_SIZE_PX > 0 && minSide < FACE_MIN_BOX_SIZE_PX) return false;
+  const ratio = Math.max(box.width, box.height) / Math.max(1, imgWidth);
+  if (ratio < FACE_MIN_BOX_WIDTH_RATIO) return false;
+  if (score < FACE_DET_SCORE_STRICT && ratio < FACE_MIN_BOX_WIDTH_RATIO_LOOSE) return false;
+  return true;
 }
 
 /**
@@ -389,11 +463,9 @@ async function faces(src) {
   const result = [];
   // 上限 64：大合照也够；纯粹防病态输入把一次分析拖到分钟级
   for (let i = 0; i < Math.min(n, 64); i += 1) {
-    // align_imgs: [N,224,224,3] uint8
-    const start = i * 224 * 224 * 3;
-    const aligned = aligns.data.subarray(start, start + 224 * 224 * 3);
-    const emb = await ef.run({ input: alignTo112(aligned) });
+    const score = scores[i] ?? 0;
 
+    // 先算框 / 过质量门，再提取特征：低分纹理误检白跑一次 EdgeFace 很浪费
     let box = null;
     if (bboxes && bboxes.data && bboxes.dims && bboxes.dims.length >= 2) {
       const b = bboxes.data;
@@ -409,15 +481,23 @@ async function faces(src) {
       const h = Math.max(1, bottom - top);
       box = { left, top, width: w, height: h };
     }
+    if (!faceBoxAcceptable(box, score, ow)) continue;
+
+    // align_imgs: [N,224,224,3] uint8
+    const start = i * 224 * 224 * 3;
+    const aligned = aligns.data.subarray(start, start + 224 * 224 * 3);
+    const emb = await ef.run({ input: alignTo112(aligned) });
 
     result.push({
-      score: scores[i] ?? 0,
+      score,
       emb: l2normalize(Array.from(emb.embedding.data)),
       box,
       imgWidth: ow,
       imgHeight: oh,
     });
   }
+  // 整张都是图案 / 海报纹理时的候选爆炸：宁可这张不产出人脸，也不制造一堆碎片
+  if (FACE_MAX_FACES_PER_IMAGE > 0 && result.length > FACE_MAX_FACES_PER_IMAGE) return [];
   return result;
 }
 
@@ -442,6 +522,16 @@ async function scenes(rgb224, imgEmb) {
     score: sceneBlend.cosine(imgEmb, x.vec),
   }));
   const scorable = sceneBlend.scorableScore(imgEmb, assets.head);
+  if (process.env.PHOTO_AI_DEBUG === '1') {
+    // 排障用：把两路 top5 打出来。场景判错时先看这里 ——
+    // 若 clip top5 全是同一个标签或全是某个值，说明文本嵌入/视觉特征有问题。
+    const ctop = clipScores.slice().sort((a, b) => b.score - a.score).slice(0, 5);
+    const ptop = placesLogits.slice().sort((a, b) => b.logit - a.logit).slice(0, 5);
+    console.error('[scene] embLen', imgEmb.length);
+    console.error('[scene] outKeys', Object.keys(out).join(','), 'dims', JSON.stringify(out.logits && out.logits.dims), 'len', out.logits ? out.logits.data.length : -1);
+    console.error('[scene] clip', JSON.stringify(ctop.map((x) => [x.label, Number(x.score.toFixed(4))])));
+    console.error('[scene] places', JSON.stringify(ptop.map((x) => [x.label, Number(x.logit.toFixed(3))])));
+  }
   const blended = sceneBlend.blendScene({
     clipScores,
     placesLogits,

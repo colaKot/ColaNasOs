@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/app_visibility.dart';
+import '../photo/backup_page.dart';
 import '../../core/session.dart';
+import '../../core/settings_store.dart';
 import '../../shell/app_visuals.dart';
 
 /// 工作台（首页）：
@@ -33,10 +37,32 @@ class _HomePageState extends State<HomePage> {
   /// grid = 平铺所有应用；list = 按大类别分组
   String _appView = 'grid';
 
+  /// 自定义应用顺序（appId 列表，存本机）。空 = 用注册表原顺序。
+  /// 只在网格视图生效：列表视图按「数据/媒体/服务」分组的，跨组重排没有意义。
+  static const String _orderKey = 'home.apps.order';
+  List<String> _order = const [];
+
+  /// GPU 采样是后台探针（约 3s 一拍），只加载一次的话首次必然拿到空值，
+  /// 卡片就永远停在「未检测到」；和监控页一样 5s 刷一次。
+  Timer? _timer;
+
   @override
   void initState() {
     super.initState();
+    final saved = SettingsStore.instance.getString(_orderKey);
+    if (saved != null && saved.isNotEmpty) {
+      _order = saved.split(',').where((s) => s.trim().isNotEmpty).toList();
+    }
     _load();
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) _load();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -76,9 +102,10 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final apps = AppRegistry.apps
-        .where((a) => a.available)
-        .toList(growable: false);
+    // 工作台的应用卡要和导航一致：契约 endpoints 不包含当前端的入口不显示
+    final apps = _applyOrder(
+      visibleAppsOnThisClient(AppRegistry.apps.where((a) => a.available)),
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -109,6 +136,154 @@ class _HomePageState extends State<HomePage> {
           (inner - gap * (diskCols - 1)) / diskCols,
         );
 
+        // 手机端（窄屏）把「我的应用」提到最前：底部导航就是应用入口，
+        // 进来先看到应用网格；系统状态与硬盘往下放。桌面保持原顺序（2026-11-04 需求）。
+        final compact = width < 600;
+        // 手机端应用网格固定一行 4 个：宽度不够就收间距和图标，而不是掉成 3 个
+        // （用户明确要求「一行尽量放 4 个，不够宽就把间距拉小」）。
+        final appGap = compact ? 6.0 : gap;
+        final appWidth = compact
+            ? math.max(56.0, ((inner - appGap * 3) / 4) - 0.5)
+            : 100.0;
+
+        final appsBlock = <Widget>[
+          Row(
+            children: [
+              Expanded(child: _sectionTitle(tr('home.apps'))),
+              IconButton(
+                tooltip: tr('home.viewGrid'),
+                icon: Icon(
+                  Icons.grid_view_rounded,
+                  size: 18,
+                  color: _appView == 'grid'
+                      ? scheme.primary
+                      : context.nasTextSecondary,
+                ),
+                onPressed: () => setState(() => _appView = 'grid'),
+              ),
+              IconButton(
+                tooltip: tr('home.viewList'),
+                icon: Icon(
+                  Icons.view_list_rounded,
+                  size: 18,
+                  color: _appView == 'list'
+                      ? scheme.primary
+                      : context.nasTextSecondary,
+                ),
+                onPressed: () => setState(() => _appView = 'list'),
+              ),
+            ],
+          ),
+          const SizedBox(height: NasTokens.spaceSm),
+          if (_appView == 'grid')
+            Wrap(
+              spacing: appGap,
+              runSpacing: appGap,
+              children: [
+                for (final app in apps)
+                  _draggableAppTile(
+                    app,
+                    compact: compact,
+                    width: appWidth,
+                  ),
+              ],
+            )
+          else
+            _groupedApps(apps, compact: compact),
+        ];
+
+        final statsBlock = <Widget>[
+          _sectionTitle(tr('home.systemStatus')),
+          const SizedBox(height: NasTokens.spaceSm),
+          Wrap(
+            spacing: gap,
+            runSpacing: gap,
+            children: [
+              SizedBox(
+                width: statWidth,
+                child: _statTile(
+                  title: tr('home.cpu'),
+                  value: _cpu == null
+                      ? '—'
+                      : '${_num(_cpu, 'usagePercent')}%',
+                  caption: _cpu == null
+                      ? null
+                      : '${_num(_cpu, 'cores')} ${tr('home.cores')}',
+                  ratio: _cpu == null
+                      ? null
+                      : _num(_cpu, 'usagePercent') / 100,
+                  icon: Icons.speed_rounded,
+                  color: const Color(0xFF06B6D4),
+                  onTap: () => widget.onOpenApp('monitor'),
+                ),
+              ),
+              SizedBox(
+                width: statWidth,
+                child: _statTile(
+                  title: tr('home.gpu'),
+                  value: _gpu == null
+                      ? '—'
+                      : '${_num(_gpu, 'usagePercent')}%',
+                  caption: _gpu == null
+                      ? tr('home.gpuUnavailable')
+                      : '${_gpu!['name'] ?? 'GPU'} · '
+                            '${formatBytes(_num(_gpu, 'memUsed'))}',
+                  ratio: _gpu == null
+                      ? null
+                      : _num(_gpu, 'usagePercent') / 100,
+                  icon: Icons.videogame_asset_outlined,
+                  color: const Color(0xFFF59E0B),
+                  onTap: () => widget.onOpenApp('monitor'),
+                ),
+              ),
+              SizedBox(
+                width: statWidth,
+                child: _statTile(
+                  title: tr('home.mem'),
+                  value: _pair(_mem, 'used', 'total'),
+                  caption: _mem == null
+                      ? null
+                      : '${tr('home.free')} ${formatBytes(_num(_mem, 'free'))}',
+                  ratio: _ratio(_mem, 'used', 'total'),
+                  icon: Icons.memory_rounded,
+                  color: const Color(0xFFA855F7),
+                  onTap: () => widget.onOpenApp('monitor'),
+                ),
+              ),
+            ],
+          ),
+        ];
+
+        final disksBlock = <Widget>[
+          _sectionTitle(tr('home.disks')),
+          const SizedBox(height: NasTokens.spaceSm),
+          if (_disks.isEmpty)
+            Text(
+              tr('home.noDisks'),
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: context.nasTextSecondary,
+              ),
+            )
+          else
+            Wrap(
+              spacing: gap,
+              runSpacing: gap,
+              children: [
+                for (final disk in _disks)
+                  SizedBox(width: diskWidth, child: _diskTile(disk)),
+              ],
+            ),
+        ];
+
+        // 手机 App 独有的「相册备份」横条（web / 桌面不出现）
+        final backupBanner = <Widget>[
+          if (isMobileApp()) ...[
+            _backupBanner(context),
+            const SizedBox(height: NasTokens.spaceMd),
+          ],
+        ];
+
         return RefreshIndicator(
           onRefresh: _load,
           child: SingleChildScrollView(
@@ -118,148 +293,25 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _greeting(scheme),
+                ...backupBanner,
                 const SizedBox(height: NasTokens.spaceLg),
-                _sectionTitle(tr('home.systemStatus')),
-                const SizedBox(height: NasTokens.spaceSm),
-                Wrap(
-                  spacing: gap,
-                  runSpacing: gap,
-                  children: [
-                    SizedBox(
-                      width: statWidth,
-                      child: _statTile(
-                        title: tr('home.cpu'),
-                        value: _cpu == null
-                            ? '—'
-                            : '${_num(_cpu, 'usagePercent')}%',
-                        caption: _cpu == null
-                            ? null
-                            : '${_num(_cpu, 'cores')} ${tr('home.cores')}',
-                        ratio: _cpu == null
-                            ? null
-                            : _num(_cpu, 'usagePercent') / 100,
-                        icon: Icons.speed_rounded,
-                        color: const Color(0xFF06B6D4),
-                        onTap: () => widget.onOpenApp('monitor'),
-                      ),
-                    ),
-                    SizedBox(
-                      width: statWidth,
-                      child: _statTile(
-                        title: tr('home.gpu'),
-                        value: _gpu == null
-                            ? '—'
-                            : '${_num(_gpu, 'usagePercent')}%',
-                        caption: _gpu == null
-                            ? tr('home.gpuUnavailable')
-                            : '${_gpu!['name'] ?? 'GPU'} · '
-                                  '${formatBytes(_num(_gpu, 'memUsed'))}',
-                        ratio: _gpu == null
-                            ? null
-                            : _num(_gpu, 'usagePercent') / 100,
-                        icon: Icons.videogame_asset_outlined,
-                        color: const Color(0xFFF59E0B),
-                        onTap: () => widget.onOpenApp('monitor'),
-                      ),
-                    ),
-                    SizedBox(
-                      width: statWidth,
-                      child: _statTile(
-                        title: tr('home.mem'),
-                        value: _pair(_mem, 'used', 'total'),
-                        caption: _mem == null
-                            ? null
-                            : '${tr('home.free')} ${formatBytes(_num(_mem, 'free'))}',
-                        ratio: _ratio(_mem, 'used', 'total'),
-                        icon: Icons.memory_rounded,
-                        color: const Color(0xFFA855F7),
-                        onTap: () => widget.onOpenApp('monitor'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: NasTokens.spaceLg),
-                _sectionTitle(tr('home.disks')),
-                const SizedBox(height: NasTokens.spaceSm),
-                if (_disks.isEmpty)
-                  Text(
-                    tr('home.noDisks'),
-                    style: TextStyle(
-                      fontSize: NasTokens.fontCaption,
-                      color: context.nasTextSecondary,
-                    ),
-                  )
-                else
-                  Wrap(
-                    spacing: gap,
-                    runSpacing: gap,
-                    children: [
-                      for (final disk in _disks)
-                        SizedBox(width: diskWidth, child: _diskTile(disk)),
-                    ],
-                  ),
-                const SizedBox(height: NasTokens.spaceLg),
-                Row(
-                  children: [
-                    Expanded(child: _sectionTitle(tr('home.apps'))),
-                    IconButton(
-                      tooltip: tr('home.viewGrid'),
-                      icon: Icon(
-                        Icons.grid_view_rounded,
-                        size: 18,
-                        color: _appView == 'grid'
-                            ? scheme.primary
-                            : context.nasTextSecondary,
-                      ),
-                      onPressed: () => setState(() => _appView = 'grid'),
-                    ),
-                    IconButton(
-                      tooltip: tr('home.viewList'),
-                      icon: Icon(
-                        Icons.view_list_rounded,
-                        size: 18,
-                        color: _appView == 'list'
-                            ? scheme.primary
-                            : context.nasTextSecondary,
-                      ),
-                      onPressed: () => setState(() => _appView = 'list'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: NasTokens.spaceSm),
-                if (_appView == 'grid')
-                  Wrap(
-                    spacing: gap,
-                    runSpacing: gap,
-                    children: [for (final app in apps) _appTile(app)],
-                  )
-                else
-                  _groupedApps(apps),
-                const SizedBox(height: NasTokens.spaceLg),
-                _sectionTitle(tr('home.quick')),
-                const SizedBox(height: NasTokens.spaceSm),
-                Wrap(
-                  spacing: gap,
-                  runSpacing: gap,
-                  children: [
-                    _quick(
-                      Icons.cloud_upload_outlined,
-                      tr('home.quick.upload'),
-                      'transfer',
-                    ),
-                    _quick(
-                      Icons.pending_actions_outlined,
-                      tr('home.quick.task'),
-                      'transfer',
-                    ),
-                    _quick(Icons.link, tr('home.quick.share'), 'share'),
-                    _quick(
-                      Icons.manage_search,
-                      tr('home.quick.index'),
-                      'files',
-                    ),
-                  ],
-                ),
+                // 手机端顺序对齐移动端基线：问候 → 应用网格 → 系统状态 → 硬盘。
+                // 应用网格是主要入口，必须在前两屏内；系统状态与硬盘留在下方（D4 保留）。
+                // 「快捷操作」整块已删（2026-11-04 用户反馈：四个入口实际都没用，
+                // 上传/任务/分享/索引在各自 App 里都有更直接的入口）。
+                if (compact) ...[
+                  ...appsBlock,
+                  const SizedBox(height: NasTokens.spaceLg),
+                  ...statsBlock,
+                  const SizedBox(height: NasTokens.spaceLg),
+                  ...disksBlock,
+                ] else ...[
+                  ...statsBlock,
+                  const SizedBox(height: NasTokens.spaceLg),
+                  ...disksBlock,
+                  const SizedBox(height: NasTokens.spaceLg),
+                  ...appsBlock,
+                ],
                 if (_loading) ...[
                   const SizedBox(height: NasTokens.spaceLg),
                   const Center(
@@ -275,6 +327,65 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       },
+    );
+  }
+
+  /// 手机 App 专属：相册备份入口（横条）。web / 桌面不出现。
+  Widget _backupBanner(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      borderRadius: BorderRadius.circular(NasTokens.radiusMd),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const PhotoBackupPage()),
+      ),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: NasTokens.spaceMd,
+          vertical: NasTokens.spaceMd,
+        ),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [scheme.primary, const Color(0xFF8B5CF6)],
+          ),
+          borderRadius: BorderRadius.circular(NasTokens.radiusMd),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.cloud_upload_outlined,
+              color: Colors.white,
+              size: 22,
+            ),
+            const SizedBox(width: NasTokens.spaceSm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr('home.backup.title'),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: NasTokens.fontBody,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    tr('home.backup.hint'),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.86),
+                      fontSize: NasTokens.fontMicro,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.white),
+          ],
+        ),
+      ),
     );
   }
 
@@ -408,7 +519,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _groupedApps(List<AppDescriptor> apps) {
+  Widget _groupedApps(List<AppDescriptor> apps, {bool compact = false}) {
     final groups = <AppGroup, List<AppDescriptor>>{};
     for (final app in apps) {
       groups.putIfAbsent(AppVisuals.groupOf(app.id), () => []).add(app);
@@ -434,42 +545,120 @@ class _HomePageState extends State<HomePage> {
           Wrap(
             spacing: gap,
             runSpacing: gap,
-            children: [for (final app in entry.value) _appTile(app)],
+            children: [
+              for (final app in entry.value) _appTile(app, compact: compact),
+            ],
           ),
         ],
       ],
     );
   }
 
-  Widget _appTile(AppDescriptor app) {
+  /// 工作台应用卡。
+  ///
+  /// 手机端（[compact]）缩小一档：360 宽能排 4 列、430 宽 5 列，
+  /// 与移动端基线的「60 图标 + 4~5 列」同一密度；桌面仍用 100×112 大卡。
+  /// 按用户自定义顺序排；没登记过的（版本升级新增的 App）保持原顺序追加到末尾 ——
+  /// 直接按 _order 过滤会让新 App 凭空消失。
+  List<AppDescriptor> _applyOrder(List<AppDescriptor> apps) {
+    if (_order.isEmpty) return apps;
+    final rest = {for (final a in apps) a.id: a};
+    final out = <AppDescriptor>[];
+    for (final id in _order) {
+      final app = rest.remove(id);
+      if (app != null) out.add(app);
+    }
+    out.addAll(rest.values);
+    return out;
+  }
+
+  /// 把 [fromId] 拖到 [toId] 的位置上并落盘
+  Future<void> _moveApp(String fromId, String toId) async {
+    if (fromId == toId) return;
+    final ids = _applyOrder(
+      visibleAppsOnThisClient(AppRegistry.apps.where((a) => a.available)),
+    ).map((a) => a.id).toList();
+    final from = ids.indexOf(fromId);
+    final to = ids.indexOf(toId);
+    if (from < 0 || to < 0) return;
+    ids.insert(to, ids.removeAt(from));
+    setState(() => _order = ids);
+    await SettingsStore.instance.setString(_orderKey, ids.join(','));
+  }
+
+  /// 可拖拽的应用卡：长按图标拖动，松手落在哪个图标上就换到那个位置。
+  /// 网格用 [Wrap]，没法用 ReorderableListView（那是列表），所以手写 Draggable/DragTarget。
+  Widget _draggableAppTile(
+    AppDescriptor app, {
+    required bool compact,
+    required double width,
+  }) {
+    final tile = _appTile(app, compact: compact, width: width);
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) => details.data != app.id,
+      onAcceptWithDetails: (details) => _moveApp(details.data, app.id),
+      builder: (context, candidate, rejected) {
+        final hovering = candidate.isNotEmpty;
+        return LongPressDraggable<String>(
+          data: app.id,
+          // 拖起来的那一份要自带 Material：feedback 不在 Scaffold 下面，
+          // 没有 Material 祖先时 InkWell/Text 会直接抛错
+          feedback: Material(
+            color: Colors.transparent,
+            child: Opacity(opacity: 0.9, child: tile),
+          ),
+          childWhenDragging: Opacity(opacity: 0.25, child: tile),
+          child: AnimatedScale(
+            scale: hovering ? 1.08 : 1,
+            duration: const Duration(milliseconds: 120),
+            child: tile,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _appTile(
+    AppDescriptor app, {
+    bool compact = false,
+    double width = 100,
+  }) {
     final scheme = Theme.of(context).colorScheme;
     final accent = AppVisuals.accentFor(app.id);
     final color = accent.isEmpty ? scheme.primary : accent.first;
+    final height = compact ? 92.0 : 112.0;
+    // 图标底盒跟着格子宽度走：一行 4 个时格子只有 80 出头，不能用固定的 58
+    final box = compact ? (width - 18).clamp(40.0, 58.0) : 80.0;
+    final iconSize = compact ? box * 0.52 : 40.0;
     return InkWell(
       onTap: () => widget.onOpenApp(app.id),
       borderRadius: BorderRadius.circular(16),
       child: SizedBox(
-        width: 100,
-        height: 112,
+        width: width,
+        height: height,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 80,
-              height: 80,
+              width: box,
+              height: box,
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(compact ? 16 : 20),
               ),
-              child: Icon(AppVisuals.iconFor(app.icon), size: 40, color: color),
+              child: Icon(
+                AppVisuals.iconFor(app.icon),
+                size: iconSize,
+                color: color,
+              ),
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: compact ? 4 : 6),
             Text(
               tr(app.nameKey),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: compact ? 11 : 12,
                 color: scheme.onSurface,
                 fontWeight: FontWeight.w500,
               ),
@@ -505,35 +694,6 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _quick(IconData icon, String label, String appId) {
-    final scheme = Theme.of(context).colorScheme;
-    return NasCard(
-      onTap: () => widget.onOpenApp(appId),
-      padding: const EdgeInsets.symmetric(
-        horizontal: NasTokens.spaceMd,
-        vertical: NasTokens.spaceSm + 2,
-      ),
-      width: 190,
-      child: Row(
-        children: [
-          Icon(icon, size: NasTokens.iconMd, color: scheme.primary),
-          const SizedBox(width: NasTokens.spaceSm),
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: NasTokens.fontBody,
-                color: scheme.onSurface,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

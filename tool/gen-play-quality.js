@@ -28,12 +28,19 @@ const spec = JSON.parse(fs.readFileSync(src, 'utf-8'));
 const dartString = (s) => `'${String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 
 function presetDart(p) {
+  const b = p.bitrates || {};
   return [
     '    PlayQualityPreset(',
     `      key: ${dartString(p.key)},`,
     `      label: ${dartString(p.label)},`,
     `      height: ${p.height},`,
     `      videoBitrateKbps: ${p.videoBitrateKbps},`,
+    `      copy: ${p.copy === true},`,
+    `      bitrates: <String, int>{`,
+    ...['h264', 'h265', 'av1'].map(
+      (c) => `        ${dartString(c)}: ${Number(b[c] ?? 0)},`,
+    ),
+    '      },',
     '    ),',
   ].join('\n');
 }
@@ -44,6 +51,7 @@ function codecDart(c) {
     `      key: ${dartString(c.key)},`,
     `      label: ${dartString(c.label)},`,
     `      container: ${dartString(c.container)},`,
+    `      bitrateFactor: ${Number(c.bitrateFactor ?? 1)},`,
     '    ),',
   ].join('\n');
 }
@@ -61,18 +69,37 @@ function genDart() {
     '    required this.label,',
     '    required this.height,',
     '    required this.videoBitrateKbps,',
+    '    this.copy = false,',
+    '    this.bitrates = const <String, int>{},',
     '  });',
     '',
     '  final String key;',
     '  final String label;',
     '  final int height;',
+    '',
+    '  /// H.264 下的码率（兼容旧调用方：下拉框不带编码时显示这个）。',
     '  final int videoBitrateKbps;',
     '',
-    '  /// 供下拉框展示的码率短标签（如 2.8 Mbps）。',
-    '  String get bitrateLabel {',
-    '    final mbps = videoBitrateKbps / 1000;',
+    '  /// 原画 = 不转码，直接复制流。此时码率无意义。',
+    '  final bool copy;',
+    '',
+    '  /// 各编码下的目标码率（kbps）。H.265 / AV1 同画质更省流量。',
+    '  final Map<String, int> bitrates;',
+    '',
+    '  /// 该编码下这一档的码率；认不出的编码回落到 H.264 的值。',
+    '  int bitrateFor(String codecKey) => bitrates[codecKey] ?? videoBitrateKbps;',
+    '',
+    '  /// 供下拉框展示的码率短标签（如 2.8 Mbps）；原画返回「不转码」。',
+    '  String bitrateLabelFor(String codecKey) {',
+    "    if (copy) return '不转码';",
+    '    final kbps = bitrateFor(codecKey);',
+    "    if (kbps <= 0) return '';",
+    '    final mbps = kbps / 1000;',
     "    return '${mbps.toStringAsFixed(mbps >= 10 ? 0 : 1)} Mbps';",
     '  }',
+    '',
+    '  /// 兼容旧调用：按 H.264 显示。',
+    "  String get bitrateLabel => bitrateLabelFor('h264');",
     '}',
     '',
     '/// 输出编码：h264 → MPEG-TS；h265 / av1 → fMP4（带 EXT-X-MAP）。',
@@ -81,6 +108,7 @@ function genDart() {
     '    required this.key,',
     '    required this.label,',
     '    required this.container,',
+    '    this.bitrateFactor = 1,',
     '  });',
     '',
     '  final String key;',
@@ -88,6 +116,9 @@ function genDart() {
     '',
     '  /// mpegts / fmp4（与服务端实际封装一致）。',
     '  final String container;',
+    '',
+    '  /// 同画质下相对 H.264 的码率系数（1.0 / 0.6 / 0.5），用于估算流量。',
+    '  final double bitrateFactor;',
     '}',
     '',
     'const List<PlayQualityPreset> playQualityPresets = <PlayQualityPreset>[',
@@ -129,7 +160,7 @@ function genTs() {
     'export const PLAY_QUALITY_PRESETS = [',
     ...spec.presets.map(
       (p) =>
-        `  { key: ${dartString(p.key)}, label: ${dartString(p.label)}, height: ${p.height}, videoBitrateKbps: ${p.videoBitrateKbps} },`,
+        `  { key: ${dartString(p.key)}, label: ${dartString(p.label)}, height: ${p.height}, videoBitrateKbps: ${p.videoBitrateKbps}, copy: ${p.copy === true}, bitrates: ${JSON.stringify(p.bitrates || {})} },`,
     ),
     '] as const;',
     '',
@@ -137,7 +168,8 @@ function genTs() {
     '',
     'export const PLAY_CODECS = [',
     ...spec.codecs.map(
-      (c) => `  { key: ${dartString(c.key)}, label: ${dartString(c.label)}, container: ${dartString(c.container)} },`,
+      (c) =>
+        `  { key: ${dartString(c.key)}, label: ${dartString(c.label)}, container: ${dartString(c.container)}, bitrateFactor: ${Number(c.bitrateFactor ?? 1)} },`,
     ),
     '] as const;',
     '',

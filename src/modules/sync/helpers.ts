@@ -1,5 +1,5 @@
 import { sql } from 'kysely';
-import { filesRoot, resolveInRoot } from '../files/fs-root';
+import { resolveRemoteDir } from '../files/fs-root';
 import type { FastifyRequest } from 'fastify';
 import { SyncTaskRow } from './util';
 import type { KernelApi } from '../../../kernel/types';
@@ -13,8 +13,8 @@ export function makeSyncHelpers(k: KernelApi) {
         throw Object.assign(new Error('source/target required'), { code: 'E_PARAM' });
       }
       return {
-        src: resolveInRoot(filesRoot(), body.source),
-        dst: resolveInRoot(filesRoot(), body.target),
+        src: resolveRemoteDir(body.source),
+        dst: resolveRemoteDir(body.target),
       };
     };
 

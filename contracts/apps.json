@@ -53,12 +53,12 @@
               },
               {
                 "id": "favorites",
-                "labelKey": "photo.nav.favorites",
+                "labelKey": "nav.favorites",
                 "icon": "favorite_outline"
               },
               {
                 "id": "folders",
-                "labelKey": "photo.nav.files",
+                "labelKey": "nav.filesView",
                 "icon": "folder_outlined"
               }
             ]
@@ -112,6 +112,11 @@
             "titleKey": "photo.nav.ai",
             "icon": "auto_awesome_outlined",
             "items": [
+              {
+                "id": "photoAiCenter",
+                "labelKey": "photo.nav.aiCenter",
+                "icon": "auto_awesome_outlined"
+              },
               {
                 "id": "faces",
                 "labelKey": "ui.photo.038",
@@ -178,10 +183,28 @@
                 "id": "trash",
                 "labelKey": "photo.nav.trash",
                 "icon": "delete_sweep_outlined"
+              },
+              {
+                "id": "backup",
+                "labelKey": "photo.nav.backup",
+                "icon": "cloud_upload_outlined",
+                "when": "mobileApp"
               }
             ]
           }
-        ]
+        ],
+        "mobile": {
+          "tabs": [
+            "timeline",
+            "footprint",
+            "album",
+            "photoAiCenter",
+            "@more"
+          ],
+          "labels": {
+            "timeline": "ui.photo.041"
+          }
+        }
       }
     },
     {
@@ -250,7 +273,7 @@
               },
               {
                 "id": "favorites",
-                "labelKey": "photo.nav.favorites",
+                "labelKey": "nav.favorites",
                 "icon": "favorite_outline"
               },
               {
@@ -310,18 +333,35 @@
                 "icon": "video_library_outlined"
               },
               {
-                "id": "settings.scrape",
-                "labelKey": "video.nav.scrapeSettings",
-                "icon": "auto_awesome_outlined"
+                "id": "settings.app",
+                "labelKey": "video.nav.appSettings",
+                "icon": "tune"
               },
               {
-                "id": "settings.other",
-                "labelKey": "video.nav.otherSettings",
-                "icon": "tune"
+                "id": "settings.client",
+                "labelKey": "video.nav.clientSettings",
+                "icon": "devices"
               }
             ]
           }
-        ]
+        ],
+        "mobile": {
+          "tabs": [
+            "home",
+            "history",
+            "collections",
+            "favorites",
+            "@more"
+          ],
+          "aliases": {
+            "home": [
+              "lib"
+            ]
+          },
+          "labels": {
+            "home": "video.nav.libraries"
+          }
+        }
       }
     },
     {
@@ -383,7 +423,16 @@
               }
             ]
           }
-        ]
+        ],
+        "mobile": {
+          "tabs": [
+            "discover",
+            "pt",
+            "rss",
+            "tasks",
+            "settings"
+          ]
+        }
       }
     },
     {
@@ -415,12 +464,12 @@
             "items": [
               {
                 "id": "songs",
-                "labelKey": "ui.music.009",
+                "labelKey": "music.nav.songs",
                 "icon": "music_note_outlined"
               },
               {
                 "id": "favorites",
-                "labelKey": "photo.nav.favorites",
+                "labelKey": "nav.favorites",
                 "icon": "favorite_outline"
               },
               {
@@ -440,7 +489,7 @@
               },
               {
                 "id": "files",
-                "labelKey": "photo.nav.files",
+                "labelKey": "nav.filesView",
                 "icon": "folder_outlined"
               }
             ]
@@ -456,24 +505,9 @@
                 "icon": "queue_music_outlined"
               },
               {
-                "id": "recentAdded",
-                "labelKey": "ui.music.026",
-                "icon": "new_releases_outlined"
-              },
-              {
-                "id": "recentPlayed",
-                "labelKey": "ui.music.027",
-                "icon": "history"
-              },
-              {
-                "id": "mostPlayed",
-                "labelKey": "ui.music.028",
-                "icon": "trending_up"
-              },
-              {
-                "id": "neverPlayed",
-                "labelKey": "ui.music.029",
-                "icon": "play_circle_outline"
+                "id": "collections",
+                "labelKey": "music.nav.collections",
+                "icon": "collections_bookmark_outlined"
               }
             ]
           },
@@ -483,13 +517,35 @@
             "icon": "settings_outlined",
             "items": [
               {
-                "id": "settings",
-                "labelKey": "music.nav.settings",
+                "id": "settings.source",
+                "labelKey": "music.nav.sources",
+                "icon": "folder_outlined"
+              },
+              {
+                "id": "settings.app",
+                "labelKey": "music.nav.appSettings",
                 "icon": "tune"
+              },
+              {
+                "id": "settings.client",
+                "labelKey": "music.nav.cache",
+                "icon": "devices"
               }
             ]
           }
-        ]
+        ],
+        "mobile": {
+          "tabs": [
+            "songs",
+            "playlists",
+            "favorites",
+            "history",
+            "@more"
+          ],
+          "labels": {
+            "songs": "music.nav.songs"
+          }
+        }
       }
     },
     {
@@ -508,7 +564,86 @@
       "accent": [
         "#10B981",
         "#059669"
-      ]
+      ],
+      "nav": {
+        "style": "side",
+        "sections": [
+          {
+            "id": "library",
+            "titleKey": "book.nav.library",
+            "icon": "local_library_outlined",
+            "items": [
+              {
+                "id": "books",
+                "labelKey": "book.nav.books",
+                "icon": "book_outlined"
+              },
+              {
+                "id": "comics",
+                "labelKey": "book.nav.comics",
+                "icon": "auto_stories_outlined"
+              },
+              {
+                "id": "favorites",
+                "labelKey": "nav.favorites",
+                "icon": "favorite_outline"
+              },
+              {
+                "id": "history",
+                "labelKey": "book.nav.history",
+                "icon": "history"
+              },
+              {
+                "id": "files",
+                "labelKey": "nav.filesView",
+                "icon": "folder_outlined"
+              }
+            ]
+          },
+          {
+            "id": "lists",
+            "titleKey": "book.nav.lists",
+            "icon": "playlist_play_outlined",
+            "items": [
+              {
+                "id": "lists",
+                "labelKey": "book.nav.myLists",
+                "icon": "playlist_add_outlined"
+              },
+              {
+                "id": "collections",
+                "labelKey": "book.nav.collections",
+                "icon": "collections_bookmark_outlined"
+              }
+            ]
+          },
+          {
+            "id": "settings",
+            "titleKey": "ui.settings.017",
+            "icon": "settings_outlined",
+            "items": [
+              {
+                "id": "settings.source",
+                "labelKey": "book.nav.sources",
+                "icon": "folder_special_outlined"
+              },
+              {
+                "id": "settings.cache",
+                "labelKey": "book.nav.cache",
+                "icon": "download_for_offline_outlined"
+              }
+            ]
+          }
+        ],
+        "mobile": {
+          "tabs": [
+            "books",
+            "comics",
+            "favorites",
+            "@more"
+          ]
+        }
+      }
     },
     {
       "id": "notes",
@@ -622,17 +757,42 @@
       "route": "/sync",
       "icon": "sync",
       "endpoints": [
-        "desktop",
-        "tablet",
-        "mobile",
-        "web"
+        "desktop"
       ],
       "available": true,
       "group": "service",
       "accent": [
         "#8B5CF6",
         "#6366F1"
-      ]
+      ],
+      "nav": {
+        "style": "side",
+        "sections": [
+          {
+            "id": "main",
+            "titleKey": "sync.menu.group",
+            "icon": "sync",
+            "items": [
+              {
+                "id": "tasks",
+                "labelKey": "sync.menu.tasks",
+                "icon": "sync"
+              },
+              {
+                "id": "help",
+                "labelKey": "sync.menu.help",
+                "icon": "help_outline"
+              }
+            ]
+          }
+        ],
+        "mobile": {
+          "tabs": [
+            "tasks",
+            "help"
+          ]
+        }
+      }
     },
     {
       "id": "transfer",
@@ -663,7 +823,7 @@
         "mobile",
         "web"
       ],
-      "available": false,
+      "available": true,
       "group": "service",
       "accent": [
         "#F43F5E",
@@ -711,7 +871,7 @@
       "endpoints": [
         "desktop"
       ],
-      "available": false,
+      "available": true,
       "group": "service",
       "accent": [
         "#475569",

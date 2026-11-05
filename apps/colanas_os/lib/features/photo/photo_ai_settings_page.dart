@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../shell/app_widgets.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -30,6 +31,9 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
 
   Timer? _timer;
   bool _busy = false;
+
+  /// 连续批处理的实时进度（`已处理 / 总量`）；null = 没在跑
+  String? _progressText;
 
   ApiClient get _client => ApiSession.instance.client;
 
@@ -114,31 +118,50 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
           : res is PhotoAiTuningResponse
               ? tr('photo.ai.saved')
               : label;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      NasSnack.show(context, msg);
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  // 「打开就真识别」：开关打开后立刻跑一批 20 张，让进度与结果立即可见。
-  Future<void> _startFaceScene() => _run(
-    tr('photo.ai.startFaceScene'),
-    () => _client.photoAiAnalyze(body: const PhotoAiAnalyzeBody(limit: 20)),
-  );
+  /// 提交整库识别到内核队列（`photo.ai.scan`）。
+  ///
+  /// 以前是客户端循环调 analyze（每次 20 张）：客户端一关 / 服务端一重启就断，
+  /// 表现就是「识别没跑完，再打开也不会继续」。入队之后内核重启会由队列
+  /// recover() 接着跑，进度靠页面 5 秒轮询的 config 反映。
+  Future<void> _queueScan({
+    bool ocr = false,
+    bool activity = false,
+  }) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final res = await _client.photoAiScan(
+        body: PhotoAiScanBody(ocr: ocr, activity: activity),
+      );
+      if (!mounted) return;
+      NasSnack.show(
+        context,
+        res.reused ? tr('photo.ai.alreadyQueued') : tr('photo.ai.queued'),
+      );
+      await _refresh();
+    } catch (e) {
+      if (!mounted) return;
+      NasSnack.show(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
-  Future<void> _startOcr() => _run(
-    tr('photo.ai.startOcr'),
-    () => _client.photoAiOcr(body: const PhotoAiBatchBody(limit: 20)),
-  );
+  Future<void> _startFaceScene() => _queueScan(ocr: true);
 
-  Future<void> _startActivity() => _run(
-    tr('photo.ai.startActivity'),
-    () => _client.photoAiActivities(body: const PhotoAiBatchBody(limit: 20)),
-  );
+  Future<void> _startOcr() => _queueScan(ocr: true);
+
+  Future<void> _startActivity() => _queueScan(ocr: true, activity: true);
 
   /// 只补人脸框（不重算场景/嵌入）：头像墙依赖 bbox，老数据需要补一次
   Future<void> _backfillFaces() async {
@@ -148,19 +171,18 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
       final res = await _client.photoFaceBackfill(
         body: const PhotoFaceBackfillBody(limit: 300),
       );
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(tr('photo.ai.backfillDone', {
-            'photos': '${res.photos}',
-            'faces': '${res.faces}',
-            'remaining': '${res.remaining}',
-          })),
-          duration: const Duration(seconds: 5),
-        ),
+      NasSnack.showOn(
+        messenger,
+        tr('photo.ai.backfillDone', {
+          'photos': '${res.photos}',
+          'faces': '${res.faces}',
+          'remaining': '${res.remaining}',
+        }),
+        duration: const Duration(seconds: 5),
       );
       await _refresh();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -172,7 +194,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
       await _refresh();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
       await _refresh();
     }
   }
@@ -256,7 +278,27 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          // 连续批处理时显示实时进度：几万张里 20 张的百分比会被四舍五入成 0%，
+          // 只有「已处理 / 总量」才能让人看出在动。
+          if (_progressText != null) ...[
+            Row(
+              children: [
+                const SizedBox(
+                  width: 13,
+                  height: 13,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _progressText!,
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],          Row(
             children: [
               const Icon(Icons.donut_large_outlined, size: 18),
               const SizedBox(width: 8),
@@ -276,11 +318,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
                 ),
                 child: Text(queue.paused ? tr('photo.ai.resume') : tr('photo.ai.pause')),
               ),
-              IconButton(
-                tooltip: tr('common.refresh'),
-                onPressed: _refresh,
-                icon: const Icon(Icons.refresh, size: 18),
-              ),
+              NasRefreshButton(onPressed: _refresh),
             ],
           ),
           if (queue.paused)
@@ -333,7 +371,9 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
               ),
               const Spacer(),
               Text(
-                '$percent%${job.pending > 0 ? ' · ${job.pending}' : ''}',
+                // 显示条数而不是百分比：1.9 万张里跑 100 多张，百分比四舍五入永远 0%，
+                // 用户就以为「完全没动」（2026-11-04）。有总数时给 done/total。
+                job.total > 0 ? '${job.done} / ${job.total}' : '$percent%',
                 style: TextStyle(fontSize: 12, color: context.nasTextSecondary),
               ),
             ],
@@ -342,7 +382,10 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
           ClipRRect(
             borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(
-              value: percent / 100,
+              // 用真实比例而不是整数百分比：0.6% 的整数版本是 0，条会一直是空的
+              value: job.total > 0
+                  ? (job.done / job.total).clamp(0.0, 1.0)
+                  : percent / 100,
               minHeight: 4,
               backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
             ),
@@ -377,7 +420,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
           Row(
             children: [
               Expanded(child: Text(tr('photo.ai.mcp.uid'), style: TextStyle(fontSize: 12, color: context.nasTextSecondary))),
-              DropdownButton<String>(
+              NasDropdown<String>(
                 value: mcp.uid.isEmpty ? null : mcp.uid,
                 hint: Text(tr('photo.ai.mcp.noUid')),
                 underline: const SizedBox.shrink(),
@@ -428,9 +471,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
                       '{"mcpServers":{"colanas-photo":{"type":"http","url":"${mcp.baseUrl}","headers":{"Authorization":"Bearer ${tr('photo.ai.mcpTokenPlaceholder')}"}}}}';
                   await Clipboard.setData(ClipboardData(text: body));
                   if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${tr('photo.ai.mcp.copied')} $token')),
-                  );
+                  NasSnack.show(context, '${tr('photo.ai.mcp.copied')} $token');
                 },
                 child: Text(tr('photo.ai.mcp.copy')),
               ),
@@ -477,11 +518,23 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
     );
   }
 
-  int _pending(PhotoAiSettings s, String key) {
+  /// 已完成 / 总数：面板要显示「120/19113」，只有百分比时几千张里跑十张看着像没动
+  (int, int) _counts(PhotoAiSettings s, String key) {
     for (final job in s.queue.jobs) {
-      if (job.key == key) return job.pending;
+      if (job.key == key) return (job.done, job.total);
     }
-    return 0;
+    return (0, 0);
+  }
+
+  /// 「（120/19113 · 1%）」；没有条目口径（total=0）时返回空串
+  String _progressSuffix(int percent, (int, int) counts) {
+    final (done, total) = counts;
+    if (total <= 0) return '';
+    return tr('photo.ai.progressDoneTotal', {
+      'done': '$done',
+      'total': '$total',
+      'percent': '$percent',
+    });
   }
 
   Widget _modulesCard(PhotoAiSettings s) {
@@ -492,7 +545,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
             title: tr('photo.ai.enableOcr'),
             subtitle: tr('photo.ai.sub.ocr'),
             percent: s.progress.ocr,
-            pending: _pending(s, 'ocr'),
+            counts: _counts(s, 'ocr'),
             value: s.config.ocrEnabled,
             onChanged: (v) async {
               await _save(PhotoAiConfigBody(ocrEnabled: v));
@@ -510,7 +563,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
             title: tr('photo.ai.enablePlace'),
             subtitle: tr('photo.ai.sub.place'),
             percent: s.progress.place,
-            pending: _pending(s, 'place'),
+            counts: _counts(s, 'place'),
             value: s.config.placeEnabled,
             onChanged: (v) async {
               await _save(PhotoAiConfigBody(placeEnabled: v));
@@ -528,7 +581,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
             title: tr('photo.ai.enableActivity'),
             subtitle: tr('photo.ai.sub.activity'),
             percent: s.progress.activity,
-            pending: _pending(s, 'activity'),
+            counts: _counts(s, 'activity'),
             value: s.config.activityEnabled,
             onChanged: (v) async {
               await _save(PhotoAiConfigBody(activityEnabled: v));
@@ -546,7 +599,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
             title: tr('photo.ai.enableSimilar'),
             subtitle: tr('photo.ai.sub.similar'),
             percent: s.progress.similarScan,
-            pending: _pending(s, 'similar'),
+            counts: _counts(s, 'similar'),
             secondPercent: s.progress.similarCompare,
             value: s.config.similarEnabled,
             onChanged: (v) => _save(PhotoAiConfigBody(similarEnabled: v)),
@@ -564,7 +617,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
     required String title,
     required String subtitle,
     required int percent,
-    required int pending,
+    required (int, int) counts,
     required bool value,
     required ValueChanged<bool> onChanged,
     required VoidCallback onReset,
@@ -573,7 +626,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
     int? secondPercent,
   }) {
     return _titleRow(
-      title: '$title${tr('photo.ai.progressWithPending', {'percent': '$percent', 'pending': '$pending'})}',
+      title: '$title${_progressSuffix(percent, counts)}',
       subtitle: secondPercent == null
           ? subtitle
           : '$subtitle · ${tr('photo.ai.scanCompare', {'scan': '$percent', 'compare': '$secondPercent'})}',
@@ -599,7 +652,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _switchRow(
-            title: '${tr('photo.ai.enableFace')}${tr('photo.ai.progressWithPending', {'percent': '${s.progress.face}', 'pending': '${_pending(s, 'face')}'})}',
+            title: '${tr('photo.ai.enableFace')}${_progressSuffix(s.progress.face, _counts(s, 'face'))}',
             subtitle: tr('photo.ai.sub.face'),
             value: s.config.faceEnabled,
             onChanged: (v) async {
@@ -623,7 +676,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
           _titleRow(
             title: tr('photo.ai.autoHide'),
             subtitle: tr('photo.ai.autoHideHint'),
-            trailing: DropdownButton<int>(
+            trailing: NasDropdown<int>(
               value: s.config.faceMinShowCount,
               underline: const SizedBox.shrink(),
               items: [
@@ -701,7 +754,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
           _titleRow(
             title: tr('photo.ai.threads'),
             subtitle: tr('photo.ai.threadsHint'),
-            trailing: DropdownButton<int>(
+            trailing: NasDropdown<int>(
               value: _threads,
               underline: const SizedBox.shrink(),
               items: [

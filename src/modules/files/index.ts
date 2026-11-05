@@ -1,8 +1,9 @@
 import { sql } from 'kysely';
+import { ftsPhrase } from './fts';
 import type { ServerModule } from '../../../kernel/types';
 import { secured } from '../../../kernel/route';
 import { Err } from '../../../kernel/errors';
-import { filesRoot } from './fs-root';
+import { filesRoot, listBrowsableRoots, toPosix } from './fs-root';
 import * as S from './schemas';
 import { listHandler, type ListQuery } from './list';
 import { downloadHandler, type DownloadQuery } from './download';
@@ -91,6 +92,40 @@ export const files: ServerModule = {
         `.execute(db);
       },
     },
+    {
+      // 文件名全文索引：`/files/search` 以前是 path like '%kw%' 全表扫。
+      // trigram 要求查询 ≥3 字符，1-2 字仍回退 LIKE（见 routes 里的 ftsPhrase）。
+      id: '132_files_fts',
+      async up(db) {
+        await sql`
+          create virtual table if not exists files_meta_fts using fts5(
+            path,
+            content='files_meta',
+            content_rowid='rowid',
+            tokenize='trigram'
+          )
+        `.execute(db);
+        await sql`
+          create trigger if not exists files_meta_fts_ai after insert on files_meta begin
+            insert into files_meta_fts(rowid, path) values (new.rowid, new.path);
+          end
+        `.execute(db);
+        await sql`
+          create trigger if not exists files_meta_fts_ad after delete on files_meta begin
+            insert into files_meta_fts(files_meta_fts, rowid, path)
+            values ('delete', old.rowid, old.path);
+          end
+        `.execute(db);
+        await sql`
+          create trigger if not exists files_meta_fts_au after update on files_meta begin
+            insert into files_meta_fts(files_meta_fts, rowid, path)
+            values ('delete', old.rowid, old.path);
+            insert into files_meta_fts(rowid, path) values (new.rowid, new.path);
+          end
+        `.execute(db);
+        await sql`insert into files_meta_fts(files_meta_fts) values('rebuild')`.execute(db);
+      },
+    },
   ],
 
   async register(app, k) {
@@ -99,6 +134,8 @@ export const files: ServerModule = {
       S.ListItem,
       S.ListQuery,
       S.ListResponse,
+      S.RootItem,
+      S.RootsResponse,
       S.CheckBody,
       S.CheckResponse,
       S.ChunkQuery,
@@ -152,6 +189,24 @@ export const files: ServerModule = {
         },
       }),
       async (req) => listHandler((req.query || {}) as ListQuery, k.log),
+    );
+
+    // 目录选择器的「我的电脑」：盘符 + 文件根 + 已登记来源根（SMB 共享）。
+    // 客户端拿到它才知道能去哪些盘，而不是只能在文件根里打转。
+    app.get(
+      '/api/v1/files/roots',
+      secured('files:read', {
+        schema: {
+          operationId: 'filesRoots',
+          tags: TAG,
+          summary: '可浏览的根（盘符 / 文件根 / 来源根）',
+          response: { 200: ref('FilesRootsResponse') },
+        },
+      }),
+      async () => ({
+        home: toPosix(filesRoot()),
+        roots: listBrowsableRoots(),
+      }),
     );
 
     app.post(
@@ -348,9 +403,13 @@ export const files: ServerModule = {
         }
         const limit = Math.max(1, Math.min(Number(q.limit || 50) || 50, 200));
         const escaped = keyword.replace(/[\\%_]/g, (m) => '\\' + m);
+        // ≥3 字走 FTS5 trigram；1-2 字（中文两字词）仍用 LIKE
+        const fts = ftsPhrase(keyword);
         const rows = await sql<{ path: string; size: number; mtime: number }>`
           select path, size, mtime from files_meta
-           where path like ${'%' + escaped + '%'} escape '\\'
+           where ${fts
+             ? sql`rowid in (select rowid from files_meta_fts where files_meta_fts match ${fts})`
+             : sql`path like ${'%' + escaped + '%'} escape '\\'`}
            order by path limit ${limit}
         `.execute(k.db);
         return { items: rows.rows.map((r) => ({ path: r.path, size: Number(r.size), mtime: Number(r.mtime) })) };

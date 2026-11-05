@@ -4,7 +4,9 @@
  *
  * 为什么要有：把菜单写进 `contracts/apps.json#nav` 之后，新增一个菜单项只是改 JSON +
  * 跑生成 —— 但**页面可能没接**。那种情况运行时表现是"点了没反应"，很难发现。
- * 这里检查契约里的每个静态菜单项 id 是否在该模块的 `_content()` 里出现过。
+ * **双向**检查：
+ *   1. 契约里的每个静态菜单项 id 必须在 `_content()` 里有分支（否则点了没反应）；
+ *   2. `_content()` 里的每个 `case` 必须在契约里有对应项（否则是删不掉的死代码）。
  *
  * 动态项（如影视的 `lib:`）不检查：它们的页面由前缀分支处理。
  *
@@ -24,6 +26,8 @@ const SHELL_OF = {
   video: 'apps/colanas_os/lib/features/video/video_shell.dart',
   music: 'apps/colanas_os/lib/features/music/music_shell.dart',
   discover: 'apps/colanas_os/lib/features/discover/discover_shell.dart',
+  // 同步没有单独的 shell 文件：菜单与内容都在 sync_page.dart 里
+  sync: 'apps/colanas_os/lib/features/sync/sync_page.dart',
 };
 
 /** 取出 `_content(...)` 方法体（到下一个同类方法或类结束） */
@@ -67,25 +71,45 @@ for (const app of spec.apps) {
       .filter(Boolean),
   );
 
+  // `// nav-orphan: a, b` 声明「页面有分支、契约没有入口」的孤儿页面（附理由），
+  // 避免它被当成死代码误删，也避免长期无人过问。
+  const orphans = new Set(
+    [...body.matchAll(/nav-orphan:\s*([^\n]+)/g)]
+      .flatMap((m) => m[1].split(','))
+      .map((v) => v.trim())
+      .filter(Boolean),
+  );
+
+  const ids = new Set();
   const missing = [];
   for (const section of app.nav.sections || []) {
     for (const item of section.items || []) {
       if (item.dynamic) continue;
+      ids.add(item.id);
       if (defaults.has(item.id)) continue;
       // 允许 `case 'x':` 或 `if (key == 'x')` 两种写法
       const quoted = `'${item.id}'`;
       if (!body.includes(quoted)) missing.push(`${section.id}.${item.id}`);
     }
   }
-  const total = (app.nav.sections || []).reduce(
-    (a, s) => a + (s.items || []).filter((i) => !i.dynamic).length,
-    0,
+
+  // 反向：`case 'x':` 里的 id 必须在契约里（或声明为 default / orphan）。
+  // 只查一个方向的话，菜单项被删掉后页面分支会一直静默留在代码里。
+  const cases = [...body.matchAll(/case '([^']+)':/g)].map((m) => m[1]);
+  const extra = [...new Set(cases)].filter(
+    (id) => !ids.has(id) && !defaults.has(id) && !orphans.has(id),
   );
+
+  const total = ids.size;
   if (missing.length) {
     rows.push(`[FAIL] ${app.id}: ${missing.length}/${total} 个菜单项没在 _content() 里接页面 → ${missing.join(', ')}`);
     failed += 1;
+  } else if (extra.length) {
+    rows.push(`[FAIL] ${app.id}: _content() 里有契约没有的分支（死代码）→ ${extra.join(', ')}`);
+    failed += 1;
   } else {
-    rows.push(`[OK]   ${app.id}: ${total} 个静态菜单项全部已接页面`);
+    const orphanNote = orphans.size ? `（另 ${orphans.size} 个孤儿页面已声明）` : '';
+    rows.push(`[OK]   ${app.id}: ${total} 个静态菜单项全部已接页面${orphanNote}`);
   }
 }
 

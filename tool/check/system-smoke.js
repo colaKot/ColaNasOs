@@ -206,6 +206,14 @@ const alive = (pid) => {
     JSON.stringify(r.json()),
   );
 
+  // 数据库碎片整理：SQLite 不允许在事务里 VACUUM，这里正好验证独立执行
+  r = await app.inject({ method: 'POST', url: '/api/v1/system/db/compact', headers: bearer });
+  check(
+    'db_compact',
+    r.statusCode === 200 && r.json().ok === true && typeof r.json().freedBytes === 'number',
+    JSON.stringify(r.json()),
+  );
+
   r = await app.inject({ method: 'GET', url: '/api/v1/system/update/check', headers: bearer });
   check(
     'update_check',

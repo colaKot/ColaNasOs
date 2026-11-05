@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../shell/app_widgets.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
+import '../../shell/mobile_frame.dart';
 
 /// 分享链接管理：创建（可选过期/密码）→ 列表 → 撤销。
 class SharePage extends StatefulWidget {
@@ -73,7 +75,7 @@ class _SharePageState extends State<SharePage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('ui.accounts.006')),
+            child: Text(tr('common.create')),
           ),
         ],
       ),
@@ -89,13 +91,14 @@ class _SharePageState extends State<SharePage> {
       );
       if (!mounted) return;
       final url = '${ApiSession.instance.baseUrl}${created['url']}';
+      // 全系统唯一保留的裸 showSnackBar：分享链接要**可选中复制**（SelectableText）。
+      // NasSnack 只收纯文本；将来若要统一，得给它加一个 content: Widget 入口。
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: SelectableText(tr('share.created', {'url': url}))));
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.createFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.createFailed', {'error': '$e'}));
     }
   }
 
@@ -105,8 +108,7 @@ class _SharePageState extends State<SharePage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('share.revokeFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('share.revokeFailed', {'error': '$e'}));
     }
   }
 
@@ -121,10 +123,11 @@ class _SharePageState extends State<SharePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(tr('ui.share.004')),
+      appBar: nasPageAppBar(
+        context,
+        title: tr('ui.share.004'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
+          NasRefreshButton(onPressed: _load),
           IconButton(
             icon: const Icon(Icons.add_link),
             tooltip: tr('ui.share.005'),

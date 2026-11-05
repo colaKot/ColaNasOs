@@ -42,39 +42,100 @@ const PNG_1PX = Buffer.from(
   'base64',
 );
 
-/** 构造带 EXIF DateTimeOriginal 的最小 JPEG（宽 640 × 高 480） */
+/**
+ * 真实可解码的 640×480 灰度 JPEG（纯灰，ffmpeg 生成一次后内联）。
+ *
+ * 为什么不用手搓 SOF0：只有 SOI + APP1 + SOF0 + EOI 的「元数据 JPEG」尺寸读得出来，
+ * 但没有 DQT/DHT/SOS 和熵编码数据，ffmpeg 解不了 —— photo-ai 识别会报
+ * `ffmpeg raw failed (-22)`，扫描后自动触发的识别任务还会拖住后续任务，
+ * 表现为 scan_task_done 超时。内联真图能同时兼顾 EXIF 断言与识别链路。
+ */
+const GRAY_JPEG_BASE64 =
+  '/9j/4AAQSkZJRgABAgAAAQABAAD//gAPTGF2YzYxLjMuMTAwAP/bAEMACBQUFxQXGxsbGxsbIB4gISEhICAgICEhISQkJCoqKiQkJCEhJCQoKCoqLi8uKysqKy8vMjIyPDw5OUZGSFZWZ//EAEoAAQAAAAAAAAAAAAAAAAAAAAABAQAAAAAAAAAAAAAAAAAAAAAQAQAAAAAAAAAAAAAAAAAAAAARAQAAAAAAAAAAAAAAAAAAAAD/wAARCAHgAoADASIAAhEAAxEA/9oADAMBAAIRAxEAPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/2Q==';
+
+/** 构造带 EXIF DateTimeOriginal 的 JPEG（宽 640 × 高 480） */
 function buildJpegWithExif(dateStr) {
   const date = Buffer.from(dateStr + '\0', 'latin1');
-  const tiff = Buffer.alloc(44 + date.length);
+  const make = Buffer.from('Canon\0', 'latin1');
+  const model = Buffer.from('EOS R5\0', 'latin1');
+  const software = Buffer.from('SmokeApp\0', 'latin1');
+  const lens = Buffer.from('RF24-70\0', 'latin1');
+  const rational = (num, den) => {
+    const b = Buffer.alloc(8);
+    b.writeUInt32LE(num, 0);
+    b.writeUInt32LE(den, 4);
+    return b;
+  };
+  const fNumber = rational(28, 10); // f/2.8
+  const exposure = rational(1, 125); // 1/125 s
+  const focal = rational(24, 1); // 24 mm
+
+  // IFD0 有 5 个条目（含 Exif 子 IFD 指针），数据区从偏移 86 开始
+  const offMake = 86;
+  const offModel = offMake + make.length;
+  const offSoftware = offModel + model.length;
+  const offLens = offSoftware + software.length;
+  const offFNumber = offLens + lens.length;
+  const offExposure = offFNumber + 8;
+  const offFocal = offExposure + 8;
+  const offDate = offFocal + 8;
+  const exifIfd = offDate + date.length;
+
+  const tiff = Buffer.alloc(exifIfd + 2 + 6 * 12 + 4);
   tiff.write('II', 0, 'latin1');
   tiff.writeUInt16LE(0x2a, 2);
   tiff.writeUInt32LE(8, 4);
-  // IFD0：1 个条目，指向 Exif 子 IFD（偏移 26）
-  tiff.writeUInt16LE(1, 8);
-  tiff.writeUInt16LE(0x8769, 10);
-  tiff.writeUInt16LE(4, 12);
-  tiff.writeUInt32LE(1, 14);
-  tiff.writeUInt32LE(26, 18);
-  tiff.writeUInt32LE(0, 22);
-  // Exif IFD：DateTimeOriginal（0x9003）指向偏移 44
-  tiff.writeUInt16LE(1, 26);
-  tiff.writeUInt16LE(0x9003, 28);
-  tiff.writeUInt16LE(2, 30);
-  tiff.writeUInt32LE(date.length, 32);
-  tiff.writeUInt32LE(44, 36);
-  tiff.writeUInt32LE(0, 40);
-  date.copy(tiff, 44);
+
+  // IFD0
+  tiff.writeUInt16LE(5, 8);
+  let p = 10;
+  const entry = (tag, type, count, value) => {
+    tiff.writeUInt16LE(tag, p);
+    tiff.writeUInt16LE(type, p + 2);
+    tiff.writeUInt32LE(count, p + 4);
+    tiff.writeUInt32LE(value, p + 8);
+    p += 12;
+  };
+  entry(0x010f, 2, make.length, offMake); // Make
+  entry(0x0110, 2, model.length, offModel); // Model
+  entry(0x0131, 2, software.length, offSoftware); // Software
+  entry(0x0112, 3, 1, 6); // Orientation
+  entry(0x8769, 4, 1, exifIfd); // Exif IFD 指针
+  tiff.writeUInt32LE(0, p);
+  make.copy(tiff, offMake);
+  model.copy(tiff, offModel);
+  software.copy(tiff, offSoftware);
+  lens.copy(tiff, offLens);
+  fNumber.copy(tiff, offFNumber);
+  exposure.copy(tiff, offExposure);
+  focal.copy(tiff, offFocal);
+  date.copy(tiff, offDate);
+
+  // Exif IFD
+  tiff.writeUInt16LE(6, exifIfd);
+  let q = exifIfd + 2;
+  const exifEntry = (tag, type, count, value) => {
+    tiff.writeUInt16LE(tag, q);
+    tiff.writeUInt16LE(type, q + 2);
+    tiff.writeUInt32LE(count, q + 4);
+    tiff.writeUInt32LE(value, q + 8);
+    q += 12;
+  };
+  exifEntry(0x9003, 2, date.length, offDate); // DateTimeOriginal
+  exifEntry(0x829d, 5, 1, offFNumber); // FNumber
+  exifEntry(0x829a, 5, 1, offExposure); // ExposureTime
+  exifEntry(0x8827, 3, 1, 400); // ISO
+  exifEntry(0x920a, 5, 1, offFocal); // FocalLength
+  exifEntry(0xa434, 2, lens.length, offLens); // LensModel
+  tiff.writeUInt32LE(0, q);
 
   const payload = Buffer.concat([Buffer.from('Exif\0\0', 'latin1'), tiff]);
   const lenBuf = Buffer.alloc(2);
   lenBuf.writeUInt16BE(payload.length + 2);
   const app1 = Buffer.concat([Buffer.from([0xff, 0xe1]), lenBuf, payload]);
-  // SOF0：精度 8，高 480，宽 640，3 分量
-  const sof = Buffer.from([
-    0xff, 0xc0, 0x00, 0x11, 0x08, 0x01, 0xe0, 0x02, 0x80, 0x03, 0x01, 0x22, 0x00, 0x02, 0x11,
-    0x01, 0x03, 0x11, 0x01,
-  ]);
-  return Buffer.concat([Buffer.from([0xff, 0xd8]), app1, sof, Buffer.from([0xff, 0xd9])]);
+  // 真图作为图像体（去掉它自己的 SOI；APP1 插到 SOI 之后即可被 EXIF 解析器读到）
+  const base = Buffer.from(GRAY_JPEG_BASE64, 'base64');
+  return Buffer.concat([Buffer.from([0xff, 0xd8]), app1, base.subarray(2)]);
 }
 
 (async () => {
@@ -117,6 +178,17 @@ function buildJpegWithExif(dateStr) {
     payload: { sub: 'u3', scopes: ['photo:read', 'photo:write'] },
   });
   const other = { authorization: 'Bearer ' + otherRes.json().token };
+
+  // 关掉后台识别：本用例只验相册库 / 时间轴 / 相册，而任务队列默认串行（并发 1）。
+  // 扫描结束会自动入队 photo.ai.scan（加载模型 + 逐张识别，几十秒起），
+  // 它会堵住后面 /photo/scan/task 的断言，表现为 scan_task_done 超时。
+  // 识别链路由 smoke:photo-ai 覆盖。
+  await app.inject({
+    method: 'POST',
+    url: '/api/v1/photo/ai/config',
+    headers: bearer,
+    payload: { faceEnabled: false, placeEnabled: false },
+  });
 
   // 1. 匿名不可读
   let r = await app.inject({ method: 'GET', url: '/api/v1/photo/timeline' });
@@ -197,6 +269,81 @@ function buildJpegWithExif(dateStr) {
     list[list.length - 1].takenAt === expect2019,
     String(list[list.length - 1].takenAt),
   );
+
+  // 9b. 属性 / EXIF 面板：品牌 / 镜头 / 软件 / 方向 / ISO / 光圈 / 快门 / 焦距
+  r = await app.inject({
+    method: 'GET',
+    url: `/api/v1/photo/exif?id=${encodeURIComponent(exifItem.id)}`,
+    headers: bearer,
+  });
+  const detail = r.json();
+  check(
+    'exif_detail_shape',
+    r.statusCode === 200 &&
+      detail.make === 'Canon' &&
+      detail.camera === 'EOS R5' &&
+      detail.lens === 'RF24-70',
+    JSON.stringify(detail).slice(0, 220),
+  );
+  check(
+    'exif_detail_exposure',
+    Math.abs(Number(detail.fNumber) - 2.8) < 0.01 &&
+      Math.abs(Number(detail.exposureTimeSec) - 0.008) < 0.0005 &&
+      detail.iso === 400 &&
+      Math.abs(Number(detail.focalLengthMm) - 24) < 0.01,
+    `f=${detail.fNumber} exp=${detail.exposureTimeSec} iso=${detail.iso} focal=${detail.focalLengthMm}`,
+  );
+  check(
+    'exif_detail_meta',
+    detail.software === 'SmokeApp' &&
+      detail.orientation === 6 &&
+      detail.width === 640 &&
+      detail.height === 480,
+    `sw=${detail.software} o=${detail.orientation} ${detail.width}x${detail.height}`,
+  );
+
+  r = await app.inject({
+    method: 'GET',
+    url: `/api/v1/photo/exif?id=${encodeURIComponent(exifItem.id)}`,
+    headers: other,
+  });
+  check('exif_owner_isolation', r.statusCode === 404, 'status=' + r.statusCode);
+
+  r = await app.inject({ method: 'GET', url: '/api/v1/photo/exif?id=nope', headers: bearer });
+  check('exif_unknown_404', r.statusCode === 404, 'status=' + r.statusCode);
+
+  // 9c. OCR 全文索引：>=3 字走 FTS5 trigram，2 字回退 LIKE
+  k.handle.raw
+    .prepare('insert or replace into photo_ocr (photo_id, text, updated_at) values (?, ?, ?)')
+    .run(exifItem.id, '发票 12345', 1700000000);
+
+  r = await app.inject({
+    method: 'POST',
+    url: '/api/v1/photo/search/suggest',
+    headers: bearer,
+    payload: { q: '发票 12' },
+  });
+  const sug = r.json().items || [];
+  check(
+    'ocr_fts_match',
+    r.statusCode === 200 && sug.some((x) => x.kind === 'ocr'),
+    JSON.stringify(sug).slice(0, 140),
+  );
+
+  r = await app.inject({
+    method: 'POST',
+    url: '/api/v1/photo/search/suggest',
+    headers: bearer,
+    payload: { q: '发票' },
+  });
+  const sugShort = r.json().items || [];
+  check(
+    'ocr_short_fallback',
+    r.statusCode === 200 && sugShort.some((x) => x.kind === 'ocr'),
+    JSON.stringify(sugShort).slice(0, 140),
+  );
+
+
 
   // 10. cursor 分页
   const p1 = (await app.inject({ method: 'GET', url: '/api/v1/photo/timeline?limit=1', headers: bearer })).json();

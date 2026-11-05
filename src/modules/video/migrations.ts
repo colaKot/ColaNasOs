@@ -601,4 +601,80 @@ export const VIDEO_MIGRATIONS: Migration[] = [
         }
       },
     },
+    {
+      // 每日刮削进度快照（2026-11-04）。
+      //
+      // 为什么单独一张表而不是只留在 tasks 里：任务是「一次性执行记录」，
+      // 面板只保留最近 50 条，翻不到上周的数字；用户要的是「还剩多少要刮、
+      // 已经刮了多少」这种可对比的曲线，所以按天落一条，一天一行、当天覆盖。
+      id: '106_video_scrape_stats',
+      async up(db) {
+        await sql`
+          create table if not exists video_scrape_stats (
+            day text primary key,
+            total integer not null default 0,
+            scraped integer not null default 0,
+            unscraped integer not null default 0,
+            with_c integer not null default 0,
+            with_sub integer not null default 0,
+            no_c_no_sub integer not null default 0,
+            detail text,
+            created_at integer not null
+          )
+        `.execute(db);
+      },
+    },
+    {
+      // 全文索引（FTS5 trigram）：只覆盖原来 `like '%kw%'` 扫的列。
+      // trigram 支持中文子串，但要求查询 ≥3 个字符；1-2 字由查询侧回退 LIKE。
+      id: '130_video_fts',
+      async up(db) {
+        await sql`
+          create virtual table if not exists video_items_fts using fts5(
+            title, rel_path, nfo_name, nfo_original_name, code, nfo_actors, nfo_directors,
+            content='video_items',
+            content_rowid='rowid',
+            tokenize='trigram'
+          )
+        `.execute(db);
+
+        await sql`
+          create trigger if not exists video_items_fts_ai after insert on video_items begin
+            insert into video_items_fts
+              (rowid, title, rel_path, nfo_name, nfo_original_name, code, nfo_actors, nfo_directors)
+            values
+              (new.rowid, new.title, new.rel_path, new.nfo_name, new.nfo_original_name,
+               new.code, new.nfo_actors, new.nfo_directors);
+          end
+        `.execute(db);
+        await sql`
+          create trigger if not exists video_items_fts_ad after delete on video_items begin
+            insert into video_items_fts
+              (video_items_fts, rowid, title, rel_path, nfo_name, nfo_original_name,
+               code, nfo_actors, nfo_directors)
+            values
+              ('delete', old.rowid, old.title, old.rel_path, old.nfo_name, old.nfo_original_name,
+               old.code, old.nfo_actors, old.nfo_directors);
+          end
+        `.execute(db);
+        await sql`
+          create trigger if not exists video_items_fts_au after update on video_items begin
+            insert into video_items_fts
+              (video_items_fts, rowid, title, rel_path, nfo_name, nfo_original_name,
+               code, nfo_actors, nfo_directors)
+            values
+              ('delete', old.rowid, old.title, old.rel_path, old.nfo_name, old.nfo_original_name,
+               old.code, old.nfo_actors, old.nfo_directors);
+            insert into video_items_fts
+              (rowid, title, rel_path, nfo_name, nfo_original_name, code, nfo_actors, nfo_directors)
+            values
+              (new.rowid, new.title, new.rel_path, new.nfo_name, new.nfo_original_name,
+               new.code, new.nfo_actors, new.nfo_directors);
+          end
+        `.execute(db);
+
+        // 已有数据一次性回填（8k 级只在这一刻花一次；之后由触发器增量维护）
+        await sql`insert into video_items_fts(video_items_fts) values('rebuild')`.execute(db);
+      },
+    },
 ];

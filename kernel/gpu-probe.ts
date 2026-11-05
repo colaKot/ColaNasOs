@@ -80,9 +80,23 @@ class GpuProbe {
     this.lastTouch = Date.now();
     this.ensureStarted();
     this.ensureJanitor();
-    const s = this.sample;
-    if (!s || Date.now() - s.at > SAMPLE_STALE_MS) return null;
     const st = this.statics;
+    const s = this.sample;
+    // 静态信息（名字 / 驱动 / 显存）来自注册表，比第一次采样早 ~1s 到。
+    // 只认采样的话，刚打开页面那一下会显示「未检测到」，而详情页过两秒又有了 ——
+    // 看起来像两处逻辑不一致（2026-11-03 反馈）。
+    const placeholder = (): GpuInfo | null =>
+      st
+        ? {
+            name: st.name,
+            driverVersion: st.driverVersion,
+            usagePercent: 0,
+            memUsed: 0,
+            memTotal: st.memTotal,
+          }
+        : null;
+    if (!s) return placeholder();
+    if (Date.now() - s.at > SAMPLE_STALE_MS) return placeholder();
     return {
       name: st?.name || 'GPU',
       driverVersion: st?.driverVersion || '',

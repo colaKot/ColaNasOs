@@ -1,7 +1,7 @@
 import { sql } from 'kysely';
 import { secured } from '../../../../kernel/route';
 import { Err } from '../../../../kernel/errors';
-import { TAG } from '../util';
+import { TAG, newId } from '../util';
 import type { FastifyInstance } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { BookHelpers } from '../helpers';
@@ -120,6 +120,13 @@ export async function registerBookFavorites(app: FastifyInstance, k: KernelApi, 
             position = excluded.position,
             percent = excluded.percent,
             updated_at = excluded.updated_at
+        `.execute(k.db);
+
+        // 阅读历史：每本书只留最新一条（同一本书反复读不在历史里刷屏）
+        await sql`delete from book_history where book_id = ${row.id} and owner_id = ${owner}`.execute(k.db);
+        await sql`
+          insert into book_history (id, book_id, owner_id, read_at)
+          values (${newId()}, ${row.id}, ${owner}, ${now})
         `.execute(k.db);
 
         return {

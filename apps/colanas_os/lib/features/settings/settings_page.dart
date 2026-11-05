@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+
+import '../../shell/app_widgets.dart';
+
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
@@ -9,11 +13,16 @@ import '../../core/app_settings.dart';
 import '../../core/i18n_setup.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
+import 'help_page.dart';
 import 'style_preview_page.dart';
+import '../../shell/mobile_frame.dart';
+import '../../shell/app_nav_shell.dart';
 
-/// 设置（配置中心）：服务器 / 主机名 / 欢迎语 / 代理在前，外观 / 语言 / 维护 / 关于在后。
+/// 设置（配置中心）：左侧二级导航分四组 —— 服务器（服务器配置 + 服务与账号）、
+/// 外观（外观 + 语言）、日志（服务端日志）、其他（索引维护 + 关于）。
 ///
-/// 媒体库管理已按参考实现移到各模块（相册来源 / 影视库管理 / 音乐库管理 / 书房）。
+/// 媒体库管理已按参考实现移到各模块（相册来源 / 影视库管理 / 音乐库管理 / 书房），
+/// 设置页不再放「媒体库」栏目。
 /// 服务器相关区块需要 `system:read` / `system:write`，无权限时显示明确提示。
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -31,34 +40,73 @@ class _SettingsPageState extends State<SettingsPage> {
   final _proxyCtrl = TextEditingController();
   final _httpsPortCtrl = TextEditingController(text: '8443');
 
-
   String _activeProxy = '';
   bool _loadingServer = true;
   bool _serverForbidden = false;
   String? _serverError;
   bool _savingServer = false;
   bool _proxyEnabled = false;
-  bool _javFallback = false;
   bool _httpsEnabled = false;
   SystemTlsInfoResponse? _tls;
 
   SystemCacheInfoResponse? _cache;
   bool _cacheLoading = true;
   bool _clearingCache = false;
+  bool _compactingDb = false;
 
   String? _updateText;
   bool _checkingUpdate = false;
   bool _restarting = false;
+
+  /// 二级导航当前分组：server / appearance / logs / other
+  String _tab = _initialTab();
+
+  static const _tabs = {'server', 'appearance', 'logs', 'other'};
+
+  static String _initialTab() {
+    final saved = SettingsStore.instance.getString('ui.settings.tab');
+    return saved != null && _tabs.contains(saved) ? saved : 'server';
+  }
+
+  /// 二级导航收起状态（沿用各模块一致的持久化键）
+  bool _navCollapsed =
+      SettingsStore.instance.getBool('ui.nav.collapsed.settings') ?? false;
+
+  SystemLogsResponse? _logs;
+  bool _logsLoading = false;
+  String? _logsError;
+  bool _logsAuto = false;
+  Timer? _logsTimer;
+
+  /// 日志级别筛选：errorWarn（默认）/ error / warn / info
+  String _logsLevel = 'errorWarn';
+
+  bool _levelVisible(String level) {
+    final isError = level == 'error' || level == 'fatal';
+    final isWarn = level == 'warn';
+    switch (_logsLevel) {
+      case 'error':
+        return isError;
+      case 'warn':
+        return isWarn;
+      case 'info':
+        return !isError && !isWarn;
+      default:
+        return isError || isWarn;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _loadServer();
     _loadCache();
+    if (_tab == 'logs') _loadLogs();
   }
 
   @override
   void dispose() {
+    _logsTimer?.cancel();
     _urlCtrl.dispose();
     _portCtrl.dispose();
     _concurrencyCtrl.dispose();
@@ -85,7 +133,6 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!mounted) return;
       final s = res.settings;
       setState(() {
-
         _activeProxy = res.activeProxy;
         _portCtrl.text = '${s.httpPort}';
         _concurrencyCtrl.text = '${s.apiConcurrency}';
@@ -93,7 +140,6 @@ class _SettingsPageState extends State<SettingsPage> {
         _welcomeCtrl.text = s.welcome;
         _proxyCtrl.text = s.proxy;
         _proxyEnabled = s.proxy.isNotEmpty;
-        _javFallback = s.javFallback;
         _httpsEnabled = s.httpsEnabled;
         _httpsPortCtrl.text = '${s.httpsPort}';
         _loadingServer = false;
@@ -129,20 +175,16 @@ class _SettingsPageState extends State<SettingsPage> {
           hostname: _hostnameCtrl.text.trim(),
           welcome: _welcomeCtrl.text.trim(),
           proxy: _proxyEnabled ? _proxyCtrl.text.trim() : '',
-          javFallback: _javFallback,
         ),
       );
       if (!mounted) return;
       setState(() {
-
         _activeProxy = res.activeProxy;
         _proxyCtrl.text = res.settings.proxy;
       });
-      messenger.showSnackBar(SnackBar(content: Text(tr('settings.saved'))));
+      NasSnack.showOn(messenger, tr('settings.saved'));
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('common.saveFailed', {'error': '${_hint(e) ?? e}'}))),
-      );
+      NasSnack.showOn(messenger, tr('common.saveFailed', {'error': '${_hint(e) ?? e}'}));
     } finally {
       if (mounted) setState(() => _savingServer = false);
     }
@@ -174,13 +216,9 @@ class _SettingsPageState extends State<SettingsPage> {
         _tls = info;
         _httpsPortCtrl.text = '${info.port}';
       });
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('settings.tlsUploaded'))),
-      );
+      NasSnack.showOn(messenger, tr('settings.tlsUploaded'));
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('common.saveFailed', {'error': '${_hint(e) ?? e}'}))),
-      );
+      NasSnack.showOn(messenger, tr('common.saveFailed', {'error': '${_hint(e) ?? e}'}));
     }
   }
 
@@ -193,7 +231,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!mounted) return;
       setState(() => _tls = info);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -212,15 +250,83 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  void _selectTab(String id) {
+    if (_tab == id) return;
+    final leavingLogs = _tab == 'logs';
+    setState(() => _tab = id);
+    SettingsStore.instance.setString('ui.settings.tab', id);
+    if (id == 'logs') {
+      _loadLogs();
+      if (_logsAuto) _startLogsTimer();
+    } else if (leavingLogs) {
+      _logsTimer?.cancel();
+      _logsTimer = null;
+    }
+  }
+
+  void _toggleNavCollapsed() {
+    setState(() => _navCollapsed = !_navCollapsed);
+    SettingsStore.instance.setBool('ui.nav.collapsed.settings', _navCollapsed);
+  }
+
+  Future<void> _loadLogs() async {
+    if (!mounted) return;
+    setState(() {
+      _logsLoading = true;
+      _logsError = null;
+    });
+    try {
+      // 级别过滤交给服务端做（在截断之前筛）：请求日志一秒几十条，
+      // 只取最后 200 行再在前端筛，错误几乎全被 info 挤出窗口
+      final res = await ApiSession.instance.client.systemLogs(
+        lines: 200,
+        level: switch (_logsLevel) {
+          'error' => 'error',
+          'info' => 'info',
+          _ => 'warn', // errorWarn：warn + error/fatal
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _logs = res;
+        _logsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _logsError = _hint(e) ?? '$e';
+        _logsLoading = false;
+      });
+    }
+  }
+
+  void _startLogsTimer() {
+    _logsTimer?.cancel();
+    _logsTimer = Timer.periodic(const Duration(seconds: 5), (_) => _loadLogs());
+  }
+
+  void _setLogsAuto(bool on) {
+    setState(() => _logsAuto = on);
+    if (on) {
+      _loadLogs();
+      _startLogsTimer();
+    } else {
+      _logsTimer?.cancel();
+      _logsTimer = null;
+    }
+  }
+
   Future<void> _clearCache() async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(tr('settings.cacheClear')),
-        content: Text(tr('settings.cacheUsage', {
-          'size': formatBytes(_cache?.bytes ?? 0),
-          'files': '${_cache?.files ?? 0}',
-        })),
+        content: Text(
+          tr('settings.cacheUsage', {
+            'size': formatBytes(_cache?.bytes ?? 0),
+            'files': '${_cache?.files ?? 0}',
+          }),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -240,15 +346,50 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final res = await ApiSession.instance.client.systemCacheClear();
       await _loadCache();
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('settings.cacheCleared', {'size': formatBytes(res.freedBytes)}))),
-      );
+      NasSnack.showOn(messenger, 
+            tr('settings.cacheCleared', {'size': formatBytes(res.freedBytes)}),
+          );
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('common.errorWith', {'error': '${_hint(e) ?? e}'}))),
-      );
+      NasSnack.showOn(messenger, tr('common.errorWith', {'error': '${_hint(e) ?? e}'}));
     } finally {
       if (mounted) setState(() => _clearingCache = false);
+    }
+  }
+
+  Future<void> _compactDb() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('settings.dbCompact')),
+        content: Text(tr('settings.dbCompactHint')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('settings.dbCompact')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    if (!mounted) return;
+    setState(() => _compactingDb = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final res = await ApiSession.instance.client.systemDbCompact();
+      if (!mounted) return;
+      NasSnack.showOn(
+        messenger,
+        tr('settings.dbCompacted', {'size': formatBytes(res.freedBytes)}),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      NasSnack.showOn(messenger, tr('common.errorWith', {'error': '${_hint(e) ?? e}'}));
+    } finally {
+      if (mounted) setState(() => _compactingDb = false);
     }
   }
 
@@ -276,13 +417,11 @@ class _SettingsPageState extends State<SettingsPage> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ApiSession.instance.client.systemRestart();
-      messenger.showSnackBar(SnackBar(content: Text(tr('settings.restarting'))));
+      NasSnack.showOn(messenger, tr('settings.restarting'));
     } catch (e) {
       if (!mounted) return;
       setState(() => _restarting = false);
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('common.errorWith', {'error': '${_hint(e) ?? e}'}))),
-      );
+      NasSnack.showOn(messenger, tr('common.errorWith', {'error': '${_hint(e) ?? e}'}));
     }
   }
 
@@ -293,7 +432,9 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!mounted) return;
       setState(() {
         _updateText = res.hasUpdate
-            ? tr('settings.updateAvailable', {'version': '${res.latestVersion}'})
+            ? tr('settings.updateAvailable', {
+                'version': '${res.latestVersion}',
+              })
             : tr('settings.updateNone');
         _checkingUpdate = false;
       });
@@ -311,9 +452,9 @@ class _SettingsPageState extends State<SettingsPage> {
     if (url.isEmpty) return;
     ApiSession.instance.configure(url);
     _urlCtrl.text = ApiSession.instance.baseUrl;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(tr('settings.switched', {'url': ApiSession.instance.baseUrl}))),
-    );
+    NasSnack.show(context, 
+          tr('settings.switched', {'url': ApiSession.instance.baseUrl}),
+        );
   }
 
   Widget _section(String title, List<Widget> children) {
@@ -338,13 +479,14 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _serverSection() {
     if (_loadingServer) {
-      return _section(tr('settings.server'), [
-        const LinearProgressIndicator(),
-      ]);
+      return _section(tr('settings.server'), [const LinearProgressIndicator()]);
     }
     if (_serverForbidden) {
       return _section(tr('settings.server'), [
-        Text(tr('settings.needAdmin'), style: TextStyle(color: context.nasTextSecondary)),
+        Text(
+          tr('settings.needAdmin'),
+          style: TextStyle(color: context.nasTextSecondary),
+        ),
       ]);
     }
     if (_serverError != null) {
@@ -362,7 +504,10 @@ class _SettingsPageState extends State<SettingsPage> {
             child: TextField(
               controller: _portCtrl,
               keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: tr('settings.port'), isDense: true),
+              decoration: InputDecoration(
+                labelText: tr('settings.port'),
+                isDense: true,
+              ),
             ),
           ),
           const SizedBox(width: NasTokens.spaceSm),
@@ -371,7 +516,10 @@ class _SettingsPageState extends State<SettingsPage> {
             child: TextField(
               controller: _concurrencyCtrl,
               keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: tr('settings.concurrency'), isDense: true),
+              decoration: InputDecoration(
+                labelText: tr('settings.concurrency'),
+                isDense: true,
+              ),
             ),
           ),
         ],
@@ -379,18 +527,29 @@ class _SettingsPageState extends State<SettingsPage> {
       const SizedBox(height: NasTokens.spaceXs),
       Text(
         tr('settings.restartHint'),
-        style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+        style: TextStyle(
+          fontSize: NasTokens.fontCaption,
+          color: context.nasTextSecondary,
+        ),
       ),
       const SizedBox(height: NasTokens.spaceSm),
       TextField(
         controller: _hostnameCtrl,
         maxLength: 10,
-        decoration: InputDecoration(labelText: tr('settings.hostname'), helperText: tr('settings.hostnameHint'), isDense: true),
+        decoration: InputDecoration(
+          labelText: tr('settings.hostname'),
+          helperText: tr('settings.hostnameHint'),
+          isDense: true,
+        ),
       ),
       TextField(
         controller: _welcomeCtrl,
         maxLength: 100,
-        decoration: InputDecoration(labelText: tr('settings.welcome'), helperText: tr('settings.welcomeHint'), isDense: true),
+        decoration: InputDecoration(
+          labelText: tr('settings.welcome'),
+          helperText: tr('settings.welcomeHint'),
+          isDense: true,
+        ),
       ),
       const Divider(height: 1),
       SwitchListTile(
@@ -434,7 +593,7 @@ class _SettingsPageState extends State<SettingsPage> {
       Text(
         _tls?.hasCert == true
             ? '${tr('settings.tlsSubject', {'subject': _tls!.subject})}\n'
-                '${tr('settings.tlsValid', {'from': _tls!.validFrom, 'to': _tls!.validTo})}'
+                  '${tr('settings.tlsValid', {'from': _tls!.validFrom, 'to': _tls!.validTo})}'
             : tr('settings.tlsNone'),
         style: TextStyle(
           fontSize: NasTokens.fontCaption,
@@ -462,24 +621,16 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       const SizedBox(height: NasTokens.spaceXs),
-Text(
+      Text(
         _activeProxy.isEmpty
             ? tr('settings.proxyOff')
             : tr('settings.proxyActive', {'proxy': _activeProxy}),
-        style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
-      ),
-      const SizedBox(height: NasTokens.spaceSm),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        dense: true,
-        title: Text(tr('settings.javFallback')),
-        subtitle: Text(
-          tr('settings.javFallbackHint'),
-          style: TextStyle(fontSize: NasTokens.fontCaption),
+        style: TextStyle(
+          fontSize: NasTokens.fontCaption,
+          color: context.nasTextSecondary,
         ),
-        value: _javFallback,
-        onChanged: (v) => setState(() => _javFallback = v),
       ),
+
       const SizedBox(height: NasTokens.spaceSm),
       Align(
         alignment: Alignment.centerLeft,
@@ -568,7 +719,7 @@ Text(
           runSpacing: NasTokens.spaceXs,
           children: [
             for (final option in NasColorSchemes.options)
-              ChoiceChip(
+              NasChip(
                 label: Text(option.label),
                 selected: option.id == id,
                 avatar: CircleAvatar(backgroundColor: option.color, radius: 8),
@@ -587,7 +738,7 @@ Text(
               style: TextStyle(color: context.nasTextSecondary),
             ),
             const SizedBox(width: NasTokens.spaceSm),
-            DropdownButton<String>(
+            NasDropdown<String>(
               value: id,
               items: [
                 for (final skin in NasSkins.options)
@@ -613,7 +764,7 @@ Text(
           runSpacing: NasTokens.spaceXs,
           children: [
             for (final font in NasFonts.ids)
-              ChoiceChip(
+              NasChip(
                 label: Text(tr('settings.font.$font')),
                 selected: font == id,
                 onSelected: (_) => AppSettings.instance.setFont(font),
@@ -634,7 +785,7 @@ Text(
           runSpacing: NasTokens.spaceXs,
           children: [
             for (final option in NasStyles.options)
-              ChoiceChip(
+              NasChip(
                 label: Text(tr('style.${option.id}')),
                 selected: option.id == id,
                 onSelected: (_) => AppSettings.instance.setStyle(option.id),
@@ -667,7 +818,7 @@ Text(
     return _section(tr('settings.language'), [
       ValueListenableBuilder<int>(
         valueListenable: i18nRevision,
-        builder: (context, _, _) => DropdownButton<String>(
+        builder: (context, _, _) => NasDropdown<String>(
           value: I18n.instance.locale,
           items: [
             for (final locale in supportedLocales)
@@ -710,7 +861,9 @@ Text(
       ),
       const SizedBox(height: NasTokens.spaceSm),
       Text(
-        tr('settings.account', {'name': ApiSession.instance.username ?? tr('settings.notLoggedIn')}),
+        tr('settings.account', {
+          'name': ApiSession.instance.username ?? tr('settings.notLoggedIn'),
+        }),
         style: TextStyle(color: context.nasTextSecondary),
       ),
     ]);
@@ -718,6 +871,28 @@ Text(
 
   Widget _maintenance() {
     return _section(tr('ui.settings.h59156f'), [
+      InkWell(
+        borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const HelpPage()),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceSm),
+          child: Row(
+            children: [
+              const Icon(Icons.help_outline, size: 20),
+              const SizedBox(width: NasTokens.spaceSm),
+              Expanded(child: Text(tr('help.title'))),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: context.nasTextSecondary,
+              ),
+            ],
+          ),
+        ),
+      ),
+      const Divider(height: 1),
       Row(
         children: [
           Expanded(
@@ -732,7 +907,10 @@ Text(
                           'size': formatBytes(_cache?.bytes ?? 0),
                           'files': '${_cache?.files ?? 0}',
                         }),
-                  style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+                  style: TextStyle(
+                    fontSize: NasTokens.fontCaption,
+                    color: context.nasTextSecondary,
+                  ),
                 ),
               ],
             ),
@@ -740,7 +918,37 @@ Text(
           OutlinedButton.icon(
             onPressed: _clearingCache ? null : _clearCache,
             icon: const Icon(Icons.cleaning_services_outlined, size: 18),
-            label: Text(_clearingCache ? tr('common.loading') : tr('settings.cacheClear')),
+            label: Text(
+              _clearingCache ? tr('common.loading') : tr('settings.cacheClear'),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: NasTokens.spaceSm),
+      Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tr('settings.dbCompact')),
+                Text(
+                  tr('settings.dbCompactHint'),
+                  style: TextStyle(
+                    fontSize: NasTokens.fontCaption,
+                    color: context.nasTextSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: NasTokens.spaceSm),
+          OutlinedButton.icon(
+            onPressed: _compactingDb ? null : _compactDb,
+            icon: const Icon(Icons.storage_outlined, size: 18),
+            label: Text(
+              _compactingDb ? tr('common.loading') : tr('settings.dbCompact'),
+            ),
           ),
         ],
       ),
@@ -756,7 +964,9 @@ Text(
           OutlinedButton.icon(
             onPressed: _restarting ? null : _restart,
             icon: const Icon(Icons.restart_alt, size: 18),
-            label: Text(_restarting ? tr('settings.restarting') : tr('settings.restart')),
+            label: Text(
+              _restarting ? tr('settings.restarting') : tr('settings.restart'),
+            ),
           ),
         ],
       ),
@@ -774,25 +984,194 @@ Text(
     ]);
   }
 
+  String _formatLogTime(String iso) {
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return '';
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(dt.hour)}:${two(dt.minute)}:${two(dt.second)}';
+  }
+
+  Widget _logRow(Map<String, dynamic> entry) {
+    final level = '${entry['level'] ?? 'info'}';
+    final time = _formatLogTime('${entry['time'] ?? ''}');
+    final msg = '${entry['msg'] ?? ''}';
+    final color = switch (level) {
+      'error' || 'fatal' => context.nasDanger,
+      'warn' => context.nasWarning,
+      _ => context.nasTextSecondary,
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (time.isNotEmpty)
+            SizedBox(
+              width: 64,
+              child: Text(
+                time,
+                style: TextStyle(
+                  fontSize: NasTokens.fontCaption,
+                  color: context.nasTextSecondary,
+                ),
+              ),
+            ),
+          SizedBox(
+            width: 46,
+            child: Text(
+              level.toUpperCase(),
+              style: TextStyle(
+                fontSize: NasTokens.fontMicro,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              msg,
+              style: const TextStyle(fontSize: NasTokens.fontCaption),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _logsSection() {
+    final all = _logs?.lines ?? const <Map<String, dynamic>>[];
+    final entries = all
+        .where((e) => _levelVisible('${e['level'] ?? 'info'}'))
+        .toList();
+    return _section(tr('settings.nav.logs'), [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              _logs == null
+                  ? ''
+                  : '${_logs!.file} · ${formatBytes(_logs!.size)}',
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: context.nasTextSecondary,
+              ),
+            ),
+          ),
+          if (_logs?.truncated == true)
+            Text(
+              tr('settings.logsTruncated', {'lines': '${all.length}'}),
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: context.nasTextSecondary,
+              ),
+            ),
+        ],
+      ),
+      const SizedBox(height: NasTokens.spaceSm),
+      SizedBox(
+        width: 200,
+        child: NasDropdown<String>(
+          initialValue: _logsLevel,
+          isDense: true,
+          decoration: InputDecoration(
+            labelText: tr('settings.logsFilter'),
+            isDense: true,
+          ),
+          items: [
+            DropdownMenuItem(
+              value: 'errorWarn',
+              child: Text(tr('settings.logsLevelErrorWarn')),
+            ),
+            DropdownMenuItem(
+              value: 'error',
+              child: Text(tr('settings.logsLevelError')),
+            ),
+            DropdownMenuItem(
+              value: 'warn',
+              child: Text(tr('settings.logsLevelWarn')),
+            ),
+            DropdownMenuItem(
+              value: 'info',
+              child: Text(tr('settings.logsLevelInfo')),
+            ),
+          ],
+          onChanged: (v) {
+            if (v != null) setState(() => _logsLevel = v);
+          },
+        ),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        secondary: const Icon(Icons.autorenew_outlined),
+        title: Text(tr('settings.logsAutoRefresh')),
+        value: _logsAuto,
+        onChanged: _setLogsAuto,
+      ),
+      const Divider(height: 1),
+      if (_logsLoading)
+        const Padding(
+          padding: EdgeInsets.only(top: NasTokens.spaceSm),
+          child: LinearProgressIndicator(),
+        ),
+      if (_logsError != null) ...[
+        const SizedBox(height: NasTokens.spaceSm),
+        Text(_logsError!, style: TextStyle(color: context.nasDanger)),
+        const SizedBox(height: NasTokens.spaceSm),
+        OutlinedButton(onPressed: _loadLogs, child: Text(tr('common.retry'))),
+      ] else if (entries.isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: NasTokens.spaceSm),
+          child: Text(
+            _logsLoading ? tr('common.loading') : tr('settings.logsEmpty'),
+            style: TextStyle(color: context.nasTextSecondary),
+          ),
+        )
+      else
+        Container(
+          margin: const EdgeInsets.only(top: NasTokens.spaceSm),
+          padding: const EdgeInsets.all(NasTokens.spaceSm),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest
+                .withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+          ),
+          child: SelectionArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [for (final entry in entries) _logRow(entry)],
+            ),
+          ),
+        ),
+    ]);
+  }
+
   Future<void> _reindexBook() async {
     try {
       final res = await ApiSession.instance.client.bookFulltextReindex(
         body: const BookFulltextReindexBody(),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('settings.reindexDone', {'indexed': '${res.indexed}', 'skipped': '${res.skipped}'}))),
-      );
+      NasSnack.show(context, 
+            tr('settings.reindexDone', {
+              'indexed': '${res.indexed}',
+              'skipped': '${res.skipped}',
+            }),
+          );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('settings.rebuildFailed', {'error': '${_hint(e) ?? e}'}))));
+      NasSnack.show(context, 
+            tr('settings.rebuildFailed', {'error': '${_hint(e) ?? e}'}),
+          );
     }
   }
 
   Widget _about() {
     return _section(tr('settings.about'), [
-      Text(tr('settings.version', {'version': '1.0.0'}), style: Theme.of(context).textTheme.bodyLarge),
+      Text(
+        tr('settings.version', {'version': '1.0.0'}),
+        style: Theme.of(context).textTheme.bodyLarge,
+      ),
       const SizedBox(height: NasTokens.spaceXs),
       Text(
         tr('ui.settings.h4b0e3b'),
@@ -806,7 +1185,9 @@ Text(
           OutlinedButton.icon(
             onPressed: _checkingUpdate ? null : _checkUpdate,
             icon: const Icon(Icons.system_update_alt, size: 18),
-            label: Text(_checkingUpdate ? tr('common.loading') : tr('settings.update')),
+            label: Text(
+              _checkingUpdate ? tr('common.loading') : tr('settings.update'),
+            ),
           ),
           OutlinedButton.icon(
             onPressed: () => ApiSession.instance.logout(),
@@ -819,7 +1200,10 @@ Text(
         const SizedBox(height: NasTokens.spaceXs),
         Text(
           _updateText!,
-          style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+          style: TextStyle(
+            fontSize: NasTokens.fontCaption,
+            color: context.nasTextSecondary,
+          ),
         ),
       ],
       const SizedBox(height: NasTokens.spaceMd),
@@ -829,43 +1213,153 @@ Text(
       ),
       Text(
         tr('settings.legalHint'),
-        style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+        style: TextStyle(
+          fontSize: NasTokens.fontCaption,
+          color: context.nasTextSecondary,
+        ),
       ),
     ]);
   }
 
+  void _refreshCurrent() {
+    if (_tab == 'logs') {
+      _loadLogs();
+      return;
+    }
+    if (_tab == 'appearance') return;
+    if (_tab == 'other') {
+      _loadCache();
+      return;
+    }
+    _loadServer();
+  }
+
+  /// 当前分组的内容（二级导航只换这里，不重建整页）
+  List<Widget> _tabChildren() {
+    switch (_tab) {
+      case 'appearance':
+        return [
+          _appearance(),
+          _language(),
+          const SizedBox(height: NasTokens.spaceLg),
+        ];
+      case 'logs':
+        return [_logsSection(), const SizedBox(height: NasTokens.spaceLg)];
+      case 'other':
+        return [
+          _maintenance(),
+          _about(),
+          const SizedBox(height: NasTokens.spaceLg),
+        ];
+      default:
+        return [
+          _serverSection(),
+          _connection(),
+          const SizedBox(height: NasTokens.spaceLg),
+        ];
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(tr('ui.settings.017')),
+    final content = ListView(
+      padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceSm),
+      children: _tabChildren(),
+    );
+    final tabs = <NasTabItem>[
+      NasTabItem(
+        id: 'server',
+        label: tr('settings.nav.server'),
+        icon: Icons.dns_outlined,
+      ),
+      NasTabItem(
+        id: 'appearance',
+        label: tr('settings.nav.appearance'),
+        icon: Icons.palette_outlined,
+      ),
+      NasTabItem(
+        id: 'logs',
+        label: tr('settings.nav.logs'),
+        icon: Icons.receipt_long_outlined,
+      ),
+      NasTabItem(
+        id: 'other',
+        label: tr('settings.nav.other'),
+        icon: Icons.tune_outlined,
+      ),
+    ];
+
+    // 手机端：设置的 4 个分区从左侧栏搬到下方
+    if (isCompactWidth(context)) {
+      return NasAppScaffold(
+        title: tr('ui.settings.017'),
+        onHome: AppNavShell.onExitToHome,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: tr('ui.settings.018'),
-            onPressed: () {
-              _loadServer();
-              _loadCache();
-            },
+          NasMobileAction(
+            icon: Icons.refresh,
+            tooltip: tr('common.refresh'),
+            onPressed: _refreshCurrent,
+          ),
+        ],
+        items: tabs,
+        selectedId: _tab,
+        onSelect: _selectTab,
+        body: content,
+      );
+    }
+
+    return Scaffold(
+      appBar: nasPageAppBar(
+        context,
+        title: tr('ui.settings.017'),
+        actions: [
+          NasRefreshButton(
+            tooltip: tr('common.refresh'),
+            onPressed: _refreshCurrent,
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceSm),
+      body: Row(
         children: [
-          _serverSection(),
-          _appearance(),
-          _language(),
-          _connection(),
-          _maintenance(),
-          _section(tr('settings.mediaSection'), [
-            Text(
-              tr('settings.librariesMoved'),
-              style: TextStyle(color: context.nasTextSecondary),
-            ),
-          ]),
-          _about(),
-          const SizedBox(height: NasTokens.spaceLg),
+          NasSideNav(
+            groups: [
+              NasNavGroup(
+                entries: [
+                  NasNavEntry(
+                    id: 'server',
+                    label: tr('settings.nav.server'),
+                    icon: Icons.dns_outlined,
+                  ),
+                  NasNavEntry(
+                    id: 'appearance',
+                    label: tr('settings.nav.appearance'),
+                    icon: Icons.palette_outlined,
+                  ),
+                  NasNavEntry(
+                    id: 'logs',
+                    label: tr('settings.nav.logs'),
+                    icon: Icons.receipt_long_outlined,
+                  ),
+                  NasNavEntry(
+                    id: 'other',
+                    label: tr('settings.nav.other'),
+                    icon: Icons.tune_outlined,
+                  ),
+                ],
+              ),
+            ],
+            selectedId: _tab,
+            onSelect: _selectTab,
+            width: _navCollapsed ? 56 : 128,
+            iconOnly: _navCollapsed,
+            title: tr('ui.settings.017'),
+            onToggleCollapsed: _toggleNavCollapsed,
+            expandTooltip: tr('nav.expand'),
+            collapseTooltip: tr('nav.collapse'),
+            debugLabel: 'settings',
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(child: content),
         ],
       ),
     );

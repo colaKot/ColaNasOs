@@ -11,10 +11,14 @@ import '../../core/session.dart';
 /// 而"年度回顾"是另一套独立的年度报告页。这里补的是**浏览用的时间刻度**：
 /// 先看哪年有东西，再看哪个月有东西，点下去时间轴就缩到那个区间。
 class PhotoYearViewPage extends StatefulWidget {
-  const PhotoYearViewPage({super.key, required this.onPick});
+  const PhotoYearViewPage({super.key, required this.onPick, this.embedded = false});
 
   /// 选中后回调；month 为 null 表示整年
   final void Function(int year, int? month) onPick;
+
+  /// 作为 tab 内容（而不是 push 的整页）时不包 Scaffold/AppBar：
+  /// 顶栏由外层的 `NasAppScaffold` 提供，返回也交给调用方处理。
+  final bool embedded;
 
   @override
   State<PhotoYearViewPage> createState() => _PhotoYearViewPageState();
@@ -30,7 +34,7 @@ class _PhotoYearViewPageState extends State<PhotoYearViewPage> {
 
   bool _loading = true;
   String? _error;
-  List<({int year, int count})> _years = const [];
+  List<PhotoYearCover> _years = const [];
   int? _selectedYear;
   PhotoCalendarResponse? _calendar;
   bool _loadingCalendar = false;
@@ -47,15 +51,14 @@ class _PhotoYearViewPageState extends State<PhotoYearViewPage> {
       _error = null;
     });
     try {
-      final res = await ApiSession.instance.client.photoStats();
+      // /photo/year-covers 每年给一张「有人像」的代表图（服务端优先取
+      // 最常出现的 3 个人所在的照片），而不是「该年最新一张」那种风景图。
+      final res = await ApiSession.instance.client.photoYearCovers();
       final maxYear = DateTime.now().year + 1;
-      final years = <({int year, int count})>[];
-      for (final e in res.byYear) {
-        final y = (e['year'] as num?)?.toInt() ?? 0;
-        final c = (e['count'] as num?)?.toInt() ?? 0;
-        if (y >= 1970 && y <= maxYear && c > 0) years.add((year: y, count: c));
-      }
-      years.sort((a, b) => b.year.compareTo(a.year));
+      final years = res.years
+          .where((y) => y.year >= 1970 && y.year <= maxYear && y.count > 0)
+          .toList()
+        ..sort((a, b) => b.year.compareTo(a.year));
       if (!mounted) return;
       setState(() {
         _years = years;
@@ -94,12 +97,59 @@ class _PhotoYearViewPageState extends State<PhotoYearViewPage> {
 
   void _pick(int year, int? month) {
     widget.onPick(year, month);
+    if (widget.embedded) {
+      // 内嵌时没有路由可 pop：收回年份列表，等调用方切走
+      setState(() => _selectedYear = null);
+      return;
+    }
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final year = _selectedYear;
+    final body = _loading
+        ? const NasLoading()
+        : _error != null
+        ? NasErrorState(message: _error!, onRetry: _loadYears)
+        : year == null
+        ? _yearGrid()
+        : _monthGrid(year);
+
+    if (widget.embedded) {
+      return Column(
+        children: [
+          if (year != null)
+            SizedBox(
+              height: 48,
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: tr('photo.yearView.title'),
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => setState(() => _selectedYear = null),
+                  ),
+                  Text(
+                    '$year',
+                    style: TextStyle(
+                      fontSize: NasTokens.fontSubtitle,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => _pick(year, null),
+                    child: Text(tr('photo.yearView.wholeYear')),
+                  ),
+                  const SizedBox(width: NasTokens.spaceXs),
+                ],
+              ),
+            ),
+          Expanded(child: body),
+        ],
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(year == null ? tr('photo.yearView.title') : '$year'),
@@ -118,13 +168,7 @@ class _PhotoYearViewPageState extends State<PhotoYearViewPage> {
             ),
         ],
       ),
-      body: _loading
-          ? const NasLoading()
-          : _error != null
-          ? NasErrorState(message: _error!, onRetry: _loadYears)
-          : year == null
-          ? _yearGrid()
-          : _monthGrid(year),
+      body: body,
     );
   }
 
@@ -136,6 +180,7 @@ class _PhotoYearViewPageState extends State<PhotoYearViewPage> {
         icon: Icons.calendar_view_month,
       );
     }
+    final scheme = Theme.of(context).colorScheme;
     return GridView.builder(
       padding: const EdgeInsets.all(NasTokens.spaceMd),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -147,37 +192,73 @@ class _PhotoYearViewPageState extends State<PhotoYearViewPage> {
       itemCount: _years.length,
       itemBuilder: (context, i) {
         final y = _years[i];
+        final cover = y.coverPath ?? '';
         return InkWell(
           borderRadius: BorderRadius.circular(NasTokens.radiusSm),
           onTap: () => _openYear(y.year),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.85),
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.45),
-                ],
-              ),
-            ),
-            padding: const EdgeInsets.all(NasTokens.spaceMd),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+            child: Stack(
+              fit: StackFit.expand,
               children: [
-                Text(
-                  '${y.year}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w600,
+                if (cover.isNotEmpty)
+                  NasCoverImage(
+                    url: _media.thumbnail(cover, size: 480),
+                    headers: _imageHeaders,
+                    cacheWidth: 480,
+                    borderRadius: 0,
+                    icon: Icons.broken_image_outlined,
+                  )
+                else
+                  // 没有可用照片（AI 识别没跑时的极少数情况）：退回原来的渐变块
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          scheme.primary.withValues(alpha: 0.85),
+                          scheme.primary.withValues(alpha: 0.45),
+                        ],
+                      ),
+                    ),
+                  ),
+                // 底部压一层黑渐变：图片明暗不可控，没有这层年份文字会看不清
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.center,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Colors.black54],
+                    ),
                   ),
                 ),
-                Text(
-                  tr('photo.yearView.count', {'count': '${y.count}'}),
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                Padding(
+                  padding: const EdgeInsets.all(NasTokens.spaceMd),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${y.year}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w600,
+                          shadows: [
+                            Shadow(color: Colors.black45, blurRadius: 6),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        tr('photo.yearView.count', {'count': '${y.count}'}),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

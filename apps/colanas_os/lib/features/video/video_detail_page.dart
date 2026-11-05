@@ -1,3 +1,6 @@
+import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nas_core/nas_core.dart';
@@ -11,6 +14,19 @@ import 'video_card.dart';
 import 'video_collection_picker.dart';
 import 'video_list_view.dart';
 import 'video_scrape_dialogs.dart';
+
+/// 字幕下拉框显示名：内嵌字幕轨没有有效语言（常见 `und`）时显示「内嵌字幕 N」，
+/// 不要把 `#embedded:N` 直接丢给用户。
+String _subtitleLabel(VideoSubtitleFile sub) {
+  final m = RegExp(r'^#embedded:(\d+)$').firstMatch(sub.name);
+  if (m != null) {
+    final n = (int.tryParse(m.group(1) ?? '') ?? 0) + 1;
+    return tr('player.embeddedSubtitle', {'n': '$n'});
+  }
+  final lang = sub.lang;
+  if (lang == null || lang.isEmpty || lang.toLowerCase() == 'und') return sub.name;
+  return '${sub.name}（$lang）';
+}
 
 /// 影片详情。
 ///
@@ -45,11 +61,38 @@ class VideoDetailPageState extends State<VideoDetailPage> {
   late bool _favorite = widget.item.favorite;
   List<VideoItem> _seriesEpisodes = const [];
 
+  /// 演员名 → 头像 / 身高 / 生日（详情页「演职人员」区用）。
+  /// 一次批量问，避免每个演员发一次请求。
+  Map<String, Map<String, dynamic>> _actorInfo = const {};
+
+  /// 剧情简介是否展开（默认 4 行）
+  bool _overviewExpanded = false;
+
   @override
   void initState() {
     super.initState();
     _loadProgress();
     _loadEpisodes();
+    _loadActorInfo();
+  }
+
+  Future<void> _loadActorInfo() async {
+    final names = [..._item.directors, ..._item.actors];
+    if (names.isEmpty) return;
+    try {
+      final res = await ApiSession.instance.client.videoActorAvatars(
+        body: {'names': names.take(48).toList()},
+      );
+      if (!mounted) return;
+      final list = (res['items'] as List?) ?? const [];
+      final map = <String, Map<String, dynamic>>{};
+      for (final e in list) {
+        if (e is Map) map['${e['name'] ?? ''}'] = Map<String, dynamic>.from(e);
+      }
+      setState(() => _actorInfo = map);
+    } catch (_) {
+      // 拿不到就只显示名字，不影响详情
+    }
   }
 
   Future<void> _refreshItem() async {
@@ -82,7 +125,9 @@ class VideoDetailPageState extends State<VideoDetailPage> {
     final series = _item.series;
     if (series == null || series.isEmpty) return;
     try {
-      final res = await ApiSession.instance.client.videoSeriesItems(name: series);
+      final res = await ApiSession.instance.client.videoSeriesItems(
+        name: series,
+      );
       if (!mounted) return;
       setState(() => _seriesEpisodes = res.items);
     } catch (_) {
@@ -92,7 +137,7 @@ class VideoDetailPageState extends State<VideoDetailPage> {
 
   void _toast(String text) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    NasSnack.show(context, text);
   }
 
   Future<void> _toggleFavorite() async {
@@ -157,7 +202,13 @@ class VideoDetailPageState extends State<VideoDetailPage> {
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => PlayerPage(url: url, title: _item.title, itemId: _item.id),
+          builder: (_) => PlayerPage(
+            url: url,
+            title: _item.title,
+            itemId: _item.id,
+            // 兼容判定（DV / HDR / HEVC / EAC3）交给播放器决定要不要自动转码
+            compat: res.compat,
+          ),
         ),
       );
     } catch (e) {
@@ -173,7 +224,9 @@ class VideoDetailPageState extends State<VideoDetailPage> {
       final res = await ApiSession.instance.client.videoStreamUrl(id: _item.id);
       final url = '${ApiSession.instance.baseUrl}${res.url}';
       await Clipboard.setData(ClipboardData(text: url));
-      _toast(tr('video.copyUrl', {'minutes': '${res.expiresInSec ~/ 60}'}));
+      _toast(
+        tr('video.copyUrl', {'hours': '${(res.expiresInSec / 3600).round()}'}),
+      );
     } catch (e) {
       _toast(tr('video.playUrlFailed', {'error': '$e'}));
     } finally {
@@ -197,7 +250,8 @@ class VideoDetailPageState extends State<VideoDetailPage> {
     if (!mounted) return;
 
     var preset = PlayPreferences.preset;
-    var codec = PlayPreferences.codec;
+    // Web 端只能播 H.264（hls.js 对 AV1 / HEVC 的 fMP4 没有 CODECS 会黑屏）
+    var codec = kIsWeb ? 'h264' : PlayPreferences.codec;
     String? subtitle;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -207,35 +261,47 @@ class VideoDetailPageState extends State<VideoDetailPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              DropdownButtonFormField<String>(
+              NasDropdown<String>(
                 initialValue: preset,
-                decoration: InputDecoration(labelText: tr('video.transcode.preset')),
+                decoration: InputDecoration(
+                  labelText: tr('video.transcode.preset'),
+                ),
                 items: [
                   for (final p in playQualityPresets)
-                    DropdownMenuItem(value: p.key, child: Text('${p.label} · ${p.bitrateLabel}')),
+                    DropdownMenuItem(
+                      value: p.key,
+                      child: Text('${p.label} · ${p.bitrateLabel}'),
+                    ),
                 ],
                 onChanged: (v) => setLocal(() => preset = v ?? preset),
               ),
               const SizedBox(height: NasTokens.spaceSm),
-              DropdownButtonFormField<String>(
+              NasDropdown<String>(
                 initialValue: codec,
-                decoration: InputDecoration(labelText: tr('video.transcode.codec')),
+                decoration: InputDecoration(
+                  labelText: tr('video.transcode.codec'),
+                ),
                 items: [
-                  for (final c in playCodecs)
+                  for (final c in playCodecs.where((c) => !kIsWeb || c.key == 'h264'))
                     DropdownMenuItem(value: c.key, child: Text(c.label)),
                 ],
                 onChanged: (v) => setLocal(() => codec = v ?? codec),
               ),
               const SizedBox(height: NasTokens.spaceSm),
-              DropdownButtonFormField<String?>(
+              NasDropdown<String?>(
                 initialValue: subtitle,
-                decoration: InputDecoration(labelText: tr('video.transcode.subtitle')),
+                decoration: InputDecoration(
+                  labelText: tr('video.transcode.subtitle'),
+                ),
                 items: [
-                  DropdownMenuItem<String?>(value: null, child: Text(tr('video.transcode.none'))),
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text(tr('video.transcode.none')),
+                  ),
                   for (final s in subtitles)
                     DropdownMenuItem<String?>(
                       value: s.name,
-                      child: Text(s.lang == null ? s.name : '${s.name}（${s.lang}）'),
+                      child: Text(_subtitleLabel(s)),
                     ),
                 ],
                 onChanged: (v) => setLocal(() => subtitle = v),
@@ -243,8 +309,14 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('common.cancel'))),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('video.transcode.start'))),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('video.transcode.start')),
+            ),
           ],
         ),
       ),
@@ -261,15 +333,34 @@ class VideoDetailPageState extends State<VideoDetailPage> {
           preset: preset,
           codec: codec,
           subtitle: subtitle,
+          // 客户端音频偏好：只有显式打开才带（null = 不传 = 跟随库级 audio_normalize）
+          audioNormalize: PlayPreferences.audioNormalize ? true : null,
+          audioDownmix: PlayPreferences.audioDownmix ? true : null,
         ),
       );
-      var job = await ApiSession.instance.client.playerSessionGet(id: created.id);
-      for (var i = 0; i < 180 && (job.status == 'pending' || job.status == 'running'); i++) {
+      var job = await ApiSession.instance.client.playerSessionGet(
+        id: created.id,
+      );
+      // 边转边播：只要会话开始产片（running）就进播放器，服务端会等到首个分片
+      // 落盘再返回 m3u8。以前这里死等 status=done，4K / AV1 片要等几十分钟，
+      // 超时后还报「转码未完成」，实际上完全没必要等整片。
+      for (
+        var i = 0;
+        i < 20 && (job.status == 'pending' || job.status == 'running');
+        i++
+      ) {
+        // running 说明 ffmpeg 已启动，首片最多几秒；不用再轮询到 done
+        if (job.status == 'running') break;
         await Future<void>.delayed(const Duration(seconds: 1));
         job = await ApiSession.instance.client.playerSessionGet(id: created.id);
       }
-      if (job.status != 'done') {
-        _toast(tr('video.transcodeIncomplete', {'status': job.status, 'error': job.error ?? ''}));
+      if (job.status == 'failed' || job.status == 'canceled') {
+        _toast(
+          tr('video.transcodeIncomplete', {
+            'status': job.status,
+            'error': job.error ?? '',
+          }),
+        );
         return;
       }
       if (!mounted) return;
@@ -279,6 +370,8 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             url: '${ApiSession.instance.baseUrl}${job.url}',
             title: _item.title,
             itemId: _item.id,
+            // 这个地址已经是选定档位的 HLS 会话，别让播放器再按直链处理
+            initialPreset: preset,
           ),
         ),
       );
@@ -317,15 +410,24 @@ class VideoDetailPageState extends State<VideoDetailPage> {
         title: Text(tr('common.delete')),
         content: Text(tr('video.action.scrapeCleanup')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('common.cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('common.ok'))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('common.ok')),
+          ),
         ],
       ),
     );
     if (ok != true) return;
+    if (!mounted) return;
     setState(() => _busy = true);
     try {
-      await ApiSession.instance.client.videoScrapeCleanup(body: VideoScrapeCleanupBody(id: _item.id));
+      await ApiSession.instance.client.videoScrapeCleanup(
+        body: VideoScrapeCleanupBody(id: _item.id),
+      );
       _toast(tr('video.scrape.cleaned'));
       await _refreshItem();
     } catch (e) {
@@ -352,9 +454,36 @@ class VideoDetailPageState extends State<VideoDetailPage> {
   @override
   Widget build(BuildContext context) {
     final item = _item;
+    final screen = MediaQuery.of(context).size;
+    final hPad = screen.width < 600
+        ? 16.0
+        : (screen.width < 1000 ? 32.0 : 48.0);
+    final wide = screen.width >= 820;
+    final hasEpisodes = _seriesEpisodes.length > 1;
+
     return Scaffold(
+      // 背景是模糊封面，内容从顶上压下来；AppBar 只留返回与菜单
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text(item.title, overflow: TextOverflow.ellipsis),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        foregroundColor: Colors.white,
+        title: const SizedBox.shrink(),
+        flexibleSpace: IgnorePointer(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.5),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+        ),
         actions: [
           IconButton(
             tooltip: tr('video.action.scrape'),
@@ -377,76 +506,134 @@ class VideoDetailPageState extends State<VideoDetailPage> {
               }
             },
             itemBuilder: (_) => [
-              PopupMenuItem(value: 'force', child: Text(tr('video.action.scrapeForce'))),
-              PopupMenuItem(value: 'match', child: Text(tr('video.action.matchTmdb'))),
-              PopupMenuItem(value: 'cleanup', child: Text(tr('video.action.scrapeCleanup'))),
-              PopupMenuItem(value: 'exclude', child: Text(tr('video.action.excludeScrape'))),
+              PopupMenuItem(
+                value: 'force',
+                child: Text(tr('video.action.scrapeForce')),
+              ),
+              PopupMenuItem(
+                value: 'match',
+                child: Text(tr('video.action.matchTmdb')),
+              ),
+              PopupMenuItem(
+                value: 'cleanup',
+                child: Text(tr('video.action.scrapeCleanup')),
+              ),
+              PopupMenuItem(
+                value: 'exclude',
+                child: Text(tr('video.action.excludeScrape')),
+              ),
               const PopupMenuDivider(),
-              PopupMenuItem(value: 'copyPath', child: Text(tr('video.action.copyPath'))),
+              PopupMenuItem(
+                value: 'copyPath',
+                child: Text(tr('video.action.copyPath')),
+              ),
             ],
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refreshItem,
-        child: ListView(
-          padding: const EdgeInsets.all(NasTokens.spaceMd),
-          children: [
-            _header(context, item),
-            const SizedBox(height: NasTokens.spaceMd),
-            _actions(context, item),
-            const SizedBox(height: NasTokens.spaceSm),
-            _progressRow(context),
-            if ((item.overview ?? '').isNotEmpty) ...[
-              const SizedBox(height: NasTokens.spaceMd),
-              _sectionTitle(context, tr('video.detail.overview')),
-              const SizedBox(height: NasTokens.spaceXs),
-              Text(item.overview!, style: const TextStyle(height: 1.5)),
-            ],
-            if (item.directors.isNotEmpty || item.actors.isNotEmpty) ...[
-              const SizedBox(height: NasTokens.spaceMd),
-              _sectionTitle(context, tr('video.detail.people')),
-              const SizedBox(height: NasTokens.spaceXs),
-              if (item.directors.isNotEmpty)
-                _peopleRow(context, tr('video.detail.director'), item.directors, 'director'),
-              if (item.actors.isNotEmpty)
-                _peopleRow(context, tr('video.detail.actor'), item.actors, 'actor'),
-            ],
-            if (_seriesEpisodes.length > 1) ...[
-              const SizedBox(height: NasTokens.spaceMd),
-              _sectionTitle(context, tr('video.nav.series')),
-              const SizedBox(height: NasTokens.spaceXs),
-              _episodeList(context, item),
-            ],
-            const SizedBox(height: NasTokens.spaceMd),
-            _sectionTitle(context, tr('video.detail.info')),
-            const SizedBox(height: NasTokens.spaceXs),
-            _infoTable(context, item),
-            const SizedBox(height: NasTokens.spaceMd),
-            Text(
-              tr('ui.video.h390648'),
-              style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+      body: Stack(
+        children: [
+          Positioned.fill(child: _backdrop(context, item)),
+          RefreshIndicator(
+            onRefresh: _refreshItem,
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(
+                hPad,
+                MediaQuery.of(context).padding.top +
+                    kToolbarHeight +
+                    NasTokens.spaceSm,
+                hPad,
+                NasTokens.spaceXl,
+              ),
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                _headSection(context, item, wide),
+                if ((item.overview ?? '').isNotEmpty) ...[
+                  const SizedBox(height: NasTokens.spaceMd),
+                  _overviewBlock(context, item),
+                ],
+                if (hasEpisodes) ...[
+                  const SizedBox(height: NasTokens.spaceLg),
+                  _episodeSection(context, item),
+                ],
+                const SizedBox(height: NasTokens.spaceLg),
+                _peopleSection(context),
+                const SizedBox(height: NasTokens.spaceLg),
+                _fileInfoSection(context, item),
+                const SizedBox(height: NasTokens.spaceLg),
+                _mediaInfoSection(context, item),
+                const SizedBox(height: NasTokens.spaceLg),
+                Text(
+                  tr('ui.video.h390648'),
+                  style: TextStyle(
+                    fontSize: NasTokens.fontCaption,
+                    color: context.nasTextSecondary,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: NasTokens.spaceLg),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  // ---------------------------------------------------------------- 顶部
-
-  Widget _header(BuildContext context, VideoItem item) {
+  /// 背景：模糊封面 + 表面色压暗。
+  ///
+  /// 截图里的观感是「整页深色、左上角透出海报的色块」，所以用封面自身做底、
+  /// 高斯模糊后压一层 72%~100% 的表面色，文字始终可读。
+  Widget _backdrop(BuildContext context, VideoItem item) {
     final scheme = Theme.of(context).colorScheme;
-    final wide = MediaQuery.of(context).size.width >= 720;
+    final art = videoPosterUrl(item, kind: 'fanart', size: 640);
+    return RepaintBoundary(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(
+              sigmaX: 36,
+              sigmaY: 36,
+              tileMode: TileMode.decal,
+            ),
+            child: NasCoverImage(
+              url: art,
+              fit: BoxFit.cover,
+              headers: videoArtHeaders,
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  scheme.surface.withValues(alpha: 0.74),
+                  scheme.surface.withValues(alpha: 0.92),
+                  scheme.surface,
+                ],
+                stops: const [0, 0.42, 1],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 顶部信息区：**左侧竖版封面 + 右侧标题/元信息/按钮**（照用户给的截图）。
+  ///
+  /// 电影和电视剧用同一套头（电影以前没有封面，这次补上）。
+  Widget _headSection(BuildContext context, VideoItem item, bool wide) {
+    final scheme = Theme.of(context).colorScheme;
+    final posterW = wide ? 190.0 : 116.0;
     final poster = ClipRRect(
       borderRadius: BorderRadius.circular(NasTokens.radiusMd),
       child: SizedBox(
-        width: wide ? 200 : 130,
+        width: posterW,
         child: AspectRatio(
           aspectRatio: 2 / 3,
           child: NasCoverImage(
-            url: videoPosterUrl(item),
+            url: videoPosterUrl(item, size: (posterW * 2).round()),
             headers: videoArtHeaders,
             fallbackText: item.title,
             icon: Icons.movie_outlined,
@@ -455,98 +642,336 @@ class VideoDetailPageState extends State<VideoDetailPage> {
       ),
     );
 
+    final meta = <String>[
+      if ((item.year ?? 0) > 0) '${item.year}',
+      ...item.genres.take(3),
+      if (item.regions.isNotEmpty) item.regions.first,
+      if ((item.runtimeMin ?? 0) > 0)
+        tr('video.detail.minutes', {'count': '${item.runtimeMin}'}),
+    ];
+    final flags = videoFlagsOf(item);
+    final score = item.score ?? 0;
+
     final info = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          item.title,
-          style: const TextStyle(fontSize: NasTokens.fontTitle, fontWeight: FontWeight.w700),
-        ),
-        if ((item.originalName ?? '').isNotEmpty && item.originalName != item.title) ...[
-          const SizedBox(height: 2),
-          Text(
-            item.originalName!,
-            style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
-          ),
-        ],
-        const SizedBox(height: NasTokens.spaceSm),
-        Wrap(
-          spacing: NasTokens.spaceXs,
-          runSpacing: NasTokens.spaceXs,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if ((item.year ?? 0) > 0) _chip(context, '${item.year}'),
-            if ((item.runtimeMin ?? 0) > 0)
-              _chip(context, tr('video.detail.minutes', {'count': '${item.runtimeMin}'})),
-            if ((item.score ?? 0) > 0)
-              _chip(context, '★ ${(item.score ?? 0).toStringAsFixed(1)}', highlight: true),
-            for (final g in item.genres.take(3)) _chip(context, g),
-            for (final r in item.regions.take(2)) _chip(context, r),
-            if (item.is4k) _chip(context, '4K', highlight: true),
-            if (item.dolbyVision) _chip(context, 'Dolby Vision', highlight: true),
-            if (item.dolbyAtmos) _chip(context, 'Atmos', highlight: true),
-            if (item.code != null && item.code!.isNotEmpty) _chip(context, item.code!),
-          ],
-        ),
-        if (item.nfoSource == null || item.nfoSource == 'none') ...[
-          const SizedBox(height: NasTokens.spaceSm),
-          InkWell(
-            onTap: _busy ? null : () => _scrape(),
-            borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+            Expanded(
+              child: Text(
+                item.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: wide ? 26 : 20,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            if (score > 0) ...[
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Icon(Icons.info_outline, size: 16, color: scheme.primary),
-                  const SizedBox(width: 6),
                   Text(
-                    tr('video.detail.notScrapedHint'),
-                    style: TextStyle(fontSize: NasTokens.fontCaption, color: scheme.primary),
+                    score.toStringAsFixed(1),
+                    style: TextStyle(
+                      fontSize: wide ? 22 : 18,
+                      height: 1.1,
+                      fontWeight: FontWeight.w800,
+                      color: scheme.primary,
+                    ),
+                  ),
+                  Text(
+                    tr('video.detail.score'),
+                    style: TextStyle(
+                      fontSize: NasTokens.fontMicro,
+                      color: context.nasTextSecondary,
+                    ),
                   ),
                 ],
               ),
+            ],
+          ],
+        ),
+        if ((item.originalName ?? '').isNotEmpty &&
+            item.originalName != item.title) ...[
+          const SizedBox(height: 3),
+          Text(
+            item.originalName!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: NasTokens.fontCaption,
+              color: context.nasTextSecondary,
             ),
           ),
         ],
+        if (meta.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (var i = 0; i < meta.length; i++) ...[
+                if (i > 0)
+                  Text(
+                    ' · ',
+                    style: TextStyle(
+                      fontSize: NasTokens.fontCaption,
+                      color: context.nasTextSecondary,
+                    ),
+                  ),
+                Text(
+                  meta[i],
+                  style: TextStyle(
+                    fontSize: NasTokens.fontCaption,
+                    color: context.nasTextSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+        if (flags.isNotEmpty ||
+            (item.code != null && item.code!.isNotEmpty)) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (item.code != null && item.code!.isNotEmpty)
+                _heroBadge(context, item.code!),
+              for (final f in flags) _heroBadge(context, f),
+            ],
+          ),
+        ],
+        const SizedBox(height: 14),
+        _actionRow(context, item),
       ],
     );
 
-    if (!wide) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          poster,
-          const SizedBox(width: NasTokens.spaceMd),
-          Expanded(child: info),
-        ],
-      );
-    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         poster,
-        const SizedBox(width: NasTokens.spaceLg),
+        SizedBox(width: wide ? 22 : 14),
         Expanded(child: info),
       ],
     );
   }
 
-  Widget _chip(BuildContext context, String text, {bool highlight = false}) {
+  /// 操作行：播放胶囊 + 三个圆形按钮（收藏 / 已看 / 更多）。
+  ///
+  /// 其余操作（转码、加合集、复制链接、复制路径、强制刮削）收进「更多」，
+  /// 头图区不再摆一排 8 个按钮。
+  Widget _actionRow(BuildContext context, VideoItem item) {
+    final scheme = Theme.of(context).colorScheme;
+    final hasProgress = _percent > 0;
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        FilledButton.icon(
+          onPressed: _busy ? null : _openPlayer,
+          icon: const Icon(Icons.play_arrow, size: 20),
+          label: Text(
+            hasProgress && _percent < 100
+                ? '${tr('ui.video.017')} ${_percent.round()}%'
+                : tr('ui.video.018'),
+          ),
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            shape: const StadiumBorder(),
+          ),
+        ),
+        _circleAction(
+          context,
+          icon: _favorite ? Icons.favorite : Icons.favorite_border,
+          tooltip: _favorite
+              ? tr('video.action.unfavorite')
+              : tr('video.action.favorite'),
+          active: _favorite,
+          onTap: _toggleFavorite,
+        ),
+        _circleAction(
+          context,
+          icon: item.watched ? Icons.check_circle : Icons.check_circle_outline,
+          tooltip: item.watched
+              ? tr('video.action.markUnwatched')
+              : (item.series != null
+                    ? tr('video.action.markTvWatched')
+                    : tr('video.action.markWatched')),
+          active: item.watched,
+          onTap: _busy ? null : _toggleWatched,
+        ),
+        _circleAction(
+          context,
+          icon: Icons.more_horiz,
+          tooltip: tr('video.card.more'),
+          onTap: () => _showMoreActions(context, item),
+        ),
+        if (hasProgress)
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              '${_percent.round()}%',
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: scheme.primary,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _circleAction(
+    BuildContext context, {
+    required IconData icon,
+    required String tooltip,
+    VoidCallback? onTap,
+    bool active = false,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: active
+            ? scheme.primary.withValues(alpha: 0.16)
+            : scheme.surfaceContainerHighest.withValues(alpha: 0.7),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(
+              icon,
+              size: 20,
+              color: active ? scheme.primary : scheme.onSurface,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 「更多」里保住的原来那些动作（转码 / 合集 / 复制 / 强制刮削 / 进度）。
+  Future<void> _showMoreActions(BuildContext context, VideoItem item) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.high_quality_outlined),
+              title: Text(tr('ui.video.019')),
+              onTap: () => Navigator.pop(ctx, 'transcode'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.playlist_add),
+              title: Text(tr('video.collection.addTo')),
+              onTap: () => Navigator.pop(ctx, 'collection'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.link),
+              title: Text(tr('ui.music.014')),
+              onTap: () => Navigator.pop(ctx, 'link'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.copy),
+              title: Text(tr('ui.video.020')),
+              onTap: () => Navigator.pop(ctx, 'path'),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.timeline),
+              title: Text(tr('ui.video.017')),
+              onTap: () => Navigator.pop(ctx, 'progress'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.auto_awesome_outlined),
+              title: Text(tr('video.action.scrapeForce')),
+              onTap: () => Navigator.pop(ctx, 'scrapeForce'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    switch (action) {
+      case 'transcode':
+        await _openTranscode();
+      case 'collection':
+        if (!mounted) return;
+        await showAddToCollectionDialog(this.context, itemIds: [item.id]);
+      case 'link':
+        await _copyPlayUrl();
+      case 'path':
+        _copyPath();
+      case 'progress':
+        if (!mounted) return;
+        await showDialog<void>(
+          context: this.context,
+          builder: (ctx) => AlertDialog(
+            title: Text(tr('ui.video.017')),
+            content: _progressRow(ctx),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(tr('common.close')),
+              ),
+            ],
+          ),
+        );
+      case 'scrapeForce':
+        await _scrape(force: true);
+    }
+  }
+
+  Widget _overviewBlock(BuildContext context, VideoItem item) {
+    final text = item.overview ?? '';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(context, tr('video.detail.overview')),
+        const SizedBox(height: NasTokens.spaceXs),
+        GestureDetector(
+          onTap: () => setState(() => _overviewExpanded = !_overviewExpanded),
+          child: Text(
+            text,
+            maxLines: _overviewExpanded ? null : 4,
+            overflow: _overviewExpanded
+                ? TextOverflow.visible
+                : TextOverflow.ellipsis,
+            style: const TextStyle(height: 1.6),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _heroBadge(BuildContext context, String text) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: highlight
-            ? scheme.primary.withValues(alpha: 0.14)
-            : scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(6),
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(5),
       ),
       child: Text(
         text,
         style: TextStyle(
-          fontSize: NasTokens.fontMicro,
-          color: highlight ? scheme.primary : scheme.onSurface,
-          fontWeight: highlight ? FontWeight.w700 : FontWeight.w500,
+          fontSize: 10,
+          height: 1.2,
+          fontWeight: FontWeight.w700,
+          color: scheme.onSurface.withValues(alpha: 0.86),
         ),
       ),
     );
@@ -555,71 +980,22 @@ class VideoDetailPageState extends State<VideoDetailPage> {
   Widget _sectionTitle(BuildContext context, String text) {
     return Text(
       text,
-      style: const TextStyle(fontSize: NasTokens.fontSubtitle, fontWeight: FontWeight.w600),
+      style: const TextStyle(
+        fontSize: NasTokens.fontSubtitle,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 
-  // ---------------------------------------------------------------- 操作
-
-  Widget _actions(BuildContext context, VideoItem item) {
-    return Wrap(
-      spacing: NasTokens.spaceSm,
-      runSpacing: NasTokens.spaceSm,
-      children: [
-        FilledButton.icon(
-          onPressed: _busy ? null : _openPlayer,
-          icon: const Icon(Icons.play_arrow),
-          label: Text(tr('ui.video.018')),
-        ),
-        OutlinedButton.icon(
-          onPressed: _busy ? null : _openTranscode,
-          icon: const Icon(Icons.high_quality_outlined, size: 18),
-          label: Text(tr('ui.video.019')),
-        ),
-        OutlinedButton.icon(
-          onPressed: _toggleFavorite,
-          icon: Icon(_favorite ? Icons.favorite : Icons.favorite_border, size: 18),
-          label: Text(_favorite ? tr('video.action.unfavorite') : tr('video.action.favorite')),
-        ),
-        OutlinedButton.icon(
-          onPressed: _busy ? null : _toggleWatched,
-          icon: Icon(item.watched ? Icons.remove_done : Icons.done_all, size: 18),
-          label: Text(
-            item.watched
-                ? tr('video.action.markUnwatched')
-                : (item.series != null
-                    ? tr('video.action.markTvWatched')
-                    : tr('video.action.markWatched')),
-          ),
-        ),
-        OutlinedButton.icon(
-          onPressed: () => showAddToCollectionDialog(context, itemIds: [item.id]),
-          icon: const Icon(Icons.playlist_add, size: 18),
-          label: Text(tr('video.collection.addTo')),
-        ),
-        OutlinedButton.icon(
-          onPressed: _busy ? null : _copyPlayUrl,
-          icon: const Icon(Icons.link, size: 18),
-          label: Text(tr('ui.music.014')),
-        ),
-        OutlinedButton.icon(
-          onPressed: _copyPath,
-          icon: const Icon(Icons.copy, size: 18),
-          label: Text(tr('ui.video.020')),
-        ),
-        OutlinedButton.icon(
-          onPressed: _busy ? null : () => _scrape(force: true),
-          icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-          label: Text(tr('video.action.scrapeForce')),
-        ),
-      ],
-    );
-  }
+  // ---------------------------------------------------------------- 进度
 
   Widget _progressRow(BuildContext context) {
     return Row(
       children: [
-        Text(tr('ui.video.017'), style: const TextStyle(fontSize: NasTokens.fontCaption)),
+        Text(
+          tr('ui.video.017'),
+          style: const TextStyle(fontSize: NasTokens.fontCaption),
+        ),
         Expanded(
           child: Slider(
             value: _percent.clamp(0, 100),
@@ -629,134 +1005,368 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             onChanged: (v) => setState(() => _percent = v),
           ),
         ),
-        Text('${_percent.round()}%', style: const TextStyle(fontSize: NasTokens.fontCaption)),
+        Text(
+          '${_percent.round()}%',
+          style: const TextStyle(fontSize: NasTokens.fontCaption),
+        ),
         TextButton(onPressed: _saveProgress, child: Text(tr('common.save'))),
       ],
     );
   }
 
-  Widget _peopleRow(BuildContext context, String label, List<String> names, String kind) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: NasTokens.spaceXs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 48,
-            child: Text(
-              label,
-              style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
-            ),
-          ),
-          Expanded(
-            child: Wrap(
-              spacing: NasTokens.spaceXs,
-              runSpacing: NasTokens.spaceXs,
-              children: [
-                for (final name in names.take(20))
-                  ActionChip(
-                    label: Text(name, style: const TextStyle(fontSize: NasTokens.fontMicro)),
-                    onPressed: () => openVideoListByPerson(context, kind: kind, name: name),
+  // ---------------------------------------------------------------- 演职人员
+
+  /// 演职人员：**圆形头像**横排（照用户给的截图），名字 + 身高/角色两行。
+  ///
+  /// 头像是 NFO 里的 `<actor><thumb>`；拿不到就显示名字首字，不留空白。
+  Widget _peopleSection(BuildContext context) {
+    final people = <(String, String, String)>[
+      for (final name in _item.directors)
+        (name, 'director', tr('video.detail.director')),
+      for (final name in _item.actors)
+        (name, 'actor', tr('video.detail.actor')),
+    ];
+    if (people.isEmpty) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(context, tr('video.detail.people')),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 132,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: people.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 14),
+            itemBuilder: (ctx, i) {
+              final (name, kind, role) = people[i];
+              final info = _actorInfo[name];
+              final avatar = '${info?['avatarUrl'] ?? ''}';
+              final height = (info?['heightCm'] as num?)?.toInt() ?? 0;
+              final birthday = '${info?['birthday'] ?? ''}';
+              final sub = height > 0
+                  ? '$height cm${birthday.isEmpty ? '' : ' · $birthday'}'
+                  : role;
+
+              return InkWell(
+                borderRadius: BorderRadius.circular(40),
+                onTap: () =>
+                    openVideoListByPerson(context, kind: kind, name: name),
+                child: SizedBox(
+                  width: 76,
+                  child: Column(
+                    children: [
+                      ClipOval(
+                        child: SizedBox(
+                          width: 64,
+                          height: 64,
+                          child: NasCoverImage(
+                            url: avatar.isEmpty ? null : avatar,
+                            icon: Icons.person_outline,
+                            fallbackText: name,
+                            cacheWidth: 128,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        sub,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: NasTokens.fontMicro,
+                          color: height > 0
+                              ? scheme.primary
+                              : context.nasTextSecondary,
+                        ),
+                      ),
+                    ],
                   ),
-              ],
-            ),
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _episodeList(BuildContext context, VideoItem item) {
-    final eps = [..._seriesEpisodes]..sort((a, b) {
+  // ---------------------------------------------------------------- 选集
+
+  /// 选集：数字网格（照截图：浅底小方块，当前集高亮，看过的用主色描边）。
+  Widget _episodeSection(BuildContext context, VideoItem item) {
+    final scheme = Theme.of(context).colorScheme;
+    final eps = [..._seriesEpisodes]
+      ..sort((a, b) {
         final sa = a.season ?? 0;
         final sb = b.season ?? 0;
         if (sa != sb) return sa.compareTo(sb);
         return (a.episode ?? 0).compareTo(b.episode ?? 0);
       });
+    if (eps.isEmpty) return const SizedBox.shrink();
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final ep in eps.take(30))
-          ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(
-              ep.watched ? Icons.check_circle : Icons.play_circle_outline,
-              size: 20,
-              color: ep.id == item.id
-                  ? Theme.of(context).colorScheme.primary
-                  : context.nasTextSecondary,
+        Row(
+          children: [
+            _sectionTitle(context, tr('video.detail.episodes')),
+            const SizedBox(width: 8),
+            Text(
+              '${eps.length}',
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: context.nasTextSecondary,
+              ),
             ),
-            title: Text(
-              'S${ep.season ?? 1}E${ep.episode ?? 0}',
-              style: const TextStyle(fontSize: NasTokens.fontCaption),
-            ),
-            subtitle: Text(ep.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            trailing: ep.id == item.id ? Text(tr('video.jp.inLibrary')) : null,
-            onTap: ep.id == item.id
-                ? null
-                : () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => VideoDetailPage(
-                          item: ep,
-                          posterUrl: videoPosterUrl(ep),
-                          headers: widget.headers,
-                        ),
-                      ),
-                    ),
-          ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (var i = 0; i < eps.length; i++)
+              _episodeButton(
+                context,
+                eps[i],
+                i + 1,
+                eps[i].id == item.id,
+                scheme,
+              ),
+          ],
+        ),
       ],
     );
   }
 
-  Widget _infoTable(BuildContext context, VideoItem item) {
-    final unknown = tr('ui.book.hd9c32a');
-    final rows = <(String, String)>[
-      (tr('video.detail.year'), (item.year ?? 0) > 0 ? '${item.year}' : unknown),
-      (tr('video.detail.score'), (item.score ?? 0) > 0 ? (item.score ?? 0).toStringAsFixed(1) : unknown),
-      (
-        tr('video.detail.runtime'),
-        (item.runtimeMin ?? 0) > 0 ? tr('video.detail.minutes', {'count': '${item.runtimeMin}'}) : unknown,
-      ),
-      (tr('video.detail.region'), item.regions.isEmpty ? unknown : item.regions.join(' / ')),
-      (tr('video.detail.genre'), item.genres.isEmpty ? unknown : item.genres.join(' / ')),
-      (tr('video.detail.studio'), (item.studio ?? '').isEmpty ? unknown : item.studio!),
-      (tr('video.detail.releaseDate'), (item.releaseDate ?? '').isEmpty ? unknown : item.releaseDate!),
-      (tr('video.detail.source'), (item.nfoSource ?? 'none').toString()),
-      (
-        tr('ui.music.h29d055'),
-        item.durationMs == null ? unknown : formatDurationMs(item.durationMs!),
-      ),
-      (
-        tr('ui.video.hcde9b5'),
-        item.width == null || item.height == null ? unknown : '${item.width}×${item.height}',
-      ),
-      (tr('ui.video.he348df'), item.videoCodec ?? unknown),
-      (tr('ui.video.h1137ee'), item.audioCodec ?? unknown),
-      (tr('ui.video.hd179a3'), item.container.isEmpty ? unknown : item.container),
-      (tr('ui.video.haaa5f2'), item.hasSubtitle ? tr('ui.video.hbe1c0c') : tr('ui.video.h720777')),
-      (tr('files.size'), formatBytes(item.size)),
-      (tr('ui.book.025'), item.path),
-    ];
-    return Column(
-      children: [
-        for (final (label, value) in rows)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceXs),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 72,
-                  child: Text(
-                    label,
-                    style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+  Widget _episodeButton(
+    BuildContext context,
+    VideoItem ep,
+    int index,
+    bool current,
+    ColorScheme scheme,
+  ) {
+    return Tooltip(
+      message: ep.title,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: current
+            ? null
+            : () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => VideoDetailPage(
+                    item: ep,
+                    posterUrl: videoPosterUrl(ep),
+                    headers: widget.headers,
                   ),
                 ),
-                Expanded(child: SelectableText(value)),
-              ],
+              ),
+        child: Container(
+          width: 52,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: current
+                ? scheme.primary
+                : scheme.surfaceContainerHighest.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(8),
+            border: !current && ep.watched
+                ? Border.all(color: scheme.primary.withValues(alpha: 0.45))
+                : null,
+          ),
+          child: Text(
+            '$index',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: current
+                  ? scheme.onPrimary
+                  : (ep.watched ? scheme.primary : scheme.onSurface),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------- 文件 / 轨道
+
+  /// 文件信息：卡片里「标签在上、值在下」的网格（照截图）。
+  Widget _fileInfoSection(BuildContext context, VideoItem item) {
+    final scheme = Theme.of(context).colorScheme;
+    final unknown = tr('ui.book.hd9c32a');
+
+    Widget cell(String label, String value) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: NasTokens.fontMicro,
+            color: context.nasTextSecondary,
+          ),
+        ),
+        const SizedBox(height: 3),
+        SelectableText(
+          value,
+          style: const TextStyle(fontSize: NasTokens.fontCaption, height: 1.35),
+        ),
       ],
+    );
+
+    final resolution = item.width == null || item.height == null
+        ? unknown
+        : '${item.width}×${item.height}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionTitle(context, tr('video.detail.file')),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              cell(tr('video.detail.fileLocation'), item.path),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: cell(
+                      tr('video.detail.fileSize'),
+                      formatBytes(item.size),
+                    ),
+                  ),
+                  Expanded(
+                    child: cell(tr('video.detail.trackVideo'), resolution),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: cell(
+                      tr('video.detail.movie'),
+                      [
+                        if ((item.year ?? 0) > 0) '${item.year}',
+                        if (item.genres.isNotEmpty) item.genres.first,
+                      ].join(' · '),
+                    ),
+                  ),
+                  Expanded(
+                    child: cell(
+                      tr('video.detail.source'),
+                      (item.nfoSource ?? 'none').toString(),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 视频 / 音频 / 字幕三列参数（照截图的三段式）。
+  Widget _mediaInfoSection(BuildContext context, VideoItem item) {
+    final scheme = Theme.of(context).colorScheme;
+    final mbps = (item.size > 0 && (item.durationMs ?? 0) > 0)
+        ? (item.size * 8) / (item.durationMs! / 1000) / 1000000
+        : 0;
+
+    Widget column(IconData icon, String title, List<String> lines) {
+      return Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 15, color: context.nasTextSecondary),
+                const SizedBox(width: 5),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: NasTokens.fontMicro,
+                    color: context.nasTextSecondary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            for (final line in lines)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  line,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: NasTokens.fontCaption,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    final res = item.height == null
+        ? '—'
+        : ((item.height ?? 0) >= 2160
+              ? '4K'
+              : ((item.height ?? 0) >= 1080 ? '1080P' : '720P'));
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          column(Icons.movie_outlined, tr('video.detail.trackVideo'), [
+            res,
+            if ((item.videoCodec ?? '').isNotEmpty)
+              item.videoCodec!.toUpperCase(),
+            if (mbps > 0) '${mbps.toStringAsFixed(2)} Mbps',
+          ]),
+          column(Icons.audiotrack_outlined, tr('video.detail.trackAudio'), [
+            if ((item.audioCodec ?? '').isNotEmpty)
+              item.audioCodec!.toUpperCase(),
+            if (item.container.isNotEmpty) item.container.toUpperCase(),
+          ]),
+          column(Icons.subtitles_outlined, tr('video.detail.trackSubtitle'), [
+            item.hasSubtitle ? tr('ui.video.hbe1c0c') : tr('ui.video.h720777'),
+          ]),
+        ],
+      ),
     );
   }
 }

@@ -1,8 +1,14 @@
 import path from 'node:path';
+import { Type } from '@sinclair/typebox';
 import { secured } from '../../../../kernel/route';
 import { downloadHandler } from '../../files/download';
 import { filesRoot, resolveAnyPath } from '../../files/fs-root';
 import { listSubtitles, readSubtitle } from '../subtitles';
+import {
+  embeddedIndex,
+  embeddedSubtitleFiles,
+  readEmbeddedSubtitle,
+} from '../embedded-subs';
 import { isOfflinePath, offlineSmbPrefixes } from '../sources';
 import { Err } from '../../../../kernel/errors';
 import { TAG } from '../util';
@@ -39,7 +45,11 @@ export async function registerVideoSubtitles(app: FastifyInstance, k: KernelApi,
         } catch {
           return reply.code(404).send({ error: Err.notFound, message: 'source missing' });
         }
-        return { items: listSubtitles(abs) };
+        const external = listSubtitles(abs);
+        // 内嵌字幕轨（文本类）一并列出，名字用 `#embedded:<index>`。
+        // media 不可用 / 解析失败时返回空数组，不影响外挂字幕。
+        const embedded = await embeddedSubtitleFiles(k, abs, row.mtime);
+        return { items: [...external, ...embedded] };
       },
     );
 
@@ -74,6 +84,21 @@ export async function registerVideoSubtitles(app: FastifyInstance, k: KernelApi,
         }
 
         try {
+          // 内嵌字幕（`#embedded:<n>`）：按需抽轨到缓存，再走同一套解析
+          const emb = q.name ? embeddedIndex(q.name) : null;
+          if (emb !== null) {
+            const parsed = await readEmbeddedSubtitle(k, abs, row.mtime, emb);
+            if (!parsed) {
+              return reply.code(404).send({ error: Err.notFound, message: 'subtitle not found' });
+            }
+            return {
+              name: parsed.file.name,
+              lang: parsed.file.lang,
+              format: parsed.file.format,
+              cues: parsed.cues,
+              vtt: parsed.vtt,
+            };
+          }
           const parsed = q.name ? readSubtitle(abs, q.name) : null;
           if (!parsed) {
             return reply.code(404).send({ error: Err.notFound, message: 'subtitle not found' });
@@ -113,6 +138,41 @@ export async function registerVideoSubtitles(app: FastifyInstance, k: KernelApi,
           return reply.code(503).send({ error: Err.unavailable, message: 'smb source offline' });
         }
         return downloadHandler(req, reply, { path: row.rel_path });
+      },
+    );
+
+    // 库级补全字幕：入队 video.subtitle.fetch（任务面板能看到进度，失败也留记录）
+    app.post(
+      '/api/v1/video/subtitle/fetch-library',
+      secured('video:write', {
+        schema: {
+          operationId: 'videoSubtitleFetchLibrary',
+          tags: TAG,
+          summary: '按库补全字幕（入队 video.subtitle.fetch）',
+          body: Type.Object({
+            id: Type.String({ minLength: 1, description: '影视库 id' }),
+          }),
+          response: {
+            200: Type.Object({
+              id: Type.String(),
+              taskId: Type.String(),
+              reused: Type.Boolean({ description: 'true = 已有同库任务在跑，没重复入队' }),
+            }),
+          },
+        },
+      }),
+      async (req, reply) => {
+        const body = (req.body || {}) as { id?: string };
+        const id = String(body.id || '');
+        if (!id) return reply.code(400).send({ error: Err.badRequest, message: 'id required' });
+        const lib = await h.loadLibrary(id);
+        if (!lib) return reply.code(404).send({ error: Err.notFound, message: 'library not found' });
+        const r = await k.tasks.enqueueIfIdle(
+          'video.subtitle.fetch',
+          { libraryId: id },
+          { maxAttempts: 2 },
+        );
+        return { id, taskId: r.id, reused: r.reused };
       },
     );
 }

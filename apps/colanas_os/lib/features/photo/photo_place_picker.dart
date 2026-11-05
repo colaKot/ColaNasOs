@@ -144,7 +144,7 @@ class _PlacePickerDialogState extends State<_PlacePickerDialog> {
                 for (final r in _radii)
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
-                    child: ChoiceChip(
+                    child: NasChip(
                       visualDensity: VisualDensity.compact,
                       label: Text('${r.toInt()}km'),
                       selected: _radiusKm == r,

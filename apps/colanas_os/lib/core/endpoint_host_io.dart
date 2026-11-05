@@ -14,3 +14,8 @@ CapabilityEndpoint detectEndpoint({required bool tvMode}) {
   if (Platform.isIOS) return CapabilityEndpoint.mobile;
   return CapabilityEndpoint.desktop;
 }
+
+/// 是否 PC 客户端：原生桌面构建（Windows / macOS / Linux）。
+/// 与 [detectEndpoint] 的 `desktop` 同义，单独留一个名字是因为
+/// 「能不能看到某个 App」和「能力档位」是两件事，判据以后可能分叉。
+bool detectPcShell() => Platform.isWindows || Platform.isMacOS || Platform.isLinux;

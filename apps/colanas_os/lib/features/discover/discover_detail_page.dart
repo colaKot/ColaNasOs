@@ -73,11 +73,9 @@ class _DiscoverDetailPageState extends State<DiscoverDetailPage> {
           'enabled': true,
         },
       );
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('discover.pt.subscribed'))),
-      );
+      NasSnack.showOn(messenger, tr('discover.pt.subscribed'));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -136,7 +134,7 @@ class _DiscoverDetailPageState extends State<DiscoverDetailPage> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -146,9 +144,7 @@ class _DiscoverDetailPageState extends State<DiscoverDetailPage> {
     final url = 'https://www.themoviedb.org/${d.mediaType}/${d.id}';
     await Clipboard.setData(ClipboardData(text: url));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(tr('discover.detail.linkCopied'))),
-    );
+    NasSnack.show(context, tr('discover.detail.linkCopied'));
   }
 
   Widget _metaLine(DiscoverDetailResponse d, Color secondary) {

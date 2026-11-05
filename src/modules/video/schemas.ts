@@ -412,10 +412,39 @@ export const IdQuery = Type.Object(
   { $id: 'VideoIdQuery' },
 );
 
+/** /video/stream-url 的兼容性标签；客户端据此决定直链 or HLS 转码 */
+const CompatReason = Type.Union([
+  Type.Literal('dolbyVision'),
+  Type.Literal('hdr10'),
+  Type.Literal('hdr10plus'),
+  Type.Literal('hlg'),
+  Type.Literal('hevc'),
+  Type.Literal('av1'),
+  Type.Literal('10bit'),
+  Type.Literal('eac3'),
+  Type.Literal('truehd'),
+  Type.Literal('atmos'),
+]);
+
 export const StreamUrlResponse = Type.Object(
   {
     url: Type.String({ description: '带短期令牌的播放地址，可直接交给外部播放器' }),
     expiresInSec: Type.Integer(),
+    compat: Type.Optional(
+      Type.Object(
+        {
+          needTranscode: Type.Boolean({ description: 'true = 建议走 HLS 转码而非直链' }),
+          reasons: Type.Array(CompatReason),
+          videoCodec: NullableString,
+          audioCodec: NullableString,
+          container: NullableString,
+          width: NullableInteger,
+          height: NullableInteger,
+          is4k: Type.Boolean(),
+        },
+        { description: '片源兼容性信息；查不到列时 needTranscode=false' },
+      ),
+    ),
   },
   { $id: 'VideoStreamUrlResponse' },
 );
@@ -897,7 +926,9 @@ export const TmdbSearchResponse = Type.Object(
 
 export const TmdbSettings = Type.Object(
   {
-    apiKey: Type.String({ description: '留空表示沿用「发现页」的 Key' }),
+    apiKey: Type.String({
+      description: '明文回传（自用 NAS：用户要能看见自己配的是哪个 Key）；留空表示沿用「发现页」的 Key',
+    }),
     language: Type.String({ description: 'TMDB 语言，如 zh-CN' }),
     writeSidecar: Type.Boolean({ description: '刮削结果是否写到片源同目录 .nfo' }),
     minScore: Type.Number({ description: '自动匹配的最低置信度，低于此值只给候选不写库' }),
@@ -921,6 +952,13 @@ export const ArtQuery = Type.Object(
     id: Type.String({ minLength: 1 }),
     kind: Type.Optional(
       Type.Union([Type.Literal('poster'), Type.Literal('fanart')], { default: 'poster' }),
+    ),
+    size: Type.Optional(
+      Type.Integer({
+        minimum: 0,
+        maximum: 2048,
+        description: '大于 0 时返回缩略图（走 thumbs 缓存），列表页用它省 SMB 带宽',
+      }),
     ),
   },
   { $id: 'VideoArtQuery' },
@@ -997,6 +1035,13 @@ export const DuplicatesQuery = Type.Object(
   {
     libraryId: Type.Optional(Type.String()),
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, default: 100 })),
+    excludeActors: Type.Optional(
+      Type.String({
+        maxLength: 2000,
+        description:
+          '要排除的演员原名，用 `|` 分隔（服务端按 actorKey 归一 + 标题/文件名兜底匹配；命中则整组不返回）',
+      }),
+    ),
   },
   { $id: 'VideoDuplicatesQuery' },
 );
@@ -1007,6 +1052,8 @@ export const DuplicateItem = Type.Object(
     title: Type.String(),
     path: Type.String(),
     size: Type.Integer(),
+    /** 文件修改时间（毫秒）。同规格的两份靠它判断哪份更早 */
+    mtime: Type.Integer(),
     durationMs: Type.Union([Type.Integer(), Type.Null()]),
     width: Type.Union([Type.Integer(), Type.Null()]),
     height: Type.Union([Type.Integer(), Type.Null()]),
@@ -1030,6 +1077,10 @@ export const DuplicateItem = Type.Object(
     ltx: Type.Boolean(),
     /** 能提出番号 = 日本片；默认勾选与「建议保留」的取舍依赖它 */
     isJp: Type.Boolean(),
+    /** NFO 演员的归一化键（`actorKey`）；查重页「演员排除」按它比对 */
+    actorKeys: Type.Array(Type.String({ description: '演员名归一化键（NFO）' })),
+    /** 分片标记：`cd1` / `下` / 空（空 = 完整版） */
+    part: Type.String({ description: '分片标记，空串表示完整版' }),
     /** 建议保留这条（分辨率/体积/清晰度综合最高的那条） */
     suggestedKeep: Type.Boolean(),
   },
@@ -1089,6 +1140,11 @@ export const DeleteItemsBody = Type.Object(
       maxItems: 500,
       description: '要删除的 video_items.id',
     }),
+    permanent: Type.Optional(
+      Type.Boolean({
+        description: 'true = 直接永久删除（不进回收站，不可恢复）；默认 false',
+      }),
+    ),
   },
   { $id: 'VideoDeleteItemsBody' },
 );

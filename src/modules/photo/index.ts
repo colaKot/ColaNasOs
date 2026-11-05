@@ -2,6 +2,7 @@ import { sql } from 'kysely';
 import type { ServerModule } from '../../../kernel/types';
 import { PHOTO_SCHEMAS } from './schemas';
 import { registerPhotoAi } from './ai';
+import { enqueueScanOnce } from './ai/vision';
 import { registerPhotoBackup } from './backup';
 import { registerPhotoCleanup } from './curation';
 import { registerPhotoMap } from './map';
@@ -99,6 +100,10 @@ export const photo: ServerModule = {
     await registerPhotoUpload(app, k);
     await registerPhotoMapTile(app, k);
     await registerPhotoDelete(app, k, h);
+
+    // 重启后自动接着识别：还有没识别的照片就入队一次。
+    // 开关关着 / 已暂停 / 已经全部识别完 都直接跳过（判断在 enqueueScanOnce 里）。
+    void enqueueScanOnce(k).catch(() => null);
 
     // 回收站保留 30 天：启动先清一次，之后每小时一次（unref 不阻止进程退出）
     void purgeExpiredTrash(k).catch(() => null);

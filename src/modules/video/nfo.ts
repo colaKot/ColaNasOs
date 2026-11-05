@@ -23,6 +23,14 @@ export interface NfoMeta {
   genres: string[];
   regions: string[];
   actors: string[];
+  /**
+   * 演员 → 头像 URL（`<actor><thumb>`，多数日片 NFO 里就带着 JavDB 的
+   * `c0.jdbstatic.com/avatars/...`）。
+   *
+   * 之前解析只取 `<name>`、把 thumb 直接丢了，表现就是「演员全都没有头像」——
+   * 而这份数据本地就有，根本不用联网抓（2026-11-04）。
+   */
+  actorThumbs?: Record<string, string>;
   directors: string[];
   /** nfo 里声明的图片（可能是文件名或 URL，调用方负责解析成实际路径） */
   poster?: string;
@@ -193,6 +201,7 @@ export function parseNfo(xml: string): NfoMeta | null {
     genres: tagAll(text, 'genre'),
     regions: [...tagAll(text, 'country'), ...tagAll(text, 'region')],
     actors: parseActorNames(text),
+    actorThumbs: parseActorThumbs(text),
     directors: tagAll(text, 'director'),
     poster: art.poster,
     fanart: art.fanart,
@@ -217,6 +226,26 @@ export function parseActorNames(xml: string): string[] {
     if (name) out.push(name);
   }
   return [...new Set(out)];
+}
+
+/**
+ * 演员头像：`<actor><name>X</name><thumb>https://…/avatars/…jpg</thumb></actor>`。
+ *
+ * 返回 `{ 名字: URL }`。只收 http(s) 的（本地相对路径走 `resolveArtRef` 那套没意义，
+ * 演员图基本都在 CDN 上）；同一演员在多条 NFO 里出现时取第一条非空的。
+ */
+export function parseActorThumbs(xml: string): Record<string, string> {
+  const re = /<actor(?:\s[^>]*)?>([\s\S]*?)<\/actor>/gi;
+  const out: Record<string, string> = {};
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml)) !== null) {
+    const name = tagText(m[1], 'name');
+    const thumb = tagText(m[1], 'thumb') ?? tagText(m[1], 'photo');
+    if (!name || !thumb) continue;
+    if (!/^https?:\/\//i.test(thumb)) continue;
+    if (!out[name]) out[name] = thumb;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- 定位

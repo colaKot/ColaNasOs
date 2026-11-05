@@ -97,16 +97,14 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
         await PhotoDownload.save(url: url, headers: videoArtHeaders, suggestedName: name);
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+          NasSnack.show(context, '$e');
         }
       }
       return;
     }
     await Clipboard.setData(ClipboardData(text: url));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('video.media.copyLink'))),
-      );
+      NasSnack.show(context, tr('video.media.copyLink'));
     }
   }
 
@@ -130,7 +128,7 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
       if (mounted) Navigator.of(context).maybePop();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 

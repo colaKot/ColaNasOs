@@ -5,7 +5,11 @@ export type BookLibraryItem = {
   "id": string;
   "name": string;
   "path": string;
+  "type": string;
   "items": number;
+  "scanWhenStart": number;
+  "scanWhenChange": number;
+  "scanIntervalHours": number;
   "createdAt": number;
   "lastScanAt": number;
 };
@@ -17,6 +21,16 @@ export type BookLibraryListResponse = {
 export type BookLibraryCreateBody = {
   "name": string;
   "path": string;
+  "type"?: "book" | "comic";
+};
+
+export type BookLibraryUpdateBody = {
+  "id": string;
+  "name"?: string;
+  "type"?: "book" | "comic";
+  "scanWhenStart"?: boolean;
+  "scanWhenChange"?: boolean;
+  "scanIntervalHours"?: number;
 };
 
 export type BookLibraryRemoveBody = {
@@ -44,6 +58,7 @@ export type BookItem = {
   "id": string;
   "libraryId": string;
   "path": string;
+  "type": string;
   "title": string;
   "author": string;
   "language": string;
@@ -61,6 +76,7 @@ export type BookItem = {
 
 export type BookListQuery = {
   "libraryId"?: string;
+  "type"?: "book" | "comic";
   "q"?: string;
   "format"?: string;
   "favorite"?: string;
@@ -88,6 +104,8 @@ export type BookFileUrlResponse = {
 export type BookStatsResponse = {
   "libraries": number;
   "books": number;
+  "bookCount": number;
+  "comicCount": number;
   "favorites": number;
 };
 
@@ -194,6 +212,11 @@ export type BookListRemoveBody = {
   "id": string;
 };
 
+export type BookListRenameBody = {
+  "id": string;
+  "name": string;
+};
+
 export type BookListRefBody = {
   "listId": string;
   "bookId": string;
@@ -205,6 +228,50 @@ export type BookListItemsQuery = {
 
 export type BookListItemsResponse = {
   "items": BookItem[];
+};
+
+export type BookHistoryQuery = {
+  "limit"?: number;
+};
+
+export type BookCacheStatsResponse = {
+  "files": number;
+  "bytes": number;
+};
+
+export type BookCacheClearResponse = {
+  "files": number;
+  "bytes": number;
+};
+
+export type BookUserCollection = {
+  "id": string;
+  "name": string;
+  "paths": string[];
+  "books": number;
+  "coverId": string;
+  "createdAt": number;
+  "updatedAt": number;
+};
+
+export type BookUserCollectionListResponse = {
+  "items": BookUserCollection[];
+};
+
+export type BookUserCollectionBody = {
+  "name": string;
+  "paths": string[];
+};
+
+export type BookUserCollectionUpdateBody = {
+  "id": string;
+  "name"?: string;
+  "paths"?: string[];
+};
+
+export type BookUserCollectionItemsQuery = {
+  "id": string;
+  "limit"?: number;
 };
 
 export type BookErrorResponse = {
@@ -286,6 +353,7 @@ export type DiscoverError = {
 
 export type DiscoverSettings = {
   "apiKeyConfigured": boolean;
+  "apiKey": string;
   "baseUrl": string;
   "language": string;
   "imageBase": string;
@@ -431,6 +499,17 @@ export type FilesListResponse = {
   "path": string;
   "items": FilesListItem[];
   "nextCursor": string;
+};
+
+export type FilesRootItem = {
+  "path": string;
+  "label": string;
+  "kind": "drive" | "home" | "share";
+};
+
+export type FilesRootsResponse = {
+  "home": string;
+  "roots": FilesRootItem[];
 };
 
 export type FilesCheckBody = {
@@ -831,6 +910,16 @@ export type MusicLibraryRemoveBody = {
   "id": string;
 };
 
+export type MusicCacheStatsResponse = {
+  "files": number;
+  "bytes": number;
+};
+
+export type MusicCacheClearResponse = {
+  "removed": number;
+  "bytes": number;
+};
+
 export type MusicScanBody = {
   "libraryId"?: string;
   "limit"?: number;
@@ -957,6 +1046,36 @@ export type MusicStatsResponse = {
   "durationMs": number;
 };
 
+export type MusicCollection = {
+  "id": string;
+  "name": string;
+  "paths": string[];
+  "tracks": number;
+  "coverTrackId": string;
+  "createdAt": number;
+  "updatedAt": number;
+};
+
+export type MusicCollectionListResponse = {
+  "items": MusicCollection[];
+};
+
+export type MusicCollectionBody = {
+  "name": string;
+  "paths": string[];
+};
+
+export type MusicCollectionUpdateBody = {
+  "id": string;
+  "name"?: string;
+  "paths"?: string[];
+};
+
+export type MusicCollectionItemsQuery = {
+  "id": string;
+  "limit"?: number;
+};
+
 export type MusicPlaylist = {
   "id": string;
   "name": string;
@@ -986,6 +1105,11 @@ export type MusicPlaylistItemsQuery = {
 
 export type MusicPlaylistDeleteBody = {
   "playlistId": string;
+};
+
+export type MusicPlaylistRenameBody = {
+  "playlistId": string;
+  "name": string;
 };
 
 export type MusicAutoPlaylist = {
@@ -1126,6 +1250,16 @@ export type PhotoCalendarResponse = {
   "year": number;
   "total": number;
   "months": PhotoCalendarMonth[];
+};
+
+export type PhotoYearCover = {
+  "year": number;
+  "count": number;
+  "coverPath": string;
+};
+
+export type PhotoYearCoversResponse = {
+  "years": PhotoYearCover[];
 };
 
 export type PhotoScanPolicy = {
@@ -1648,6 +1782,8 @@ export type PhotoAiQueueJob = {
   "label": string;
   "status": string;
   "pending": number;
+  "done": number;
+  "total": number;
   "percent": number;
 };
 
@@ -1766,6 +1902,18 @@ export type PhotoScanTask = {
   "reused": boolean;
 };
 
+export type PhotoAiScanBody = {
+  "force"?: boolean;
+  "ocr"?: boolean;
+  "activity"?: boolean;
+  "limit"?: number;
+};
+
+export type PhotoAiScanResponse = {
+  "jobId": string;
+  "reused": boolean;
+};
+
 export type PhotoAiAnalyzeBody = {
   "libraryId"?: string;
   "limit"?: number;
@@ -1843,6 +1991,8 @@ export type PhotoFaceList = {
 export type PhotoSceneSummaryItem = {
   "label": string;
   "count": number;
+  "coverId"?: string;
+  "coverPath"?: string;
 };
 
 export type PhotoSceneSummary = {
@@ -2570,6 +2720,13 @@ export type SystemRestartResponse = {
   "ok": boolean;
 };
 
+export type SystemDbCompactResponse = {
+  "ok": boolean;
+  "beforeBytes": number;
+  "afterBytes": number;
+  "freedBytes": number;
+};
+
 export type SystemUpdateCheckResponse = {
   "currentId": string;
   "currentVersion": number;
@@ -2591,6 +2748,18 @@ export type SystemTlsInfoResponse = {
 export type SystemTlsUploadBody = {
   "cert": string;
   "key": string;
+};
+
+export type SystemLogsResponse = {
+  "file": string;
+  "size": number;
+  "updatedAt": string;
+  "lines": {
+    "time": string;
+    "level": string;
+    "msg": string;
+  }[];
+  "truncated": boolean;
 };
 
 export type VideoSourceItem = {
@@ -2843,6 +3012,7 @@ export type VideoBrowseResponse = {
 export type VideoDuplicatesQuery = {
   "libraryId"?: string;
   "limit"?: number;
+  "excludeActors"?: string;
 };
 
 export type VideoDuplicateItem = {
@@ -2850,6 +3020,7 @@ export type VideoDuplicateItem = {
   "title": string;
   "path": string;
   "size": number;
+  "mtime": number;
   "durationMs": number;
   "width": number;
   "height": number;
@@ -2868,6 +3039,8 @@ export type VideoDuplicateItem = {
   "dolbyAtmos": boolean;
   "ltx": boolean;
   "isJp": boolean;
+  "actorKeys": string[];
+  "part": string;
   "suggestedKeep": boolean;
 };
 
@@ -2888,6 +3061,7 @@ export type VideoDuplicatesResponse = {
 
 export type VideoDeleteItemsBody = {
   "ids": string[];
+  "permanent"?: boolean;
 };
 
 export type VideoDeleteItemsResponse = {
@@ -2990,6 +3164,16 @@ export type VideoIdQuery = {
 export type VideoStreamUrlResponse = {
   "url": string;
   "expiresInSec": number;
+  "compat"?: {
+    "needTranscode": boolean;
+    "reasons": "dolbyVision" | "hdr10" | "hdr10plus" | "hlg" | "hevc" | "av1" | "10bit" | "eac3" | "truehd" | "atmos"[];
+    "videoCodec": string;
+    "audioCodec": string;
+    "container": string;
+    "width": number;
+    "height": number;
+    "is4k": boolean;
+  };
 };
 
 export type VideoStatsResponse = {
@@ -3256,6 +3440,7 @@ export type VideoTmdbSettingsBody = {
 export type VideoArtQuery = {
   "id": string;
   "kind"?: "poster" | "fanart";
+  "size"?: number;
 };
 
 export type VideoWatchBody = {
@@ -3303,9 +3488,13 @@ export type VideoHomeResponse = {
 
 export type PlayerSessionCreateBody = {
   "id": string;
-  "preset"?: "web480" | "web720" | "web1080";
+  "preset"?: "original" | "2160p_15m" | "1440p_10m" | "1440p_8m" | "1440p_5m" | "1440p_3m" | "1080p_8m" | "1080p_5m" | "1080p_3m" | "1080p_2m" | "720p_3m" | "720p_2m" | "720p_1m" | "480p_1m";
   "codec"?: "h264" | "h265" | "av1";
   "subtitle"?: string;
+  "audioNormalize"?: boolean;
+  "audioDownmix"?: boolean;
+  "audioIndex"?: number;
+  "forceSdr"?: boolean;
 };
 
 export type PlayerSessionCreated = {
@@ -3326,6 +3515,8 @@ export type PlayerSessionItem = {
   "url": string;
   "createdAt": number;
   "updatedAt": number;
+  "audioIndex"?: number;
+  "hdrToSdr"?: boolean;
 };
 
 export type PlayerSessionQuery = {

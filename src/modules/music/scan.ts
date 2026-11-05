@@ -1,7 +1,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { sql } from 'kysely';
-import { filesRoot, resolveInRoot } from '../files/fs-root';
+import { filesRoot, resolveAnyPath, resolveInRoot } from '../files/fs-root';
 import { walkFiles } from '../files/walk';
 import { mapLimit } from '../media/concurrency';
 import { isAudioFile, probeAudio, titleOf } from './ffmpeg';
@@ -61,7 +61,9 @@ export async function scanMusicLibrary(
   const root = filesRoot();
   let rootAbs: string;
   try {
-    rootAbs = resolveInRoot(root, lib.root_path);
+    // root_path 可能是绝对路径（音乐来源允许任意本机目录 / SMB 共享），
+    // 相对路径仍按 files 根解析
+    rootAbs = resolveAnyPath(root, lib.root_path);
   } catch {
     return { tracks: 0, added: 0, updated: 0, skipped: 0, probed: 0, missing: 0, pruned: 0 };
   }

@@ -75,6 +75,39 @@ function validate() {
         }
       }
     }
+
+    // mobile：手机端底部 tab（可选）。空/缺省 = 手机端不显示底部 tab（只有房子 + 内容）
+    const mobile = nav.mobile;
+    if (mobile) {
+      const tabs = mobile.tabs || [];
+      if (!Array.isArray(tabs) || tabs.length < 2 || tabs.length > 5) {
+        errors.push(`${app.id}.nav.mobile.tabs：需要 2~5 项，实际 ${JSON.stringify(tabs)}`);
+      }
+      const moreCount = tabs.filter((t) => t === '@more').length;
+      if (moreCount > 1) errors.push(`${app.id}.nav.mobile.tabs：@more 最多一个`);
+      if (moreCount === 1 && tabs[tabs.length - 1] !== '@more') {
+        errors.push(`${app.id}.nav.mobile.tabs：@more 必须排在最后`);
+      }
+      for (const t of tabs) {
+        if (t === '@more') continue;
+        if (!itemIds.has(t)) {
+          errors.push(`${app.id}.nav.mobile.tabs：${t} 不是本 App 的菜单项 id`);
+        }
+      }
+      for (const [tabId, alts] of Object.entries(mobile.aliases || {})) {
+        if (!tabs.includes(tabId)) errors.push(`${app.id}.nav.mobile.aliases：${tabId} 不在 tabs 里`);
+        if (!Array.isArray(alts) || alts.length === 0) {
+          errors.push(`${app.id}.nav.mobile.aliases.${tabId}：需要非空数组`);
+        }
+        for (const a of alts) {
+          if (!itemIds.has(a)) errors.push(`${app.id}.nav.mobile.aliases.${tabId}：${a} 不是本 App 的菜单项 id`);
+        }
+      }
+      for (const [tabId, key] of Object.entries(mobile.labels || {})) {
+        if (!tabs.includes(tabId)) errors.push(`${app.id}.nav.mobile.labels：${tabId} 不在 tabs 里`);
+        if (!key) errors.push(`${app.id}.nav.mobile.labels.${tabId}：需要 i18n 键`);
+      }
+    }
   }
   return errors;
 }
@@ -255,18 +288,51 @@ function genNav() {
     '}',
     '',
     'class AppNavSpec {',
-    '  const AppNavSpec({required this.appId, required this.style, required this.sections});',
+    '  const AppNavSpec({',
+    '    required this.appId,',
+    '    required this.style,',
+    '    required this.sections,',
+    '    this.mobileTabs = const <String>[],',
+    '    this.mobileTabLabels = const <String, String>{},',
+    '    this.mobileTabAliases = const <String, List<String>>{},',
+    '  });',
     '',
     '  final String appId;',
     '  final NavStyle style;',
     '  final List<NavSectionSpec> sections;',
+    '',
+    '  /// 手机端底部 tab（契约 `nav.mobile.tabs`）。空 = 手机端不显示底部 tab。',
+    '  /// 末项可以是 [kNavMoreTabId]，表示「更多」整页。',
+    '  final List<String> mobileTabs;',
+    '',
+    '  /// 底部 tab 的文案覆盖（tab id → i18n 键）。不给就用菜单项自己的 labelKey。',
+    '  final Map<String, String> mobileTabLabels;',
+    '',
+    '  /// 选中别名：tab → 菜单项 id 列表。用于「一个 tab 涵盖多个菜单项」',
+    '  /// （如影视的「库」tab 同时涵盖 `home` 与动态的 `lib:<id>`）。',
+    '  final Map<String, List<String>> mobileTabAliases;',
+    '',
+    '  bool get hasMobileTabs => mobileTabs.isNotEmpty;',
     '',
     '  /// 全部静态项 id（不含动态项），用于「契约 ↔ 实现」对账与测试遍历',
     '  Iterable<String> get staticItemIds => sections',
     '      .expand((s) => s.items)',
     '      .where((i) => !i.isDynamic)',
     '      .map((i) => i.id);',
+    '',
+    '  /// 按 id 取菜单项（不含动态项）；找不到返回 null',
+    '  NavItemSpec? itemById(String id) {',
+    '    for (final section in sections) {',
+    '      for (final item in section.items) {',
+    '        if (!item.isDynamic && item.id == id) return item;',
+    '      }',
+    '    }',
+    '    return null;',
+    '  }',
     '}',
+    '',
+    "/// 契约里表示「更多」的伪 tab id",
+    "const String kNavMoreTabId = '@more';",
     '',
     '/// 有二级菜单的 App（生成自契约，新增模块只要在 apps.json 写 nav）',
     'const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{',
@@ -299,6 +365,22 @@ function genNav() {
       lines.push('      ),');
     }
     lines.push('    ],');
+    const mobile = nav.mobile;
+    if (mobile && Array.isArray(mobile.tabs) && mobile.tabs.length) {
+      lines.push(`    mobileTabs: <String>[${mobile.tabs.map((t) => `'${t}'`).join(', ')}],`);
+      const labels = Object.entries(mobile.labels || {});
+      if (labels.length) {
+        lines.push(`    mobileTabLabels: <String, String>{${labels.map(([k, v]) => `'${k}': '${v}'`).join(', ')}},`);
+      }
+      const aliases = Object.entries(mobile.aliases || {});
+      if (aliases.length) {
+        lines.push(
+          `    mobileTabAliases: <String, List<String>>{${aliases
+            .map(([k, v]) => `'${k}': <String>[${v.map((x) => `'${x}'`).join(', ')}]`)
+            .join(', ')}},`,
+        );
+      }
+    }
     lines.push('  ),');
   }
   lines.push('};', '', '/// 取某个 App 的菜单结构（没有二级菜单时返回 null）', 'AppNavSpec? appNavSpecOf(String appId) => kAppNavSpecs[appId];', '');

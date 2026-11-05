@@ -1,6 +1,8 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
+import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
 import 'video_page.dart';
@@ -90,11 +92,7 @@ class _VideoSmartAlbumsPageState extends State<VideoSmartAlbumsPage> {
                   ),
                 ),
               ),
-              IconButton(
-                tooltip: tr('common.refresh'),
-                onPressed: _load,
-                icon: const Icon(Icons.refresh),
-              ),
+              NasRefreshButton(onPressed: _load),
             ],
           ),
         ),
@@ -111,39 +109,55 @@ class _VideoSmartAlbumsPageState extends State<VideoSmartAlbumsPage> {
             itemBuilder: (context, i) {
               final (key, labelKey, icon) = _defs[i];
               final count = _counts[key] ?? 0;
-              return NasCard(
-                onTap: count == 0 ? null : () => _open(key, labelKey),
-                padding: const EdgeInsets.all(NasTokens.spaceMd),
-                child: Row(
-                  children: [
-                    Icon(icon, size: NasTokens.iconXl),
-                    const SizedBox(width: NasTokens.spaceSm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            tr(labelKey),
-                            style: const TextStyle(
-                              fontSize: NasTokens.fontSubtitle,
-                              fontWeight: FontWeight.w600,
+              return NasContextMenuRegion(
+                entries: [
+                  NasMenuEntry(
+                    label: tr('common.open'),
+                    icon: Icons.open_in_new,
+                    onSelected: count == 0
+                        ? null
+                        : () => _open(key, labelKey),
+                  ),
+                  NasMenuEntry(
+                    label: tr('common.refresh'),
+                    icon: Icons.refresh,
+                    onSelected: _load,
+                  ),
+                ],
+                child: NasCard(
+                  onTap: count == 0 ? null : () => _open(key, labelKey),
+                  padding: const EdgeInsets.all(NasTokens.spaceMd),
+                  child: Row(
+                    children: [
+                      Icon(icon, size: NasTokens.iconXl),
+                      const SizedBox(width: NasTokens.spaceSm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              tr(labelKey),
+                              style: const TextStyle(
+                                fontSize: NasTokens.fontSubtitle,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: NasTokens.spaceXs),
-                          Text(
-                            tr('video.smart.count', {'count': count}),
-                            style: TextStyle(
-                              fontSize: NasTokens.fontCaption,
-                              color: count == 0
-                                  ? context.nasTextSecondary
-                                  : Theme.of(context).colorScheme.primary,
+                            const SizedBox(height: NasTokens.spaceXs),
+                            Text(
+                              tr('video.smart.count', {'count': count}),
+                              style: TextStyle(
+                                fontSize: NasTokens.fontCaption,
+                                color: count == 0
+                                    ? context.nasTextSecondary
+                                    : Theme.of(context).colorScheme.primary,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             },
@@ -200,6 +214,58 @@ class _SmartAlbumItemsPageState extends State<_SmartAlbumItemsPage> {
     }
   }
 
+  /// 右键菜单：智能合集里的条目也是影片，给的动作用详情页那套里最常用的三个，
+  /// 重型操作（刮削 / 改匹配）仍回详情页，避免这里塞一堆对话框。
+  List<NasMenuEntry> _itemMenuEntries(VideoItem item) => [
+    NasMenuEntry(
+      label: tr('common.open'),
+      icon: Icons.play_arrow_outlined,
+      onSelected: () => openVideoDetail(context, item),
+    ),
+    NasMenuEntry(
+      label: tr(
+        item.watched ? 'video.action.markUnwatched' : 'video.action.markWatched',
+      ),
+      icon: item.watched ? Icons.remove_done : Icons.done_all,
+      onSelected: () => _toggleWatched(item),
+    ),
+    NasMenuEntry(
+      label: tr('video.action.copyPath'),
+      icon: Icons.copy_all_outlined,
+      onSelected: item.path.isEmpty ? null : () => _copyPath(item.path),
+    ),
+  ];
+
+  Future<void> _toggleWatched(VideoItem item) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final next = !item.watched;
+    try {
+      await ApiSession.instance.client.videoWatchMark(
+        body: VideoWatchBody(ids: [item.id], watched: next),
+      );
+      if (!mounted) return;
+      setState(() {
+        _items = [
+          for (final it in _items)
+            if (it.id == item.id)
+              VideoItem.fromJson({...it.toJson(), 'watched': next})
+            else
+              it,
+        ];
+      });
+      // 智能合集的计数是按已看/未看筛出来的，改完要重拉否则和条目对不上
+      await _load();
+    } catch (e) {
+      NasSnack.showOn(messenger, '$e');
+    }
+  }
+
+  Future<void> _copyPath(String path) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await Clipboard.setData(ClipboardData(text: path));
+    NasSnack.showOn(messenger, tr('common.copied'));
+  }
+
   @override
   Widget build(BuildContext context) {
     final base = ApiSession.instance.baseUrl;
@@ -210,11 +276,7 @@ class _SmartAlbumItemsPageState extends State<_SmartAlbumItemsPage> {
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
-          IconButton(
-            tooltip: tr('common.refresh'),
-            onPressed: _load,
-            icon: const Icon(Icons.refresh),
-          ),
+          NasRefreshButton(onPressed: _load),
         ],
       ),
       body: _loading
@@ -245,36 +307,39 @@ class _SmartAlbumItemsPageState extends State<_SmartAlbumItemsPage> {
                           itemCount: _items.length,
                           itemBuilder: (context, i) {
                             final item = _items[i];
-                            return InkWell(
-                              onTap: () => openVideoDetail(context, item),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(
-                                        NasTokens.radiusSm,
-                                      ),
-                                      child: NasCoverImage(
-                                        url:
-                                            '$base/api/v1/video/poster?id=${Uri.encodeComponent(item.id)}',
-                                        headers: headers,
-                                        cacheWidth: 480,
-                                        icon: Icons.movie_outlined,
+                            return NasContextMenuRegion(
+                              entries: _itemMenuEntries(item),
+                              child: InkWell(
+                                onTap: () => openVideoDetail(context, item),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(
+                                          NasTokens.radiusSm,
+                                        ),
+                                        child: NasCoverImage(
+                                          url:
+                                              '$base/api/v1/video/poster?id=${Uri.encodeComponent(item.id)}',
+                                          headers: headers,
+                                          cacheWidth: 480,
+                                          icon: Icons.movie_outlined,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(height: NasTokens.spaceXs),
-                                  Text(
-                                    item.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: NasTokens.fontBody,
+                                    const SizedBox(height: NasTokens.spaceXs),
+                                    Text(
+                                      item.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: NasTokens.fontBody,
+                                      ),
                                     ),
-                                  ),
-                                  MediaFlagsRow(item: item, compact: true),
-                                ],
+                                    MediaFlagsRow(item: item, compact: true),
+                                  ],
+                                ),
                               ),
                             );
                           },

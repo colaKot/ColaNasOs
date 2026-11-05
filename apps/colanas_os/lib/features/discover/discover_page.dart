@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
+import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
 import 'discover_detail_page.dart';
@@ -267,47 +268,82 @@ class _DiscoverPageState extends State<DiscoverPage> {
     );
   }
 
+  /// 发现页设置：TMDB（Key / 语言）+ 豆瓣 Cookie，各带一个「测试」按钮。
+  ///
+  /// Key / Cookie 都是**明文回传**并直接填进输入框：用户要能看见自己配的是哪一个，
+  /// 不再是「已配置 / 未配置」两句话说事。
   Future<void> _openSettings() async {
-    final keyCtrl = TextEditingController();
+    final keyCtrl = TextEditingController(text: _settings?.apiKey ?? '');
     final langCtrl = TextEditingController(
       text: _settings?.language ?? 'zh-CN',
     );
+    final doubanCtrl = TextEditingController();
+    try {
+      final d = await ApiSession.instance.client.discoverDoubanSettingsGet();
+      doubanCtrl.text = '${d['cookie'] ?? ''}';
+    } catch (_) {
+      // 读不到豆瓣配置不该挡住 TMDB 设置
+    }
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(tr('ui.discover.001')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _settings?.apiKeyConfigured == true
-                  ? tr('ui.discover.h839ce1')
-                  : tr('ui.discover.h8b26af'),
-              style: TextStyle(
-                color: ctx.nasTextSecondary,
-                fontSize: NasTokens.fontCaption,
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _settings?.apiKeyConfigured == true
+                    ? tr('ui.discover.h839ce1')
+                    : tr('ui.discover.h8b26af'),
+                style: TextStyle(
+                  color: ctx.nasTextSecondary,
+                  fontSize: NasTokens.fontCaption,
+                ),
               ),
-            ),
-            const SizedBox(height: NasTokens.spaceSm),
-            TextField(
-              controller: keyCtrl,
-              obscureText: true,
-              decoration: const InputDecoration(labelText: 'TMDB API Key'),
-            ),
-            const SizedBox(height: NasTokens.spaceSm),
-            TextField(
-              controller: langCtrl,
-              decoration: InputDecoration(
-                labelText: tr('ui.discover.002'),
-                hintText: 'zh-CN',
+              const SizedBox(height: NasTokens.spaceSm),
+              TextField(
+                controller: keyCtrl,
+                decoration: const InputDecoration(labelText: 'TMDB API Key'),
               ),
-            ),
-          ],
+              const SizedBox(height: NasTokens.spaceSm),
+              TextField(
+                controller: langCtrl,
+                decoration: InputDecoration(
+                  labelText: tr('ui.discover.002'),
+                  hintText: 'zh-CN',
+                ),
+              ),
+              const SizedBox(height: NasTokens.spaceSm),
+              TextField(
+                controller: doubanCtrl,
+                decoration: InputDecoration(
+                  labelText: tr('discover.douban.cookie'),
+                  helperText: tr('discover.douban.hint'),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: Text(tr('common.cancel')),
+          ),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(ctx, false);
+              _testTmdbKey(keyCtrl.text.trim());
+            },
+            child: Text(tr('video.tmdb.test')),
+          ),
+          OutlinedButton(
+            onPressed: () {
+              Navigator.pop(ctx, false);
+              _testDoubanCookie(doubanCtrl.text.trim());
+            },
+            child: Text('${tr('discover.douban.cookie')} · ${tr('common.test')}'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -324,13 +360,43 @@ class _DiscoverPageState extends State<DiscoverPage> {
           language: langCtrl.text.trim(),
         ),
       );
+      if (doubanCtrl.text.trim().isNotEmpty) {
+        await ApiSession.instance.client.discoverDoubanSettings(
+          body: {'cookie': doubanCtrl.text.trim()},
+        );
+      }
       if (!mounted) return;
       setState(() => _settings = res);
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.saveFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.saveFailed', {'error': '$e'}));
+    }
+  }
+
+  /// TMDB 连通性自检：用输入框里的 Key，没保存也能测
+  Future<void> _testTmdbKey(String apiKey) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final r = await ApiSession.instance.client.videoTmdbTest(
+        body: {'apiKey': apiKey},
+      );
+      NasSnack.showOn(messenger, '${r['message'] ?? ''} (${r['latencyMs'] ?? 0} ms)');
+    } catch (e) {
+      NasSnack.showOn(messenger, '$e');
+    }
+  }
+
+  /// 豆瓣连通性自检
+  Future<void> _testDoubanCookie(String cookie) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final r = await ApiSession.instance.client.discoverDoubanTest(
+        body: {'cookie': cookie},
+      );
+      NasSnack.showOn(messenger, '${r['message'] ?? ''} (${r['latencyMs'] ?? 0} ms)');
+    } catch (e) {
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -371,7 +437,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
         ];
       });
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -389,11 +455,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
             icon: const Icon(Icons.settings_outlined),
             onPressed: _openSettings,
           ),
-          IconButton(
-            tooltip: tr('ui.accounts.021'),
-            icon: const Icon(Icons.refresh),
-            onPressed: () => _load(),
-          ),
+          NasRefreshButton(onPressed: () => _load()),
         ],
       ),
       body: Column(
@@ -461,7 +523,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                         padding: const EdgeInsets.only(
                           right: NasTokens.spaceXs,
                         ),
-                        child: ChoiceChip(
+                        child: NasChip(
                           label: Text(tr(k.$2)),
                           selected: _kind == k.$1,
                           onSelected: (_) {
@@ -536,7 +598,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                     runSpacing: NasTokens.spaceXs,
                     children: [
                       for (final g in _genres)
-                        FilterChip(
+                        NasChip(
                           label: Text(tr('discover.genre.${g.$2}')),
                           selected: _genresSel.contains(g.$1),
                           onSelected: (on) {
@@ -566,7 +628,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                     runSpacing: NasTokens.spaceXs,
                     children: [
                       for (final lang in const ['zh', 'ja', 'ko', 'en', 'fr', 'de', 'es'])
-                        FilterChip(
+                        NasChip(
                           label: Text(tr('discover.language.$lang')),
                           selected: _languagesSel.contains(lang),
                           onSelected: (on) {
@@ -621,7 +683,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                       SizedBox(
 
                         width: 132,
-                        child: DropdownButtonFormField<String>(
+                        child: NasDropdown<String>(
                           initialValue: _sort,
                           isDense: true,
                           decoration: InputDecoration(
@@ -665,7 +727,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
                 children: [
                   SizedBox(
                     width: 130,
-                    child: DropdownButtonFormField<String>(
+                    child: NasDropdown<String>(
                       initialValue: _country.isEmpty ? '__any__' : _country,
                       isDense: true,
                       decoration: InputDecoration(

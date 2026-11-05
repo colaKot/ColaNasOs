@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import net from 'node:net';
 import { execFile } from 'node:child_process';
 import { isSealed, openSecret, sealSecret } from '../../../kernel/secret-box';
@@ -183,6 +184,36 @@ export async function ensureSmbSession(
     return (await run(args)).code === 0;
   }
   return false;
+}
+
+/**
+ * 「共享真的能读吗」：445 端口通**不代表**共享可用 —— 服务在、但共享没挂 / 凭据过期 /
+ * 会话被踢掉时，端口探测照样返回 YES，而一访问就会挂住几秒。
+ *
+ * 这里用真实凭据建一次会话 + 读一次根目录，读不到就判离线：内容不该继续显示，
+ * 用户也不用等超时才发现「这个库打不开」。
+ */
+export async function verifySmbShare(
+  rootAbs: string,
+  username?: string | null,
+  password?: string | null,
+  timeoutMs = 3000,
+): Promise<boolean> {
+  const root = String(rootAbs || '').trim();
+  if (!root) return false;
+  const sessionOk = await ensureSmbSession(root, username, password);
+  if (!sessionOk) return false;
+  try {
+    await Promise.race([
+      fs.promises.access(root, fs.constants.R_OK),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('smb share read timeout')), timeoutMs),
+      ),
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function openSmbPassword(stored: string | null): string {

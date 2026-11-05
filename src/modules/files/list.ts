@@ -1,6 +1,13 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { filesRoot, httpError, resolveInRoot } from './fs-root';
+import {
+  filesRoot,
+  httpError,
+  isAbsoluteInput,
+  absoluteInput,
+  resolveInRoot,
+  toPosix,
+} from './fs-root';
 
 export interface ListQuery {
   path?: string;
@@ -15,7 +22,12 @@ export interface Logger {
 /** GET /api/v1/files/list：单层列目录，目录优先、名称升序 */
 export async function listHandler(q: ListQuery, log: Logger) {
   const root = filesRoot();
-  const target = resolveInRoot(root, q.path);
+  // 绝对路径（`D:/Photos`、`/D:/Photos`、`\\host\share`）= 浏览整机，不属于文件根的
+  // 相对语义；相对路径仍走 resolveInRoot 的越界保护。
+  const absolute = isAbsoluteInput(q.path);
+  const target = absolute
+    ? path.resolve(absoluteInput(q.path as string))
+    : resolveInRoot(root, q.path);
 
   let entries;
   try {
@@ -42,7 +54,10 @@ export async function listHandler(q: ListQuery, log: Logger) {
   log.debug({ root, target, count: items.length }, 'files.list');
 
   return {
-    path: path.relative(root, target).split(path.sep).join('/') || '.',
+    // 绝对路径原样回（POSIX 风格），前端据此继续往下一层拼
+    path: absolute
+      ? toPosix(target) || '/'
+      : path.relative(root, target).split(path.sep).join('/') || '.',
     items,
     nextCursor: null,
   };

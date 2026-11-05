@@ -124,14 +124,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   /// 下载当前曲目到本地缓存（进度提示走 SnackBar；失败如实说原因）
   Future<void> _cacheCurrent(MusicTrack track) async {
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(SnackBar(content: Text(tr('music.cache.downloading'))));
+    NasSnack.showOn(messenger, tr('music.cache.downloading'));
     try {
       await _service.cacheTrack(track);
-      messenger.showSnackBar(SnackBar(content: Text(tr('music.cache.done'))));
+      NasSnack.showOn(messenger, tr('music.cache.done'));
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('music.cache.failed', {'error': '$e'}))),
-      );
+      NasSnack.showOn(messenger, tr('music.cache.failed', {'error': '$e'}));
     }
   }
 

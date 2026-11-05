@@ -4,7 +4,7 @@ import path from 'node:path';
 import { Type } from '@sinclair/typebox';
 import { sql } from 'kysely';
 import { secured } from '../../../../kernel/route';
-import { filesRoot, resolveInRoot } from '../../files/fs-root';
+import { resolveRemoteDir } from '../../files/fs-root';
 import { Err } from '../../../../kernel/errors';
 import { TAG, ErrorResponse, RunBody, RunResponse, JobListResponse, DiffResponse, ConflictListResponse, ResolveBody, OkResponse, sha256File, walk, JobRow, ConflictRow } from '../util';
 import type { FastifyInstance } from 'fastify';
@@ -230,8 +230,8 @@ export async function registerSyncJobs(app: FastifyInstance, k: KernelApi, h: Sy
           let src: string;
           let dst: string;
           try {
-            src = resolveInRoot(filesRoot(), job.source);
-            dst = resolveInRoot(filesRoot(), job.target);
+            src = resolveRemoteDir(job.source);
+            dst = resolveRemoteDir(job.target);
           } catch {
             return reply.code(400).send({ error: Err.badRequest, message: 'path escapes root' });
           }

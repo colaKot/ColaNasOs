@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
+import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
 import 'video_page.dart';
@@ -109,8 +110,7 @@ class _VideoCollectionsPageState extends State<VideoCollectionsPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -138,8 +138,105 @@ class _VideoCollectionsPageState extends State<VideoCollectionsPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
+    }
+  }
+
+  /// 合集卡右键：打开 / 编辑 / 删除
+  List<NasMenuEntry> _collectionMenuEntries(VideoCollection c) => [
+    NasMenuEntry(
+      label: tr('common.open'),
+      icon: Icons.collections_bookmark_outlined,
+      onSelected: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => VideoCollectionDetailPage(
+            collection: c,
+            onChanged: _load,
+          ),
+        ),
+      ),
+    ),
+    NasMenuEntry(
+      label: tr('video.collection.edit'),
+      icon: Icons.edit_outlined,
+      onSelected: () => _upsert(editing: c),
+    ),
+    NasMenuEntry(
+      label: tr('video.collection.merge'),
+      icon: Icons.merge_type,
+      onSelected: () => _merge(c),
+    ),
+    const NasMenuEntry.divider(),
+    NasMenuEntry(
+      label: tr('common.delete'),
+      icon: Icons.delete_outline,
+      danger: true,
+      onSelected: () => _delete(c),
+    ),
+  ];
+
+  /// 合并合集：把当前合集的影片并入另一个合集，当前合集随后删除。
+  Future<void> _merge(VideoCollection source) async {
+    final targets = _items.where((x) => x.id != source.id).toList(growable: false);
+    if (targets.isEmpty) {
+      NasSnack.show(context, tr('video.collection.mergeNoTarget'));
+      return;
+    }
+    var targetId = targets.first.id;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text(tr('video.collection.mergeTitle')),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(tr('video.collection.mergeBody', {'source': source.name})),
+                const SizedBox(height: NasTokens.spaceMd),
+                DropdownButtonFormField<String>(
+                  initialValue: targetId,
+                  decoration: InputDecoration(
+                    labelText: tr('video.collection.mergeTarget'),
+                  ),
+                  items: [
+                    for (final t in targets)
+                      DropdownMenuItem(value: t.id, child: Text(t.name)),
+                  ],
+                  onChanged: (v) => setLocal(() => targetId = v ?? targetId),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('video.collection.merge')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final merged = await ApiSession.instance.client.videoCollectionMerge(
+        body: {'sourceId': source.id, 'targetId': targetId},
+      );
+      if (!mounted) return;
+      NasSnack.show(
+        context,
+        tr('video.collection.merged', {'count': '${merged.items}'}),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -169,8 +266,7 @@ class _VideoCollectionsPageState extends State<VideoCollectionsPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -221,7 +317,10 @@ class _VideoCollectionsPageState extends State<VideoCollectionsPage> {
                   itemCount: _items.length,
                   itemBuilder: (context, i) {
                     final c = _items[i];
-                    return Padding(
+                    // 桌面 / Web 右键
+                    return NasContextMenuRegion(
+                      entries: _collectionMenuEntries(c),
+                      child: Padding(
                       padding: const EdgeInsets.only(
                         bottom: NasTokens.spaceSm,
                       ),
@@ -320,6 +419,7 @@ class _VideoCollectionsPageState extends State<VideoCollectionsPage> {
                           ],
                         ),
                       ),
+                      ),
                     );
                   },
                 ),
@@ -373,12 +473,10 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
       if (!mounted) return;
       setState(() => _coverId = item.id);
       widget.onChanged?.call();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('video.collection.coverSet'))),
-      );
+      NasSnack.show(context, tr('video.collection.coverSet'));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -447,8 +545,7 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -478,11 +575,7 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: tr('common.refresh'),
-            onPressed: _load,
-            icon: const Icon(Icons.refresh),
-          ),
+          NasRefreshButton(onPressed: _load),
         ],
       ),
       body: _loading

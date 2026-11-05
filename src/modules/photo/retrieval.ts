@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { Type } from '@sinclair/typebox';
 import { sql } from 'kysely';
+import { ftsPhrase } from '../files/fts';
 import { secured } from '../../../kernel/route';
 import type { KernelApi } from '../../../kernel/types';
 import { Err } from '../../../kernel/errors';
@@ -158,6 +159,7 @@ export async function registerPhotoRetrieval(app: any, k: KernelApi): Promise<vo
       const raw = String(body.q || '').trim();
       const limit = Math.max(1, Math.min(Number(body.limit) || 5, 20));
       const like = `%${raw.replace(/[%_]/g, (m) => '\\' + m)}%`;
+      const fts = ftsPhrase(raw);
       const hasQuery = raw.length > 0;
       const items: Array<{ kind: string; value: string; count: number }> = [];
 
@@ -257,7 +259,9 @@ export async function registerPhotoRetrieval(app: any, k: KernelApi): Promise<vo
       const ocr = (
         await sql<{ text: string; n: number }>`
           select text, count(*) as n from photo_ocr
-           where text like ${like} escape '\\'
+           where ${fts
+             ? sql`rowid in (select rowid from photo_ocr_fts where photo_ocr_fts match ${fts})`
+             : sql`text like ${like} escape '\\'`}
            group by text order by n desc limit ${limit}
         `.execute(k.db)
       ).rows;

@@ -1,10 +1,13 @@
+import { tmdbGet } from '../../discover/tmdb';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sql } from 'kysely';
+import { Type } from '@sinclair/typebox';
 import { secured } from '../../../../kernel/route';
 import { Err } from '../../../../kernel/errors';
 import { filesRoot, resolveAnyPath } from '../../files/fs-root';
+import { thumbHandler } from '../../files/thumb';
 import { findLocalFanart, findLocalPoster } from '../nfo';
 import { isOfflinePath, offlineSmbPrefixes } from '../sources';
 import { TAG } from '../util';
@@ -217,8 +220,8 @@ export async function registerVideoScrape(
     async () => {
       const s = readScrapeSettings(k);
       return {
-        // Key 不回传明文，只回「有没有配」；前端按 configured 显示状态
-        apiKey: '',
+        // 明文回传：用户要能确认「现在配的是哪个 Key」（自用 NAS，不做多租户隔离）
+        apiKey: s.apiKey,
         language: s.language,
         writeSidecar: s.writeSidecar,
         minScore: s.minScore,
@@ -260,12 +263,62 @@ export async function registerVideoScrape(
       await k.config.set('video.tmdb', next);
       const s = readScrapeSettings(k);
       return {
-        apiKey: '',
+        apiKey: s.apiKey,
         language: s.language,
         writeSidecar: s.writeSidecar,
         minScore: s.minScore,
         configured: Boolean(s.apiKey),
       };
+    },
+  );
+
+  // 连通性自检：拿当前配置的 Key 真打一次 TMDB，界面上的「测试」按钮用它。
+  // 用 /movie/550 而不是 /configuration —— 后者不需要 Key，无效 Key 也会返回 200。
+  app.post(
+    '/api/v1/video/tmdb/test',
+    secured('video:read', {
+      schema: {
+        operationId: 'videoTmdbTest',
+        tags: TAG,
+        summary: '测试 TMDB 连通性（用当前配置的 Key）',
+        body: Type.Object({
+          apiKey: Type.Optional(Type.String({ maxLength: 200, description: '不传 = 用已保存的 Key' })),
+        }),
+        response: {
+          200: Type.Object({
+            ok: Type.Boolean(),
+            message: Type.String(),
+            latencyMs: Type.Integer(),
+          }),
+        },
+      },
+    }),
+    async (req) => {
+      const body = (req.body || {}) as { apiKey?: string };
+      const s = readScrapeSettings(k);
+      const apiKey = String(body.apiKey ?? '').trim() || s.apiKey;
+      if (!apiKey) {
+        return { ok: false, message: '未配置 TMDB API Key', latencyMs: 0 };
+      }
+      const cfg = tmdbConfigOf({ ...s, apiKey });
+      const started = Date.now();
+      try {
+        const r = await tmdbGet(cfg, '/movie/550');
+        const title = r && typeof r === 'object' ? String((r as any).title || '') : '';
+        return {
+          ok: true,
+          message: title ? `连接成功：${title}` : '连接成功',
+          latencyMs: Date.now() - started,
+        };
+      } catch (err) {
+        const msg = String((err as Error)?.message || err);
+        const unauthorized = /401|unauthorized|api key/i.test(msg);
+        return {
+          ok: false,
+          message: unauthorized ? 'Key 无效或被拒绝（401）' : `连接失败：${msg}`,
+          latencyMs: Date.now() - started,
+        };
+      }
     },
   );
 
@@ -357,6 +410,13 @@ export async function registerVideoScrape(
       }
 
       const etag = `"${crypto.createHash('sha1').update(`${target}:${stat.mtimeMs}:${stat.size}`).digest('hex').slice(0, 20)}"`;
+      // 列表页只要小图：原图（1000×1500 的海报常有 1~2 MB）直传时，
+      // SMB 库一屏几十张就是几十 MB 的网络盘读盘，这就是「打开库很慢」的主因。
+      // 交给缩略图出口后，第一次生成、之后全部命中 dataDir/thumbs 本地缓存。
+      const wantSize = Number((req.query as { size?: unknown }).size) || 0;
+      if (wantSize > 0) {
+        return thumbHandler(req, reply, { path: target, size: wantSize }, k);
+      }
       if (String(req.headers['if-none-match'] || '') === etag) return reply.code(304).send();
       const ext = path.extname(target).toLowerCase();
       const type =

@@ -1,6 +1,8 @@
 import 'sync_fs_stub.dart'
     if (dart.library.io) 'sync_fs_io.dart'
-    if (dart.library.html) 'sync_fs_web.dart';
+    // 用 js_interop 而不是已弃用的 `dart.library.html`：wasm 构建下后者为 false，
+    // 会悄悄退回 stub（Electron 文件桥就白搭了）
+    if (dart.library.js_interop) 'sync_fs_web.dart';
 
 /// 结构化过滤（与 `src/modules/sync/util.ts#filterExcluded` 同一口径）
 class SyncFilterConfig {
@@ -144,6 +146,9 @@ abstract class SyncFs {
 
   /// 读取本地文件区间（用于分片上传）
   Future<List<int>> readChunk(String path, int start, int end);
+
+  /// 本地文件当前大小（字节）。上传前用它校正 plan 里可能已过期的尺寸。
+  Future<int> sizeOf(String path);
 
   /// 流式下载到本地文件，并在成功后把 mtime 对齐到 [mtimeMs]
   Future<void> download({

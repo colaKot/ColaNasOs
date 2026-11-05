@@ -11,7 +11,11 @@ export const LibraryItem = Type.Object(
     id: Type.String(),
     name: Type.String(),
     path: Type.String({ description: '相对 files 根的 POSIX 路径' }),
+    type: Type.String({ description: 'book 书籍 / comic 漫画' }),
     items: Type.Integer({ description: '已索引书籍数' }),
+    scanWhenStart: Type.Integer({ description: '1 启动时自动扫描' }),
+    scanWhenChange: Type.Integer({ description: '1 目录变化时自动扫描' }),
+    scanIntervalHours: Type.Integer({ description: '定时扫描间隔（小时，0 = 关闭）' }),
     createdAt: Type.Integer(),
     lastScanAt: NullableInteger,
   },
@@ -27,8 +31,26 @@ export const LibraryCreateBody = Type.Object(
   {
     name: Type.String({ minLength: 1, maxLength: 64 }),
     path: Type.String({ minLength: 1, description: '相对 files 根的目录' }),
+    type: Type.Optional(
+      Type.Union([Type.Literal('book'), Type.Literal('comic')], {
+        default: 'book',
+        description: 'book 书籍 / comic 漫画',
+      }),
+    ),
   },
   { $id: 'BookLibraryCreateBody' },
+);
+
+export const LibraryUpdateBody = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    name: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+    type: Type.Optional(Type.Union([Type.Literal('book'), Type.Literal('comic')])),
+    scanWhenStart: Type.Optional(Type.Boolean()),
+    scanWhenChange: Type.Optional(Type.Boolean()),
+    scanIntervalHours: Type.Optional(Type.Integer({ minimum: 0, maximum: 24 })),
+  },
+  { $id: 'BookLibraryUpdateBody' },
 );
 
 export const LibraryRemoveBody = Type.Object(
@@ -66,6 +88,7 @@ export const Book = Type.Object(
     id: Type.String(),
     libraryId: Type.String(),
     path: Type.String({ description: '相对 files 根' }),
+    type: Type.String({ description: 'book 书籍 / comic 漫画' }),
     title: Type.String(),
     author: NullableString,
     language: NullableString,
@@ -88,6 +111,11 @@ export const Book = Type.Object(
 export const ListQuery = Type.Object(
   {
     libraryId: Type.Optional(Type.String()),
+    type: Type.Optional(
+      Type.Union([Type.Literal('book'), Type.Literal('comic')], {
+        description: '只看书籍或只看漫画',
+      }),
+    ),
     q: Type.Optional(Type.String({ maxLength: 200, description: '标题 / 作者关键词' })),
     format: Type.Optional(Type.String({ maxLength: 16, description: '按扩展名过滤' })),
     favorite: Type.Optional(
@@ -132,7 +160,9 @@ export const FileUrlResponse = Type.Object(
 export const StatsResponse = Type.Object(
   {
     libraries: Type.Integer(),
-    books: Type.Integer(),
+    books: Type.Integer({ description: '全部书籍 + 漫画' }),
+    bookCount: Type.Integer({ description: '书籍数' }),
+    comicCount: Type.Integer({ description: '漫画数' }),
     favorites: Type.Integer({ description: '当前用户收藏数' }),
   },
   { $id: 'BookStatsResponse' },
@@ -301,6 +331,14 @@ export const ListRemoveBody = Type.Object(
   { $id: 'BookListRemoveBody' },
 );
 
+export const ListRenameBody = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    name: Type.String({ minLength: 1, maxLength: 64 }),
+  },
+  { $id: 'BookListRenameBody' },
+);
+
 export const ListRefBody = Type.Object(
   {
     listId: Type.String({ minLength: 1 }),
@@ -319,10 +357,80 @@ export const ListItemsResponse = Type.Object(
   { $id: 'BookListItemsResponse' },
 );
 
+// ---------------------------------------------------------------- 阅读历史 / 用户合集
+
+export const HistoryQuery = Type.Object(
+  { limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200, default: 60 })) },
+  { $id: 'BookHistoryQuery' },
+);
+
+export const CacheStatsResponse = Type.Object(
+  { files: Type.Integer(), bytes: Type.Integer() },
+  { $id: 'BookCacheStatsResponse' },
+);
+
+export const CacheClearResponse = Type.Object(
+  { files: Type.Integer(), bytes: Type.Integer() },
+  { $id: 'BookCacheClearResponse' },
+);
+
+/** 用户自建合集：按目录整理（和音乐合集同一模型），按 owner 隔离 */
+export const UserCollection = Type.Object(
+  {
+    id: Type.String(),
+    name: Type.String(),
+    paths: Type.Array(Type.String()),
+    books: Type.Integer({ description: '这些目录下已索引的书数' }),
+    coverId: Type.Union([Type.String(), Type.Null()]),
+    createdAt: Type.Integer(),
+    updatedAt: Type.Integer(),
+  },
+  { $id: 'BookUserCollection' },
+);
+
+export const UserCollectionListResponse = Type.Object(
+  { items: Type.Array(Type.Ref(UserCollection)) },
+  { $id: 'BookUserCollectionListResponse' },
+);
+
+export const UserCollectionBody = Type.Object(
+  {
+    name: Type.String({ minLength: 1, maxLength: 64 }),
+    paths: Type.Array(Type.String({ minLength: 1, maxLength: 1024 }), {
+      minItems: 1,
+      maxItems: 200,
+    }),
+  },
+  { $id: 'BookUserCollectionBody' },
+);
+
+export const UserCollectionUpdateBody = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    name: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+    paths: Type.Optional(
+      Type.Array(Type.String({ minLength: 1, maxLength: 1024 }), {
+        minItems: 1,
+        maxItems: 200,
+      }),
+    ),
+  },
+  { $id: 'BookUserCollectionUpdateBody' },
+);
+
+export const UserCollectionItemsQuery = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, default: 200 })),
+  },
+  { $id: 'BookUserCollectionItemsQuery' },
+);
+
 export const BOOK_SCHEMAS = [
   LibraryItem,
   LibraryListResponse,
   LibraryCreateBody,
+  LibraryUpdateBody,
   LibraryRemoveBody,
   ScanBody,
   ScanResponse,
@@ -350,8 +458,17 @@ export const BOOK_SCHEMAS = [
   ListsResponse,
   ListCreateBody,
   ListRemoveBody,
+  ListRenameBody,
   ListRefBody,
   ListItemsQuery,
   ListItemsResponse,
+  HistoryQuery,
+  CacheStatsResponse,
+  CacheClearResponse,
+  UserCollection,
+  UserCollectionListResponse,
+  UserCollectionBody,
+  UserCollectionUpdateBody,
+  UserCollectionItemsQuery,
   ErrorResponse,
 ];

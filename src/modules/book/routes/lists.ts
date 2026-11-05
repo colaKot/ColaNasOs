@@ -79,6 +79,52 @@ export async function registerBookLists(app: FastifyInstance, k: KernelApi, h: B
     );
 
     app.post(
+      '/api/v1/book/lists/rename',
+      secured('book:write', {
+        schema: {
+          operationId: 'bookListRename',
+          tags: TAG,
+          summary: '重命名自定义列表',
+          body: h.ref('BookListRenameBody'),
+          response: { 200: h.ref('BookListItem'), 404: h.ref('BookErrorResponse'), 409: h.ref('BookErrorResponse') },
+        },
+      }),
+      async (req, reply) => {
+        const body = (req.body || {}) as { id?: string; name?: string };
+        const owner = req.user?.sub || '';
+        const name = (body.name || '').trim();
+        if (!body.id || !name) {
+          return reply.code(404).send({ error: Err.notFound, message: 'list not found' });
+        }
+        const row = (
+          await sql<{ id: string; name: string; created_at: number }>`
+            select id, name, created_at from book_lists
+             where id = ${body.id} and owner_id = ${owner}
+          `.execute(k.db)
+        ).rows[0];
+        if (!row) return reply.code(404).send({ error: Err.notFound, message: 'list not found' });
+
+        const dup = await sql<{ n: number }>`
+          select count(*) as n from book_lists
+           where owner_id = ${owner} and name = ${name} and id != ${row.id}
+        `.execute(k.db);
+        if ((Number(dup.rows[0]?.n) || 0) > 0) {
+          return reply.code(409).send({ error: Err.conflict, message: 'list already exists' });
+        }
+        await sql`update book_lists set name = ${name} where id = ${row.id}`.execute(k.db);
+        const cnt = await sql<{ n: number }>`
+          select count(*) as n from book_list_items where list_id = ${row.id}
+        `.execute(k.db);
+        return {
+          id: row.id,
+          name,
+          books: Number(cnt.rows[0]?.n) || 0,
+          createdAt: Number(row.created_at) || 0,
+        };
+      },
+    );
+
+    app.post(
       '/api/v1/book/lists/remove',
       secured('book:write', {
         schema: {

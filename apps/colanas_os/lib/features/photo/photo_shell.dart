@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/app_visibility.dart';
 import '../../shell/app_nav_shell.dart';
 import 'backup_page.dart';
 import 'cleanup_page.dart';
@@ -9,6 +10,7 @@ import 'memory_page.dart';
 import 'photo_page.dart';
 import 'photo_on_this_day_page.dart';
 import 'photo_ai_settings_page.dart';
+import 'photo_ai_center_page.dart';
 import 'photo_collection_page.dart';
 import 'photo_folders_page.dart';
 import 'photo_home_page.dart';
@@ -18,6 +20,7 @@ import 'photo_preview_settings_page.dart';
 import 'photo_geo_page.dart';
 
 import 'photo_source_page.dart';
+import 'photo_timeline_tab.dart';
 import 'photo_trash_page.dart';
 import 'smart_page.dart';
 
@@ -38,13 +41,21 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
   final NavSelection _selection = NavSelection('home');
 
   Widget _content(String key) {
+    // 契约里没有、但页面已实现的入口：onThisDay（往年今日）/ backup（相册备份）/
+    // models（AI 模型管理）。页面都在（194 / 258 / 132 行），是否恢复成菜单项待定，
+    // 先在这里登记，避免被当成死代码删掉（`app-nav.check` 的 nav-orphan 白名单）。
+    // nav-orphan: onThisDay, models
     switch (key) {
       case 'home':
         return PhotoHomePage(embedded: true, onNavigate: _selection.select);
       case 'timeline':
-        return const PhotoPage();
+        // 手机端这一个 tab 里还有「全部 / 年份 / 今天 / 收藏」四种看法（浮动胶囊），
+        // 桌面端 PhotoTimelineTab 会直接退回 PhotoPage，形态不变。
+        return const PhotoTimelineTab();
       case 'onThisDay':
         return const PhotoOnThisDayPage(embedded: true);
+      case 'photoAiCenter':
+        return PhotoAiCenterPage(onNavigate: _selection.select);
       case 'favorites':
         return const PhotoPage(favoriteOnly: true);
       case 'album':
@@ -59,7 +70,6 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
         return const PhotoTicketsPage(embedded: true);
       case 'year':
         return const PhotoAnnualPage(embedded: true);
-      case 'smart':
       case 'smartRules':
         return const PhotoSmartPage(embedded: true, section: 'rules');
       case 'activities':
@@ -103,6 +113,9 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
       appId: 'photo',
       defaultKey: 'home',
       selection: _selection,
+      // 「相册备份」只在手机 App 出现（契约里该项 `when: mobileApp`）：
+      // 它要读本机相册权限，web / 桌面没有这个东西
+      conditions: {if (isMobileApp()) 'mobileApp'},
       content: _content,
     );
   }
@@ -124,7 +137,7 @@ class _PendingPane extends StatelessWidget {
           ),
           const SizedBox(height: NasTokens.spaceSm),
           Text(
-            tr('photo.nav.pending'),
+            tr('common.pending'),
             style: TextStyle(
               fontSize: NasTokens.fontSubtitle,
               color: context.nasTextSecondary,
@@ -132,7 +145,7 @@ class _PendingPane extends StatelessWidget {
           ),
           const SizedBox(height: NasTokens.spaceXs),
           Text(
-            tr('photo.nav.pendingHint'),
+            tr('common.pendingHint'),
             style: TextStyle(
               fontSize: NasTokens.fontCaption,
               color: context.nasTextSecondary,

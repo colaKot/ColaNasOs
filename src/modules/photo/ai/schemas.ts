@@ -20,6 +20,24 @@ export const AnalyzeBody = Type.Object(
   { $id: 'PhotoAiAnalyzeBody' },
 );
 
+/** 整库后台识别（入队 `photo.ai.scan`，内核重启后自动续跑） */
+export const ScanBody = Type.Object(
+  {
+    force: Type.Optional(Type.Boolean({ default: false, description: '已识别过的也重算' })),
+    ocr: Type.Optional(Type.Boolean({ default: false })),
+    activity: Type.Optional(Type.Boolean({ default: false })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200, default: 50 })),
+  },
+  { $id: 'PhotoAiScanBody' },
+);
+
+export const ScanResponse = Type.Object(
+  {
+    jobId: Type.String(),
+    reused: Type.Boolean({ description: '已有同参数任务在跑时复用' }),
+  },
+  { $id: 'PhotoAiScanResponse' },
+);
 export const AnalyzeResponse = Type.Object(
   {
     processed: Type.Integer(),
@@ -115,7 +133,13 @@ export const FaceList = Type.Object(
 );
 
 export const SceneSummaryItem = Type.Object(
-  { label: Type.String(), count: Type.Integer() },
+  {
+    label: Type.String(),
+    count: Type.Integer(),
+    /** 封面：该标签下**最近拍**的一张（列表改成网格后每个格子要一张图） */
+    coverId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    coverPath: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  },
   { $id: 'PhotoSceneSummaryItem' },
 );
 
@@ -465,6 +489,8 @@ export const ErrorResponse = Type.Object(
 );
 
 export const PHOTO_AI_SCHEMAS = [
+  ScanBody,
+  ScanResponse,
   AnalyzeBody,
   AnalyzeResponse,
   ClusterItem,

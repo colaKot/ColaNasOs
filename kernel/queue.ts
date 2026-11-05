@@ -12,6 +12,10 @@ export interface TaskRow {
   attempts: number;
   max_attempts: number;
   progress: number;
+  /** 已完成条数（handler 用 `ctx.progress(pct, done, total)` 上报；0 = 这条任务没有条目口径） */
+  done_count: number;
+  /** 总条数。>0 时面板显示「已完成/总数」 */
+  total_count: number;
   error: string | null;
   next_run_at: number | null;
   created_at: number;
@@ -29,7 +33,11 @@ export interface TaskContext {
   id: string;
   type: string;
   attempt: number;
-  progress(pct: number): Promise<void>;
+  /**
+   * 上报进度。`done` / `total` 是可选的「条目口径」—— 只有百分比时，几万条的任务
+   * 跑 20 条仍然显示 0%，看起来像卡死；带上条数面板才能显示「已完成/总数」。
+   */
+  progress(pct: number, done?: number, total?: number): Promise<void>;
   log(level: 'info' | 'warn' | 'error', message: string, meta?: unknown): void;
   /** handler 内部可主动检查是否已被取消（长任务应按块轮询） */
   isCanceled(): Promise<boolean>;
@@ -87,6 +95,8 @@ export class TaskQueue {
         attempts integer not null default 0,
         max_attempts integer not null default 3,
         progress real not null default 0,
+        done_count integer not null default 0,
+        total_count integer not null default 0,
         error text,
         next_run_at integer,
         created_at integer not null,
@@ -105,6 +115,17 @@ export class TaskQueue {
       await sql`alter table tasks add column next_run_at integer`.execute(db);
     } catch {
       /* 已存在 */
+    }
+
+    // 条目口径（已完成/总数）：老库补列，CLI 面板靠它显示「12/50」
+    for (const col of ['done_count', 'total_count']) {
+      try {
+        await sql
+          .raw(`alter table tasks add column ${col} integer not null default 0`)
+          .execute(db);
+      } catch {
+        /* 已存在 */
+      }
     }
 
     return new TaskQueue(db, raw, log);
@@ -228,7 +249,7 @@ export class TaskQueue {
       id: task.id,
       type: task.type,
       attempt: task.attempts,
-      progress: (pct) => this.progress(task.id, pct),
+      progress: (pct, done, total) => this.progress(task.id, pct, done, total),
       log: (level, message, meta) => this.log?.(level === 'info' ? 'info' : 'warn', message, meta),
       isCanceled: async () => {
         const row = await this.get(task.id);
@@ -274,14 +295,30 @@ export class TaskQueue {
     return claimed;
   }
 
-  async progress(id: string, pct: number): Promise<void> {
+  async progress(id: string, pct: number, done?: number, total?: number): Promise<void> {
     const v = Math.max(0, Math.min(100, pct));
-    await sql`update tasks set progress = ${v} where id = ${id}`.execute(this.db);
+    // 不传 done/total 时保持原值：有些 handler 只在循环里报百分比，别把已有条数清掉
+    const d = Number.isFinite(done) ? Math.max(0, Math.round(Number(done))) : null;
+    const t = Number.isFinite(total) ? Math.max(0, Math.round(Number(total))) : null;
+    if (d === null && t === null) {
+      await sql`update tasks set progress = ${v} where id = ${id}`.execute(this.db);
+      return;
+    }
+    await sql`
+      update tasks
+         set progress = ${v},
+             done_count = coalesce(${d}, done_count),
+             total_count = coalesce(${t}, total_count)
+       where id = ${id}
+    `.execute(this.db);
   }
 
   async complete(id: string): Promise<void> {
+    // 收尾时把「已完成」对齐到总数：最后一个批次常常不落 100% 的 progress
     await sql`
-      update tasks set state='done', progress=100, finished_at=${Date.now()}, error=null
+      update tasks
+         set state='done', progress=100, finished_at=${Date.now()}, error=null,
+             done_count = case when total_count > 0 then total_count else done_count end
       where id=${id} and state='running'
     `.execute(this.db);
   }

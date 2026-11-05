@@ -29,6 +29,8 @@ export interface NfoIngest {
   genres: string | null;
   regions: string | null;
   actors: string | null;
+  /** JSON 对象文本：{ 演员名: 头像 URL }，来自 `<actor><thumb>`，扫描时回写 jp_actors */
+  actorThumbs: string | null;
   directors: string | null;
   poster: string | null;
   fanart: string | null;
@@ -57,6 +59,7 @@ const EMPTY: NfoIngest = {  mtimeMs: 0,
   genres: null,
   regions: null,
   actors: null,
+  actorThumbs: null,
   directors: null,
   poster: null,
   fanart: null,
@@ -174,6 +177,10 @@ export async function ingestNfo(absPath: string): Promise<NfoIngest> {
     genres: jsonOf(meta.genres),
     regions: jsonOf(meta.regions),
     actors: jsonOf(meta.actors),
+    actorThumbs:
+      meta.actorThumbs && Object.keys(meta.actorThumbs).length > 0
+        ? JSON.stringify(meta.actorThumbs)
+        : null,
     directors: jsonOf(meta.directors),
     poster,
     fanart,

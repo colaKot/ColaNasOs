@@ -26,6 +26,10 @@ class StubSyncFs implements SyncFs {
       const [];
 
   @override
+  Future<int> sizeOf(String path) async =>
+      throw UnsupportedError('sync_requires_desktop');
+
+  @override
   Future<List<int>> readChunk(String path, int start, int end) async =>
       throw UnsupportedError('sync_requires_desktop');
 

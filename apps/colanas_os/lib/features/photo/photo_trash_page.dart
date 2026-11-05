@@ -138,13 +138,11 @@ class _PhotoTrashPageState extends State<PhotoTrashPage> {
     try {
       final res = await ApiSession.instance.client.photoTrashRestore(body: body);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('photo.trash.restored').replaceAll('{n}', '${res.restored}'))),
-      );
+      NasSnack.show(context, tr('photo.trash.restored').replaceAll('{n}', '${res.restored}'));
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      NasSnack.show(context, e.toString());
     }
   }
 
@@ -172,12 +170,11 @@ class _PhotoTrashPageState extends State<PhotoTrashPage> {
       if (batchId != null) body['batchId'] = batchId;
       await ApiSession.instance.client.photoTrashEmpty(body: body);
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('photo.trash.cleared'))));
+      NasSnack.show(context, tr('photo.trash.cleared'));
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+      NasSnack.show(context, e.toString());
     }
   }
 

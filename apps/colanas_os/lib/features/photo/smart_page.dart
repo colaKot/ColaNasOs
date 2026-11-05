@@ -5,6 +5,8 @@ import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
+import '../../shell/shell_back.dart';
+import 'photo_viewer_page.dart';
 
 /// 智能相册：场景 / 活动 / 人脸 / 语义搜索。
 ///
@@ -63,8 +65,35 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
 
   @override
   void dispose() {
+    ShellBack.unregister('photo', _backToGrid);
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  /// 下钻后顶栏的「返回上一层」：回到场景 / 活动 / 人脸 / 规则的列表页。
+  ///
+  /// 嵌入相册导航时本页没有自己的 AppBar（`embedded=true`），此前进入某个簇或标签后
+  /// 只能靠切换左侧菜单才能出去 —— 2026-11-04 用户反馈「人脸无法返回上一层」。
+  void _backToGrid() {
+    ShellBack.unregister('photo', _backToGrid);
+    if (!mounted) return;
+    setState(() {
+      _title = null;
+      _photos = const [];
+      _searchHint = '';
+      _searchTags = const [];
+      _sceneGateOf = const {};
+      _gateConfidentOnly = false;
+    });
+  }
+
+  /// `_title` 非空 = 已下钻一层；同步给顶栏注册 / 注销返回动作。
+  void _syncBack() {
+    if (_title == null) {
+      ShellBack.unregister('photo', _backToGrid);
+    } else {
+      ShellBack.register('photo', _backToGrid);
+    }
   }
 
   Future<void> _load() async {
@@ -76,7 +105,9 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
       final c = ApiSession.instance.client;
       final scenes = await c.photoSceneTagSummary();
       final activities = await c.photoActivitySummary();
-      final clusters = await c.photoFaceClusters(minCount: 1);
+      // 不传 minCount：交给服务端按「AI 设置 → 人脸显示下限」过滤，
+      // 否则这里写死 1 会让配置形同虚设（低于下限的碎片组仍全部铺出来）。
+      final clusters = await c.photoFaceClusters();
       final rules = await c.photoSmartRuleList();
       if (!mounted) return;
       setState(() {
@@ -100,6 +131,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
       _title = label;
       _gateConfidentOnly = false;
     });
+    _syncBack();
     try {
       final res = await ApiSession.instance.client.photoSceneTags(
         label: label,
@@ -112,13 +144,13 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.loadFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.loadFailed', {'error': '$e'}));
     }
   }
 
   Future<void> _openActivity(String label) async {
     setState(() => _title = label);
+    _syncBack();
     try {
       final res = await ApiSession.instance.client.photoActivities(
         label: label,
@@ -130,8 +162,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.loadFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.loadFailed', {'error': '$e'}));
     }
   }
 
@@ -139,6 +170,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
     setState(
       () => _title = cluster.name ?? tr('photo.faceCluster.unnamed', {'id': cluster.id.substring(0, 6)}),
     );
+    _syncBack();
     try {
       final res = await ApiSession.instance.client.photoFaces(id: cluster.id);
       if (!mounted) return;
@@ -149,13 +181,13 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.loadFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.loadFailed', {'error': '$e'}));
     }
   }
 
   Future<void> _openRule(PhotoSmartRule rule) async {
     setState(() => _title = rule.name);
+    _syncBack();
     try {
       final res = await ApiSession.instance.client.photoSmartRuleItems(
         id: rule.id,
@@ -173,7 +205,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
 
   void _toast(String text) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    NasSnack.show(context, text);
   }
 
   String _fmtDate(DateTime d) =>
@@ -207,7 +239,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
           : _fmtDate(DateTime.fromMillisecondsSinceEpoch(c.to! * 1000));
       parts.add(tr('photo.smartRule.range', {'from': from, 'to': to}));
     }
-    if (c.favorite == true) parts.add(tr('photo.nav.favorites'));
+    if (c.favorite == true) parts.add(tr('nav.favorites'));
     return parts.join(' · ');
   }
 
@@ -290,7 +322,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
                     ),
                   ),
                   const SizedBox(height: NasTokens.spaceMd),
-                  DropdownButtonFormField<String>(
+                  NasDropdown<String>(
                     initialValue: scene,
                     isDense: true,
                     decoration: InputDecoration(
@@ -307,7 +339,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
                     onChanged: (v) => setLocal(() => scene = v ?? ''),
                   ),
                   const SizedBox(height: NasTokens.spaceSm),
-                  DropdownButtonFormField<String>(
+                  NasDropdown<String>(
                     initialValue: activity,
                     isDense: true,
                     decoration: InputDecoration(
@@ -324,7 +356,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
                     onChanged: (v) => setLocal(() => activity = v ?? ''),
                   ),
                   const SizedBox(height: NasTokens.spaceSm),
-                  DropdownButtonFormField<String>(
+                  NasDropdown<String>(
                     initialValue: person,
                     isDense: true,
                     decoration: InputDecoration(
@@ -621,12 +653,11 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
             tr('photo.analyzeAll', {'count': '${res.processed}', 'faces': '${res.faces}', 'scenes': '${res.scenes}', 'remaining': '${res.remaining}'});
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+      NasSnack.show(context, text);
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('photo.analyzeFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('photo.analyzeFailed', {'error': '$e'}));
     } finally {
       if (mounted) setState(() => _analyzing = false);
     }
@@ -663,8 +694,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('photo.nameFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('photo.nameFailed', {'error': '$e'}));
     }
   }
 
@@ -692,13 +722,11 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
         body: PhotoFaceMergeBody(fromId: cluster.id, toId: picked.id),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('photo.merged', {'moved': '${res.moved}'}))));
+      NasSnack.show(context, tr('photo.merged', {'moved': '${res.moved}'}));
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('photo.mergeFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('photo.mergeFailed', {'error': '$e'}));
     }
   }
 
@@ -706,6 +734,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
     final q = _searchCtrl.text.trim();
     if (q.isEmpty) return;
     setState(() => _title = tr('photo.searchTitle', {'q': q}));
+    _syncBack();
     try {
       final c = ApiSession.instance.client;
       final parsed = await c.photoSemanticParse(q: q);
@@ -723,77 +752,125 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.searchFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.searchFailed', {'error': '$e'}));
     }
   }
 
-  /// 一个场景标签：封面缩略图 + 名称 + 张数 + 置信度分布。
+  /// 场景 / 活动：**封面网格**。
   ///
-  /// 为什么要有封面：纯文字列表看不出「这个标签到底装了什么」，
-  /// 而场景标签最容易出现的疑问恰恰是"这个'客厅'里都是些什么照片"。
-  Widget _sceneTile(PhotoSceneTagSummaryItem s) {
+  /// 旧实现是纯文字列表（图标 + 名称 + 张数），面对一屏标签根本看不出里面是什么照片；
+  /// 现在每格用「这个标签下**最近拍**的一张」当封面（封面由服务端按 taken_at desc 取），
+  /// 一眼就能对上内容，和 AI 人脸的头像墙保持同一套观感。
+  Widget _coverGrid(List<Widget> tiles, String emptyHint) {
+    if (tiles.isEmpty) {
+      return Center(child: Text(emptyHint, style: TextStyle(color: context.nasTextSecondary)));
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.all(NasTokens.spaceSm),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 220,
+        mainAxisSpacing: NasTokens.spaceSm,
+        crossAxisSpacing: NasTokens.spaceSm,
+        childAspectRatio: 0.8,
+      ),
+      itemCount: tiles.length,
+      itemBuilder: (_, i) => tiles[i],
+    );
+  }
+
+  /// 一格 = 封面图 + 图上压标签 + 图下小字（张数 / 置信度）
+  Widget _coverTile({
+    required String label,
+    required String subtitle,
+    required String? coverPath,
+    required VoidCallback onTap,
+    IconData icon = Icons.landscape_outlined,
+    double? progress,
+  }) {
     final scheme = Theme.of(context).colorScheme;
-    final coverPath = s.coverPath;
-    final confident = s.confident;
-    final total = s.count;
     return InkWell(
-      onTap: () => _openLabel(s.label),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: NasTokens.spaceMd,
-          vertical: NasTokens.spaceXs,
-        ),
-        child: Row(
-          children: [
-            ClipRRect(
+      borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ClipRRect(
               borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-              child: SizedBox(
-                width: 56,
-                height: 56,
-                child: coverPath == null
-                    ? Container(
-                        color: scheme.surfaceContainerHighest,
-                        child: Icon(Icons.landscape_outlined, color: context.nasTextSecondary),
-                      )
-                    : NasCoverImage(
-                        url: _media.thumbnail(coverPath, size: 160),
-                        headers: ApiSession.instance.authHeaders,
-                        icon: Icons.landscape_outlined,
-                      ),
-              ),
-            ),
-            const SizedBox(width: NasTokens.spaceSm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Text(s.label, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
-                  Text(
-                    tr('photo.scene.gateCount', {
-                      'cl': '$confident',
-                      'total': '$total',
-                    }),
-                    style: TextStyle(fontSize: NasTokens.fontMicro, color: context.nasTextSecondary),
-                  ),
-                  if (total > 0) ...[
-                    const SizedBox(height: 4),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(99),
-                      child: LinearProgressIndicator(
-                        value: (confident / total).clamp(0.0, 1.0),
-                        minHeight: 3,
-                        backgroundColor: scheme.surfaceContainerHighest,
+                  if (coverPath == null)
+                    Container(
+                      color: scheme.surfaceContainerHighest,
+                      child: Icon(icon, color: context.nasTextSecondary),
+                    )
+                  else
+                    NasCoverImage(
+                      url: _media.thumbnail(coverPath, size: 400),
+                      headers: ApiSession.instance.authHeaders,
+                      icon: icon,
+                    ),
+                  // 底部渐变：封面本身明暗不可控，纯白字压上去会看不清
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(
+                        NasTokens.spaceSm,
+                        NasTokens.spaceLg,
+                        NasTokens.spaceSm,
+                        NasTokens.spaceXs,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.72),
+                          ],
+                        ),
+                      ),
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: NasTokens.fontBody,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right),
+          ),
+          const SizedBox(height: NasTokens.spaceXs),
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: NasTokens.fontMicro,
+              color: context.nasTextSecondary,
+            ),
+          ),
+          if (progress != null) ...[
+            const SizedBox(height: 3),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                value: progress.clamp(0.0, 1.0),
+                minHeight: 3,
+                backgroundColor: scheme.surfaceContainerHighest,
+              ),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -831,7 +908,10 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
     final label = named
         ? c.name!
         : tr('photo.faceCluster.unnamed', {'id': c.id.substring(0, 6)});
-    return InkWell(
+    // 桌面 / Web 右键：重命名 / 合并 / 解散 / 管理人脸（与长按同一批动作）
+    return NasContextMenuRegion(
+      entries: _faceMenuEntries(c),
+      child: InkWell(
       borderRadius: BorderRadius.circular(NasTokens.radiusMd),
       onTap: () => _openCluster(c),
       onLongPress: () => _faceActions(c),
@@ -907,10 +987,38 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
           ),
         ],
       ),
-    );
+    ));
   }
 
   /// 长按：改名 / 合并 / 隐藏
+  /// 人脸卡右键菜单（桌面 / Web）；移动端走长按 [_faceActions]。
+  ///
+  /// 参考实现的人脸右键有「下载 / 重命名 / 显示隐藏 / 标记问题」，我们目前只有
+  /// 重命名、合并、解散、管理这几个能力，就只给这些 —— 不造点了没反应的项。
+  List<NasMenuEntry> _faceMenuEntries(PhotoFaceClusterItem c) => [
+    NasMenuEntry(
+      label: tr('ui.photo.074'),
+      icon: Icons.edit_outlined,
+      onSelected: () => _renameCluster(c),
+    ),
+    NasMenuEntry(
+      label: tr('ui.photo.075'),
+      icon: Icons.merge_type,
+      onSelected: () => _mergeCluster(c),
+    ),
+    NasMenuEntry(
+      label: tr('photo.face.dissolve'),
+      icon: Icons.link_off,
+      onSelected: () => _dissolveCluster(c),
+    ),
+    const NasMenuEntry.divider(),
+    NasMenuEntry(
+      label: tr('photo.face.manage'),
+      icon: Icons.people_outline,
+      onSelected: () => _manageFaces(c),
+    ),
+  ];
+
   Future<void> _faceActions(PhotoFaceClusterItem c) async {
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -1121,7 +1229,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
               for (final s in const [0.70, 0.76, 0.85])
                 Padding(
                   padding: const EdgeInsets.only(left: 4),
-                  child: ChoiceChip(
+                  child: NasChip(
                     visualDensity: VisualDensity.compact,
                     label: Text(s.toStringAsFixed(2)),
                     selected: (sim - s).abs() < 0.001,
@@ -1320,7 +1428,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
             ),
             child: Row(
               children: [
-                FilterChip(
+                NasChip(
                   label: Text(tr('photo.scene.confidentOnly')),
                   selected: _gateConfidentOnly,
                   onSelected: (v) => setState(() => _gateConfidentOnly = v),
@@ -1386,10 +1494,23 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
               crossAxisSpacing: NasTokens.spaceSm,
             ),
             itemCount: visible.length,
-            itemBuilder: (context, i) => NasCoverImage(
-              url: _media.thumbnail(visible[i].path, size: 320),
-              headers: ApiSession.instance.authHeaders,
-              icon: Icons.image_outlined,
+            itemBuilder: (context, i) => GestureDetector(
+              // 点开大图：**只传当前这一份列表**（人脸簇 / 场景 / 规则 / 搜索各自独立），
+              // 从哪个列表打开就在哪个列表里左右翻页，不会串到相册时间轴去。
+              onTap: () => openPhotoViewer(
+                context,
+                photos: [
+                  for (final p in visible)
+                    ViewerPhoto(id: p.id, path: p.path),
+                ],
+                initialIndex: i,
+                title: _title,
+              ),
+              child: NasCoverImage(
+                url: _media.thumbnail(visible[i].path, size: 320),
+                headers: ApiSession.instance.authHeaders,
+                icon: Icons.image_outlined,
+              ),
             ),
           ),
         ),
@@ -1432,15 +1553,6 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
     );
   }
 
-  Widget _listPane(List<Widget> tiles, String emptyHint) {
-    if (tiles.isEmpty) return Center(child: Text(emptyHint));
-    return ListView.separated(
-      itemCount: tiles.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, i) => tiles[i],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final showingPhotos = _title != null;
@@ -1450,12 +1562,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
         leading: showingPhotos
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
-                onPressed: () => setState(() {
-                  _title = null;
-                  _photos = const [];
-                  _searchHint = '';
-                  _searchTags = const [];
-                }),
+                onPressed: _backToGrid,
               )
             : null,
         actions: [
@@ -1503,18 +1610,26 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
           : showingPhotos
           ? _photoGrid()
           : switch (widget.section) {
-              'scenes' => _listPane([
-                  for (final s in _scenes) _sceneTile(s),
+              'scenes' => _coverGrid([
+                  for (final s in _scenes)
+                    _coverTile(
+                      label: s.label,
+                      subtitle: tr('photo.scene.gateCount', {
+                        'cl': '${s.confident}',
+                        'total': '${s.count}',
+                      }),
+                      coverPath: s.coverPath,
+                      onTap: () => _openLabel(s.label),
+                      progress: s.count > 0 ? s.confident / s.count : null,
+                    ),
                 ], tr('ui.photo.h531110')),
-              'activities' => _listPane([
+              'activities' => _coverGrid([
                   for (final a in _activities)
-                    ListTile(
-                      leading: const Icon(
-                        Icons.sports_handball_outlined,
-                      ),
-                      title: Text(a.label),
-                      subtitle: Text(tr('photo.count', {'count': '${a.count}'})),
-                      trailing: const Icon(Icons.chevron_right),
+                    _coverTile(
+                      label: a.label,
+                      subtitle: tr('photo.count', {'count': '${a.count}'}),
+                      coverPath: a.coverPath,
+                      icon: Icons.sports_handball_outlined,
                       onTap: () => _openActivity(a.label),
                     ),
                 ], tr('ui.photo.h6a8cef')),

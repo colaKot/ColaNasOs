@@ -65,7 +65,7 @@ class _PhotoCollectionPageState extends State<PhotoCollectionPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('ui.accounts.006')),
+            child: Text(tr('common.create')),
           ),
         ],
       ),
@@ -79,10 +79,36 @@ class _PhotoCollectionPageState extends State<PhotoCollectionPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      NasSnack.show(context, e.toString());
     }
   }
+
+  /// 合集卡右键：打开 / 删除（参考实现还有「编辑」，我们暂无重命名接口）
+  List<NasMenuEntry> _collectionMenuEntries(PhotoCollection c) => [
+    NasMenuEntry(
+      label: tr('common.open'),
+      icon: Icons.collections_outlined,
+      onSelected: () async {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => _CollectionDetailPage(
+              collection: c,
+              imageUrl: _media.thumbnail,
+              headers: ApiSession.instance.authHeaders,
+            ),
+          ),
+        );
+        await _load();
+      },
+    ),
+    const NasMenuEntry.divider(),
+    NasMenuEntry(
+      label: tr('common.delete'),
+      icon: Icons.delete_outline,
+      danger: true,
+      onSelected: () => _delete(c),
+    ),
+  ];
 
   Future<void> _delete(PhotoCollection c) async {
     final ok = await showDialog<bool>(
@@ -110,8 +136,7 @@ class _PhotoCollectionPageState extends State<PhotoCollectionPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      NasSnack.show(context, e.toString());
     }
   }
 
@@ -169,7 +194,10 @@ class _PhotoCollectionPageState extends State<PhotoCollectionPage> {
                   itemCount: _items.length,
                   itemBuilder: (context, i) {
                     final c = _items[i];
-                    return InkWell(
+                    // 桌面 / Web 右键
+                    return NasContextMenuRegion(
+                      entries: _collectionMenuEntries(c),
+                      child: InkWell(
                       onTap: () async {
                         await Navigator.of(context).push(
                           MaterialPageRoute<void>(
@@ -226,6 +254,7 @@ class _PhotoCollectionPageState extends State<PhotoCollectionPage> {
                             ),
                           ],
                         ),
+                      ),
                       ),
                     );
                   },
@@ -303,18 +332,13 @@ class _CollectionDetailPageState extends State<_CollectionDetailPage> {
         ),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+      NasSnack.show(context, 
             tr('photo.collection.added').replaceAll('{n}', '${picked.length}'),
-          ),
-        ),
-      );
+          );
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      NasSnack.show(context, e.toString());
     }
   }
 

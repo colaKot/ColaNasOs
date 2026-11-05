@@ -56,13 +56,13 @@ class _PhotoBackupPageState extends State<PhotoBackupPage> {
 
   Future<void> _pickAndBackup() async {
     if (kIsWeb) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('ui.photo.001'))));
+      NasSnack.show(context, tr('ui.photo.001'));
       return;
     }
     final files = await openFiles();
     if (files.isEmpty) return;
 
+    if (!mounted) return;
     setState(() {
       _running = true;
       _uploaded = 0;

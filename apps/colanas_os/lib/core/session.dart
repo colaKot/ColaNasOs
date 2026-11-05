@@ -25,15 +25,23 @@ class ApiSession {
   /// `dev.bat`（Flutter 5173 热重载 + 内核 7788）用 `--dart-define=COLANAS_API_BASE` 显式指定。
   static String defaultBaseUrl() {
     const configured = String.fromEnvironment('COLANAS_API_BASE');
-    if (configured.isNotEmpty) return configured;
     if (kIsWeb) {
       final base = Uri.base;
       if (base.hasScheme &&
           base.host.isNotEmpty &&
           base.scheme.startsWith('http')) {
+        final loopback = base.host == '127.0.0.1' || base.host == 'localhost';
+        if (!loopback) {
+          // 从局域网/其它设备打开时，dart-define 里的 127.0.0.1 指的是**访问设备自己**。
+          // 换成页面所在主机 + 内核端口，这样 192.168.2.199:5173 也能连到 7788。
+          final port = configured.isNotEmpty ? Uri.parse(configured).port : 7788;
+          return '${base.scheme}://${base.host}:$port';
+        }
+        if (configured.isNotEmpty) return configured;
         return base.origin;
       }
     }
+    if (configured.isNotEmpty) return configured;
     return 'http://127.0.0.1:7788';
   }
 

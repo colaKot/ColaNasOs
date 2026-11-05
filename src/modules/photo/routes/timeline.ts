@@ -1,8 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { sql } from 'kysely';
+import { Type } from '@sinclair/typebox';
 import { secured } from '../../../../kernel/route';
 import { Err } from '../../../../kernel/errors';
+import { filesRoot, resolveAnyPath } from '../../files/fs-root';
+import { readImageMeta } from '../exif';
 import { TAG, PhotoItemRow, toItem, encodeCursor, decodeCursor, likePattern } from '../util';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
@@ -126,6 +129,87 @@ export async function registerPhotoTimeline(app: FastifyInstance, k: KernelApi, 
         const row = res.rows[0];
         if (!row) return reply.code(404).send({ error: Err.notFound, message: 'photo not found' });
         return toItem(row);
+      },
+    );
+
+    // 属性 / EXIF 面板：按需读文件头，不落库（避免为几个展示字段做迁移与回填）
+    app.get(
+      '/api/v1/photo/exif',
+      secured('photo:read', {
+        schema: {
+          operationId: 'photoExif',
+          tags: TAG,
+          summary: '照片属性与 EXIF（按需解析文件头；无 EXIF 字段返回 null）',
+          querystring: h.ref('PhotoItemQuery'),
+          response: {
+            200: Type.Object({
+              id: Type.String(),
+              path: Type.String(),
+              size: Type.Integer(),
+              width: Type.Union([Type.Integer(), Type.Null()]),
+              height: Type.Union([Type.Integer(), Type.Null()]),
+              mime: Type.String(),
+              takenAt: Type.Union([Type.Integer(), Type.Null()]),
+              camera: Type.Union([Type.String(), Type.Null()]),
+              make: Type.Union([Type.String(), Type.Null()]),
+              lens: Type.Union([Type.String(), Type.Null()]),
+              software: Type.Union([Type.String(), Type.Null()]),
+              orientation: Type.Union([Type.Integer(), Type.Null()]),
+              iso: Type.Union([Type.Integer(), Type.Null()]),
+              fNumber: Type.Union([Type.Number(), Type.Null()]),
+              exposureTimeSec: Type.Union([Type.Number(), Type.Null()]),
+              focalLengthMm: Type.Union([Type.Number(), Type.Null()]),
+              latitude: Type.Union([Type.Number(), Type.Null()]),
+              longitude: Type.Union([Type.Number(), Type.Null()]),
+            }),
+            404: h.ref('PhotoErrorResponse'),
+          },
+        },
+      }),
+      async (req, reply) => {
+        const q = (req.query || {}) as { id?: string };
+        const uid = String((req as any).user?.sub || '');
+        const res = await sql<PhotoItemRow & { mtime?: number }>`
+          select * from photo_items
+           where id = ${q.id || ''}
+             and library_id in (select id from photo_libraries where owner_id = ${uid})
+        `.execute(k.db);
+        const row = res.rows[0];
+        if (!row) return reply.code(404).send({ error: Err.notFound, message: 'photo not found' });
+
+        let abs: string;
+        try {
+          abs = resolveAnyPath(filesRoot(), row.rel_path);
+        } catch {
+          return reply.code(404).send({ error: Err.notFound, message: 'source missing' });
+        }
+        let meta;
+        try {
+          meta = await readImageMeta(abs);
+        } catch {
+          return reply.code(404).send({ error: Err.notFound, message: 'unreadable image' });
+        }
+
+        return {
+          id: row.id,
+          path: row.rel_path,
+          size: Number(row.size) || 0,
+          width: meta.width ?? row.width ?? null,
+          height: meta.height ?? row.height ?? null,
+          mime: meta.mime || row.mime || '',
+          takenAt: meta.takenAt ?? (Number(row.taken_at) || null),
+          camera: meta.camera,
+          make: meta.make,
+          lens: meta.lens,
+          software: meta.software,
+          orientation: meta.orientation,
+          iso: meta.iso == null ? null : Math.round(meta.iso),
+          fNumber: meta.fNumber,
+          exposureTimeSec: meta.exposureTime,
+          focalLengthMm: meta.focalLength,
+          latitude: meta.latitude,
+          longitude: meta.longitude,
+        };
       },
     );
 
@@ -391,6 +475,126 @@ export async function registerPhotoTimeline(app: FastifyInstance, k: KernelApi, 
           year,
           total: months.reduce((sum, m) => sum + m.count, 0),
           months,
+        };
+      },
+    );
+
+    // 年视图卡片封面：每年一张「有人像」的代表图。
+    //
+    // 为什么不复用 calendar 的「每月最新一张」：那几乎总是风景/截图/文档，
+    // 年份卡上排一排蓝天白云根本认不出是哪一年。这里三级优先：
+    //   ① 含「常出现的 3 个人」（簇 size 最大 = 本人/家人，而不是合影里的路人）
+    //   ② 含任意人脸
+    //   ③ 该年最新一张（AI 还没跑完时的兜底 —— 有图总比空白强）
+    // 三个查询都按「同一年里 rank=1」取，后写的覆盖先写的，正好是优先级从低到高。
+    app.get(
+      '/api/v1/photo/year-covers',
+      secured('photo:read', {
+        schema: {
+          operationId: 'photoYearCovers',
+          tags: TAG,
+          summary: '每年一张「有人像」的代表图（年视图卡片封面）',
+          response: { 200: h.ref('PhotoYearCoversResponse') },
+        },
+      }),
+      async (req: FastifyRequest) => {
+        const uid = String((req as any).user?.sub || '');
+        const own = sql`library_id in (select id from photo_libraries where owner_id = ${uid})`;
+
+        const years = await sql<{ year: number; count: number }>`
+          select cast(strftime('%Y', taken_at, 'unixepoch', 'localtime') as integer) as year,
+                 count(*) as count
+            from photo_items
+           where in_trash = 0 and ${own}
+           group by year
+           order by year desc
+        `.execute(k.db);
+
+        // 「最符合」的排序键：人脸**相对面积和** > 脸数 > 时间。
+        // 只按脸数排会挑中截图/合影缩略图（一堆几十像素的小头像，脸数还更多）；
+        // 按面积排就落到「大脸的人像照」上，这正是年份卡想要的那张。
+        // 同时过滤掉占图不到 1% 的极小脸（背景路人、截图角落的头像）。
+        const faceArea = sql`sum(
+          case when f.img_width > 0 and f.img_height > 0
+               then (f.box_width * f.box_height) * 1.0 / (f.img_width * f.img_height)
+               else 0 end
+        )`;
+
+        const topPeople = await sql<{ year: number; path: string }>`
+          select y as year, path from (
+            select cast(strftime('%Y', p.taken_at, 'unixepoch', 'localtime') as integer) as y,
+                   p.rel_path as path,
+                   row_number() over (
+                     partition by strftime('%Y', p.taken_at, 'unixepoch', 'localtime')
+                     order by p.area desc, p.cnt desc, p.taken_at desc
+                   ) as rn
+              from (
+                select ph.id as id, ph.taken_at as taken_at, ph.rel_path as rel_path,
+                       count(*) as cnt, ${faceArea} as area
+                  from photo_items ph
+                  join photo_faces f on f.photo_id = ph.id
+                 where ph.in_trash = 0
+                   and ph.library_id in (select id from photo_libraries where owner_id = ${uid})
+                   and lower(ph.rel_path) not like '%screenshot%'
+                   and f.cluster_id in (
+                     select id from photo_face_clusters where size > 0 order by size desc limit 3
+                   )
+                   and (f.img_width is null or f.img_width = 0
+                        or (f.box_width * f.box_height) * 100 >= f.img_width * f.img_height)
+                 group by ph.id
+              ) p
+          ) where rn = 1
+        `.execute(k.db);
+
+        const anyFace = await sql<{ year: number; path: string }>`
+          select y as year, path from (
+            select cast(strftime('%Y', p.taken_at, 'unixepoch', 'localtime') as integer) as y,
+                   p.rel_path as path,
+                   row_number() over (
+                     partition by strftime('%Y', p.taken_at, 'unixepoch', 'localtime')
+                     order by p.area desc, p.cnt desc, p.taken_at desc
+                   ) as rn
+              from (
+                select ph.id as id, ph.taken_at as taken_at, ph.rel_path as rel_path,
+                       count(*) as cnt, ${faceArea} as area
+                  from photo_items ph
+                  join photo_faces f on f.photo_id = ph.id
+                 where ph.in_trash = 0
+                   and ph.library_id in (select id from photo_libraries where owner_id = ${uid})
+                   and lower(ph.rel_path) not like '%screenshot%'
+                   and f.cluster_id is not null
+                   and (f.img_width is null or f.img_width = 0
+                        or (f.box_width * f.box_height) * 100 >= f.img_width * f.img_height)
+                 group by ph.id
+              ) p
+          ) where rn = 1
+        `.execute(k.db);
+
+        const latest = await sql<{ year: number; path: string }>`
+          select y as year, path from (
+            select cast(strftime('%Y', taken_at, 'unixepoch', 'localtime') as integer) as y,
+                   rel_path as path,
+                   row_number() over (
+                     partition by strftime('%Y', taken_at, 'unixepoch', 'localtime')
+                     order by taken_at desc, id desc
+                   ) as rn
+              from photo_items
+             where in_trash = 0 and ${own}
+               and lower(rel_path) not like '%screenshot%'
+          ) where rn = 1
+        `.execute(k.db);
+
+        const cover = new Map<number, string>();
+        for (const r of latest.rows) cover.set(Number(r.year), r.path);
+        for (const r of anyFace.rows) cover.set(Number(r.year), r.path);
+        for (const r of topPeople.rows) cover.set(Number(r.year), r.path);
+
+        return {
+          years: years.rows.map((r) => ({
+            year: Number(r.year),
+            count: Number(r.count),
+            coverPath: cover.get(Number(r.year)) ?? null,
+          })),
         };
       },
     );

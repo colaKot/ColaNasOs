@@ -104,6 +104,10 @@ class IoSyncFs implements SyncFs {
   }
 
   @override
+  @override
+  Future<int> sizeOf(String path) async => File(path).length();
+
+  @override
   Future<List<int>> readChunk(String path, int start, int end) async {
     final file = File(path);
     final raf = await file.open();

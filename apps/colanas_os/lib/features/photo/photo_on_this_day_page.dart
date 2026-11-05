@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_media/nas_media.dart';
 import 'package:nas_ui/nas_ui.dart';
+import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
 import 'photo_viewer_page.dart';
@@ -83,11 +84,7 @@ class _PhotoOnThisDayPageState extends State<PhotoOnThisDayPage> {
           : AppBar(
               title: Text(tr('photo.onThisDay.title')),
               actions: [
-                IconButton(
-                  tooltip: tr('common.refresh'),
-                  icon: const Icon(Icons.refresh),
-                  onPressed: _load,
-                ),
+                NasRefreshButton(onPressed: _load),
               ],
             ),
       body: _loading

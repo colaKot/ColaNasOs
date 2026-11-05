@@ -45,7 +45,7 @@ curl -s -X POST "http://127.0.0.1:5174/hot-reload?token=colanas-dev-ctl"    # �
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `dev.bat`       | 双窗口：`tool/dev/watch-kernel.js` + `tool/dev/flutter-dev.js`（托管 flutter，带 5174 控制口）                                                    | **默认**：本地调试、联调、跑手工验收                                                   |
 | `start.bat`     | `npm start` → Electron 外壳 + 内核；窗口直接加载 `http://127.0.0.1:7788/`（不再是 `/health`）；缺 `dist/kernel/index.js` 会先自动 `npm run build` | 只在需要验证「桌面形态 / 生产配置（无 dev-token、无 CORS）」时用                       |
-| `build-web.bat` | `flutter build web --release --no-wasm-dry-run` → `apps/colanas_os/build/web`                                                                     | 只在交付、验收需要刷新 Web 产物时用（改了前端要出正式包 → 跑它，别手敲 flutter build） |
+| `build-web.bat` | `flutter build web --release --no-wasm-dry-run` → `apps/colanas_os/build/web`                                                                     | **只在交付 / 打包 / 验收**需要刷新 7788 的正式产物时用；`dev.bat` 在跑时**不要**跑它（全量 30s，开发循环靠 5173 热重载） |
 | `pack.bat`      | `npm run pack` → `dist_installer/win-unpacked`，随后跑 `installer.check`                                                                          | 只需验证打包形态、做安装前自检时用                                                     |
 | `dist.bat`      | `npm run dist` → `dist_installer/ColaNasOs-Setup-<版本>.exe`（NSIS，含本地模型），随后跑 `installer.check`                                       | 交付完整安装器时用；出包前先跑 `build-web.bat`                                        |
 | （精简包）      | `npm run dist:lite` → `dist_installer/ColaNasOs-<版本>-<arch>-lite-setup.exe`（不含 `vendor/models`，约 206 MB）                                  | 不需要本地 AI / 体积敏感时用                                                           |
@@ -74,6 +74,14 @@ curl -s -X POST "http://127.0.0.1:5174/hot-reload?token=colanas-dev-ctl"    # �
 > **给 AI 助手：不要每个功能都跑 `verify` / `verify:full`，更不要跑 CI。**
 > 一个功能改完 → `npm run verify:fast`；跨域改动或用户说要提交 → 才 `npm run verify`。
 > 编译只有两步：服务端 `npm run build`（tsc），Web 产物 `build-web.bat`。
+
+> ⛔ **`dev.bat` 在跑的时候，禁止跑 `build-web.bat`。** 那是 `flutter build web --release`，
+> dart2js **全量**编译（实测 30s，Web release 没有增量编译），而开发循环用的是 5173 的
+> `flutter run`（DDC 增量：改 `apps/**` 保存即热重载 <1s，改 `packages/**` 自动发 `R` 约 2~4s）。
+> `build/web` 只在内核 7788 要对外提供正式产物时才需要刷新 —— 即**交付 / 打包 / 验收**，
+> 不是改完一个功能就刷。同理，日常改代码也不需要 `flutter test`（提交门禁才跑）。
+>
+> 判断口诀：**能靠刷新 5173 看到效果 → 一个编译命令都不敲。**
 
 ```bash
 npm run build            # tsc（增量，1~2s）

@@ -4,9 +4,11 @@ import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
 import '../../core/scan_refresh.dart';
+import '../../shell/mobile_frame.dart';
 import 'video_card.dart';
 import 'video_detail_page.dart';
 import 'video_image_library_page.dart';
+import 'video_jp_pages.dart';
 import 'video_list_view.dart';
 import 'video_media_viewer_page.dart';
 
@@ -30,6 +32,17 @@ class _VideoHomePageState extends State<VideoHomePage> {
   VideoHomeResponse? _home;
   VideoStatsResponse? _stats;
   late final void Function() _unsub;
+
+  /// 手机端底部浮动胶囊：0 = 主页，1..n = 各影视库（参考实现就是这么切库的）
+  int _libIndex = 0;
+
+  /// 库内容按需建、建完保活（切回主页再切回来不重新拉一页）
+  final Map<int, Widget> _libViews = {};
+
+  /// 胶囊里的库 = **全部**库（含没勾「首页显示」的）。
+  /// 「首页显示」只决定它出不出现在主页推荐区，不该让它从导航里消失
+  /// ——2026-11-04 用户要求：取消勾选后仍要在浮动胶囊里能点到。
+  List<VideoLibraryItem> _libs = const [];
 
   @override
   void initState() {
@@ -55,10 +68,31 @@ class _VideoHomePageState extends State<VideoHomePage> {
       } catch (_) {
         // 统计失败不影响首页
       }
+      // 全部库（不受「首页显示」开关影响），只用来做底部胶囊
+      var libs = const <VideoLibraryItem>[];
+      try {
+        libs = (await c.videoLibraryList()).items;
+      } catch (_) {
+        // 库列表失败就退回首页给的来源，至少还能切
+      }
       if (!mounted) return;
       setState(() {
         _home = home;
         _stats = stats;
+        _libs = libs.isNotEmpty
+            ? libs
+            : [
+                for (final s in home.sources)
+                  VideoLibraryItem(
+                    id: s.id,
+                    name: s.name,
+                    path: '',
+                    items: s.items,
+                    createdAt: 0,
+                    lastScanAt: null,
+                    libType: s.libType,
+                  ),
+              ];
         _loading = false;
         _error = null;
       });
@@ -99,7 +133,10 @@ class _VideoHomePageState extends State<VideoHomePage> {
   void _openLibrary(String id, String name, String libType) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => libType == 'image' || libType == 'mixed'
+        builder: (_) => libType == 'jp_movie'
+            // 日本库：先进演员列表（页内可切「影片」）
+            ? VideoJpActorPage(embedded: false, libraryId: id)
+            : libType == 'image' || libType == 'mixed'
             ? VideoImageLibraryPage(
                 libraryId: id,
                 libType: libType,
@@ -117,13 +154,17 @@ class _VideoHomePageState extends State<VideoHomePage> {
       return NasErrorState(message: _error!, onRetry: _load);
     }
     final home = _home;
-    final empty = home == null ||
+    // 注意用 _libs 判空而不是 home.sources：库全部取消「首页显示」时，
+    // 首页推荐区是空的，但库本身还在，胶囊必须照样给出来。
+    final empty =
+        home == null ||
         (home.recommend.isEmpty &&
             home.recentPlay.isEmpty &&
             home.recentAdd.isEmpty &&
-            home.sources.isEmpty);
+            home.sources.isEmpty &&
+            _libs.isEmpty);
     if (empty) {
-      return ListView(
+      final emptyView = ListView(
         children: [
           NasEmptyState(
             title: tr('video.home.empty'),
@@ -132,9 +173,12 @@ class _VideoHomePageState extends State<VideoHomePage> {
           ),
         ],
       );
+      return isCompactWidth(context) && _libs.isNotEmpty
+          ? _withLibChips(emptyView)
+          : emptyView;
     }
 
-    return RefreshIndicator(
+    final homeBody = RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.only(bottom: NasTokens.spaceLg),
@@ -163,6 +207,83 @@ class _VideoHomePageState extends State<VideoHomePage> {
         ],
       ),
     );
+
+    // 桌面端保持原样：库入口就是「来源」卡片，点进整页。
+    // 手机端才用底部浮动胶囊切库（主页 + 各库），与参考实现一致 ——
+    // 手机上「点卡片 → 推整页 → 返回」来回两次，切库成本比桌面高得多。
+    if (!isCompactWidth(context) || _libs.isEmpty) return homeBody;
+    return _withLibChips(homeBody);
+  }
+
+  /// 手机端外壳：内容 + 底部库切换胶囊
+  Widget _withLibChips(Widget homeBody) {
+    final labels = [
+      tr('video.home.main'),
+      for (final l in _libs) l.name,
+    ];
+    final index = _libIndex.clamp(0, labels.length - 1);
+    _libViews.putIfAbsent(index, () => _libView(index));
+    return Stack(
+      children: [
+        Positioned.fill(
+          // 底部留出胶囊高度：最后一行海报不被浮动条压住
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 56),
+            child: IndexedStack(
+              index: index,
+              children: [
+                // 主页内容每次重建（数据在本 State 里，缓存 widget 实例会冻结数据）；
+                // 库视图自己拉数据，缓存实例即可保活滚动位置
+                homeBody,
+                for (var i = 1; i < labels.length; i++)
+                  _libViews[i] ?? const SizedBox.shrink(),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          left: NasTokens.spaceMd,
+          right: NasTokens.spaceMd,
+          bottom: 8,
+          child: NasFloatingChips(
+            scrollable: true,
+            labels: labels,
+            selectedIndex: index,
+            onSelect: _selectLib,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _selectLib(int index) {
+    if (index == _libIndex) return;
+    setState(() {
+      _libIndex = index;
+      _libViews.putIfAbsent(index, () => _libView(index));
+    });
+  }
+
+  Widget _libView(int index) {
+    if (index <= 0) return const SizedBox.shrink();
+    final lib = _libs[index - 1];
+    // 日本库的入口是**演员网格**（参考实现同款：先进角色列表，右上角再切「影片」），
+    // 不能像普通库那样直接甩一个影片列表 —— 2026-11-04 用户反馈。
+    if (lib.libType == 'jp_movie') {
+      return VideoJpActorPage(embedded: true, libraryId: lib.id);
+    }
+    return lib.libType == 'image' || lib.libType == 'mixed'
+        ? VideoImageLibraryPage(
+            libraryId: lib.id,
+            libType: lib.libType,
+            title: lib.name,
+            embedded: true,
+          )
+        : VideoListView(
+            libraryId: lib.id,
+            title: lib.name,
+            embedded: true,
+          );
   }
 
   Widget _sectionHeader(BuildContext context, String title, {VoidCallback? onMore}) {

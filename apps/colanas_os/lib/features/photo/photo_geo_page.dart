@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../shell/app_widgets.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -112,13 +113,11 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
         ),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('photo.geo.batchDone', {'count': '${_selected.length}'}))),
-      );
+      NasSnack.show(context, tr('photo.geo.batchDone', {'count': '${_selected.length}'}));
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     } finally {
       if (mounted) setState(() => _applying = false);
     }
@@ -129,6 +128,7 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
       await _load();
       return;
     }
+    if (!mounted) return;
     setState(() {
       _queue = _queue.skip(_batchSize).toList();
       _selected
@@ -168,7 +168,7 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _visionBusy = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -194,7 +194,7 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -206,7 +206,7 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -282,11 +282,7 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
             ],
           ),
         ),
-        IconButton(
-          tooltip: tr('common.refresh'),
-          onPressed: _load,
-          icon: const Icon(Icons.refresh),
-        ),
+        NasRefreshButton(onPressed: _load),
       ],
     );
   }

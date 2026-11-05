@@ -55,7 +55,7 @@ class _VideoLibrarySettingsPageState extends State<VideoLibrarySettingsPage> {
 
   void _toast(String text) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    NasSnack.show(context, text);
   }
 
   Future<void> _add() async {
@@ -161,6 +161,7 @@ class _VideoLibrarySettingsPageState extends State<VideoLibrarySettingsPage> {
       ),
     );
     if (ok != true || _busy) return;
+    if (!mounted) return;
     setState(() => _busy = true);
     try {
       await ApiSession.instance.client.videoLibraryFlags(
@@ -203,7 +204,7 @@ class _VideoLibrarySettingsPageState extends State<VideoLibrarySettingsPage> {
       _toast(tr('video.source.probed'));
       await _load();
     } catch (e) {
-      _toast(tr('mount.getFailed', {'error': '$e'}));
+      _toast(tr('common.getFailed', {'error': '$e'}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -213,16 +214,12 @@ class _VideoLibrarySettingsPageState extends State<VideoLibrarySettingsPage> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final r = await ApiSession.instance.client.videoScan(
-        body: VideoScanBody(libraryId: lib.id),
-      );
-      // 来源路径挂了时以前是「扫描成功、0 条」，用户只能猜。把原因摆出来。
-      final errs = r.errors ?? const <String>[];
-      if (errs.isNotEmpty) {
-        _toast(tr('video.source.scanFailedWith', {'error': errs.first}));
-      } else {
-        _toast(tr('video.nav.scanDone'));
-      }
+      // 走任务队列而不是同步扫描：几万文件时同步接口会卡几分钟，页面只能转圈。
+      // 进度与失败记录统一去「影视设置 → 搜刮任务」看。
+      final r = await ApiSession.instance.client.videoScanEnqueue(body: {'libraryId': lib.id});
+      final tasks = (r['tasks'] as List?) ?? const [];
+      final reused = tasks.isNotEmpty && (tasks.first as Map)['reused'] == true;
+      _toast(tr(reused ? 'video.scan.alreadyRunning' : 'video.scan.queued'));
       await _load();
     } catch (e) {
       _toast(tr('common.scanFailed', {'error': '$e'}));
@@ -357,7 +354,7 @@ class _VideoLibrarySettingsPageState extends State<VideoLibrarySettingsPage> {
               onPressed: _busy ? null : () => _edit(lib),
             ),
             IconButton(
-              tooltip: tr('photo.source.scanAll'),
+              tooltip: tr('common.scanAll'),
               icon: const Icon(Icons.sync),
               onPressed: _busy ? null : () => _scan(lib),
             ),
@@ -650,7 +647,7 @@ Future<VideoLibraryForm?> showVideoLibraryDialog(
                     decoration: InputDecoration(labelText: tr('ui.book.004')),
                   ),
                   const SizedBox(height: NasTokens.spaceSm),
-                  DropdownButtonFormField<String>(
+                  NasDropdown<String>(
                     initialValue: libType,
                     dropdownColor: Theme.of(ctx).colorScheme.surface,
                     decoration: InputDecoration(labelText: tr('video.library.type')),
@@ -795,7 +792,7 @@ Widget _sourceRow(
                 ),
               ),
               const SizedBox(width: NasTokens.spaceSm),
-              DropdownButton<String>(
+              NasDropdown<String>(
                 value: d.connType,
                 isDense: true,
                 underline: const SizedBox.shrink(),
@@ -919,165 +916,5 @@ Widget _sourceRow(
 }
 
 void _dialogToast(BuildContext context, String text) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-}
-
-/// 刮削设置：TMDB Key / 语言 / 是否写 .nfo / 自动匹配置信度阈值。
-///
-/// Key 留空 = 沿用「发现页」的 Key（用户只需填一次）。服务端从不回传明文 Key，
-/// 只回 `configured`，所以这里显示的是「已配置 / 未配置」而不是一串星号。
-class VideoScrapeSettingsPage extends StatefulWidget {
-  const VideoScrapeSettingsPage({super.key});
-
-  @override
-  State<VideoScrapeSettingsPage> createState() => _VideoScrapeSettingsPageState();
-}
-
-class _VideoScrapeSettingsPageState extends State<VideoScrapeSettingsPage> {
-  final _keyCtrl = TextEditingController();
-  final _langCtrl = TextEditingController(text: 'zh-CN');
-  final _scoreCtrl = TextEditingController(text: '2');
-  bool _writeSidecar = false;
-  bool _configured = false;
-  bool _loading = true;
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  @override
-  void dispose() {
-    _keyCtrl.dispose();
-    _langCtrl.dispose();
-    _scoreCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final s = await ApiSession.instance.client.videoTmdbSettingsGet();
-      if (!mounted) return;
-      setState(() {
-        _configured = s.configured;
-        _langCtrl.text = s.language;
-        _writeSidecar = s.writeSidecar;
-        _scoreCtrl.text = s.minScore.toStringAsFixed(0);
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = '$e';
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _save() async {
-    setState(() => _saving = true);
-    try {
-      final s = await ApiSession.instance.client.videoTmdbSettingsSet(
-        body: VideoTmdbSettingsBody(
-          // 空字符串 = 不改（沿用发现页 Key）；只有用户真填了才覆盖
-          apiKey: _keyCtrl.text.trim().isEmpty ? null : _keyCtrl.text.trim(),
-          language: _langCtrl.text.trim().isEmpty ? 'zh-CN' : _langCtrl.text.trim(),
-          writeSidecar: _writeSidecar,
-          minScore: double.tryParse(_scoreCtrl.text.trim()),
-        ),
-      );
-      if (!mounted) return;
-      setState(() => _configured = s.configured);
-      _dialogToast(context, tr('video.scrape.saved'));
-    } catch (e) {
-      if (!mounted) return;
-      _dialogToast(context, '$e');
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) return const NasLoading();
-    if (_error != null) return NasErrorState(message: _error!, onRetry: _load);
-    final scheme = Theme.of(context).colorScheme;
-    return ListView(
-      padding: const EdgeInsets.all(NasTokens.spaceLg),
-      children: [
-        Row(
-          children: [
-            Icon(
-              _configured ? Icons.check_circle : Icons.info_outline,
-              size: 18,
-              color: _configured ? scheme.primary : scheme.error,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              _configured ? tr('video.scrape.configured') : tr('video.scrape.notConfigured'),
-              style: TextStyle(
-                fontSize: NasTokens.fontCaption,
-                color: _configured ? scheme.primary : scheme.error,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: NasTokens.spaceMd),
-        TextField(
-          controller: _keyCtrl,
-          obscureText: true,
-          decoration: InputDecoration(
-            labelText: tr('video.scrape.key'),
-            helperText: tr('video.scrape.keyHint'),
-            isDense: true,
-          ),
-        ),
-        const SizedBox(height: NasTokens.spaceSm),
-        TextField(
-          controller: _langCtrl,
-          decoration: InputDecoration(
-            labelText: tr('video.scrape.language'),
-            isDense: true,
-          ),
-        ),
-        const SizedBox(height: NasTokens.spaceSm),
-        TextField(
-          controller: _scoreCtrl,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
-            labelText: tr('video.scrape.minScore'),
-            helperText: tr('video.scrape.minScoreHint'),
-            isDense: true,
-          ),
-        ),
-        const SizedBox(height: NasTokens.spaceSm),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          value: _writeSidecar,
-          onChanged: (v) => setState(() => _writeSidecar = v),
-          title: Text(tr('video.scrape.writeSidecar')),
-          subtitle: Text(
-            tr('video.scrape.writeSidecarHint'),
-            style: TextStyle(fontSize: NasTokens.fontMicro, color: context.nasTextSecondary),
-          ),
-        ),
-        const SizedBox(height: NasTokens.spaceMd),
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: const Icon(Icons.save_outlined, size: 18),
-            label: Text(tr('common.save')),
-          ),
-        ),
-      ],
-    );
-  }
+  NasSnack.show(context, text);
 }

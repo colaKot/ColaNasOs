@@ -4,6 +4,7 @@ import 'package:nas_ui/nas_ui.dart';
 import '../../core/session.dart';
 import 'sync_engine.dart';
 import 'sync_fs.dart';
+import 'sync_remote_dir_picker.dart';
 import 'sync_scheduler.dart';
 
 /// 创建 / 编辑同步任务：设备确认 → 规则（名称/模式/按需/高级）→ 路径。
@@ -99,7 +100,31 @@ class _SyncCreateWizardState extends State<SyncCreateWizard> {
   Future<void> _pickLocal() async {
     final picked = await SyncEngine.instance.fs.pickDirectory();
     if (picked == null || picked.isEmpty) return;
+    if (!mounted) return;
     setState(() => _localDir.text = picked);
+  }
+
+  /// 远端目录归一化：相对路径去掉前导斜杠（老语义），
+  /// **绝对路径（盘符 / UNC）原样保留** —— 选择器现在允许直接选 D:/Photos。
+  String _remotePath(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return '';
+    final abs = RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(t) ||
+        t.startsWith('\\\\') ||
+        t.startsWith('//');
+    if (abs) return t.replaceAll('\\', '/');
+    return t.replaceAll(RegExp(r'^/+'), '');
+  }
+
+  /// 选 NAS 上的目录。远端是相对文件根的路径，选择器直接返回相对路径。
+  Future<void> _pickRemote() async {
+    final picked = await showSyncRemoteDirPicker(
+      context,
+      initialPath: _remoteDir.text,
+    );
+    if (picked == null) return;
+    if (!mounted) return;
+    setState(() => _remoteDir.text = picked);
   }
 
   String _filterSummary() {
@@ -145,7 +170,7 @@ class _SyncCreateWizardState extends State<SyncCreateWizard> {
             ) {
               return SizedBox(
                 width: 90,
-                child: DropdownButtonFormField<String>(
+                child: NasDropdown<String>(
                   initialValue: value,
                   isDense: true,
                   items: const [
@@ -290,7 +315,7 @@ class _SyncCreateWizardState extends State<SyncCreateWizard> {
   Future<void> _save() async {
     final name = _name.text.trim();
     final local = _localDir.text.trim();
-    final remote = _remoteDir.text.trim().replaceAll(RegExp(r'^/+'), '');
+    final remote = _remotePath(_remoteDir.text);
     if (name.isEmpty) {
       setState(() {
         _step = 1;
@@ -311,6 +336,7 @@ class _SyncCreateWizardState extends State<SyncCreateWizard> {
         body: <String, dynamic>{'remoteDir': remote},
       );
       if (probe['allowed'] == false) {
+        if (!mounted) return;
         setState(() {
           _step = 2;
           _error = tr('sync.wizard.probeEscape');
@@ -318,6 +344,7 @@ class _SyncCreateWizardState extends State<SyncCreateWizard> {
         return;
       }
       if (probe['exists'] == true && probe['writable'] != true) {
+        if (!mounted) return;
         setState(() {
           _step = 2;
           _error = tr('sync.wizard.probeReadonly');
@@ -327,6 +354,7 @@ class _SyncCreateWizardState extends State<SyncCreateWizard> {
     } catch (_) {
       // 旧服务端没有 probe：不阻断保存
     }
+    if (!mounted) return;
     setState(() {
       _saving = true;
       _error = null;
@@ -842,7 +870,7 @@ class _SyncCreateWizardState extends State<SyncCreateWizard> {
   Widget _pathsStep() {
     final scheme = Theme.of(context).colorScheme;
     final local = _localDir.text.trim();
-    final remote = _remoteDir.text.trim().replaceAll(RegExp(r'^/+'), '');
+    final remote = _remotePath(_remoteDir.text);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -867,13 +895,25 @@ class _SyncCreateWizardState extends State<SyncCreateWizard> {
           ],
         ),
         const SizedBox(height: NasTokens.spaceSm),
-        TextField(
-          controller: _remoteDir,
-          decoration: InputDecoration(
-            labelText: tr('sync.remoteDir'),
-            hintText: tr('sync.wizard.remoteHint'),
-          ),
-          onChanged: (_) => setState(() {}),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _remoteDir,
+                decoration: InputDecoration(
+                  labelText: tr('sync.remoteDir'),
+                  hintText: tr('sync.wizard.remoteHint'),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            const SizedBox(width: NasTokens.spaceXs),
+            IconButton(
+              tooltip: tr('sync.picker.title'),
+              onPressed: _pickRemote,
+              icon: const Icon(Icons.drive_folder_upload_outlined),
+            ),
+          ],
         ),
         const SizedBox(height: NasTokens.spaceSm),
         NasCard(

@@ -44,6 +44,8 @@ const RETAIN_SEC = 7 * 24 * 60 * 60;
 const SettingsItem = Type.Object(
   {
     apiKeyConfigured: Type.Boolean(),
+    // 明文回传：用户要能看见自己配的是哪个 Key（自用 NAS，不做多租户隔离）
+    apiKey: Type.String({ description: 'TMDB API Key 明文' }),
     baseUrl: Type.String(),
     language: Type.String(),
     imageBase: Type.String(),
@@ -386,6 +388,7 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
       const cfg = config();
       return {
         apiKeyConfigured: isConfigured(cfg),
+        apiKey: cfg.apiKey,
         baseUrl: cfg.baseUrl,
         language: cfg.language,
         imageBase: cfg.imageBase,
@@ -424,6 +427,7 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
       const cfg = normalizeConfig(next);
       return {
         apiKeyConfigured: isConfigured(cfg),
+        apiKey: cfg.apiKey,
         baseUrl: cfg.baseUrl,
         language: cfg.language,
         imageBase: cfg.imageBase,

@@ -74,10 +74,18 @@ class NasTheme {
     final scheme = base.colorScheme;
     final subtle = scheme.onSurface.withValues(alpha: 0.08);
     final fieldRadius = BorderRadius.circular(spec.radius * 0.55);
+    // 弹窗 / 抽屉 / 下拉菜单必须是**不透明**的。
+    // 玻璃皮肤的 `panelColor` 自带 alpha（极光暗色才 8% 白），直接拿来当弹窗底色，
+    // 后面的整页内容会透上来，文字跟海报叠在一起根本看不清（用户明确反馈过）。
+    // 做法：把它和底色合成成等效的不透明色 —— 观感与半透明面板一致，但绝不透。
+    final solidPanel = Color.alphaBlend(spec.panelColor, scheme.surface);
 
     return base.copyWith(
+      // `canvasColor` 保持透明会让 DropdownButton 的弹出菜单、Drawer、Material(type:canvas)
+      // 全部变透明 —— 这也是"某些弹窗看不清"的来源之一。它只影响浮层与默认材质，
+      // 页面底色仍由 CanvasBackground 负责（scaffoldBackgroundColor 依旧透明）。
       scaffoldBackgroundColor: Colors.transparent,
-      canvasColor: Colors.transparent,
+      canvasColor: scheme.surface,
       dividerTheme: DividerThemeData(color: subtle, space: 1, thickness: 1),
       dividerColor: subtle,
       cardTheme: CardThemeData(
@@ -87,18 +95,27 @@ class NasTheme {
             borderRadius: BorderRadius.circular(spec.cardRadius)),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: spec.panelColor,
+        backgroundColor: solidPanel,
         surfaceTintColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.45),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(spec.radius)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: spec.panelColor,
+        backgroundColor: solidPanel,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius:
               BorderRadius.vertical(top: Radius.circular(spec.radius)),
         ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: solidPanel,
+        surfaceTintColor: Colors.transparent,
+      ),
+      drawerTheme: DrawerThemeData(
+        backgroundColor: solidPanel,
+        surfaceTintColor: Colors.transparent,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(

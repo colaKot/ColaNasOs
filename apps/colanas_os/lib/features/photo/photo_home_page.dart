@@ -1,4 +1,6 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
+import '../../shell/app_widgets.dart';
 
 import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
@@ -92,11 +94,7 @@ Map<String, String> get _imageHeaders {
           : AppBar(
               title: Text(tr('photo.home.title')),
               actions: [
-                IconButton(
-                  tooltip: tr('common.refresh'),
-                  onPressed: _load,
-                  icon: const Icon(Icons.refresh),
-                ),
+                NasRefreshButton(onPressed: _load),
               ],
             ),
       body: _loading
@@ -417,9 +415,31 @@ Map<String, String> get _imageHeaders {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (path.isNotEmpty)
-              NasCoverImage(url: _thumb(path), headers: _imageHeaders, fit: BoxFit.cover)
-            else
+            if (path.isNotEmpty) ...[
+              // 背景：同一张图 cover + 模糊，填满卡片（contain 两侧会留白）
+              Positioned.fill(
+                child: ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  child: NasCoverImage(
+                    url: _thumb(path, size: 240),
+                    headers: _imageHeaders,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              // 前景：完整等比显示。原来只有 cover，竖图被裁掉一大半，
+              // 用户看到的就是「只看到一小部分」（2026-11-04）。
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: NasCoverImage(
+                    url: _thumb(path, size: 720),
+                    headers: _imageHeaders,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ] else
               ColoredBox(color: scheme.surfaceContainerHighest),
             const DecoratedBox(
               decoration: BoxDecoration(

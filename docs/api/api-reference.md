@@ -1,33 +1,33 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**388 个路径 / 413 个操作 / 23 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**425 个路径 / 454 个操作 / 23 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
 - **子账号与权限**（`accounts`）· 21 个操作 · [跳转](#accounts)
 - **认证与账号**（`auth`）· 1 个操作 · [跳转](#auth)
-- **书房**（`book`）· 28 个操作 · [跳转](#book)
-- **discover**（`discover`）· 16 个操作 · [跳转](#discover)
+- **书房**（`book`）· 39 个操作 · [跳转](#book)
+- **discover**（`discover`）· 18 个操作 · [跳转](#discover)
 - **events**（`events`）· 1 个操作 · [跳转](#events)
-- **文件**（`files`）· 17 个操作 · [跳转](#files)
+- **文件**（`files`）· 18 个操作 · [跳转](#files)
 - **开放集成（Webhook / deliveries）**（`integration`）· 6 个操作 · [跳转](#integration)
 - **mediatool**（`mediatool`）· 10 个操作 · [跳转](#mediatool)
 - **站内消息**（`messages`）· 6 个操作 · [跳转](#messages)
 - **远程挂载**（`mount`）· 10 个操作 · [跳转](#mount)
-- **音乐**（`music`）· 25 个操作 · [跳转](#music)
+- **音乐**（`music`）· 34 个操作 · [跳转](#music)
 - **笔记**（`notes`）· 7 个操作 · [跳转](#notes)
 - **其他**（`other`）· 2 个操作 · [跳转](#other)
-- **相册**（`photo`）· 126 个操作 · [跳转](#photo)
+- **相册**（`photo`）· 129 个操作 · [跳转](#photo)
 - **player**（`player`）· 2 个操作 · [跳转](#player)
 - **pt**（`pt`）· 14 个操作 · [跳转](#pt)
 - **RSS 订阅**（`rss`）· 9 个操作 · [跳转](#rss)
 - **安全中心（备份 / 加密空间）**（`safety`）· 9 个操作 · [跳转](#safety)
 - **分享**（`share`）· 5 个操作 · [跳转](#share)
 - **同步**（`sync`）· 17 个操作 · [跳转](#sync)
-- **系统监控**（`system`）· 17 个操作 · [跳转](#system)
+- **系统监控**（`system`）· 20 个操作 · [跳转](#system)
 - **tasks**（`tasks`）· 5 个操作 · [跳转](#tasks)
-- **影视**（`video`）· 59 个操作 · [跳转](#video)
+- **影视**（`video`）· 71 个操作 · [跳转](#video)
 
 ## accounts
 
@@ -198,6 +198,18 @@ IP 黑名单 · `securityIpList`
 - 请求体：（空对象）
 - 响应：200 `BookOkResponse` · 错误 404
 
+#### `GET /api/v1/book/cache`
+
+封面 / PDF 页图缓存占用 · `bookCacheStats`
+
+- 响应：200 `BookCacheStatsResponse`
+
+#### `POST /api/v1/book/cache/clear`
+
+清空封面 / PDF 页图缓存 · `bookCacheClear`
+
+- 响应：200 `BookCacheClearResponse`
+
 #### `POST /api/v1/book/collection`
 
 设置 / 清除书籍所属合集与序号 · `bookCollectionSet`
@@ -254,6 +266,19 @@ IP 黑名单 · `securityIpList`
 - 参数：`id` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选
 - 响应：200 `BookFileUrlResponse` · 错误 404
 
+#### `GET /api/v1/book/history`
+
+阅读历史（最近读的在最前） · `bookHistory`
+
+- 参数：`limit` · 查询 · integer · 可选
+- 响应：200 `BookListResponse`
+
+#### `POST /api/v1/book/history/clear`
+
+清空当前用户的阅读历史（不影响阅读进度） · `bookHistoryClear`
+
+- 响应：200 `BookOkResponse`
+
 #### `GET /api/v1/book/item`
 
 书籍详情（含当前用户收藏与进度） · `bookItem`
@@ -281,11 +306,18 @@ IP 黑名单 · `securityIpList`
 - 请求体：（空对象）
 - 响应：200 `BookOkResponse` · 错误 404
 
+#### `POST /api/v1/book/libraries/update`
+
+改名 / 切换书籍或漫画类型 · `bookLibraryUpdate`
+
+- 请求体：（空对象）
+- 响应：200 `BookLibraryItem` · 错误 404
+
 #### `GET /api/v1/book/list`
 
 书架（标题序 + 排序键 cursor；可按格式 / 收藏过滤） · `bookList`
 
-- 参数：`libraryId` · 查询 · string · 可选<br>`q` · 查询 · string · 可选<br>`format` · 查询 · string · 可选<br>`favorite` · 查询 · string · 可选<br>`archived` · 查询 · string · 可选<br>`listId` · 查询 · string · 可选<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
+- 参数：`libraryId` · 查询 · string · 可选<br>`type` · 查询 · enum(book, comic) · 可选<br>`q` · 查询 · string · 可选<br>`format` · 查询 · string · 可选<br>`favorite` · 查询 · string · 可选<br>`archived` · 查询 · string · 可选<br>`listId` · 查询 · string · 可选<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
 - 响应：200 `BookListResponse` · 错误 400
 
 #### `GET /api/v1/book/lists`
@@ -328,6 +360,13 @@ IP 黑名单 · `securityIpList`
 
 - 请求体：（空对象）
 - 响应：200 `BookOkResponse` · 错误 404
+
+#### `POST /api/v1/book/lists/rename`
+
+重命名自定义列表 · `bookListRename`
+
+- 请求体：（空对象）
+- 响应：200 `BookListItem` · 错误 404 / 409
 
 #### `GET /api/v1/book/page`
 
@@ -384,6 +423,40 @@ IP 黑名单 · `securityIpList`
 - 参数：`id` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选
 - 响应：200 `BookTocResponse` · 错误 400 / 404
 
+#### `GET /api/v1/book/user-collections`
+
+当前用户的图书合集（含书数与封面） · `bookUserCollectionList`
+
+- 响应：200 `BookUserCollectionListResponse`
+
+#### `POST /api/v1/book/user-collections`
+
+新建图书合集 · `bookUserCollectionCreate`
+
+- 请求体：（空对象）
+- 响应：200 `BookUserCollection` · 错误 400
+
+#### `GET /api/v1/book/user-collections/items`
+
+合集里的书 · `bookUserCollectionItems`
+
+- 参数：`id` · 查询 · string · **必填**<br>`limit` · 查询 · integer · 可选
+- 响应：200 `BookListResponse` · 错误 404
+
+#### `POST /api/v1/book/user-collections/remove`
+
+删除合集（不动书与索引） · `bookUserCollectionRemove`
+
+- 请求体：（空对象）
+- 响应：200 `BookOkResponse`
+
+#### `POST /api/v1/book/user-collections/update`
+
+改名 / 换目录 · `bookUserCollectionUpdate`
+
+- 请求体：（空对象）
+- 响应：200 `BookUserCollection` · 错误 404
+
 ## discover
 
 ### discover
@@ -428,11 +501,24 @@ IP 黑名单 · `securityIpList`
 - 参数：`title` · 查询 · string · **必填**<br>`year` · 查询 · string · 可选
 - 响应：200 object
 
+#### `GET /api/v1/discover/douban/settings`
+
+读取豆瓣配置（Cookie 明文回传） · `discoverDoubanSettingsGet`
+
+- 响应：200 object
+
 #### `POST /api/v1/discover/douban/settings`
 
 设置豆瓣 Cookie（可选） · `discoverDoubanSettings`
 
 - 请求体：`cookie` string · **必填**
+- 响应：200 object
+
+#### `POST /api/v1/discover/douban/test`
+
+测试豆瓣连通性（用当前 Cookie） · `discoverDoubanTest`
+
+- 请求体：`cookie` string · 可选
 - 响应：200 object
 
 #### `GET /api/v1/discover/favorites`
@@ -592,6 +678,12 @@ IP 黑名单 · `securityIpList`
 
 - 请求体：（空对象）
 - 响应：200 `FilesRenameResponse` · 错误 400 / 404 / 409
+
+#### `GET /api/v1/files/roots`
+
+可浏览的根（盘符 / 文件根 / 来源根） · `filesRoots`
+
+- 响应：200 `FilesRootsResponse`
 
 #### `GET /api/v1/files/search`
 
@@ -895,6 +987,52 @@ Webhook 列表（不含 secret） · `webhookList`
 
 - 响应：200 `MusicAutoPlaylistListResponse`
 
+#### `GET /api/v1/music/cache`
+
+音乐转码缓存占用 · `musicCacheStats`
+
+- 响应：200 `MusicCacheStatsResponse`
+
+#### `POST /api/v1/music/cache/clear`
+
+清空音乐转码缓存 · `musicCacheClear`
+
+- 响应：200 `MusicCacheClearResponse`
+
+#### `GET /api/v1/music/collections`
+
+当前用户的音乐合集（含曲目数与封面） · `musicCollectionList`
+
+- 响应：200 `MusicCollectionListResponse`
+
+#### `POST /api/v1/music/collections`
+
+新建音乐合集 · `musicCollectionCreate`
+
+- 请求体：（空对象）
+- 响应：200 `MusicCollection` · 错误 400
+
+#### `GET /api/v1/music/collections/items`
+
+合集里的曲目 · `musicCollectionItems`
+
+- 参数：`id` · 查询 · string · **必填**<br>`limit` · 查询 · integer · 可选
+- 响应：200 `MusicListResponse` · 错误 404
+
+#### `POST /api/v1/music/collections/remove`
+
+删除合集（不动磁盘文件与曲库索引） · `musicCollectionRemove`
+
+- 请求体：（空对象）
+- 响应：200 `MusicOkResponse`
+
+#### `POST /api/v1/music/collections/update`
+
+改名 / 换目录 · `musicCollectionUpdate`
+
+- 请求体：（空对象）
+- 响应：200 `MusicCollection` · 错误 404
+
 #### `GET /api/v1/music/cover`
 
 内嵌封面（首次访问生成，之后走文件缓存） · `musicCover`
@@ -911,16 +1049,16 @@ Webhook 列表（不含 secret） · `webhookList`
 
 #### `GET /api/v1/music/favorites`
 
-我的收藏（按收藏时间倒序） · `musicFavorites`
+我的收藏（按收藏时间倒序，返回完整曲目） · `musicFavorites`
 
-- 响应：200 `MusicStateList`
+- 响应：200 `MusicListResponse`
 
 #### `GET /api/v1/music/history`
 
-播放历史（按时间倒序） · `musicHistory`
+播放历史（按时间倒序，返回完整曲目） · `musicHistory`
 
 - 参数：`limit` · 查询 · integer · 可选
-- 响应：200 `MusicHistoryList`
+- 响应：200 `MusicListResponse`
 
 #### `GET /api/v1/music/item`
 
@@ -1011,12 +1149,26 @@ Webhook 列表（不含 secret） · `webhookList`
 - 请求体：（空对象）
 - 响应：200 `MusicOkResponse` · 错误 404
 
+#### `POST /api/v1/music/playlists/rename`
+
+重命名歌单 · `musicPlaylistRename`
+
+- 请求体：（空对象）
+- 响应：200 `MusicOkResponse` · 错误 404
+
 #### `POST /api/v1/music/scan`
 
 扫描索引（ffmpeg 解析 tags / 时长；未变文件跳过） · `musicScan`
 
 - 请求体：（空对象）
 - 响应：200 `MusicScanResponse` · 错误 404
+
+#### `POST /api/v1/music/scan/enqueue`
+
+入队扫描（立即返回任务 id；进度与失败记录见 /tasks） · `musicScanEnqueue`
+
+- 请求体：（空对象）
+- 响应：200 object · 错误 404
 
 #### `GET /api/v1/music/stats`
 
@@ -1204,6 +1356,13 @@ MCP 开放平台状态 · `photoMcpStatus`
 - 请求体：（空对象）
 - 响应：200 `PhotoAiOpResponse`
 
+#### `POST /api/v1/photo/ai/scan`
+
+整库后台识别（入队，重启后可续跑） · `photoAiScan`
+
+- 请求体：（空对象）
+- 响应：200 `PhotoAiScanResponse` · 错误 503
+
 #### `GET /api/v1/photo/albums`
 
 当前用户的相册列表 · `photoAlbumList`
@@ -1372,6 +1531,13 @@ MCP 开放平台状态 · `photoMcpStatus`
 
 - 请求体：（空对象）
 - 响应：200 `PhotoDeleteResponse` · 错误 400
+
+#### `GET /api/v1/photo/exif`
+
+照片属性与 EXIF（按需解析文件头；无 EXIF 字段返回 null） · `photoExif`
+
+- 参数：`id` · 查询 · string · **必填**
+- 响应：200 object · 错误 404
 
 #### `GET /api/v1/photo/face/image`
 
@@ -1967,6 +2133,12 @@ GPS 视觉候选生成进度 · `photoGeoVisionStatus`
 - 请求体：（空对象）
 - 响应：200 object · 错误 400 / 404 / 413
 
+#### `GET /api/v1/photo/year-covers`
+
+每年一张「有人像」的代表图（年视图卡片封面） · `photoYearCovers`
+
+- 响应：200 `PhotoYearCoversResponse`
+
 ## player
 
 ### player
@@ -2393,12 +2565,32 @@ RSS 自动下载规则（按账号隔离） · `rssRuleList`
 
 - 响应：200 object
 
+#### `POST /api/v1/system/client-log`
+
+上报一条客户端日志（前端错误 / 警告） · `systemClientLog`
+
+- 请求体：`level` enum(error, warn, info) · **必填**<br>`message` string · **必填**<br>`route` string · 可选<br>`detail` string · 可选
+- 响应：200 object
+
+#### `POST /api/v1/system/db/compact`
+
+数据库碎片整理（VACUUM，重写数据文件回收空洞空间） · `systemDbCompact`
+
+- 响应：200 `SystemDbCompactResponse` · 错误 409
+
 #### `POST /api/v1/system/exec`
 
 受限命令执行（白名单 + 无 shell + 5 s 超时） · `systemExec`
 
 - 请求体：`command` string · **必填**<br>`args` array<string> · 可选<br>`cwd` string · 可选
 - 响应：200 object · 错误 400
+
+#### `GET /api/v1/system/logs`
+
+服务端日志尾部（logs/kernel.log，按时间正序返回最后 N 行） · `systemLogs`
+
+- 参数：`lines` · 查询 · integer · 可选<br>`file` · 查询 · string · 可选<br>`level` · 查询 · enum(all, warn, error, info) · 可选
+- 响应：200 `SystemLogsResponse`
 
 #### `GET /api/v1/system/monitor`
 
@@ -2521,11 +2713,25 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 ### 影视
 
+#### `POST /api/v1/video/actor/avatars`
+
+按演员名批量取头像与档案（详情页演职人员区用） · `videoActorAvatars`
+
+- 请求体：`names` array<string> · **必填**<br>`libraryId` string · 可选
+- 响应：200 object
+
+#### `GET /api/v1/video/actors`
+
+演员候选（从 NFO 演员聚合，供查重页排除指定演员） · `videoActors`
+
+- 参数：`q` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
+- 响应：200 object
+
 #### `GET /api/v1/video/art`
 
 刮削海报 / 剧照（本地文件读流，远端 URL 302 跳转） · `videoArt`
 
-- 参数：`id` · 查询 · string · **必填**<br>`kind` · 查询 · enum(poster, fanart) · 可选
+- 参数：`id` · 查询 · string · **必填**<br>`kind` · 查询 · enum(poster, fanart) · 可选<br>`size` · 查询 · integer · 可选
 - 响应：200 -
 
 #### `GET /api/v1/video/browse`
@@ -2562,6 +2768,13 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 - 请求体：（空对象）
 - 响应：200 `VideoCollectionItemsResponse` · 错误 404
 
+#### `POST /api/v1/video/collections/merge`
+
+合并两个合集（来源的影片并入目标，来源合集被删除） · `videoCollectionMerge`
+
+- 请求体：`sourceId` string · **必填**<br>`targetId` string · **必填**
+- 响应：200 `VideoCollection` · 错误 400 / 404
+
 #### `POST /api/v1/video/collections/upsert`
 
 创建 / 编辑合集（名称 / 简介 / 封面 / 顺序） · `videoCollectionUpsert`
@@ -2573,7 +2786,7 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 重复视频（豆瓣 / IMDB / 番号 / 标题+年份 四把钥匙，并查集分组） · `videoDuplicates`
 
-- 参数：`libraryId` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
+- 参数：`libraryId` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选<br>`excludeActors` · 查询 · string · 可选
 - 响应：200 `VideoDuplicatesResponse`
 
 #### `GET /api/v1/video/favorites`
@@ -2624,6 +2837,13 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 - 请求体：（空对象）
 - 响应：200 `VideoDeleteItemsResponse`
+
+#### `POST /api/v1/video/items/delete-task`
+
+删除视频（后台任务，返回 taskId，用 /tasks/:id 看进度） · `videoItemsDeleteTask`
+
+- 请求体：（空对象）
+- 响应：200 object
 
 #### `POST /api/v1/video/jp_actor/favorite`
 
@@ -2783,6 +3003,13 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 - 请求体：（空对象）
 - 响应：200 `VideoScanResponse` · 错误 404
 
+#### `POST /api/v1/video/scan/enqueue`
+
+入队扫描（立即返回任务 id；进度与失败记录见 /tasks） · `videoScanEnqueue`
+
+- 请求体：`libraryId` string · 可选
+- 响应：200 object
+
 #### `POST /api/v1/video/scrape/batch`
 
 批量刮削（缺省只刮还没元数据的条目） · `videoScrapeBatch`
@@ -2803,6 +3030,19 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 - 请求体：（空对象）
 - 响应：200 `VideoOkResponse`
+
+#### `GET /api/v1/video/scrape/progress`
+
+刮削进度（每日快照，含按库明细；最新的在前） · `videoScrapeProgress`
+
+- 参数：`days` · 查询 · integer · 可选
+- 响应：200 object
+
+#### `POST /api/v1/video/scrape/progress/refresh`
+
+立即重算一次刮削进度（入队，不阻塞请求） · `videoScrapeProgressRefresh`
+
+- 响应：200 object
 
 #### `POST /api/v1/video/scrape/start`
 
@@ -2837,6 +3077,19 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 - 参数：`name` · 查询 · string · **必填**<br>`libraryId` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
 - 响应：200 `VideoSeriesItemsResponse` · 错误 400 / 404
+
+#### `GET /api/v1/video/settings`
+
+影视设置（字幕抓取 + 转码） · `videoSettingsGet`
+
+- 响应：200 object
+
+#### `PUT /api/v1/video/settings`
+
+写影视设置（只传要改的段 / 字段） · `videoSettingsSet`
+
+- 请求体：`subtitle` object · 可选<br>`transcode` object · 可选
+- 响应：200 object
 
 #### `GET /api/v1/video/smart-albums`
 
@@ -2893,6 +3146,20 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 - 请求体：`id` string · **必填**
 - 响应：200 object · 错误 404
 
+#### `POST /api/v1/video/subtitle/fetch-library`
+
+按库补全字幕（入队 video.subtitle.fetch） · `videoSubtitleFetchLibrary`
+
+- 请求体：`id` string · **必填**
+- 响应：200 object
+
+#### `POST /api/v1/video/subtitle/test-sources`
+
+测试各字幕源链接（连通性，不下载） · `videoSubtitleSourcesTest`
+
+- 请求体：`assrtToken` string · 可选<br>`openSubtitlesKey` string · 可选
+- 响应：200 object
+
 #### `GET /api/v1/video/subtitles`
 
 外挂字幕列表（与影片同目录、同主名） · `videoSubtitles`
@@ -2919,6 +3186,13 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 - 请求体：（空对象）
 - 响应：200 `VideoTmdbSettings`
+
+#### `POST /api/v1/video/tmdb/test`
+
+测试 TMDB 连通性（用当前配置的 Key） · `videoTmdbTest`
+
+- 请求体：`apiKey` string · 可选
+- 响应：200 object
 
 #### `POST /api/v1/video/watch`
 

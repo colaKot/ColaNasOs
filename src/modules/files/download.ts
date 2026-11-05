@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { filesRoot, httpError, isAbsoluteInput, resolveAnyPath, resolveInRoot } from './fs-root';
+import { absoluteInput, filesRoot, httpError, isAbsoluteInput, resolveInRoot } from './fs-root';
 
 export interface DownloadQuery {
   path?: string;
@@ -95,13 +95,11 @@ function disposition(name: string, inline: boolean): string {
 /** GET /api/v1/files/download：Range + ETag + If-None-Match / If-Range，流式输出 */
 export async function downloadHandler(req: FastifyRequest, reply: FastifyReply, q: DownloadQuery) {
   const root = filesRoot();
-  let abs: string;
-  try {
-    abs = resolveInRoot(root, q.path);
-  } catch (err) {
-    if (!isAbsoluteInput(q.path)) throw err;
-    abs = resolveAnyPath(root, q.path);
-  }
+  // 绝对路径（盘符 / UNC）直通：同步的远端目录可能整个在 D 盘，
+  // 下载走 /files/download —— 只在 extraRoots 里找会 403。
+  const abs = isAbsoluteInput(q.path)
+    ? path.resolve(absoluteInput(q.path ?? ''))
+    : resolveInRoot(root, q.path);
 
   let st;
   try {

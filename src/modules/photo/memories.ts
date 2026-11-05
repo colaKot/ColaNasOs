@@ -466,7 +466,10 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
           }))
           .sort((a, b) => b.score - a.score);
 
-        const cover = scored[0].row;
+        // 封面优先挑「有人脸」的那张：记忆卡片是给人看的，一张有人的照片
+        // 比构图最好的风景更像「回忆」。AI 没跑（无 people 数据）时自然退回最高分。
+        const cover = scored.find((s) => (labels.people.get(s.row.id) || []).length > 0)?.row
+          ?? scored[0].row;
         const picks = scored.slice(0, 7).map((s) => ({
           id: s.row.id,
           path: s.row.rel_path,
@@ -1054,7 +1057,9 @@ function buildMemoryBase(
       ),
     }))
     .sort((a, b) => b.score - a.score);
-  const cover = scored[0].row;
+  // 同列表页：有人脸的优先做封面
+  const cover = scored.find((s) => (labels.people.get(s.row.id) || []).length > 0)?.row
+    ?? scored[0].row;
 
   const cellCount = new Map<string, number>();
   for (const r of list) {

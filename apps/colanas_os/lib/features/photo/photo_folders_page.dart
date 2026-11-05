@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_media/nas_media.dart';
 import 'package:nas_ui/nas_ui.dart';
+import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
 import 'photo_viewer_page.dart';
@@ -159,7 +160,7 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
           ),
           Expanded(
             child: Text(
-              _source == null ? tr('photo.nav.files') : '${_source!.name}  $_relative',
+              _source == null ? tr('nav.filesView') : '${_source!.name}  $_relative',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 13, color: scheme.onSurface),
@@ -197,11 +198,7 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
               if (!_selecting) _selected.clear();
             }),
           ),
-          IconButton(
-            tooltip: tr('common.refresh'),
-            onPressed: _source == null ? _loadRoots : () => _loadDir(_path),
-            icon: const Icon(Icons.refresh, size: 18),
-          ),
+          NasRefreshButton(onPressed: _source == null ? _loadRoots : () => _loadDir(_path)),
         ],
       ),
     );
@@ -479,13 +476,9 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
         _selecting = false;
       });
       await _loadDir(_path);
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('photo.delete.done', {'count': '${res.count}'}))),
-      );
+      NasSnack.showOn(messenger, tr('photo.delete.done', {'count': '${res.count}'}));
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('photo.delete.failed', {'error': '$e'}))),
-      );
+      NasSnack.showOn(messenger, tr('photo.delete.failed', {'error': '$e'}));
     }
   }
 }

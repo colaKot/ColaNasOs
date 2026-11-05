@@ -1,4 +1,5 @@
 import { sql } from 'kysely';
+import { ftsPhrase } from '../../files/fts';
 import { secured } from '../../../../kernel/route';
 import type { KernelApi } from '../../../../kernel/types';
 import { aiAvailable, ensureSidecar } from './sidecar';
@@ -118,11 +119,15 @@ export async function scoreSemantic(
 
   // 文字融合：OCR / 路径（票号、车次这类查询走这里最快）
   const like = likePattern(query);
+  const fts = ftsPhrase(query);
   const ocrRows = (
     await sql<{ id: string }>`
       select o.photo_id as id from photo_ocr o
         join photo_items i on i.id = o.photo_id
-       where o.text like ${like} escape '\\' and i.in_trash = 0 and ${owner}
+       where ${fts
+         ? sql`o.rowid in (select rowid from photo_ocr_fts where photo_ocr_fts match ${fts})`
+         : sql`o.text like ${like} escape '\\'`}
+         and i.in_trash = 0 and ${owner}
        limit 3000
     `.execute(k.db)
   ).rows;
@@ -273,11 +278,15 @@ export async function registerPhotoSemantic(app: any, k: KernelApi): Promise<voi
 
       // 文字融合：OCR / 路径（票号、车次这类查询走这里最快）
       const like = likePattern(q);
+      const fts = ftsPhrase(q);
       const ocrRows = (
         await sql<{ id: string }>`
           select o.photo_id as id from photo_ocr o
             join photo_items i on i.id = o.photo_id
-           where o.text like ${like} escape '\\' and i.in_trash = 0
+           where ${fts
+             ? sql`o.rowid in (select rowid from photo_ocr_fts where photo_ocr_fts match ${fts})`
+             : sql`o.text like ${like} escape '\\'`}
+             and i.in_trash = 0
            limit 3000
         `.execute(k.db)
       ).rows;

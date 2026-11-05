@@ -30,6 +30,22 @@ export const SessionCreateBody = Type.Object(
     subtitle: Type.Optional(
       Type.String({ description: '同目录外挂字幕文件名（如 S01E01.zh.srt）；给定时烧录进画面' }),
     ),
+    /**
+     * 客户端级音频覆盖：不传 = 跟随库级「响度归一」开关（video_libraries.audio_normalize）。
+     * 客户端设置页只在用户偏离默认值时才带上这两个字段。
+     */
+    audioNormalize: Type.Optional(
+      Type.Boolean({ description: '响度归一（优先于库级开关）：true = 强制开，false = 强制关' }),
+    ),
+    audioDownmix: Type.Optional(
+      Type.Boolean({ description: '降混双声道：5.1 / 7.1 压成 stereo' }),
+    ),
+    audioIndex: Type.Optional(
+      Type.Integer({ minimum: 0, description: '选第几条音轨转码（默认 0）' }),
+    ),
+    forceSdr: Type.Optional(
+      Type.Boolean({ description: '强制 HDR→SDR；不传时由服务端按片源标记自动判定' }),
+    ),
   },
   { $id: 'PlayerSessionCreateBody' },
 );
@@ -59,6 +75,8 @@ export const SessionItem = Type.Object(
     url: Type.String(),
     createdAt: Type.Integer(),
     updatedAt: Type.Integer(),
+    audioIndex: Type.Optional(Type.Integer({ description: '转码选用的音轨序号' })),
+    hdrToSdr: Type.Optional(Type.Boolean({ description: '是否做 HDR→SDR 转换' })),
   },
   { $id: 'PlayerSessionItem' },
 );

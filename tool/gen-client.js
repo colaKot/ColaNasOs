@@ -274,6 +274,10 @@ function genClient() {
       const opId = op.operationId || toCamel(`${method} ${url}`);
       const summary = (op.summary || '').replace(/\r?\n/g, ' ');
 
+      // path 里的 `{id}` 必须换成 Dart 插值：直接用原样路径会打到
+      // `/api/v1/tasks/{id}` 这种字面量，服务端永远 404（tasksGet 曾因此不可用）
+      const urlDart = url.replace(/\{([^}]+)\}/g, (_m, name) => '${Uri.encodeComponent(' + name + ')}');
+
       // 参数
       const params = [];
       const queryLines = [];
@@ -340,11 +344,11 @@ function genClient() {
         out.push(...queryLines);
         out.push('    };');
         out.push(
-          `    final res = await transport.send('${method.toUpperCase()}', _uri('${url}', query), headers: await _headers(${jsonBody ? 'jsonBody: true' : binaryBody ? 'binaryBody: true' : ''})${bodyExpr ? `, body: ${bodyExpr}` : ''});`,
+          `    final res = await transport.send('${method.toUpperCase()}', _uri('${urlDart}', query), headers: await _headers(${jsonBody ? 'jsonBody: true' : binaryBody ? 'binaryBody: true' : ''})${bodyExpr ? `, body: ${bodyExpr}` : ''});`,
         );
       } else {
         out.push(
-          `    final res = await transport.send('${method.toUpperCase()}', _uri('${url}'), headers: await _headers(${jsonBody ? 'jsonBody: true' : binaryBody ? 'binaryBody: true' : ''})${bodyExpr ? `, body: ${bodyExpr}` : ''});`,
+          `    final res = await transport.send('${method.toUpperCase()}', _uri('${urlDart}'), headers: await _headers(${jsonBody ? 'jsonBody: true' : binaryBody ? 'binaryBody: true' : ''})${bodyExpr ? `, body: ${bodyExpr}` : ''});`,
         );
       }
 

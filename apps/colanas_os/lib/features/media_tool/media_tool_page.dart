@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../shell/app_widgets.dart';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,8 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
+import '../../shell/app_nav_shell.dart';
+import '../../shell/mobile_frame.dart';
 
 /// 媒体工具（SP3-10 / M1–M7）：左二级菜单 + 统一任务表（账号隔离 + 启停 + 统计）。
 ///
@@ -26,6 +29,25 @@ class _MediaToolPageState extends State<MediaToolPage> {
   bool _collapsed = false;
 
   String _tool = 'videoTrans';
+
+  static IconData _toolIcon(String id) {
+    switch (id) {
+      case 'singleCompress':
+        return Icons.image_outlined;
+      case 'batchCompress':
+        return Icons.photo_library_outlined;
+      case 'videoTrans':
+        return Icons.movie_filter_outlined;
+      case 'audioTrans':
+        return Icons.audiotrack_outlined;
+      case 'arrange':
+        return Icons.drive_file_move_outline;
+      case 'thumbnails':
+        return Icons.photo_size_select_large_outlined;
+      default:
+        return Icons.history;
+    }
+  }
 
   static const _toolTitles = <String, String>{
     'singleCompress': 'media_tool.entry.singleCompress',
@@ -139,9 +161,7 @@ class _MediaToolPageState extends State<MediaToolPage> {
       await action();
       await _load();
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('common.errorWith', {'error': '${_hint(e) ?? e}'}))),
-      );
+      NasSnack.showOn(messenger, tr('common.errorWith', {'error': '${_hint(e) ?? e}'}));
     }
   }
 
@@ -191,7 +211,7 @@ class _MediaToolPageState extends State<MediaToolPage> {
   ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: NasTokens.spaceSm),
-      child: DropdownButtonFormField<T>(
+      child: NasDropdown<T>(
         initialValue: value,
         isDense: true,
         decoration: InputDecoration(labelText: label, isDense: true),
@@ -266,20 +286,12 @@ class _MediaToolPageState extends State<MediaToolPage> {
         uploaded += 1;
       }
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(tr('media_tool.uploaded', {'count': '$uploaded'})),
-        ),
-      );
+      NasSnack.showOn(messenger, tr('media_tool.uploaded', {'count': '$uploaded'}));
       if (uploaded > 0) {
         await _openEditor(presetSource: dir, presetZip: true);
       }
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(tr('media_tool.uploadFailed', {'error': '$e'})),
-        ),
-      );
+      NasSnack.showOn(messenger, tr('media_tool.uploadFailed', {'error': '$e'}));
     }
   }
 
@@ -544,9 +556,7 @@ class _MediaToolPageState extends State<MediaToolPage> {
         );
         await _load();
       } catch (e) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(tr('common.createFailed', {'error': '${_hint(e) ?? e}'}))),
-        );
+        NasSnack.showOn(messenger, tr('common.createFailed', {'error': '${_hint(e) ?? e}'}));
       }
     } finally {
       src.dispose();
@@ -656,11 +666,7 @@ class _MediaToolPageState extends State<MediaToolPage> {
               icon: const Icon(Icons.add, size: 16),
               label: Text(tr('media_tool.action.new')),
             ),
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 18),
-            tooltip: tr('ui.accounts.021'),
-            onPressed: _load,
-          ),
+          NasRefreshButton(onPressed: _load),
         ],
       ),
     );
@@ -795,6 +801,71 @@ class _MediaToolPageState extends State<MediaToolPage> {
   @override
   Widget build(BuildContext context) {
     final admin = ApiSession.instance.isAdmin;
+
+    // 手机端：7 个工具的侧栏放不下底部，收成「4 个高频工具 + 更多」。
+    if (isCompactWidth(context)) {
+      final all = <String>[
+        'singleCompress',
+        if (admin) 'batchCompress',
+        if (admin) 'videoTrans',
+        if (admin) 'audioTrans',
+        if (admin) 'arrange',
+        if (admin) 'thumbnails',
+        'tasks',
+      ];
+      final main = all.take(4).toList(growable: false);
+      final more = all.skip(main.length).toList(growable: false);
+      const moreId = '@more';
+      final selected = main.contains(_tool)
+          ? _tool
+          : (more.contains(_tool) || _tool == moreId ? moreId : main.first);
+      return NasAppScaffold(
+        title: tr('app.mediaTool'),
+        onHome: AppNavShell.onExitToHome,
+        items: [
+          for (final id in main)
+            NasTabItem(
+              id: id,
+              label: tr(_toolTitles[id] ?? id),
+              icon: _toolIcon(id),
+            ),
+          if (more.isNotEmpty)
+            NasTabItem(
+              id: moreId,
+              label: tr('nav.more'),
+              icon: Icons.more_horiz,
+            ),
+        ],
+        selectedId: selected,
+        activeTabId: selected,
+        onSelect: (id) => setState(() => _tool = id),
+        body: _tool == moreId
+            ? NasMorePage(
+                title: tr('nav.more'),
+                groups: [
+                  NasNavGroup(
+                    entries: [
+                      for (final id in more)
+                        NasNavEntry(
+                          id: id,
+                          label: tr(_toolTitles[id] ?? id),
+                          icon: _toolIcon(id),
+                        ),
+                    ],
+                  ),
+                ],
+                onSelect: (id) => setState(() => _tool = id),
+              )
+            : Column(
+                children: [
+                  _toolBar(),
+                  const Divider(height: 1),
+                  Expanded(child: _content()),
+                ],
+              ),
+      );
+    }
+
     return Scaffold(
       body: Row(
         children: [

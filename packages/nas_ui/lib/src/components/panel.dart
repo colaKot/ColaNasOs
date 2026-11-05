@@ -140,7 +140,11 @@ class NasCard extends StatelessWidget {
           ),
           boxShadow: hovered ? spec.cardShadow : null,
         ),
-        child: child,
+        // 卡片里经常直接放 ListTile / SwitchListTile：它们的水波纹画在**最近的
+        // Material** 上，而这层 AnimatedContainer 的背景会盖住它 —— debug 下直接抛
+        // 「ListTile background color or ink splashes may be invisible」。
+        // 透明 Material 让涟漪落在这层（卡片内部、背景之上），视觉不变。
+        child: Material(type: MaterialType.transparency, child: child),
       ),
     );
   }

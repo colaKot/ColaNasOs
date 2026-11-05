@@ -1,9 +1,10 @@
+import { subtitleConf } from './routes/settings';
 import path from 'node:path';
 import { Type } from '@sinclair/typebox';
 import { sql } from 'kysely';
 import { secured } from '../../../kernel/route';
 import type { KernelApi } from '../../../kernel/types';
-import { filesRoot, resolveInRoot } from '../files/fs-root';
+import { filesRoot, resolveAnyPath } from '../files/fs-root';
 import { jpMetaOf } from './media-type';
 import { actorKey, actorProfileOrPlaceholder } from './jp-actor';
 import {
@@ -218,7 +219,7 @@ export async function registerJpRoutes(app: any, k: KernelApi): Promise<void> {
 
       let abs: string;
       try {
-        abs = resolveInRoot(VIDEO_ROOT(), item.rel_path);
+        abs = resolveAnyPath(VIDEO_ROOT(), item.rel_path);
       } catch {
         return reply.code(404).send({ error: Err.notFound, message: 'file missing' });
       }
@@ -455,6 +456,7 @@ export async function registerJpRoutes(app: any, k: KernelApi): Promise<void> {
           hip: num(profile.hip ?? profile.hips),
           cup: String(profile.cup ?? ''),
           birthday: String(profile.birthday ?? ''),
+          birthplace: String(profile.birthplace ?? ''),
         };
       });
 
@@ -640,6 +642,15 @@ export async function registerJpRoutes(app: any, k: KernelApi): Promise<void> {
         limit: body.limit,
       });
       const pruned = await pruneOrphanActors(k.db);
+      // 顺带入队「从 NFO 补演员头像」：重建只补关联，头像在 NFO 的 <actor><thumb> 里，
+      // 老库不重读 NFO 永远是空的。任务里没缺口时秒退，重复点也不会有额外开销。
+      void k.tasks
+        .enqueueIfIdle('video.actor.thumbs', { libraryId: body.libraryId }, { maxAttempts: 1 })
+        .catch(() => null);
+      // 档案（身高 / 生日 / 出身地）要联网抓维基，慢；排在头像后面由队列串行跑
+      void k.tasks
+        .enqueueIfIdle('video.actor.profile', {}, { maxAttempts: 1 })
+        .catch(() => null);
       return { ...result, pruned };
     },
   );
@@ -735,7 +746,11 @@ async function markSubState(k: KernelApi, itemId: string, state: number): Promis
  * 因为站点后来补了字幕也能被发现；状态 2（文件名提不出片号）不重试。
  * 命中 avsubtitles 每日上限立刻中止整轮，不做重试风暴。
  */
-export async function fetchSubtitlesForLibrary(k: KernelApi, libraryId: string): Promise<number> {
+export async function fetchSubtitlesForLibrary(
+  k: KernelApi,
+  libraryId: string,
+  onProgress?: (pct: number, done?: number, total?: number) => void,
+): Promise<number> {
   const lib = (
     await sql<{ id: string; auto_subtitle: number; lib_type: string | null; jp_movie: number }>`
       select id, auto_subtitle, lib_type, jp_movie from video_libraries where id = ${libraryId}
@@ -781,24 +796,28 @@ export async function fetchSubtitlesForLibrary(k: KernelApi, libraryId: string):
     `.execute(k.db)
   ).rows;
 
+  // 字幕源凭据来自「影视设置 → 字幕」（k.config 的 video.subtitle 对象）；
+  // 环境变量作为回退，方便容器部署时不进界面也能配。
+  const subCfg = subtitleConf(k);
   const normalOpts = {
-    assrtToken: String(
-      k.config.get('video.subtitle.assrtToken') || process.env.COLANAS_ASSRT_TOKEN || '',
+    assrtToken: (subCfg.assrtToken || String(process.env.COLANAS_ASSRT_TOKEN || '')).trim(),
+    openSubtitlesKey: (
+      subCfg.openSubtitlesKey || String(process.env.COLANAS_OPENSUBTITLES_KEY || '')
     ).trim(),
-    openSubtitlesKey: String(
-      k.config.get('video.subtitle.openSubtitlesKey') ||
-        process.env.COLANAS_OPENSUBTITLES_KEY ||
-        '',
-    ).trim(),
-    xunlei: k.config.get('video.subtitle.xunlei') !== false,
+    xunlei: subCfg.xunlei,
   };
 
   let done = 0;
-  for (const item of items) {
+  for (let i = 0; i < items.length; i += 1) {
+    // 条数一起报：一轮只处理 12~30 条，光看百分号会误以为没动
+    onProgress?.(Math.round((i / items.length) * 100), i, items.length);
+    const item = items[i];
     // 已有同名字幕就跳过（不覆盖用户自己放的字幕）
     let abs: string;
     try {
-      abs = resolveInRoot(VIDEO_ROOT(), item.rel_path);
+      // 影视库来源可以是任意本机盘 / UNC，必须走 resolveAnyPath；
+      // 只用 resolveInRoot(filesRoot) 会把绝对路径全部判成越界，任务秒退、一条都不处理
+      abs = resolveAnyPath(VIDEO_ROOT(), item.rel_path);
     } catch {
       continue;
     }

@@ -82,9 +82,25 @@ export interface KernelApi {
         subtitle?: string;
         /** 音频滤镜（如 dynaudnorm）；库级「响度归一」开关决定是否传 */
         audioFilter?: string;
+        /** 首选硬件编码器：auto / nvenc / qsv / amf / cpu（影视设置的「首选解码器」） */
+        hwaccel?: string;
+        /** 选第几条音轨转码（默认 0） */
+        audioIndex?: number;
+        /** 强制 / 自动 HDR→SDR 色彩转换 */
+        hdrToSdr?: boolean;
+        /** 片源视频编码（h264 / hevc / av1）：决定「原画」能否直接 copy */
+        srcVideoCodec?: string;
         timeoutMs?: number;
       },
     ): Promise<{ segments: number; ms: number; codec?: string; container?: string }>;
+    /** 取消某个目录下正在跑的 HLS 转码（新会话抢占旧会话时用）；未在跑返回 false */
+    cancel(dir: string): Promise<boolean>;
+    /** 列出容器内字幕轨（文本 / 图形都返回，`text` 标记能否转字幕文件） */
+    subtitleTracks(src: string): Promise<
+      Array<{ index: number; lang: string | null; codec: string; text: boolean }>
+    >;
+    /** 抽取一条字幕轨到 `dst`（默认 srt）；图形字幕 / 轨道不存在时抛错 */
+    extractSubtitle(src: string, index: number, dst: string, format?: string): Promise<void>;
     available(): boolean;
   };
   /** 认证：用内核同一 secret 签发 token（模块登录用） */

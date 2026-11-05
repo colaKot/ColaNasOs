@@ -3,6 +3,7 @@ import { sql } from 'kysely';
 import { secured } from '../../../kernel/route';
 import type { KernelApi } from '../../../kernel/types';
 import type { FastifyRequest } from 'fastify';
+import { toTrack, type TrackRow } from './util';
 
 /**
  * 音乐用户态：收藏 + 播放历史（按 JWT `sub` 隔离）。
@@ -19,6 +20,7 @@ const FavoriteBody = Type.Object(
 
 const TrackRef = Type.Object({ id: Type.String({ minLength: 1 }) }, { $id: 'MusicTrackRefBody' });
 
+/** 兼容旧客户端：收藏 / 历史的精简结构仍保留在契约里（接口已改为返回完整曲目）。 */
 const StateItem = Type.Object(
   {
     id: Type.String(),
@@ -112,27 +114,23 @@ export async function registerMusicState(app: any, k: KernelApi): Promise<void> 
       schema: {
         operationId: 'musicFavorites',
         tags: ['music'],
-        summary: '我的收藏（按收藏时间倒序）',
-        response: { 200: ref('MusicStateList') },
+        summary: '我的收藏（按收藏时间倒序，返回完整曲目）',
+        response: { 200: ref('MusicListResponse') },
       },
     }),
     async (req: FastifyRequest) => {
       const owner = req.user?.sub ?? '';
+      // 返回完整曲目（而不是精简的 MusicStateItem）：收藏页与曲目页共用同一个
+      // 封面网格 / 播放队列，少了 path / hasCover 就没法直接播、也没法取封面。
       const rows = (
-        await sql<{
-          id: string;
-          title: string;
-          artist: string | null;
-          album: string | null;
-          duration: number | null;
-        }>`
-          select t.id, t.title, t.artist, t.album, t.duration
+        await sql<TrackRow>`
+          select t.*
           from music_favorites f join music_tracks t on t.id = f.item_id
           where f.owner_id = ${owner}
           order by f.created_at desc limit 200
         `.execute(k.db)
       ).rows;
-      return { items: rows.map((r) => ({ ...r, favorite: true })) };
+      return { items: rows.map(toTrack), nextCursor: null };
     },
   );
 
@@ -170,9 +168,9 @@ export async function registerMusicState(app: any, k: KernelApi): Promise<void> 
       schema: {
         operationId: 'musicHistory',
         tags: ['music'],
-        summary: '播放历史（按时间倒序）',
+        summary: '播放历史（按时间倒序，返回完整曲目）',
         querystring: ref('MusicHistoryQuery'),
-        response: { 200: ref('MusicHistoryList') },
+        response: { 200: ref('MusicListResponse') },
       },
     }),
     async (req: FastifyRequest) => {
@@ -182,21 +180,14 @@ export async function registerMusicState(app: any, k: KernelApi): Promise<void> 
         200,
       );
       const rows = (
-        await sql<{
-          id: string;
-          title: string;
-          artist: string | null;
-          album: string | null;
-          duration: number | null;
-          played_at: number;
-        }>`
-          select t.id, t.title, t.artist, t.album, t.duration, p.played_at
+        await sql<TrackRow>`
+          select t.*
           from music_plays p join music_tracks t on t.id = p.item_id
           where p.owner_id = ${owner}
           order by p.played_at desc limit ${limit}
         `.execute(k.db)
       ).rows;
-      return { items: rows.map((r) => ({ ...r, playedAt: Number(r.played_at) })) };
+      return { items: rows.map(toTrack), nextCursor: null };
     },
   );
 }

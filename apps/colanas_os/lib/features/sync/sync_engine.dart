@@ -292,6 +292,14 @@ class SyncEngine {
     revision.value += 1;
   }
 
+  /// 上报给服务端的错误摘要：契约上限 2000（`ReportBody.error`），
+  /// 这里按 1800 截断留余量 —— 20 条失败拼起来很容易超长，
+  /// 一旦超了服务端直接 400，整轮结果就丢了（2026-11-04）。
+  String _errorText(List<String> errors) {
+    if (errors.isEmpty) return '';
+    final text = errors.join('; ');
+    return text.length <= 1800 ? text : '${text.substring(0, 1800)}…';
+  }
   void _throwIfCancelled(String id) {
     if (_cancel.contains(id)) throw const _SyncCancelled();
   }
@@ -487,7 +495,7 @@ class SyncEngine {
             'applied': applied,
             'bytes': bytes,
             'status': status,
-            if (errors.isNotEmpty) 'error': errors.take(20).join('; '),
+            if (errors.isNotEmpty) 'error': _errorText(errors),
           },
         );
       } catch (e) {
@@ -531,10 +539,15 @@ class SyncEngine {
             'applied': applied,
             'bytes': bytes,
             'status': 'failed',
-            'error': message.length > 500 ? message.substring(0, 500) : message,
+            'error': _errorText([message]),
           },
         );
-      } catch (_) {}
+      } catch (e) {
+        // 上报失败必须留痕：以前这里是 catch (_) {}，服务端 400（error 超长）
+        // 被吞掉，结果「同步失败了但记录里什么都没有、任务卡在 running」。
+        debugPrint('[sync] report failed: $e');
+        errors.add('report: $e');
+      }
       return SyncRunResult(
         ok: false,
         error: message,
@@ -565,19 +578,40 @@ class SyncEngine {
     final remoteRel = joinPosix([task.remoteDir, action.path]);
     final localPath = _localPath(task, action.path);
 
+    // plan 里的 size 可能已经过期：构建产物 / 素材在扫描之后被重写，
+    // 按旧尺寸分片会让服务端 merge 时对不上（422 size mismatch，实测
+    // `sheet-1.png` 计划 1473909 实际 1434599）。传之前重新取一次真实大小。
+    var size = action.size;
+    try {
+      final actual = await fs.sizeOf(localPath);
+      if (actual != size) size = actual;
+    } catch (_) {
+      // 拿不到就按 plan 的值传，失败由下一轮重试
+    }
+
     final check = await client.filesCheck(
-      body: FilesCheckBody(path: remoteRel, size: action.size),
+      body: FilesCheckBody(path: remoteRel, size: size),
     );
     if (check.exists) return false;
 
+    // 断点续传：服务端会返回已落盘的分片下标，别再重传一遍
+    // （以前每次都从第 0 片开始，一个 1.4 MB 的图传一半断了也要从头来）
+    final already = check.uploaded.toSet();
     final chunkSize = math.max(1, check.chunkSize);
-    final total = action.size == 0
+    final total = size == 0
         ? 0
-        : math.max(1, (action.size + chunkSize - 1) ~/ chunkSize);
+        : math.max(1, (size + chunkSize - 1) ~/ chunkSize);
     for (var i = 0; i < total; i += 1) {
       _throwIfCancelled(task.id);
       final start = i * chunkSize;
-      final end = math.min(action.size, start + chunkSize);
+      final end = math.min(size, start + chunkSize);
+      final len = end - start;
+      if (len <= 0) continue;
+      if (already.contains(i)) {
+        // 这一片上次已经传完（服务端 merge 前会校验齐全）
+        onProgress(len);
+        continue;
+      }
       final bytes = await fs.readChunk(localPath, start, end);
       await client.filesChunk(
         path: remoteRel,
@@ -592,7 +626,7 @@ class SyncEngine {
       body: FilesMergeBody(
         path: remoteRel,
         total: total,
-        size: action.size,
+        size: size,
         mtimeMs: action.mtimeMs.toDouble(),
       ),
     );

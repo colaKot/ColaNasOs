@@ -95,6 +95,14 @@ class ColanasClient:
         """归档 / 取消归档（按当前用户隔离）"""
         return self._request("POST", "/api/v1/book/archive", params, "body")
 
+    def book_cache_clear(self, **params):
+        """清空封面 / PDF 页图缓存"""
+        return self._request("POST", "/api/v1/book/cache/clear", params, "body")
+
+    def book_cache_stats(self, **params):
+        """封面 / PDF 页图缓存占用"""
+        return self._request("GET", "/api/v1/book/cache", params, "query")
+
     def book_collection_items(self, **params):
         """合集内的书（按序号、标题排序）"""
         return self._request("GET", "/api/v1/book/collections/items", params, "query")
@@ -135,6 +143,14 @@ class ColanasClient:
         """全文检索（FTS5，返回片段）"""
         return self._request("GET", "/api/v1/book/search", params, "query")
 
+    def book_history(self, **params):
+        """阅读历史（最近读的在最前）"""
+        return self._request("GET", "/api/v1/book/history", params, "query")
+
+    def book_history_clear(self, **params):
+        """清空当前用户的阅读历史（不影响阅读进度）"""
+        return self._request("POST", "/api/v1/book/history/clear", params, "body")
+
     def book_item(self, **params):
         """书籍详情（含当前用户收藏与进度）"""
         return self._request("GET", "/api/v1/book/item", params, "query")
@@ -150,6 +166,10 @@ class ColanasClient:
     def book_library_remove(self, **params):
         """删除书库（级联清理收藏 / 进度 / 归档 / 列表条目）"""
         return self._request("POST", "/api/v1/book/libraries/remove", params, "body")
+
+    def book_library_update(self, **params):
+        """改名 / 切换书籍或漫画类型"""
+        return self._request("POST", "/api/v1/book/libraries/update", params, "body")
 
     def book_list(self, **params):
         """书架（标题序 + 排序键 cursor；可按格式 / 收藏过滤）"""
@@ -174,6 +194,10 @@ class ColanasClient:
     def book_list_remove_item(self, **params):
         """把书移出自定义列表"""
         return self._request("POST", "/api/v1/book/lists/items/remove", params, "body")
+
+    def book_list_rename(self, **params):
+        """重命名自定义列表"""
+        return self._request("POST", "/api/v1/book/lists/rename", params, "body")
 
     def book_lists(self, **params):
         """当前用户的自定义列表（按名称排序）"""
@@ -203,6 +227,26 @@ class ColanasClient:
         """内置阅读器目录（epub spine / txt 分章 / cbz 图片页）"""
         return self._request("GET", "/api/v1/book/toc", params, "query")
 
+    def book_user_collection_create(self, **params):
+        """新建图书合集"""
+        return self._request("POST", "/api/v1/book/user-collections", params, "body")
+
+    def book_user_collection_items(self, **params):
+        """合集里的书"""
+        return self._request("GET", "/api/v1/book/user-collections/items", params, "query")
+
+    def book_user_collection_list(self, **params):
+        """当前用户的图书合集（含书数与封面）"""
+        return self._request("GET", "/api/v1/book/user-collections", params, "query")
+
+    def book_user_collection_remove(self, **params):
+        """删除合集（不动书与索引）"""
+        return self._request("POST", "/api/v1/book/user-collections/remove", params, "body")
+
+    def book_user_collection_update(self, **params):
+        """改名 / 换目录"""
+        return self._request("POST", "/api/v1/book/user-collections/update", params, "body")
+
     def discover_catalog(self, **params):
         """发现目录（trending / popular / top_rated / upcoming / now_playing / on_air）"""
         return self._request("GET", "/api/v1/discover/catalog", params, "query")
@@ -230,6 +274,14 @@ class ColanasClient:
     def discover_douban_settings(self, **params):
         """设置豆瓣 Cookie（可选）"""
         return self._request("POST", "/api/v1/discover/douban/settings", params, "body")
+
+    def discover_douban_settings_get(self, **params):
+        """读取豆瓣配置（Cookie 明文回传）"""
+        return self._request("GET", "/api/v1/discover/douban/settings", params, "query")
+
+    def discover_douban_test(self, **params):
+        """测试豆瓣连通性（用当前 Cookie）"""
+        return self._request("POST", "/api/v1/discover/douban/test", params, "body")
 
     def discover_favorites(self, **params):
         """当前账号的发现收藏（id + mediaType）"""
@@ -318,6 +370,10 @@ class ColanasClient:
     def files_rename(self, **params):
         """重命名（同目录改名，名称不允许含分隔符）"""
         return self._request("POST", "/api/v1/files/rename", params, "body")
+
+    def files_roots(self, **params):
+        """可浏览的根（盘符 / 文件根 / 来源根）"""
+        return self._request("GET", "/api/v1/files/roots", params, "query")
 
     def files_search(self, **params):
         """按路径关键词搜索已索引文件（先 POST /files/index）"""
@@ -467,6 +523,34 @@ class ColanasClient:
         """自动歌单概览（最近添加 / 最近播放 / 最常播放 / 从未播放）"""
         return self._request("GET", "/api/v1/music/auto-playlists", params, "query")
 
+    def music_cache_clear(self, **params):
+        """清空音乐转码缓存"""
+        return self._request("POST", "/api/v1/music/cache/clear", params, "body")
+
+    def music_cache_stats(self, **params):
+        """音乐转码缓存占用"""
+        return self._request("GET", "/api/v1/music/cache", params, "query")
+
+    def music_collection_create(self, **params):
+        """新建音乐合集"""
+        return self._request("POST", "/api/v1/music/collections", params, "body")
+
+    def music_collection_items(self, **params):
+        """合集里的曲目"""
+        return self._request("GET", "/api/v1/music/collections/items", params, "query")
+
+    def music_collection_list(self, **params):
+        """当前用户的音乐合集（含曲目数与封面）"""
+        return self._request("GET", "/api/v1/music/collections", params, "query")
+
+    def music_collection_remove(self, **params):
+        """删除合集（不动磁盘文件与曲库索引）"""
+        return self._request("POST", "/api/v1/music/collections/remove", params, "body")
+
+    def music_collection_update(self, **params):
+        """改名 / 换目录"""
+        return self._request("POST", "/api/v1/music/collections/update", params, "body")
+
     def music_cover(self, **params):
         """内嵌封面（首次访问生成，之后走文件缓存）"""
         return self._request("GET", "/api/v1/music/cover", params, "query")
@@ -476,11 +560,11 @@ class ColanasClient:
         return self._request("POST", "/api/v1/music/favorite", params, "body")
 
     def music_favorites(self, **params):
-        """我的收藏（按收藏时间倒序）"""
+        """我的收藏（按收藏时间倒序，返回完整曲目）"""
         return self._request("GET", "/api/v1/music/favorites", params, "query")
 
     def music_history(self, **params):
-        """播放历史（按时间倒序）"""
+        """播放历史（按时间倒序，返回完整曲目）"""
         return self._request("GET", "/api/v1/music/history", params, "query")
 
     def music_item(self, **params):
@@ -535,9 +619,17 @@ class ColanasClient:
         """从歌单移出曲目"""
         return self._request("POST", "/api/v1/music/playlists/remove", params, "body")
 
+    def music_playlist_rename(self, **params):
+        """重命名歌单"""
+        return self._request("POST", "/api/v1/music/playlists/rename", params, "body")
+
     def music_scan(self, **params):
         """扫描索引（ffmpeg 解析 tags / 时长；未变文件跳过）"""
         return self._request("POST", "/api/v1/music/scan", params, "body")
+
+    def music_scan_enqueue(self, **params):
+        """入队扫描（立即返回任务 id；进度与失败记录见 /tasks）"""
+        return self._request("POST", "/api/v1/music/scan/enqueue", params, "body")
 
     def music_stats(self, **params):
         """曲目 / 专辑 / 艺术家 / 总时长"""
@@ -622,6 +714,10 @@ class ColanasClient:
     def photo_ai_reset(self, **params):
         """清空某一类识别结果（OCR / 场景 / 活动 / 去重）"""
         return self._request("POST", "/api/v1/photo/ai/reset", params, "body")
+
+    def photo_ai_scan(self, **params):
+        """整库后台识别（入队，重启后可续跑）"""
+        return self._request("POST", "/api/v1/photo/ai/scan", params, "body")
 
     def photo_album_add(self, **params):
         """向相册加入照片"""
@@ -722,6 +818,10 @@ class ColanasClient:
     def photo_delete(self, **params):
         """批量删除（可选放入回收站）"""
         return self._request("POST", "/api/v1/photo/delete", params, "body")
+
+    def photo_exif(self, **params):
+        """照片属性与 EXIF（按需解析文件头；无 EXIF 字段返回 null）"""
+        return self._request("GET", "/api/v1/photo/exif", params, "query")
 
     def photo_face_backfill(self, **params):
         """只补人脸框（不重算场景/嵌入，保留簇归属）"""
@@ -1083,6 +1183,10 @@ class ColanasClient:
         """上传照片到相册来源（application/x-colanas-upload 原始流）"""
         return self._request("POST", "/api/v1/photo/upload", params, "body")
 
+    def photo_year_covers(self, **params):
+        """每年一张「有人像」的代表图（年视图卡片封面）"""
+        return self._request("GET", "/api/v1/photo/year-covers", params, "query")
+
     def photo_year_report(self, **params):
         """年度记录：张数 / 地点 / 活跃人物 / 常用场景，地点可跨年对照"""
         return self._request("GET", "/api/v1/photo/memories/year-report", params, "query")
@@ -1303,9 +1407,21 @@ class ColanasClient:
         """缓存命中统计（进程内累计，重启清零）"""
         return self._request("GET", "/api/v1/system/cache/stats", params, "query")
 
+    def system_client_log(self, **params):
+        """上报一条客户端日志（前端错误 / 警告）"""
+        return self._request("POST", "/api/v1/system/client-log", params, "body")
+
+    def system_db_compact(self, **params):
+        """数据库碎片整理（VACUUM，重写数据文件回收空洞空间）"""
+        return self._request("POST", "/api/v1/system/db/compact", params, "body")
+
     def system_exec(self, **params):
         """受限命令执行（白名单 + 无 shell + 5 s 超时）"""
         return self._request("POST", "/api/v1/system/exec", params, "body")
+
+    def system_logs(self, **params):
+        """服务端日志尾部（logs/kernel.log，按时间正序返回最后 N 行）"""
+        return self._request("GET", "/api/v1/system/logs", params, "query")
 
     def system_monitor(self, **params):
         """整机监控（CPU / 内存 / 磁盘 / 负载）"""
@@ -1439,6 +1555,14 @@ class ColanasClient:
         """写入一个文件（AES-256-GCM）"""
         return self._request("POST", "/api/v1/vault/put", params, "body")
 
+    def video_actor_avatars(self, **params):
+        """按演员名批量取头像与档案（详情页演职人员区用）"""
+        return self._request("POST", "/api/v1/video/actor/avatars", params, "body")
+
+    def video_actors(self, **params):
+        """演员候选（从 NFO 演员聚合，供查重页排除指定演员）"""
+        return self._request("GET", "/api/v1/video/actors", params, "query")
+
     def video_art(self, **params):
         """刮削海报 / 剧照（本地文件读流，远端 URL 302 跳转）"""
         return self._request("GET", "/api/v1/video/art", params, "query")
@@ -1466,6 +1590,10 @@ class ColanasClient:
     def video_collection_list(self, **params):
         """我的合集（按更新时间倒序，带条目数）"""
         return self._request("GET", "/api/v1/video/collections", params, "query")
+
+    def video_collection_merge(self, **params):
+        """合并两个合集（来源的影片并入目标，来源合集被删除）"""
+        return self._request("POST", "/api/v1/video/collections/merge", params, "body")
 
     def video_collection_upsert(self, **params):
         """创建 / 编辑合集（名称 / 简介 / 封面 / 顺序）"""
@@ -1502,6 +1630,10 @@ class ColanasClient:
     def video_items_delete(self, **params):
         """删除视频（移入回收站，并清掉索引 / 观看进度 / 收藏）"""
         return self._request("POST", "/api/v1/video/items/delete", params, "body")
+
+    def video_items_delete_task(self, **params):
+        """删除视频（后台任务，返回 taskId，用 /tasks/:id 看进度）"""
+        return self._request("POST", "/api/v1/video/items/delete-task", params, "body")
 
     def video_jp_actor_favorite(self, **params):
         """收藏 / 取消收藏演员"""
@@ -1591,6 +1723,10 @@ class ColanasClient:
         """扫描索引（ffmpeg 提取元数据；未变文件跳过）"""
         return self._request("POST", "/api/v1/video/scan", params, "body")
 
+    def video_scan_enqueue(self, **params):
+        """入队扫描（立即返回任务 id；进度与失败记录见 /tasks）"""
+        return self._request("POST", "/api/v1/video/scan/enqueue", params, "body")
+
     def video_scrape_batch(self, **params):
         """批量刮削（缺省只刮还没元数据的条目）"""
         return self._request("POST", "/api/v1/video/scrape/batch", params, "body")
@@ -1602,6 +1738,14 @@ class ColanasClient:
     def video_scrape_match(self, **params):
         """设置该条目是否参与自动刮削"""
         return self._request("POST", "/api/v1/video/scrape/match", params, "body")
+
+    def video_scrape_progress(self, **params):
+        """刮削进度（每日快照，含按库明细；最新的在前）"""
+        return self._request("GET", "/api/v1/video/scrape/progress", params, "query")
+
+    def video_scrape_progress_refresh(self, **params):
+        """立即重算一次刮削进度（入队，不阻塞请求）"""
+        return self._request("POST", "/api/v1/video/scrape/progress/refresh", params, "body")
 
     def video_scrape_start(self, **params):
         """刮削单条（番号优先，失败回退 TMDB）"""
@@ -1622,6 +1766,14 @@ class ColanasClient:
     def video_series_list(self, **params):
         """剧集列表（剧名序 + 排序键 cursor；只含能解析出季 / 集号的文件）"""
         return self._request("GET", "/api/v1/video/series", params, "query")
+
+    def video_settings_get(self, **params):
+        """影视设置（字幕抓取 + 转码）"""
+        return self._request("GET", "/api/v1/video/settings", params, "query")
+
+    def video_settings_set(self, **params):
+        """写影视设置（只传要改的段 / 字段）"""
+        return self._request("PUT", "/api/v1/video/settings", params, "body")
 
     def video_smart_album_items(self, **params):
         """智能合集条目（与计数同一份规则）"""
@@ -1655,9 +1807,17 @@ class ColanasClient:
         """手动抓取一条日本片的字幕（avsubtitles 五步链路）"""
         return self._request("POST", "/api/v1/video/subtitle/fetch", params, "body")
 
+    def video_subtitle_fetch_library(self, **params):
+        """按库补全字幕（入队 video.subtitle.fetch）"""
+        return self._request("POST", "/api/v1/video/subtitle/fetch-library", params, "body")
+
     def video_subtitles(self, **params):
         """外挂字幕列表（与影片同目录、同主名）"""
         return self._request("GET", "/api/v1/video/subtitles", params, "query")
+
+    def video_subtitle_sources_test(self, **params):
+        """测试各字幕源链接（连通性，不下载）"""
+        return self._request("POST", "/api/v1/video/subtitle/test-sources", params, "body")
 
     def video_tmdb_search(self, **params):
         """手动搜索 TMDB 条目（用于「匹配到别的片子」时纠正）"""
@@ -1670,6 +1830,10 @@ class ColanasClient:
     def video_tmdb_settings_set(self, **params):
         """写刮削设置（Key 传空字符串表示沿用发现页的 Key）"""
         return self._request("POST", "/api/v1/video/tmdb/settings", params, "body")
+
+    def video_tmdb_test(self, **params):
+        """测试 TMDB 连通性（用当前配置的 Key）"""
+        return self._request("POST", "/api/v1/video/tmdb/test", params, "body")
 
     def video_watch_mark(self, **params):
         """标记已观看 / 未观看（电视剧可一次展开到全部集）"""

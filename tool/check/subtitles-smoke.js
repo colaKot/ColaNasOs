@@ -71,6 +71,23 @@ const ASS = [
 
 const VTT = ['WEBVTT', '', '00:00:01.000 --> 00:00:02.000', 'VTT line', ''].join('\n');
 
+/** 内嵌字幕素材：真实 mp4 + mov_text（只有本机有 ffmpeg 时才生成并验证） */
+const EMBED_SRT = '1\n00:00:00,500 --> 00:00:02,500\nembedded smoke\n';
+const EMBED_TEXT = 'embedded smoke';
+
+function findFfmpeg() {
+  const exe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+  if (process.env.COLANAS_FFMPEG && fs.existsSync(process.env.COLANAS_FFMPEG))
+    return process.env.COLANAS_FFMPEG;
+  for (const p of [
+    path.join(root, 'vendor', 'ffmpeg', exe),
+    path.join(root, 'vendor', 'ffmpeg', 'bin', exe),
+  ]) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
 /** GB18030 的「你好」= C4 E3 BA C3；用它验证非 UTF-8 字幕的编码探测 */
 const GBK_SRT = Buffer.concat([
   Buffer.from('1\n00:00:01,000 --> 00:00:02,000\n', 'latin1'),
@@ -100,6 +117,31 @@ const GBK_SRT = Buffer.concat([
 
   fs.writeFileSync(path.join(movies, 'Gamma.mkv'), video);
   fs.writeFileSync(path.join(movies, 'Gamma.srt'), Buffer.alloc(6 * 1024 * 1024, 0x41));
+
+  // Epsilon：真实 mp4 + mov_text 内嵌字幕（走 media sidecar 抽轨）
+  let embeddedMade = false;
+  const ffmpeg = findFfmpeg();
+  if (ffmpeg) {
+    process.env.COLANAS_FFMPEG = ffmpeg;
+    const srcSrt = path.join(movies, 'embed-src.srt');
+    fs.writeFileSync(srcSrt, EMBED_SRT);
+    const made = spawnSync(
+      ffmpeg,
+      [
+        '-hide_banner', '-loglevel', 'error', '-y',
+        '-f', 'lavfi', '-i', 'testsrc=size=320x240:rate=24',
+        '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=44100',
+        '-i', srcSrt,
+        '-t', '3', '-map', '0:v', '-map', '1:a', '-map', '2:s',
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-c:s', 'mov_text',
+        path.join(movies, 'Epsilon.mp4'),
+      ],
+      { stdio: 'ignore' },
+    );
+    if (made.status !== 0) console.error('[warn] 内嵌字幕测试素材生成失败');
+    else embeddedMade = true;
+  }
 
   process.env.COLANAS_DEV_TOKEN = '1';
   process.env.COLANAS_FILES_ROOT = filesRoot;
@@ -142,6 +184,7 @@ const GBK_SRT = Buffer.concat([
   const beta = byName('Beta.mkv');
   const delta = byName('Delta.mp4');
   const gamma = byName('Gamma.mkv');
+  const epsilon = byName('Epsilon.mp4');
   check(
     'indexed_videos',
     Boolean(alpha && beta && delta && gamma),
@@ -272,6 +315,37 @@ const GBK_SRT = Buffer.concat([
   // 8. 超过 5 MB → 413
   r = await read(gamma.id, 'Gamma.srt');
   check('too_large_413', r.statusCode === 413, 'status=' + r.statusCode);
+
+  // 9. 内嵌字幕（mov_text → 抽轨 → WebVTT）；本机没有 ffmpeg 时跳过
+  if (embeddedMade && epsilon && k.media.available()) {
+    r = await list(epsilon.id);
+    const items2 = r.json().items || [];
+    const embedded = items2.filter((f) => String(f.name).startsWith('#embedded:'));
+    check(
+      'embedded_track_listed',
+      r.statusCode === 200 && embedded.length >= 1 && embedded[0].format === 'vtt',
+      'items=' + JSON.stringify(items2.map((f) => f.name)),
+    );
+    r = await read(epsilon.id, embedded[0] ? embedded[0].name : '#embedded:0');
+    const emb = r.json();
+    check(
+      'embedded_cues',
+      r.statusCode === 200 &&
+        Array.isArray(emb.cues) &&
+        emb.cues.length >= 1 &&
+        emb.cues.some((c) => String(c.text).includes(EMBED_TEXT)),
+      `status=${r.statusCode} cues=${JSON.stringify(emb.cues)}`,
+    );
+    check(
+      'embedded_vtt',
+      typeof emb.vtt === 'string' && emb.vtt.startsWith('WEBVTT'),
+      'head=' + String(emb.vtt).slice(0, 40),
+    );
+    r = await read(epsilon.id, '#embedded:99');
+    check('embedded_unknown_404', r.statusCode === 404, 'status=' + r.statusCode);
+  } else {
+    console.log('[skip] 内嵌字幕（本机无 ffmpeg 或素材生成失败）');
+  }
 
   const failed = results.filter((x) => !x.ok);
   for (const x of results) {

@@ -250,6 +250,14 @@ function makeVideo(out, size, seconds, fps = 25) {
     'items=' + (searched.items || []).length,
   );
 
+  // 2 字符查询必须回退 LIKE（trigram 只索引 3 字符窗口）
+  r = await app.inject({ method: 'GET', url: '/api/v1/video/list?q=be', headers: bearer });
+  check(
+    'search_short_fallback',
+    r.statusCode === 200 && r.json().items.length === 1 && r.json().items[0].title === 'Beta',
+    'status=' + r.statusCode,
+  );
+
   // 12. 详情
   const betaItem = searched.items[0];
   r = await app.inject({
@@ -353,13 +361,76 @@ function makeVideo(out, size, seconds, fps = 25) {
   });
   check('collection_rename', r.statusCode === 200 && r.json().name === 'Weekend v2', JSON.stringify(r.json()).slice(0, 80));
 
+  // 12c-2 合并合集：Weekday → Weekend v2（成员去重、来源删除、目标保留）
+  const alphaItem = list.items.find((x) => x.title === 'Alpha');
+  r = await app.inject({
+    method: 'POST',
+    url: '/api/v1/video/collections/upsert',
+    headers: bearer,
+    payload: { name: 'Weekday' },
+  });
+  const col2 = r.json();
+  r = await app.inject({
+    method: 'POST',
+    url: '/api/v1/video/collections/items',
+    headers: bearer,
+    payload: { id: col2.id, itemIds: [alphaItem.id], action: 'add' },
+  });
+  check(
+    'collection2_add_item',
+    r.statusCode === 200 && r.json().items.length === 1,
+    'status=' + r.statusCode,
+  );
+
+  r = await app.inject({
+    method: 'POST',
+    url: '/api/v1/video/collections/merge',
+    headers: bearer,
+    payload: { sourceId: col2.id, targetId: col.id },
+  });
+  const merged = r.json();
+  check(
+    'collection_merge',
+    r.statusCode === 200 && merged.items === 2,
+    `status=${r.statusCode} items=${merged.items}`,
+  );
+
+  r = await app.inject({ method: 'GET', url: '/api/v1/video/collections', headers: bearer });
+  check(
+    'collection_merge_source_gone',
+    r.statusCode === 200 && r.json().items.length === 1 && r.json().items[0].items === 2,
+    JSON.stringify(r.json()).slice(0, 100),
+  );
+
+  r = await app.inject({
+    method: 'POST',
+    url: '/api/v1/video/collections/merge',
+    headers: bearer,
+    payload: { sourceId: col.id, targetId: col.id },
+  });
+  check('collection_merge_self_400', r.statusCode === 400, 'status=' + r.statusCode);
+
+  r = await app.inject({
+    method: 'POST',
+    url: '/api/v1/video/collections/merge',
+    headers: bearer,
+    payload: { sourceId: col2.id, targetId: col.id },
+  });
+  check('collection_merge_missing_404', r.statusCode === 404, 'status=' + r.statusCode);
+
   r = await app.inject({
     method: 'POST',
     url: '/api/v1/video/collections/items',
     headers: bearer,
     payload: { id: col.id, itemIds: [betaItem.id], action: 'remove' },
   });
-  check('collection_remove_item', r.statusCode === 200 && r.json().items.length === 0, 'status=' + r.statusCode);
+  check(
+    'collection_remove_item',
+    r.statusCode === 200 &&
+      r.json().items.length === 1 &&
+      r.json().items[0].id === alphaItem.id,
+    'status=' + r.statusCode,
+  );
 
   r = await app.inject({
     method: 'POST',
@@ -489,6 +560,19 @@ function makeVideo(out, size, seconds, fps = 25) {
     'stream_url_playable',
     r.statusCode === 200 && !!streamUrl.url && direct.statusCode === 206,
     `url=${r.statusCode} play=${direct.statusCode}`,
+  );
+  // 有效期必须够看一整部片（暂停去洗澡/接电话不该断）：2026-11-03 由 300s 改 12h
+  check(
+    'stream_url_ttl_long_enough',
+    Number(streamUrl.expiresInSec) >= 6 * 3600,
+    'expiresInSec=' + streamUrl.expiresInSec,
+  );
+  // 容器要回给客户端：浏览器 <video> 解不了 MKV / AVI（DEMUXER_ERROR），
+  // 客户端据此强制转码，而不是按编码判定「HEVC 才转」。
+  check(
+    'stream_compat_container',
+    !!streamUrl.compat && String(streamUrl.compat.container || '').length > 0,
+    'container=' + (streamUrl.compat ? streamUrl.compat.container : '-'),
   );
 
   const noAuth = await app.inject({

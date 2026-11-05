@@ -6,7 +6,11 @@ class BookLibraryItem {
   final String id;
   final String name;
   final String path;
+  final String type;
   final int items;
+  final int scanWhenStart;
+  final int scanWhenChange;
+  final int scanIntervalHours;
   final int createdAt;
   final int? lastScanAt;
 
@@ -14,7 +18,11 @@ class BookLibraryItem {
     required this.id,
     required this.name,
     required this.path,
+    required this.type,
     required this.items,
+    required this.scanWhenStart,
+    required this.scanWhenChange,
+    required this.scanIntervalHours,
     required this.createdAt,
     required this.lastScanAt,
   });
@@ -23,7 +31,11 @@ class BookLibraryItem {
         id: json['id'] as String,
         name: json['name'] as String,
         path: json['path'] as String,
+        type: json['type'] as String,
         items: json['items'] as int,
+        scanWhenStart: json['scanWhenStart'] as int,
+        scanWhenChange: json['scanWhenChange'] as int,
+        scanIntervalHours: json['scanIntervalHours'] as int,
         createdAt: json['createdAt'] as int,
         lastScanAt: json['lastScanAt'] as int?,
       );
@@ -32,7 +44,11 @@ class BookLibraryItem {
         'id': id,
         'name': name,
         'path': path,
+        'type': type,
         'items': items,
+        'scanWhenStart': scanWhenStart,
+        'scanWhenChange': scanWhenChange,
+        'scanIntervalHours': scanIntervalHours,
         'createdAt': createdAt,
         'lastScanAt': lastScanAt,
       };
@@ -57,20 +73,60 @@ class BookLibraryListResponse {
 class BookLibraryCreateBody {
   final String name;
   final String path;
+  final dynamic type;
 
   const BookLibraryCreateBody({
     required this.name,
     required this.path,
+    this.type,
   });
 
   factory BookLibraryCreateBody.fromJson(Map<String, dynamic> json) => BookLibraryCreateBody(
         name: json['name'] as String,
         path: json['path'] as String,
+        type: json['type'] == null ? null : (json['type'] as dynamic),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'name': name,
         'path': path,
+        if (type != null) 'type': type!,
+      };
+}
+
+class BookLibraryUpdateBody {
+  final String id;
+  final String? name;
+  final dynamic type;
+  final bool? scanWhenStart;
+  final bool? scanWhenChange;
+  final int? scanIntervalHours;
+
+  const BookLibraryUpdateBody({
+    required this.id,
+    this.name,
+    this.type,
+    this.scanWhenStart,
+    this.scanWhenChange,
+    this.scanIntervalHours,
+  });
+
+  factory BookLibraryUpdateBody.fromJson(Map<String, dynamic> json) => BookLibraryUpdateBody(
+        id: json['id'] as String,
+        name: json['name'] == null ? null : json['name'] as String,
+        type: json['type'] == null ? null : (json['type'] as dynamic),
+        scanWhenStart: json['scanWhenStart'] == null ? null : json['scanWhenStart'] as bool,
+        scanWhenChange: json['scanWhenChange'] == null ? null : json['scanWhenChange'] as bool,
+        scanIntervalHours: json['scanIntervalHours'] == null ? null : json['scanIntervalHours'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        if (name != null) 'name': name!,
+        if (type != null) 'type': type!,
+        if (scanWhenStart != null) 'scanWhenStart': scanWhenStart!,
+        if (scanWhenChange != null) 'scanWhenChange': scanWhenChange!,
+        if (scanIntervalHours != null) 'scanIntervalHours': scanIntervalHours!,
       };
 }
 
@@ -162,6 +218,7 @@ class BookItem {
   final String id;
   final String libraryId;
   final String path;
+  final String type;
   final String title;
   final String? author;
   final String? language;
@@ -180,6 +237,7 @@ class BookItem {
     required this.id,
     required this.libraryId,
     required this.path,
+    required this.type,
     required this.title,
     required this.author,
     required this.language,
@@ -199,6 +257,7 @@ class BookItem {
         id: json['id'] as String,
         libraryId: json['libraryId'] as String,
         path: json['path'] as String,
+        type: json['type'] as String,
         title: json['title'] as String,
         author: json['author'] as String?,
         language: json['language'] as String?,
@@ -218,6 +277,7 @@ class BookItem {
         'id': id,
         'libraryId': libraryId,
         'path': path,
+        'type': type,
         'title': title,
         'author': author,
         'language': language,
@@ -277,23 +337,31 @@ class BookFileUrlResponse {
 class BookStatsResponse {
   final int libraries;
   final int books;
+  final int bookCount;
+  final int comicCount;
   final int favorites;
 
   const BookStatsResponse({
     required this.libraries,
     required this.books,
+    required this.bookCount,
+    required this.comicCount,
     required this.favorites,
   });
 
   factory BookStatsResponse.fromJson(Map<String, dynamic> json) => BookStatsResponse(
         libraries: json['libraries'] as int,
         books: json['books'] as int,
+        bookCount: json['bookCount'] as int,
+        comicCount: json['comicCount'] as int,
         favorites: json['favorites'] as int,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'libraries': libraries,
         'books': books,
+        'bookCount': bookCount,
+        'comicCount': comicCount,
         'favorites': favorites,
       };
 }
@@ -630,6 +698,26 @@ class BookListRemoveBody {
       };
 }
 
+class BookListRenameBody {
+  final String id;
+  final String name;
+
+  const BookListRenameBody({
+    required this.id,
+    required this.name,
+  });
+
+  factory BookListRenameBody.fromJson(Map<String, dynamic> json) => BookListRenameBody(
+        id: json['id'] as String,
+        name: json['name'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+      };
+}
+
 class BookListRefBody {
   final String listId;
   final String bookId;
@@ -663,6 +751,146 @@ class BookListItemsResponse {
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class BookCacheStatsResponse {
+  final int files;
+  final int bytes;
+
+  const BookCacheStatsResponse({
+    required this.files,
+    required this.bytes,
+  });
+
+  factory BookCacheStatsResponse.fromJson(Map<String, dynamic> json) => BookCacheStatsResponse(
+        files: json['files'] as int,
+        bytes: json['bytes'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'files': files,
+        'bytes': bytes,
+      };
+}
+
+class BookCacheClearResponse {
+  final int files;
+  final int bytes;
+
+  const BookCacheClearResponse({
+    required this.files,
+    required this.bytes,
+  });
+
+  factory BookCacheClearResponse.fromJson(Map<String, dynamic> json) => BookCacheClearResponse(
+        files: json['files'] as int,
+        bytes: json['bytes'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'files': files,
+        'bytes': bytes,
+      };
+}
+
+class BookUserCollection {
+  final String id;
+  final String name;
+  final List<String> paths;
+  final int books;
+  final String? coverId;
+  final int createdAt;
+  final int updatedAt;
+
+  const BookUserCollection({
+    required this.id,
+    required this.name,
+    required this.paths,
+    required this.books,
+    required this.coverId,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory BookUserCollection.fromJson(Map<String, dynamic> json) => BookUserCollection(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        paths: (json['paths'] as List<dynamic>).cast<String>(),
+        books: json['books'] as int,
+        coverId: json['coverId'] as String?,
+        createdAt: json['createdAt'] as int,
+        updatedAt: json['updatedAt'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'paths': paths,
+        'books': books,
+        'coverId': coverId,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
+      };
+}
+
+class BookUserCollectionListResponse {
+  final List<BookUserCollection> items;
+
+  const BookUserCollectionListResponse({
+    required this.items,
+  });
+
+  factory BookUserCollectionListResponse.fromJson(Map<String, dynamic> json) => BookUserCollectionListResponse(
+        items: (json['items'] as List<dynamic>).map((e) => BookUserCollection.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class BookUserCollectionBody {
+  final String name;
+  final List<String> paths;
+
+  const BookUserCollectionBody({
+    required this.name,
+    required this.paths,
+  });
+
+  factory BookUserCollectionBody.fromJson(Map<String, dynamic> json) => BookUserCollectionBody(
+        name: json['name'] as String,
+        paths: (json['paths'] as List<dynamic>).cast<String>(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'name': name,
+        'paths': paths,
+      };
+}
+
+class BookUserCollectionUpdateBody {
+  final String id;
+  final String? name;
+  final List<String>? paths;
+
+  const BookUserCollectionUpdateBody({
+    required this.id,
+    this.name,
+    this.paths,
+  });
+
+  factory BookUserCollectionUpdateBody.fromJson(Map<String, dynamic> json) => BookUserCollectionUpdateBody(
+        id: json['id'] as String,
+        name: json['name'] == null ? null : json['name'] as String,
+        paths: json['paths'] == null ? null : (json['paths'] as List<dynamic>).cast<String>(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        if (name != null) 'name': name!,
+        if (paths != null) 'paths': paths!,
       };
 }
 
@@ -939,12 +1167,14 @@ class DiscoverError {
 
 class DiscoverSettings {
   final bool apiKeyConfigured;
+  final String apiKey;
   final String baseUrl;
   final String language;
   final String imageBase;
 
   const DiscoverSettings({
     required this.apiKeyConfigured,
+    required this.apiKey,
     required this.baseUrl,
     required this.language,
     required this.imageBase,
@@ -952,6 +1182,7 @@ class DiscoverSettings {
 
   factory DiscoverSettings.fromJson(Map<String, dynamic> json) => DiscoverSettings(
         apiKeyConfigured: json['apiKeyConfigured'] as bool,
+        apiKey: json['apiKey'] as String,
         baseUrl: json['baseUrl'] as String,
         language: json['language'] as String,
         imageBase: json['imageBase'] as String,
@@ -959,6 +1190,7 @@ class DiscoverSettings {
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'apiKeyConfigured': apiKeyConfigured,
+        'apiKey': apiKey,
         'baseUrl': baseUrl,
         'language': language,
         'imageBase': imageBase,
@@ -1358,6 +1590,50 @@ class FilesListResponse {
         'path': path,
         'items': items.map((e) => e.toJson()).toList(),
         'nextCursor': nextCursor,
+      };
+}
+
+class FilesRootItem {
+  final String path;
+  final String label;
+  final dynamic kind;
+
+  const FilesRootItem({
+    required this.path,
+    required this.label,
+    required this.kind,
+  });
+
+  factory FilesRootItem.fromJson(Map<String, dynamic> json) => FilesRootItem(
+        path: json['path'] as String,
+        label: json['label'] as String,
+        kind: (json['kind'] as dynamic),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'path': path,
+        'label': label,
+        'kind': kind,
+      };
+}
+
+class FilesRootsResponse {
+  final String home;
+  final List<FilesRootItem> roots;
+
+  const FilesRootsResponse({
+    required this.home,
+    required this.roots,
+  });
+
+  factory FilesRootsResponse.fromJson(Map<String, dynamic> json) => FilesRootsResponse(
+        home: json['home'] as String,
+        roots: (json['roots'] as List<dynamic>).map((e) => FilesRootItem.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'home': home,
+        'roots': roots.map((e) => e.toJson()).toList(),
       };
 }
 
@@ -2729,6 +3005,46 @@ class MusicLibraryRemoveBody {
       };
 }
 
+class MusicCacheStatsResponse {
+  final int files;
+  final int bytes;
+
+  const MusicCacheStatsResponse({
+    required this.files,
+    required this.bytes,
+  });
+
+  factory MusicCacheStatsResponse.fromJson(Map<String, dynamic> json) => MusicCacheStatsResponse(
+        files: json['files'] as int,
+        bytes: json['bytes'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'files': files,
+        'bytes': bytes,
+      };
+}
+
+class MusicCacheClearResponse {
+  final int removed;
+  final int bytes;
+
+  const MusicCacheClearResponse({
+    required this.removed,
+    required this.bytes,
+  });
+
+  factory MusicCacheClearResponse.fromJson(Map<String, dynamic> json) => MusicCacheClearResponse(
+        removed: json['removed'] as int,
+        bytes: json['bytes'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'removed': removed,
+        'bytes': bytes,
+      };
+}
+
 class MusicScanBody {
   final String? libraryId;
   final int? limit;
@@ -3053,6 +3369,106 @@ class MusicStatsResponse {
       };
 }
 
+class MusicCollection {
+  final String id;
+  final String name;
+  final List<String> paths;
+  final int tracks;
+  final String? coverTrackId;
+  final int createdAt;
+  final int updatedAt;
+
+  const MusicCollection({
+    required this.id,
+    required this.name,
+    required this.paths,
+    required this.tracks,
+    required this.coverTrackId,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory MusicCollection.fromJson(Map<String, dynamic> json) => MusicCollection(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        paths: (json['paths'] as List<dynamic>).cast<String>(),
+        tracks: json['tracks'] as int,
+        coverTrackId: json['coverTrackId'] as String?,
+        createdAt: json['createdAt'] as int,
+        updatedAt: json['updatedAt'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'paths': paths,
+        'tracks': tracks,
+        'coverTrackId': coverTrackId,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
+      };
+}
+
+class MusicCollectionListResponse {
+  final List<MusicCollection> items;
+
+  const MusicCollectionListResponse({
+    required this.items,
+  });
+
+  factory MusicCollectionListResponse.fromJson(Map<String, dynamic> json) => MusicCollectionListResponse(
+        items: (json['items'] as List<dynamic>).map((e) => MusicCollection.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class MusicCollectionBody {
+  final String name;
+  final List<String> paths;
+
+  const MusicCollectionBody({
+    required this.name,
+    required this.paths,
+  });
+
+  factory MusicCollectionBody.fromJson(Map<String, dynamic> json) => MusicCollectionBody(
+        name: json['name'] as String,
+        paths: (json['paths'] as List<dynamic>).cast<String>(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'name': name,
+        'paths': paths,
+      };
+}
+
+class MusicCollectionUpdateBody {
+  final String id;
+  final String? name;
+  final List<String>? paths;
+
+  const MusicCollectionUpdateBody({
+    required this.id,
+    this.name,
+    this.paths,
+  });
+
+  factory MusicCollectionUpdateBody.fromJson(Map<String, dynamic> json) => MusicCollectionUpdateBody(
+        id: json['id'] as String,
+        name: json['name'] == null ? null : json['name'] as String,
+        paths: json['paths'] == null ? null : (json['paths'] as List<dynamic>).cast<String>(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        if (name != null) 'name': name!,
+        if (paths != null) 'paths': paths!,
+      };
+}
+
 class MusicPlaylist {
   final String id;
   final String name;
@@ -3154,6 +3570,26 @@ class MusicPlaylistDeleteBody {
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'playlistId': playlistId,
+      };
+}
+
+class MusicPlaylistRenameBody {
+  final String playlistId;
+  final String name;
+
+  const MusicPlaylistRenameBody({
+    required this.playlistId,
+    required this.name,
+  });
+
+  factory MusicPlaylistRenameBody.fromJson(Map<String, dynamic> json) => MusicPlaylistRenameBody(
+        playlistId: json['playlistId'] as String,
+        name: json['name'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'playlistId': playlistId,
+        'name': name,
       };
 }
 
@@ -3614,6 +4050,46 @@ class PhotoCalendarResponse {
         'year': year,
         'total': total,
         'months': months.map((e) => e.toJson()).toList(),
+      };
+}
+
+class PhotoYearCover {
+  final int year;
+  final int count;
+  final String? coverPath;
+
+  const PhotoYearCover({
+    required this.year,
+    required this.count,
+    required this.coverPath,
+  });
+
+  factory PhotoYearCover.fromJson(Map<String, dynamic> json) => PhotoYearCover(
+        year: json['year'] as int,
+        count: json['count'] as int,
+        coverPath: json['coverPath'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'year': year,
+        'count': count,
+        'coverPath': coverPath,
+      };
+}
+
+class PhotoYearCoversResponse {
+  final List<PhotoYearCover> years;
+
+  const PhotoYearCoversResponse({
+    required this.years,
+  });
+
+  factory PhotoYearCoversResponse.fromJson(Map<String, dynamic> json) => PhotoYearCoversResponse(
+        years: (json['years'] as List<dynamic>).map((e) => PhotoYearCover.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'years': years.map((e) => e.toJson()).toList(),
       };
 }
 
@@ -5374,6 +5850,8 @@ class PhotoAiQueueJob {
   final String label;
   final String status;
   final int pending;
+  final int done;
+  final int total;
   final int percent;
 
   const PhotoAiQueueJob({
@@ -5381,6 +5859,8 @@ class PhotoAiQueueJob {
     required this.label,
     required this.status,
     required this.pending,
+    required this.done,
+    required this.total,
     required this.percent,
   });
 
@@ -5389,6 +5869,8 @@ class PhotoAiQueueJob {
         label: json['label'] as String,
         status: json['status'] as String,
         pending: json['pending'] as int,
+        done: json['done'] as int,
+        total: json['total'] as int,
         percent: json['percent'] as int,
       );
 
@@ -5397,6 +5879,8 @@ class PhotoAiQueueJob {
         'label': label,
         'status': status,
         'pending': pending,
+        'done': done,
+        'total': total,
         'percent': percent,
       };
 }
@@ -5837,6 +6321,54 @@ class PhotoScanTask {
       };
 }
 
+class PhotoAiScanBody {
+  final bool? force;
+  final bool? ocr;
+  final bool? activity;
+  final int? limit;
+
+  const PhotoAiScanBody({
+    this.force,
+    this.ocr,
+    this.activity,
+    this.limit,
+  });
+
+  factory PhotoAiScanBody.fromJson(Map<String, dynamic> json) => PhotoAiScanBody(
+        force: json['force'] == null ? null : json['force'] as bool,
+        ocr: json['ocr'] == null ? null : json['ocr'] as bool,
+        activity: json['activity'] == null ? null : json['activity'] as bool,
+        limit: json['limit'] == null ? null : json['limit'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (force != null) 'force': force!,
+        if (ocr != null) 'ocr': ocr!,
+        if (activity != null) 'activity': activity!,
+        if (limit != null) 'limit': limit!,
+      };
+}
+
+class PhotoAiScanResponse {
+  final String jobId;
+  final bool reused;
+
+  const PhotoAiScanResponse({
+    required this.jobId,
+    required this.reused,
+  });
+
+  factory PhotoAiScanResponse.fromJson(Map<String, dynamic> json) => PhotoAiScanResponse(
+        jobId: json['jobId'] as String,
+        reused: json['reused'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'jobId': jobId,
+        'reused': reused,
+      };
+}
+
 class PhotoAiAnalyzeBody {
   final String? libraryId;
   final int? limit;
@@ -6084,20 +6616,28 @@ class PhotoFaceList {
 class PhotoSceneSummaryItem {
   final String label;
   final int count;
+  final String? coverId;
+  final String? coverPath;
 
   const PhotoSceneSummaryItem({
     required this.label,
     required this.count,
+    this.coverId,
+    this.coverPath,
   });
 
   factory PhotoSceneSummaryItem.fromJson(Map<String, dynamic> json) => PhotoSceneSummaryItem(
         label: json['label'] as String,
         count: json['count'] as int,
+        coverId: json['coverId'] == null ? null : json['coverId'] as String?,
+        coverPath: json['coverPath'] == null ? null : json['coverPath'] as String?,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'label': label,
         'count': count,
+        if (coverId != null) 'coverId': coverId!,
+        if (coverPath != null) 'coverPath': coverPath!,
       };
 }
 
@@ -8621,6 +9161,34 @@ class SystemRestartResponse {
       };
 }
 
+class SystemDbCompactResponse {
+  final bool ok;
+  final int beforeBytes;
+  final int afterBytes;
+  final int freedBytes;
+
+  const SystemDbCompactResponse({
+    required this.ok,
+    required this.beforeBytes,
+    required this.afterBytes,
+    required this.freedBytes,
+  });
+
+  factory SystemDbCompactResponse.fromJson(Map<String, dynamic> json) => SystemDbCompactResponse(
+        ok: json['ok'] as bool,
+        beforeBytes: json['beforeBytes'] as int,
+        afterBytes: json['afterBytes'] as int,
+        freedBytes: json['freedBytes'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'ok': ok,
+        'beforeBytes': beforeBytes,
+        'afterBytes': afterBytes,
+        'freedBytes': freedBytes,
+      };
+}
+
 class SystemUpdateCheckResponse {
   final String? currentId;
   final int? currentVersion;
@@ -8710,6 +9278,38 @@ class SystemTlsUploadBody {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'cert': cert,
         'key': key,
+      };
+}
+
+class SystemLogsResponse {
+  final String file;
+  final int size;
+  final String updatedAt;
+  final List<Map<String, dynamic>> lines;
+  final bool truncated;
+
+  const SystemLogsResponse({
+    required this.file,
+    required this.size,
+    required this.updatedAt,
+    required this.lines,
+    required this.truncated,
+  });
+
+  factory SystemLogsResponse.fromJson(Map<String, dynamic> json) => SystemLogsResponse(
+        file: json['file'] as String,
+        size: json['size'] as int,
+        updatedAt: json['updatedAt'] as String,
+        lines: (json['lines'] as List<dynamic>).cast<Map<String, dynamic>>(),
+        truncated: json['truncated'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'file': file,
+        'size': size,
+        'updatedAt': updatedAt,
+        'lines': lines,
+        'truncated': truncated,
       };
 }
 
@@ -9686,6 +10286,7 @@ class VideoDuplicateItem {
   final String title;
   final String path;
   final int size;
+  final int mtime;
   final int? durationMs;
   final int? width;
   final int? height;
@@ -9704,6 +10305,8 @@ class VideoDuplicateItem {
   final bool dolbyAtmos;
   final bool ltx;
   final bool isJp;
+  final List<String> actorKeys;
+  final String part;
   final bool suggestedKeep;
 
   const VideoDuplicateItem({
@@ -9711,6 +10314,7 @@ class VideoDuplicateItem {
     required this.title,
     required this.path,
     required this.size,
+    required this.mtime,
     required this.durationMs,
     required this.width,
     required this.height,
@@ -9729,6 +10333,8 @@ class VideoDuplicateItem {
     required this.dolbyAtmos,
     required this.ltx,
     required this.isJp,
+    required this.actorKeys,
+    required this.part,
     required this.suggestedKeep,
   });
 
@@ -9737,6 +10343,7 @@ class VideoDuplicateItem {
         title: json['title'] as String,
         path: json['path'] as String,
         size: json['size'] as int,
+        mtime: json['mtime'] as int,
         durationMs: json['durationMs'] as int?,
         width: json['width'] as int?,
         height: json['height'] as int?,
@@ -9755,6 +10362,8 @@ class VideoDuplicateItem {
         dolbyAtmos: json['dolbyAtmos'] as bool,
         ltx: json['ltx'] as bool,
         isJp: json['isJp'] as bool,
+        actorKeys: (json['actorKeys'] as List<dynamic>).cast<String>(),
+        part: json['part'] as String,
         suggestedKeep: json['suggestedKeep'] as bool,
       );
 
@@ -9763,6 +10372,7 @@ class VideoDuplicateItem {
         'title': title,
         'path': path,
         'size': size,
+        'mtime': mtime,
         'durationMs': durationMs,
         'width': width,
         'height': height,
@@ -9781,6 +10391,8 @@ class VideoDuplicateItem {
         'dolbyAtmos': dolbyAtmos,
         'ltx': ltx,
         'isJp': isJp,
+        'actorKeys': actorKeys,
+        'part': part,
         'suggestedKeep': suggestedKeep,
       };
 }
@@ -9847,17 +10459,21 @@ class VideoDuplicatesResponse {
 
 class VideoDeleteItemsBody {
   final List<String> ids;
+  final bool? permanent;
 
   const VideoDeleteItemsBody({
     required this.ids,
+    this.permanent,
   });
 
   factory VideoDeleteItemsBody.fromJson(Map<String, dynamic> json) => VideoDeleteItemsBody(
         ids: (json['ids'] as List<dynamic>).cast<String>(),
+        permanent: json['permanent'] == null ? null : json['permanent'] as bool,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'ids': ids,
+        if (permanent != null) 'permanent': permanent!,
       };
 }
 
@@ -10088,20 +10704,24 @@ class VideoImageFolderDeleteResponse {
 class VideoStreamUrlResponse {
   final String url;
   final int expiresInSec;
+  final Map<String, dynamic>? compat;
 
   const VideoStreamUrlResponse({
     required this.url,
     required this.expiresInSec,
+    this.compat,
   });
 
   factory VideoStreamUrlResponse.fromJson(Map<String, dynamic> json) => VideoStreamUrlResponse(
         url: json['url'] as String,
         expiresInSec: json['expiresInSec'] as int,
+        compat: json['compat'] == null ? null : json['compat'] as Map<String, dynamic>,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'url': url,
         'expiresInSec': expiresInSec,
+        if (compat != null) 'compat': compat!,
       };
 }
 
@@ -11130,12 +11750,20 @@ class PlayerSessionCreateBody {
   final dynamic preset;
   final dynamic codec;
   final String? subtitle;
+  final bool? audioNormalize;
+  final bool? audioDownmix;
+  final int? audioIndex;
+  final bool? forceSdr;
 
   const PlayerSessionCreateBody({
     required this.id,
     this.preset,
     this.codec,
     this.subtitle,
+    this.audioNormalize,
+    this.audioDownmix,
+    this.audioIndex,
+    this.forceSdr,
   });
 
   factory PlayerSessionCreateBody.fromJson(Map<String, dynamic> json) => PlayerSessionCreateBody(
@@ -11143,6 +11771,10 @@ class PlayerSessionCreateBody {
         preset: json['preset'] == null ? null : (json['preset'] as dynamic),
         codec: json['codec'] == null ? null : (json['codec'] as dynamic),
         subtitle: json['subtitle'] == null ? null : json['subtitle'] as String,
+        audioNormalize: json['audioNormalize'] == null ? null : json['audioNormalize'] as bool,
+        audioDownmix: json['audioDownmix'] == null ? null : json['audioDownmix'] as bool,
+        audioIndex: json['audioIndex'] == null ? null : json['audioIndex'] as int,
+        forceSdr: json['forceSdr'] == null ? null : json['forceSdr'] as bool,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -11150,6 +11782,10 @@ class PlayerSessionCreateBody {
         if (preset != null) 'preset': preset!,
         if (codec != null) 'codec': codec!,
         if (subtitle != null) 'subtitle': subtitle!,
+        if (audioNormalize != null) 'audioNormalize': audioNormalize!,
+        if (audioDownmix != null) 'audioDownmix': audioDownmix!,
+        if (audioIndex != null) 'audioIndex': audioIndex!,
+        if (forceSdr != null) 'forceSdr': forceSdr!,
       };
 }
 
@@ -11186,6 +11822,8 @@ class PlayerSessionItem {
   final String url;
   final int createdAt;
   final int updatedAt;
+  final int? audioIndex;
+  final bool? hdrToSdr;
 
   const PlayerSessionItem({
     required this.id,
@@ -11200,6 +11838,8 @@ class PlayerSessionItem {
     required this.url,
     required this.createdAt,
     required this.updatedAt,
+    this.audioIndex,
+    this.hdrToSdr,
   });
 
   factory PlayerSessionItem.fromJson(Map<String, dynamic> json) => PlayerSessionItem(
@@ -11215,6 +11855,8 @@ class PlayerSessionItem {
         url: json['url'] as String,
         createdAt: json['createdAt'] as int,
         updatedAt: json['updatedAt'] as int,
+        audioIndex: json['audioIndex'] == null ? null : json['audioIndex'] as int,
+        hdrToSdr: json['hdrToSdr'] == null ? null : json['hdrToSdr'] as bool,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -11230,6 +11872,8 @@ class PlayerSessionItem {
         'url': url,
         'createdAt': createdAt,
         'updatedAt': updatedAt,
+        if (audioIndex != null) 'audioIndex': audioIndex!,
+        if (hdrToSdr != null) 'hdrToSdr': hdrToSdr!,
       };
 }
 

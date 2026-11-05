@@ -31,6 +31,23 @@ export const LibraryCreateBody = Type.Object(
   { $id: 'MusicLibraryCreateBody' },
 );
 
+/** 音乐缓存（转码产出）占用：客户端设置页显示 / 清理用 */
+export const CacheStatsResponse = Type.Object(
+  {
+    files: Type.Integer({ description: '缓存的音频文件数' }),
+    bytes: Type.Integer({ description: '缓存占用字节数' }),
+  },
+  { $id: 'MusicCacheStatsResponse' },
+);
+
+export const CacheClearResponse = Type.Object(
+  {
+    removed: Type.Integer({ description: '删掉的文件数' }),
+    bytes: Type.Integer({ description: '释放的字节数' }),
+  },
+  { $id: 'MusicCacheClearResponse' },
+);
+
 export const LibraryRemoveBody = Type.Object(
   { id: Type.String({ minLength: 1 }) },
   { $id: 'MusicLibraryRemoveBody' },
@@ -243,6 +260,65 @@ export const StatsResponse = Type.Object(
   { $id: 'MusicStatsResponse' },
 );
 
+/**
+ * 音乐合集：用户自建的一组音乐目录（对齐参考实现的「音乐合集」）。
+ *
+ * 和歌单的区别：歌单收的是**曲目 id**；合集收的是**目录**（曲库里的相对 / 绝对路径），
+ * 目录里后来新放进去的歌会自动进合集 —— 适合「这张专辑一个文件夹」这种整理方式。
+ */
+export const Collection = Type.Object(
+  {
+    id: Type.String(),
+    name: Type.String(),
+    paths: Type.Array(Type.String()),
+    tracks: Type.Integer({ description: '这些目录下已索引的曲目数' }),
+    coverTrackId: Type.Union([Type.String(), Type.Null()], {
+      description: '第一首带封面的曲目 id（用它请求 /music/cover）',
+    }),
+    createdAt: Type.Integer(),
+    updatedAt: Type.Integer(),
+  },
+  { $id: 'MusicCollection' },
+);
+
+export const CollectionListResponse = Type.Object(
+  { items: Type.Array(Type.Ref(Collection)) },
+  { $id: 'MusicCollectionListResponse' },
+);
+
+export const CollectionBody = Type.Object(
+  {
+    name: Type.String({ minLength: 1, maxLength: 64 }),
+    paths: Type.Array(Type.String({ minLength: 1, maxLength: 1024 }), {
+      minItems: 1,
+      maxItems: 200,
+    }),
+  },
+  { $id: 'MusicCollectionBody' },
+);
+
+export const CollectionItemsQuery = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, default: 200 })),
+  },
+  { $id: 'MusicCollectionItemsQuery' },
+);
+
+export const CollectionUpdateBody = Type.Object(
+  {
+    id: Type.String({ minLength: 1 }),
+    name: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+    paths: Type.Optional(
+      Type.Array(Type.String({ minLength: 1, maxLength: 1024 }), {
+        minItems: 1,
+        maxItems: 200,
+      }),
+    ),
+  },
+  { $id: 'MusicCollectionUpdateBody' },
+);
+
 export const Playlist = Type.Object(
   {
     id: Type.String(),
@@ -288,6 +364,14 @@ export const PlaylistItemsQuery = Type.Object(
 export const PlaylistDeleteBody = Type.Object(
   { playlistId: Type.String({ minLength: 1 }) },
   { $id: 'MusicPlaylistDeleteBody' },
+);
+
+export const PlaylistRenameBody = Type.Object(
+  {
+    playlistId: Type.String({ minLength: 1 }),
+    name: Type.String({ minLength: 1, maxLength: 64 }),
+  },
+  { $id: 'MusicPlaylistRenameBody' },
 );
 
 /** 自动歌单：kind 由服务端校验，避免 OpenAPI 里出现 anyOf 让生成器难处理 */
@@ -384,6 +468,8 @@ export const MUSIC_SCHEMAS = [
   LibraryListResponse,
   LibraryCreateBody,
   LibraryRemoveBody,
+  CacheStatsResponse,
+  CacheClearResponse,
   ScanBody,
   ScanResponse,
   Track,
@@ -400,12 +486,18 @@ export const MUSIC_SCHEMAS = [
   StreamQuery,
   StreamUrlResponse,
   StatsResponse,
+  Collection,
+  CollectionListResponse,
+  CollectionBody,
+  CollectionUpdateBody,
+  CollectionItemsQuery,
   Playlist,
   PlaylistListResponse,
   PlaylistCreateBody,
   PlaylistMembersBody,
   PlaylistItemsQuery,
   PlaylistDeleteBody,
+  PlaylistRenameBody,
   AutoPlaylist,
   AutoPlaylistListResponse,
   AutoPlaylistQuery,

@@ -35,11 +35,10 @@ String scrapeOutcomeText(VideoScrapeResponse res) {
 Future<void> showScrapeOutcome(BuildContext context, VideoScrapeResponse res) async {
   if (!context.mounted) return;
   final messenger = ScaffoldMessenger.of(context);
-  messenger.showSnackBar(
-    SnackBar(
-      content: Text(scrapeOutcomeText(res)),
-      duration: const Duration(seconds: 4),
-    ),
+  NasSnack.showOn(
+    messenger,
+    scrapeOutcomeText(res),
+    duration: const Duration(seconds: 4),
   );
 }
 
@@ -126,9 +125,7 @@ class _TmdbMatchDialogState extends State<_TmdbMatchDialog> {
       if (!mounted) return;
       Navigator.of(context).pop(res.status == 'scraped');
       if (res.status != 'scraped') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(scrapeOutcomeText(res))),
-        );
+        NasSnack.show(context, scrapeOutcomeText(res));
       }
     } catch (e) {
       if (!mounted) return;

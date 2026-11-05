@@ -107,6 +107,16 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/book/archive', params, 'body');
   }
 
+  /** 清空封面 / PDF 页图缓存 */
+  async bookCacheClear(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/book/cache/clear', params, 'body');
+  }
+
+  /** 封面 / PDF 页图缓存占用 */
+  async bookCacheStats(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/book/cache', params, 'query');
+  }
+
   /** 合集内的书（按序号、标题排序） */
   async bookCollectionItems(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/book/collections/items', params, 'query');
@@ -157,6 +167,16 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/book/search', params, 'query');
   }
 
+  /** 阅读历史（最近读的在最前） */
+  async bookHistory(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/book/history', params, 'query');
+  }
+
+  /** 清空当前用户的阅读历史（不影响阅读进度） */
+  async bookHistoryClear(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/book/history/clear', params, 'body');
+  }
+
   /** 书籍详情（含当前用户收藏与进度） */
   async bookItem(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/book/item', params, 'query');
@@ -175,6 +195,11 @@ export class ColanasClient {
   /** 删除书库（级联清理收藏 / 进度 / 归档 / 列表条目） */
   async bookLibraryRemove(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/book/libraries/remove', params, 'body');
+  }
+
+  /** 改名 / 切换书籍或漫画类型 */
+  async bookLibraryUpdate(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/book/libraries/update', params, 'body');
   }
 
   /** 书架（标题序 + 排序键 cursor；可按格式 / 收藏过滤） */
@@ -205,6 +230,11 @@ export class ColanasClient {
   /** 把书移出自定义列表 */
   async bookListRemoveItem(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/book/lists/items/remove', params, 'body');
+  }
+
+  /** 重命名自定义列表 */
+  async bookListRename(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/book/lists/rename', params, 'body');
   }
 
   /** 当前用户的自定义列表（按名称排序） */
@@ -242,6 +272,31 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/book/toc', params, 'query');
   }
 
+  /** 新建图书合集 */
+  async bookUserCollectionCreate(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/book/user-collections', params, 'body');
+  }
+
+  /** 合集里的书 */
+  async bookUserCollectionItems(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/book/user-collections/items', params, 'query');
+  }
+
+  /** 当前用户的图书合集（含书数与封面） */
+  async bookUserCollectionList(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/book/user-collections', params, 'query');
+  }
+
+  /** 删除合集（不动书与索引） */
+  async bookUserCollectionRemove(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/book/user-collections/remove', params, 'body');
+  }
+
+  /** 改名 / 换目录 */
+  async bookUserCollectionUpdate(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/book/user-collections/update', params, 'body');
+  }
+
   /** 发现目录（trending / popular / top_rated / upcoming / now_playing / on_air） */
   async discoverCatalog(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/discover/catalog', params, 'query');
@@ -275,6 +330,16 @@ export class ColanasClient {
   /** 设置豆瓣 Cookie（可选） */
   async discoverDoubanSettings(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/discover/douban/settings', params, 'body');
+  }
+
+  /** 读取豆瓣配置（Cookie 明文回传） */
+  async discoverDoubanSettingsGet(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/discover/douban/settings', params, 'query');
+  }
+
+  /** 测试豆瓣连通性（用当前 Cookie） */
+  async discoverDoubanTest(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/discover/douban/test', params, 'body');
   }
 
   /** 当前账号的发现收藏（id + mediaType） */
@@ -385,6 +450,11 @@ export class ColanasClient {
   /** 重命名（同目录改名，名称不允许含分隔符） */
   async filesRename(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/files/rename', params, 'body');
+  }
+
+  /** 可浏览的根（盘符 / 文件根 / 来源根） */
+  async filesRoots(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/files/roots', params, 'query');
   }
 
   /** 按路径关键词搜索已索引文件（先 POST /files/index） */
@@ -572,6 +642,41 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/music/auto-playlists', params, 'query');
   }
 
+  /** 清空音乐转码缓存 */
+  async musicCacheClear(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/music/cache/clear', params, 'body');
+  }
+
+  /** 音乐转码缓存占用 */
+  async musicCacheStats(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/music/cache', params, 'query');
+  }
+
+  /** 新建音乐合集 */
+  async musicCollectionCreate(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/music/collections', params, 'body');
+  }
+
+  /** 合集里的曲目 */
+  async musicCollectionItems(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/music/collections/items', params, 'query');
+  }
+
+  /** 当前用户的音乐合集（含曲目数与封面） */
+  async musicCollectionList(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/music/collections', params, 'query');
+  }
+
+  /** 删除合集（不动磁盘文件与曲库索引） */
+  async musicCollectionRemove(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/music/collections/remove', params, 'body');
+  }
+
+  /** 改名 / 换目录 */
+  async musicCollectionUpdate(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/music/collections/update', params, 'body');
+  }
+
   /** 内嵌封面（首次访问生成，之后走文件缓存） */
   async musicCover(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/music/cover', params, 'query');
@@ -582,12 +687,12 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/music/favorite', params, 'body');
   }
 
-  /** 我的收藏（按收藏时间倒序） */
+  /** 我的收藏（按收藏时间倒序，返回完整曲目） */
   async musicFavorites(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/music/favorites', params, 'query');
   }
 
-  /** 播放历史（按时间倒序） */
+  /** 播放历史（按时间倒序，返回完整曲目） */
   async musicHistory(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/music/history', params, 'query');
   }
@@ -657,9 +762,19 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/music/playlists/remove', params, 'body');
   }
 
+  /** 重命名歌单 */
+  async musicPlaylistRename(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/music/playlists/rename', params, 'body');
+  }
+
   /** 扫描索引（ffmpeg 解析 tags / 时长；未变文件跳过） */
   async musicScan(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/music/scan', params, 'body');
+  }
+
+  /** 入队扫描（立即返回任务 id；进度与失败记录见 /tasks） */
+  async musicScanEnqueue(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/music/scan/enqueue', params, 'body');
   }
 
   /** 曲目 / 专辑 / 艺术家 / 总时长 */
@@ -765,6 +880,11 @@ export class ColanasClient {
   /** 清空某一类识别结果（OCR / 场景 / 活动 / 去重） */
   async photoAiReset(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/photo/ai/reset', params, 'body');
+  }
+
+  /** 整库后台识别（入队，重启后可续跑） */
+  async photoAiScan(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/photo/ai/scan', params, 'body');
   }
 
   /** 向相册加入照片 */
@@ -890,6 +1010,11 @@ export class ColanasClient {
   /** 批量删除（可选放入回收站） */
   async photoDelete(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/photo/delete', params, 'body');
+  }
+
+  /** 照片属性与 EXIF（按需解析文件头；无 EXIF 字段返回 null） */
+  async photoExif(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/photo/exif', params, 'query');
   }
 
   /** 只补人脸框（不重算场景/嵌入，保留簇归属） */
@@ -1342,6 +1467,11 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/photo/upload', params, 'body');
   }
 
+  /** 每年一张「有人像」的代表图（年视图卡片封面） */
+  async photoYearCovers(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/photo/year-covers', params, 'query');
+  }
+
   /** 年度记录：张数 / 地点 / 活跃人物 / 常用场景，地点可跨年对照 */
   async photoYearReport(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/photo/memories/year-report', params, 'query');
@@ -1617,9 +1747,24 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/system/cache/stats', params, 'query');
   }
 
+  /** 上报一条客户端日志（前端错误 / 警告） */
+  async systemClientLog(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/system/client-log', params, 'body');
+  }
+
+  /** 数据库碎片整理（VACUUM，重写数据文件回收空洞空间） */
+  async systemDbCompact(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/system/db/compact', params, 'body');
+  }
+
   /** 受限命令执行（白名单 + 无 shell + 5 s 超时） */
   async systemExec(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/system/exec', params, 'body');
+  }
+
+  /** 服务端日志尾部（logs/kernel.log，按时间正序返回最后 N 行） */
+  async systemLogs(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/system/logs', params, 'query');
   }
 
   /** 整机监控（CPU / 内存 / 磁盘 / 负载） */
@@ -1787,6 +1932,16 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/vault/put', params, 'body');
   }
 
+  /** 按演员名批量取头像与档案（详情页演职人员区用） */
+  async videoActorAvatars(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/video/actor/avatars', params, 'body');
+  }
+
+  /** 演员候选（从 NFO 演员聚合，供查重页排除指定演员） */
+  async videoActors(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/video/actors', params, 'query');
+  }
+
   /** 刮削海报 / 剧照（本地文件读流，远端 URL 302 跳转） */
   async videoArt(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/video/art', params, 'query');
@@ -1820,6 +1975,11 @@ export class ColanasClient {
   /** 我的合集（按更新时间倒序，带条目数） */
   async videoCollectionList(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/video/collections', params, 'query');
+  }
+
+  /** 合并两个合集（来源的影片并入目标，来源合集被删除） */
+  async videoCollectionMerge(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/video/collections/merge', params, 'body');
   }
 
   /** 创建 / 编辑合集（名称 / 简介 / 封面 / 顺序） */
@@ -1865,6 +2025,11 @@ export class ColanasClient {
   /** 删除视频（移入回收站，并清掉索引 / 观看进度 / 收藏） */
   async videoItemsDelete(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/video/items/delete', params, 'body');
+  }
+
+  /** 删除视频（后台任务，返回 taskId，用 /tasks/:id 看进度） */
+  async videoItemsDeleteTask(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/video/items/delete-task', params, 'body');
   }
 
   /** 收藏 / 取消收藏演员 */
@@ -1977,6 +2142,11 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/video/scan', params, 'body');
   }
 
+  /** 入队扫描（立即返回任务 id；进度与失败记录见 /tasks） */
+  async videoScanEnqueue(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/video/scan/enqueue', params, 'body');
+  }
+
   /** 批量刮削（缺省只刮还没元数据的条目） */
   async videoScrapeBatch(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/video/scrape/batch', params, 'body');
@@ -1990,6 +2160,16 @@ export class ColanasClient {
   /** 设置该条目是否参与自动刮削 */
   async videoScrapeMatch(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/video/scrape/match', params, 'body');
+  }
+
+  /** 刮削进度（每日快照，含按库明细；最新的在前） */
+  async videoScrapeProgress(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/video/scrape/progress', params, 'query');
+  }
+
+  /** 立即重算一次刮削进度（入队，不阻塞请求） */
+  async videoScrapeProgressRefresh(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/video/scrape/progress/refresh', params, 'body');
   }
 
   /** 刮削单条（番号优先，失败回退 TMDB） */
@@ -2015,6 +2195,16 @@ export class ColanasClient {
   /** 剧集列表（剧名序 + 排序键 cursor；只含能解析出季 / 集号的文件） */
   async videoSeriesList(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/video/series', params, 'query');
+  }
+
+  /** 影视设置（字幕抓取 + 转码） */
+  async videoSettingsGet(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/video/settings', params, 'query');
+  }
+
+  /** 写影视设置（只传要改的段 / 字段） */
+  async videoSettingsSet(params: Record<string, any> = {}): Promise<any> {
+    return this.request('PUT', '/api/v1/video/settings', params, 'body');
   }
 
   /** 智能合集条目（与计数同一份规则） */
@@ -2057,9 +2247,19 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/video/subtitle/fetch', params, 'body');
   }
 
+  /** 按库补全字幕（入队 video.subtitle.fetch） */
+  async videoSubtitleFetchLibrary(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/video/subtitle/fetch-library', params, 'body');
+  }
+
   /** 外挂字幕列表（与影片同目录、同主名） */
   async videoSubtitles(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/video/subtitles', params, 'query');
+  }
+
+  /** 测试各字幕源链接（连通性，不下载） */
+  async videoSubtitleSourcesTest(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/video/subtitle/test-sources', params, 'body');
   }
 
   /** 手动搜索 TMDB 条目（用于「匹配到别的片子」时纠正） */
@@ -2075,6 +2275,11 @@ export class ColanasClient {
   /** 写刮削设置（Key 传空字符串表示沿用发现页的 Key） */
   async videoTmdbSettingsSet(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/video/tmdb/settings', params, 'body');
+  }
+
+  /** 测试 TMDB 连通性（用当前配置的 Key） */
+  async videoTmdbTest(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/video/tmdb/test', params, 'body');
   }
 
   /** 标记已观看 / 未观看（电视剧可一次展开到全部集） */

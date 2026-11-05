@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
+import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
+import '../../shell/mobile_frame.dart';
 
 /// 笔记（SP3-06 客户端）：列表 + 编辑 + 版本历史。
 ///
@@ -83,6 +86,108 @@ class _NotesPageState extends State<NotesPage> {
     );
   }
 
+  /// 列表右键菜单（桌面 / Web）：与编辑器里同一批动作，不必先点进去。
+  List<NasMenuEntry> _noteMenuEntries(Map<String, dynamic> n) {
+    final id = n['id'] as String? ?? '';
+    if (id.isEmpty) return const [];
+    final pinned = n['pinned'] == true;
+    return [
+      NasMenuEntry(
+        label: tr('common.open'),
+        icon: Icons.open_in_new,
+        onSelected: () {
+          if (useTwoPane(MediaQuery.sizeOf(context).width)) {
+            setState(() => _selectedId = id);
+          } else {
+            _openEditor(id);
+          }
+        },
+      ),
+      NasMenuEntry(
+        label: tr('common.rename'),
+        icon: Icons.drive_file_rename_outline,
+        onSelected: () => _renameNote(id, n['title'] as String? ?? ''),
+      ),
+      NasMenuEntry(
+        label: pinned ? tr('ui.notes.014') : tr('ui.notes.015'),
+        icon: pinned ? Icons.push_pin_outlined : Icons.push_pin,
+        onSelected: () => _pinNote(id, !pinned),
+      ),
+      const NasMenuEntry.divider(),
+      NasMenuEntry(
+        label: tr('common.delete'),
+        icon: Icons.delete_outline,
+        danger: true,
+        onSelected: () => _deleteNote(id, n['title'] as String? ?? ''),
+      ),
+    ];
+  }
+
+  Future<void> _renameNote(String id, String current) async {
+    final ctrl = TextEditingController(text: current);
+    final title = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('common.rename')),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: InputDecoration(hintText: tr('ui.notes.020')),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: Text(tr('common.confirm')),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (title == null || title.isEmpty || title == current || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      // 只带 title：服务端对未出现的字段保留原值，不会把正文清掉
+      await ApiSession.instance.client.noteUpdate(body: {'id': id, 'title': title});
+      await _load();
+    } catch (e) {
+      NasSnack.showOn(messenger, tr('common.saveFailed', {'error': '$e'}));
+    }
+  }
+
+  Future<void> _pinNote(String id, bool pinned) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ApiSession.instance.client.noteUpdate(body: {'id': id, 'pinned': pinned});
+      await _load();
+    } catch (e) {
+      NasSnack.showOn(messenger, tr('notes.pinFailed', {'error': '$e'}));
+    }
+  }
+
+  Future<void> _deleteNote(String id, String title) async {
+    final ok = await NasConfirmDialog.show(
+      context,
+      title: tr('ui.notes.008'),
+      message: tr('ui.notes.h7aeae1'),
+      danger: true,
+      confirmText: tr('ui.notes.017'),
+    );
+    if (!ok || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ApiSession.instance.client.noteRemove(body: {'id': id});
+      if (_selectedId == id) setState(() => _selectedId = null);
+      await _load();
+    } catch (e) {
+      NasSnack.showOn(messenger, tr('common.deleteFailed', {'error': '$e'}));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -91,8 +196,9 @@ class _NotesPageState extends State<NotesPage> {
         final list = _buildList(wide);
         if (!wide) {
           return Scaffold(
-            appBar: AppBar(
-              title: Text(tr('ui.notes.003')),
+            appBar: nasPageAppBar(
+              context,
+              title: tr('ui.notes.003'),
               actions: [
                 IconButton(
                   icon: const Icon(Icons.add),
@@ -113,11 +219,7 @@ class _NotesPageState extends State<NotesPage> {
                 tooltip: tr('ui.notes.004'),
                 onPressed: _createDraft,
               ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                tooltip: tr('ui.accounts.021'),
-                onPressed: _load,
-              ),
+              NasRefreshButton(onPressed: _load),
             ],
           ),
           body: Row(
@@ -179,35 +281,38 @@ class _NotesPageState extends State<NotesPage> {
                       ' · ',
                     );
                     final updatedAt = (n['updatedAt'] as num?)?.toInt() ?? 0;
-                    return ListTile(
-                      selected: wide && id == _selectedId,
-                      leading: Icon(
-                        n['pinned'] == true
-                            ? Icons.push_pin
-                            : Icons.sticky_note_2_outlined,
-                        size: NasTokens.iconMd,
+                    return NasContextMenuRegion(
+                      entries: _noteMenuEntries(n),
+                      child: ListTile(
+                        selected: wide && id == _selectedId,
+                        leading: Icon(
+                          n['pinned'] == true
+                              ? Icons.push_pin
+                              : Icons.sticky_note_2_outlined,
+                          size: NasTokens.iconMd,
+                        ),
+                        title: Text(
+                          n['title'] as String? ?? '',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          [
+                            if (tags.isNotEmpty) tags,
+                            n['excerpt'] as String? ?? '',
+                            if (updatedAt > 0) formatDateTimeSec(updatedAt),
+                          ].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () {
+                          if (wide) {
+                            setState(() => _selectedId = id);
+                          } else {
+                            _openEditor(id);
+                          }
+                        },
                       ),
-                      title: Text(
-                        n['title'] as String? ?? '',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        [
-                          if (tags.isNotEmpty) tags,
-                          n['excerpt'] as String? ?? '',
-                          if (updatedAt > 0) formatDateTimeSec(updatedAt),
-                        ].join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: () {
-                        if (wide) {
-                          setState(() => _selectedId = id);
-                        } else {
-                          _openEditor(id);
-                        }
-                      },
                     );
                   },
                 ),
@@ -245,6 +350,7 @@ class _NoteEditorState extends State<_NoteEditor> {
   bool _pinned = false;
   bool _dirty = false;
   bool _saving = false;
+  bool _preview = false;
   int _updatedAt = 0;
 
   /// 乐观锁版本号：保存时带回 baseVersion，服务端版本不一致会返回 409
@@ -341,12 +447,12 @@ class _NoteEditorState extends State<_NoteEditor> {
         _version = (saved['version'] as num?)?.toInt() ?? _version;
         _dirty = false;
       });
-      messenger.showSnackBar(SnackBar(content: Text(tr('ui.notes.007'))));
+      NasSnack.showOn(messenger, tr('ui.notes.007'));
       widget.onChanged();
       return true;
     } on ApiError catch (e) {
       if (e.statusCode != 409) {
-        messenger.showSnackBar(SnackBar(content: Text(tr('common.saveFailed', {'error': e.message}))));
+        NasSnack.showOn(messenger, tr('common.saveFailed', {'error': e.message}));
         return false;
       }
       // 服务端版本已前进：让用户决定用最新版本还是覆盖
@@ -378,6 +484,7 @@ class _NoteEditorState extends State<_NoteEditor> {
         ),
       );
       if (choice == 'reload') {
+        if (!mounted) return false;
         setState(() {
           _titleCtrl.text = details['title']?.toString() ?? _titleCtrl.text;
           _bodyCtrl.text = details['body']?.toString() ?? _bodyCtrl.text;
@@ -388,9 +495,7 @@ class _NoteEditorState extends State<_NoteEditor> {
           _updatedAt = (details['updatedAt'] as num?)?.toInt() ?? _updatedAt;
           _dirty = false;
         });
-        messenger.showSnackBar(
-          SnackBar(content: Text(tr('ui.notes.h_conflictReloaded'))),
-        );
+        NasSnack.showOn(messenger, tr('ui.notes.h_conflictReloaded'));
         return true;
       }
       if (choice == 'overwrite') {
@@ -398,7 +503,7 @@ class _NoteEditorState extends State<_NoteEditor> {
       }
       return false;
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('common.saveFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('common.saveFailed', {'error': '$e'}));
       return false;
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -438,11 +543,11 @@ class _NoteEditorState extends State<_NoteEditor> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ApiSession.instance.client.noteRemove(body: {'id': id});
-      messenger.showSnackBar(SnackBar(content: Text(tr('ui.notes.009'))));
+      NasSnack.showOn(messenger, tr('ui.notes.009'));
       widget.onChanged();
       widget.onClose?.call();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('common.deleteFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('common.deleteFailed', {'error': '$e'}));
     }
   }
 
@@ -461,7 +566,7 @@ class _NoteEditorState extends State<_NoteEditor> {
           .map((e) => (e as Map).cast<String, dynamic>())
           .toList();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('notes.versionLoadFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('notes.versionLoadFailed', {'error': '$e'}));
       return;
     }
     if (!mounted) return;
@@ -528,7 +633,10 @@ class _NoteEditorState extends State<_NoteEditor> {
         content: SizedBox(
           width: 560,
           child: SingleChildScrollView(
-            child: SelectableText(version['body'] as String? ?? ''),
+            child: MarkdownBody(
+              data: version['body'] as String? ?? '',
+              selectable: true,
+            ),
           ),
         ),
         actions: [
@@ -549,7 +657,7 @@ class _NoteEditorState extends State<_NoteEditor> {
       final restored = await ApiSession.instance.client.noteRestore(
         body: {'id': id, 'versionId': versionId},
       );
-      messenger.showSnackBar(SnackBar(content: Text(tr('ui.notes.012'))));
+      NasSnack.showOn(messenger, tr('ui.notes.012'));
       if (!mounted) return;
       setState(() {
         _titleCtrl.text = restored['title'] as String? ?? '';
@@ -562,7 +670,7 @@ class _NoteEditorState extends State<_NoteEditor> {
       });
       widget.onChanged();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('notes.restoreFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('notes.restoreFailed', {'error': '$e'}));
     }
   }
 
@@ -617,6 +725,15 @@ class _NoteEditorState extends State<_NoteEditor> {
                 onPressed: _id == null ? null : _togglePin,
               ),
               IconButton(
+                tooltip: _preview
+                    ? tr('notes.edit')
+                    : tr('notes.preview'),
+                icon: Icon(
+                  _preview ? Icons.edit_outlined : Icons.visibility_outlined,
+                ),
+                onPressed: () => setState(() => _preview = !_preview),
+              ),
+              IconButton(
                 tooltip: tr('ui.notes.016'),
                 icon: const Icon(Icons.history),
                 onPressed: _showVersions,
@@ -662,21 +779,44 @@ class _NoteEditorState extends State<_NoteEditor> {
           ),
           const SizedBox(height: NasTokens.spaceSm),
           Expanded(
-            child: TextField(
-              controller: _bodyCtrl,
-              expands: true,
-              maxLines: null,
-              textAlignVertical: TextAlignVertical.top,
-              style: const TextStyle(
-                fontSize: NasTokens.fontBody,
-                fontFamily: 'monospace',
-              ),
-              decoration: InputDecoration(
-                hintText: tr('ui.notes.022'),
-                border: InputBorder.none,
-                alignLabelWithHint: true,
-              ),
-            ),
+            child: _preview
+                ? SizedBox(
+                    width: double.infinity,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: NasTokens.spaceSm,
+                      ),
+                      child: MarkdownBody(
+                        data: _bodyCtrl.text.trim().isEmpty
+                            ? tr('notes.previewEmpty')
+                            : _bodyCtrl.text,
+                        selectable: true,
+                        styleSheet:
+                            MarkdownStyleSheet.fromTheme(Theme.of(context))
+                                .copyWith(
+                                  p: const TextStyle(
+                                    fontSize: NasTokens.fontBody,
+                                    height: 1.55,
+                                  ),
+                                ),
+                      ),
+                    ),
+                  )
+                : TextField(
+                    controller: _bodyCtrl,
+                    expands: true,
+                    maxLines: null,
+                    textAlignVertical: TextAlignVertical.top,
+                    style: const TextStyle(
+                      fontSize: NasTokens.fontBody,
+                      fontFamily: 'monospace',
+                    ),
+                    decoration: InputDecoration(
+                      hintText: tr('ui.notes.022'),
+                      border: InputBorder.none,
+                      alignLabelWithHint: true,
+                    ),
+                  ),
           ),
         ],
       ),

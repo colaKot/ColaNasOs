@@ -20,6 +20,22 @@ export interface ImageMeta {
   longitude: number | null;
   /** 相机型号（EXIF Model），用于年度报告 */
   camera: string | null;
+  /** 品牌（EXIF Make） */
+  make: string | null;
+  /** 镜头型号（EXIF LensModel） */
+  lens: string | null;
+  /** 后期软件（EXIF Software） */
+  software: string | null;
+  /** 方向（EXIF Orientation，1~8） */
+  orientation: number | null;
+  /** ISO 感光度 */
+  iso: number | null;
+  /** 光圈 F 值（如 2.8） */
+  fNumber: number | null;
+  /** 快门时间（秒，如 1/125 会得到 0.008） */
+  exposureTime: number | null;
+  /** 焦距（毫米） */
+  focalLength: number | null;
 }
 
 const HEAD_BYTES = 256 * 1024;
@@ -233,6 +249,69 @@ function readTiffDate(buf: Buffer, tiffStart: number, ifd0Offset: number): numbe
   return null;
 }
 
+function tiffShort(_buf: Buffer, v: TiffView, entry: number): number | null {
+  // SHORT 的 count=1 时值直接放在 entry+8 的低 2 字节
+  if (v.u16(entry + 2) !== 3) return null;
+  return v.u16(entry + 8);
+}
+
+function tiffRational(buf: Buffer, v: TiffView, entry: number, tiffStart: number): number | null {
+  if (v.u16(entry + 2) !== 5) return null;
+  const value = rationalAt(buf, v, tiffStart + v.u32(entry + 8));
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** 照片属性面板需要的扩展 EXIF（品牌 / 镜头 / 软件 / 方向 / ISO / 光圈 / 快门 / 焦距） */
+function readTiffDetails(
+  buf: Buffer,
+  tiffStart: number,
+  ifd0Offset: number,
+): Omit<ImageMeta, 'width' | 'height' | 'takenAt' | 'mime' | 'latitude' | 'longitude' | 'camera'> | null {
+  const v = tiffView(buf, tiffStart);
+  if (!v) return null;
+  const ifd0 = tiffStart + ifd0Offset;
+  if (ifd0 + 2 > buf.length) return null;
+
+  const out = {
+    make: null as string | null,
+    lens: null as string | null,
+    software: null as string | null,
+    orientation: null as number | null,
+    iso: null as number | null,
+    fNumber: null as number | null,
+    exposureTime: null as number | null,
+    focalLength: null as number | null,
+  };
+
+  let exifIfd = 0;
+  const count = v.u16(ifd0);
+  for (let i = 0; i < count; i += 1) {
+    const entry = ifd0 + 2 + i * 12;
+    if (entry + 12 > buf.length) break;
+    const tag = v.u16(entry);
+    if (tag === 0x010f) out.make = asciiValue(buf, v, entry, tiffStart) || null;
+    else if (tag === 0x0131) out.software = asciiValue(buf, v, entry, tiffStart) || null;
+    else if (tag === 0x0112) out.orientation = tiffShort(buf, v, entry);
+    else if (tag === 0x8769) exifIfd = v.u32(entry + 8);
+  }
+
+  if (!exifIfd) return out;
+  const exif = tiffStart + exifIfd;
+  if (exif + 2 > buf.length) return out;
+  const exifCount = v.u16(exif);
+  for (let i = 0; i < exifCount; i += 1) {
+    const entry = exif + 2 + i * 12;
+    if (entry + 12 > buf.length) break;
+    const tag = v.u16(entry);
+    if (tag === 0x829d) out.fNumber = tiffRational(buf, v, entry, tiffStart);
+    else if (tag === 0x829a) out.exposureTime = tiffRational(buf, v, entry, tiffStart);
+    else if (tag === 0x8827) out.iso = tiffShort(buf, v, entry);
+    else if (tag === 0x920a) out.focalLength = tiffRational(buf, v, entry, tiffStart);
+    else if (tag === 0xa434) out.lens = asciiValue(buf, v, entry, tiffStart) || null;
+  }
+  return out;
+}
+
 function parseJpeg(buf: Buffer): Partial<ImageMeta> {
   const out: Partial<ImageMeta> = {};
   let off = 2;
@@ -272,6 +351,17 @@ function parseJpeg(buf: Buffer): Partial<ImageMeta> {
         }
         const camera = readTiffAscii(buf, tiffStart, ifd0, 0x0110);
         if (camera) out.camera = camera;
+        const details = readTiffDetails(buf, tiffStart, ifd0);
+        if (details) {
+          out.make = details.make;
+          out.lens = details.lens;
+          out.software = details.software;
+          out.orientation = details.orientation;
+          out.iso = details.iso;
+          out.fNumber = details.fNumber;
+          out.exposureTime = details.exposureTime;
+          out.focalLength = details.focalLength;
+        }
       }
     }
 
@@ -327,6 +417,14 @@ export async function readImageMeta(file: string): Promise<ImageMeta> {
       latitude: null,
       longitude: null,
       camera: null,
+      make: null,
+      lens: null,
+      software: null,
+      orientation: null,
+      iso: null,
+      fNumber: null,
+      exposureTime: null,
+      focalLength: null,
     };
   }
 
@@ -348,5 +446,13 @@ export async function readImageMeta(file: string): Promise<ImageMeta> {
     latitude: parsed.latitude ?? null,
     longitude: parsed.longitude ?? null,
     camera: parsed.camera ?? null,
+    make: parsed.make ?? null,
+    lens: parsed.lens ?? null,
+    software: parsed.software ?? null,
+    orientation: parsed.orientation ?? null,
+    iso: parsed.iso ?? null,
+    fNumber: parsed.fNumber ?? null,
+    exposureTime: parsed.exposureTime ?? null,
+    focalLength: parsed.focalLength ?? null,
   };
 }

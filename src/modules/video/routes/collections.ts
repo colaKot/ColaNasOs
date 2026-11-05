@@ -1,4 +1,5 @@
 import { sql } from 'kysely';
+import { Type } from '@sinclair/typebox';
 import { secured } from '../../../../kernel/route';
 import { Err } from '../../../../kernel/errors';
 import { newId, TAG, toItem, type MediaRow } from '../util';
@@ -23,6 +24,44 @@ interface CollectionRow {
 
 const uidOf = (req: FastifyRequest) => String(req.user?.sub || '');
 const now = () => Math.floor(Date.now() / 1000);
+
+/** 回读完整条目（封面用解析后的值，前端不必自己再算一次 fallback） */
+async function readCollection(
+  k: KernelApi,
+  id: string,
+  uid: string,
+): Promise<CollectionRow | null> {
+  return (
+    (
+      await sql<CollectionRow>`
+        select c.*,
+               (select count(*) from video_collection_items i where i.collection_id = c.id) as items,
+               coalesce(
+                 (select i.item_id from video_collection_items i
+                   where i.collection_id = c.id and i.item_id = c.cover_item_id),
+                 (select i.item_id from video_collection_items i
+                   where i.collection_id = c.id order by i.added_at, i.item_id limit 1)
+               ) as cover_resolved
+          from video_collections c
+         where c.id = ${id} and c.uid = ${uid}
+      `.execute(k.db)
+    ).rows[0] ?? null
+  );
+}
+
+function collectionOut(r: CollectionRow) {
+  return {
+    id: r.id,
+    name: r.name,
+    kind: r.kind,
+    items: Number(r.items) || 0,
+    createdAt: Number(r.created_at),
+    updatedAt: Number(r.updated_at),
+    description: r.description ?? null,
+    coverItemId: r.cover_resolved ?? null,
+    sortOrder: Number(r.sort_order) || 0,
+  };
+}
 
 /** 影视自定义合集（每用户；条目按加入时间倒序） */
 export async function registerVideoCollections(
@@ -98,35 +137,6 @@ export async function registerVideoCollections(
       const uid = uidOf(req);
       const ts = now();
 
-      /** 回读完整条目（封面用解析后的值，前端不必自己再算一次 fallback） */
-      const readBack = async (id: string): Promise<CollectionRow | null> =>
-        (
-          await sql<CollectionRow>`
-            select c.*,
-                   (select count(*) from video_collection_items i where i.collection_id = c.id) as items,
-                   coalesce(
-                     (select i.item_id from video_collection_items i
-                       where i.collection_id = c.id and i.item_id = c.cover_item_id),
-                     (select i.item_id from video_collection_items i
-                       where i.collection_id = c.id order by i.added_at, i.item_id limit 1)
-                   ) as cover_resolved
-              from video_collections c
-             where c.id = ${id} and c.uid = ${uid}
-          `.execute(k.db)
-        ).rows[0] ?? null;
-
-      const out = (r: CollectionRow) => ({
-        id: r.id,
-        name: r.name,
-        kind: r.kind,
-        items: Number(r.items) || 0,
-        createdAt: Number(r.created_at),
-        updatedAt: Number(r.updated_at),
-        description: r.description ?? null,
-        coverItemId: r.cover_resolved ?? null,
-        sortOrder: Number(r.sort_order) || 0,
-      });
-
       if (body.id) {
         const existing = (
           await sql<CollectionRow>`
@@ -172,8 +182,8 @@ export async function registerVideoCollections(
             k.db,
           );
         }
-        const updated = await readBack(existing.id);
-        return updated ? out(updated) : out(existing);
+        const updated = await readCollection(k, existing.id, uid);
+        return updated ? collectionOut(updated) : collectionOut(existing);
       }
 
       const id = newId();
@@ -186,9 +196,9 @@ export async function registerVideoCollections(
           (id, uid, name, kind, description, sort_order, created_at, updated_at)
         values (${id}, ${uid}, ${name}, ${kind}, ${desc}, ${sortOrder}, ${ts}, ${ts})
       `.execute(k.db);
-      const created = await readBack(id);
+      const created = await readCollection(k, id, uid);
       return created
-        ? out(created)
+        ? collectionOut(created)
         : {
             id,
             name,
@@ -229,6 +239,69 @@ export async function registerVideoCollections(
         await sql`delete from video_collections where id = ${body.id} and uid = ${uid}`.execute(trx);
       });
       return { ok: true };
+    },
+  );
+
+  app.post(
+    '/api/v1/video/collections/merge',
+    secured('video:write', {
+      schema: {
+        operationId: 'videoCollectionMerge',
+        tags: TAG,
+        summary: '合并两个合集（来源的影片并入目标，来源合集被删除）',
+        body: Type.Object({
+          sourceId: Type.String({ minLength: 1, description: '被合并（将被删除）的合集' }),
+          targetId: Type.String({ minLength: 1, description: '接收影片并保留的合集' }),
+        }),
+        response: {
+          200: h.ref('VideoCollection'),
+          400: h.ref('VideoErrorResponse'),
+          404: h.ref('VideoErrorResponse'),
+        },
+      },
+    }),
+    async (req: FastifyRequest, reply) => {
+      const body = (req.body || {}) as { sourceId?: string; targetId?: string };
+      const sourceId = String(body.sourceId || '');
+      const targetId = String(body.targetId || '');
+      if (!sourceId || !targetId) {
+        return reply.code(400).send({ error: Err.badRequest, message: 'sourceId/targetId required' });
+      }
+      if (sourceId === targetId) {
+        return reply.code(400).send({ error: Err.badRequest, message: 'cannot merge into itself' });
+      }
+      const uid = uidOf(req);
+      const found = (
+        await sql<CollectionRow>`
+          select * from video_collections
+           where id in (${sourceId}, ${targetId}) and uid = ${uid}
+        `.execute(k.db)
+      ).rows;
+      const source = found.find((r) => r.id === sourceId);
+      const target = found.find((r) => r.id === targetId);
+      if (!source || !target) {
+        return reply.code(404).send({ error: Err.notFound, message: 'collection not found' });
+      }
+
+      const ts = now();
+      await k.db.transaction().execute(async (trx: any) => {
+        // insert or ignore：两边都有的影片不会重复；保留目标合集原有的加入时间
+        await sql`
+          insert or ignore into video_collection_items (collection_id, item_id, added_at)
+          select ${targetId}, item_id, added_at
+            from video_collection_items where collection_id = ${sourceId}
+        `.execute(trx);
+        await sql`delete from video_collection_items where collection_id = ${sourceId}`.execute(trx);
+        await sql`delete from video_collections where id = ${sourceId} and uid = ${uid}`.execute(trx);
+        await sql`
+          update video_collections set updated_at = ${ts} where id = ${targetId} and uid = ${uid}
+        `.execute(trx);
+      });
+
+      const updated = await readCollection(k, targetId, uid);
+      return updated
+        ? collectionOut(updated)
+        : reply.code(404).send({ error: Err.notFound, message: 'collection not found' });
     },
   );
 

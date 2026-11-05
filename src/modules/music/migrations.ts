@@ -116,4 +116,26 @@ export const MUSIC_MIGRATIONS: Migration[] = [
         `.execute(db);
       },
     },
+    {
+      id: '107_music_collections',
+      async up(db) {
+        // 音乐合集：**用户自建**的一组音乐目录（对齐参考实现的「音乐合集」）。
+        // 曲库是全局共享的（music_libraries / music_tracks 没有 owner），
+        // 合集跟歌单、收藏一样按 owner 隔离 —— 每个人整理自己的那一套。
+        await sql`
+          create table if not exists music_collections (
+            id text primary key,
+            owner_id text not null,
+            name text not null,
+            paths text not null,
+            created_at integer not null,
+            updated_at integer not null
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_music_collections_owner
+            on music_collections(owner_id, created_at desc)
+        `.execute(db);
+      },
+    },
 ];

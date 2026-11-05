@@ -7,6 +7,7 @@ export interface BookRow {
   id: string;
   library_id: string;
   rel_path: string;
+  type: string;
   title: string;
   author: string | null;
   language: string | null;
@@ -30,6 +31,7 @@ export function toBook(r: BookRow) {
     id: r.id,
     libraryId: r.library_id,
     path: r.rel_path,
+    type: r.type || 'book',
     title: r.title,
     author: r.author,
     language: r.language,

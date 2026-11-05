@@ -124,6 +124,28 @@ export async function startKernel(opts: KernelOptions) {
     },
   });
 
+  // 统一错误落日志：Fastify 默认只把 5xx 打进日志，业务侧 `throw httpError(...)`
+  // 的 4xx（参数校验 / 权限不足 / 路径越界 / 资源不存在）在日志页里一条都看不到，
+  // 用户排查「为什么删不掉」时等于瞎猜（2026-11-03 反馈）。
+  app.setErrorHandler((error, req, reply) => {
+    const err = error as Error & { statusCode?: number; code?: string };
+    const status = Number(err.statusCode) || 500;
+    const base = { status, method: req.method, url: redactUrl(String(req.url || '')) };
+    if (status >= 500) {
+      req.log.error({ ...base, err }, 'request failed');
+    } else {
+      req.log.warn({ ...base, err: { message: err.message, name: err.name } }, 'request rejected');
+    }
+    if (reply.sent) return;
+    const code = err.code;
+    void reply.code(status).send({
+      statusCode: status,
+      error: status >= 500 ? 'Internal Server Error' : code || err.name || 'Error',
+      ...(code ? { code } : {}),
+      message: err.message,
+    });
+  });
+
   await app.register(swagger, {
     openapi: {
       info: { title: 'ColaNasOs API', version: 'v1' },
@@ -266,6 +288,10 @@ export async function startKernel(opts: KernelOptions) {
       thumb: (src, dst, size) => mediaBridge.thumb(src, dst, size),
       transcode: (src, dst, preset) => mediaBridge.transcode(src, dst, preset),
       hls: (src, dir, opts) => mediaBridge.hls(src, dir, opts),
+      cancel: (dir) => mediaBridge.cancel(dir),
+      subtitleTracks: (src) => mediaBridge.subtitleTracks(src),
+      extractSubtitle: (src, index, dst, format) =>
+        mediaBridge.extractSubtitle(src, index, dst, format),
       available: () => mediaBridge.available(),
     },
     /** 认证：用内核同一 secret 签发 token（模块登录用） */

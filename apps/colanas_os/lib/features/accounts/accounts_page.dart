@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
+import '../../shell/app_nav_shell.dart';
 
 /// 用户与权限（SP3-01）：主从布局（用户列表 + 详情工作台）。
 ///
@@ -89,6 +91,7 @@ class _AccountsPageState extends State<AccountsPage> {
       });
       if (_selectedId != null &&
           !items.any((u) => '${u['id']}' == _selectedId)) {
+        if (!mounted) return;
         setState(() => _selectedId = null);
       }
     } catch (e) {
@@ -157,8 +160,7 @@ class _AccountsPageState extends State<AccountsPage> {
     final user = _selectedUser;
     if (user == null) return;
     if (_appRestricted && _allowedApps.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('accounts.policy.noApps'))));
+      NasSnack.show(context, tr('accounts.policy.noApps'));
       return;
     }
     setState(() => _policySaving = true);
@@ -177,13 +179,9 @@ class _AccountsPageState extends State<AccountsPage> {
               .toList(),
         },
       );
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('accounts.policy.saved'))),
-      );
+      NasSnack.showOn(messenger, tr('accounts.policy.saved'));
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('common.saveFailed', {'error': '${_hint(e) ?? e}'}))),
-      );
+      NasSnack.showOn(messenger, tr('common.saveFailed', {'error': '${_hint(e) ?? e}'}));
     } finally {
       if (mounted) setState(() => _policySaving = false);
     }
@@ -227,7 +225,7 @@ class _AccountsPageState extends State<AccountsPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('ui.accounts.006')),
+            child: Text(tr('common.create')),
           ),
         ],
       ),
@@ -250,8 +248,7 @@ class _AccountsPageState extends State<AccountsPage> {
       await _loadUsers();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.createFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.createFailed', {'error': '$e'}));
     }
   }
 
@@ -264,13 +261,9 @@ class _AccountsPageState extends State<AccountsPage> {
       await _loadUsers();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+      NasSnack.show(context, 
             tr('accounts.toggleFailed', {'action': disabled ? tr('ui.accounts.007') : tr('ui.accounts.008'), 'error': '$e'}),
-          ),
-        ),
-      );
+          );
     }
   }
 
@@ -339,9 +332,7 @@ class _AccountsPageState extends State<AccountsPage> {
         );
         await _loadUsers();
       } catch (e) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(tr('common.saveFailed', {'error': '${_hint(e) ?? e}'}))),
-        );
+        NasSnack.showOn(messenger, tr('common.saveFailed', {'error': '${_hint(e) ?? e}'}));
       }
     } finally {
       nameCtrl.dispose();
@@ -378,9 +369,7 @@ class _AccountsPageState extends State<AccountsPage> {
       setState(() => _selectedId = null);
       await _loadUsers();
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('common.deleteFailed', {'error': '${_hint(e) ?? e}'}))),
-      );
+      NasSnack.showOn(messenger, tr('common.deleteFailed', {'error': '${_hint(e) ?? e}'}));
     }
   }
 
@@ -454,8 +443,7 @@ class _AccountsPageState extends State<AccountsPage> {
       await _loadUsers();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('accounts.enable2faFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('accounts.enable2faFailed', {'error': '$e'}));
     }
   }
 
@@ -486,8 +474,7 @@ class _AccountsPageState extends State<AccountsPage> {
       await _loadUsers();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('accounts.disable2faFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('accounts.disable2faFailed', {'error': '$e'}));
     }
   }
 
@@ -543,6 +530,7 @@ class _AccountsPageState extends State<AccountsPage> {
     if (ok != true) return;
     final path = ctrl.text.trim();
     if (path.isEmpty) return;
+    if (!mounted) return;
     setState(() {
       _policyPaths = [
         ..._policyPaths,
@@ -764,11 +752,7 @@ class _AccountsPageState extends State<AccountsPage> {
               tooltip: tr('common.delete'),
               onPressed: () => _deleteUser(user),
             ),
-            IconButton(
-              icon: const Icon(Icons.refresh, size: 18),
-              tooltip: tr('ui.accounts.021'),
-              onPressed: _loadUsers,
-            ),
+            NasRefreshButton(onPressed: _loadUsers),
           ],
         ),
       ),
@@ -859,7 +843,7 @@ class _AccountsPageState extends State<AccountsPage> {
             runSpacing: NasTokens.spaceXs,
             children: [
               for (final app in AppRegistry.apps.where((a) => a.available))
-                FilterChip(
+                NasChip(
                   label: Text(tr(app.nameKey)),
                   selected: _allowedApps.contains(app.id),
                   onSelected: (on) => setState(() {
@@ -923,7 +907,7 @@ class _AccountsPageState extends State<AccountsPage> {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButton<String>(
+                  NasDropdown<String>(
                     value: _policyPaths[i]['access'] == 'rw' ? 'rw' : 'ro',
                     underline: const SizedBox.shrink(),
                     items: [
@@ -1041,6 +1025,11 @@ class _AccountsPageState extends State<AccountsPage> {
     final user = _selectedUser;
     if (!wide) {
       return Scaffold(
+        // 手机端单页模块：房子 + 标题，列表里点人进详情（详情自带返回）
+        appBar: NasMobileAppBar(
+          title: tr('app.accounts'),
+          onHome: AppNavShell.onExitToHome,
+        ),
         body: user == null
             ? _userList()
             : _detail(user, showBack: true),
@@ -1250,7 +1239,7 @@ class _FileLogTabState extends State<_FileLogTab> {
                 tr('accounts.fileLog.action'),
                 style: TextStyle(fontSize: NasTokens.fontCaption),
               ),
-              DropdownButton<String>(
+              NasDropdown<String>(
                 value: _action,
                 isDense: true,
                 underline: const SizedBox.shrink(),
@@ -1271,7 +1260,7 @@ class _FileLogTabState extends State<_FileLogTab> {
                 tr('accounts.fileLog.status'),
                 style: TextStyle(fontSize: NasTokens.fontCaption),
               ),
-              DropdownButton<String>(
+              NasDropdown<String>(
                 value: _status,
                 isDense: true,
                 underline: const SizedBox.shrink(),
@@ -1628,9 +1617,7 @@ class _TokensTabState extends State<_TokensTab> {
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: token));
               if (!ctx.mounted) return;
-              ScaffoldMessenger.of(ctx).showSnackBar(
-                SnackBar(content: Text(tr('accounts.tokens.copied'))),
-              );
+              NasSnack.show(ctx, tr('accounts.tokens.copied'));
             },
             icon: const Icon(Icons.copy, size: 16),
             label: Text(tr('accounts.tokens.copy')),
@@ -1691,7 +1678,7 @@ class _TokensTabState extends State<_TokensTab> {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(tr('ui.accounts.006')),
+              child: Text(tr('common.create')),
             ),
           ],
         ),
@@ -1719,9 +1706,7 @@ class _TokensTabState extends State<_TokensTab> {
         final token = '${res['token'] ?? ''}';
         if (token.isNotEmpty) await _showSecret(token);
       } catch (e) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(tr('common.createFailed', {'error': '$e'}))),
-        );
+        NasSnack.showOn(messenger, tr('common.createFailed', {'error': '$e'}));
       }
     } finally {
       nameCtrl.dispose();
@@ -1757,7 +1742,7 @@ class _TokensTabState extends State<_TokensTab> {
       );
       await _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -1780,11 +1765,7 @@ class _TokensTabState extends State<_TokensTab> {
                 icon: const Icon(Icons.key, size: 16),
                 label: Text(tr('accounts.tokens.new')),
               ),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 18),
-                tooltip: tr('ui.accounts.021'),
-                onPressed: _load,
-              ),
+              NasRefreshButton(onPressed: _load),
             ],
           ),
         ),
@@ -1920,9 +1901,7 @@ class _IpRulesDialogState extends State<_IpRulesDialog> {
       await ApiSession.instance.client.securityIpAdd(body: {'rule': rule});
       await _reload();
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('accounts.joinFailed', {'error': '$e'}))),
-      );
+      NasSnack.showOn(messenger, tr('accounts.joinFailed', {'error': '$e'}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1935,9 +1914,7 @@ class _IpRulesDialogState extends State<_IpRulesDialog> {
       await ApiSession.instance.client.securityIpRemove(body: {'rule': rule});
       await _reload();
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('accounts.removeFailed', {'error': '$e'}))),
-      );
+      NasSnack.showOn(messenger, tr('accounts.removeFailed', {'error': '$e'}));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

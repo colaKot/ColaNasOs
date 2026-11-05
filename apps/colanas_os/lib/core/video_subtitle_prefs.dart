@@ -41,3 +41,22 @@ VideoSubtitleFile? pickSubtitle(List<VideoSubtitleFile> items, String preferred)
   }
   return items.first;
 }
+
+/// 按播放位置取当前应显示的字幕文本（纯函数，便于单测）。
+///
+/// 服务端 `/video/subtitle` 已经把 srt/ass/vtt 解析成结构化 `cues`，播放器
+/// 直接按位置自绘，不再走 media_kit 的 `SubtitleTrack.data`：Web 内核挂的是
+/// blob `<track>`，`open()` 会用 `element.innerHTML = ''` 把它清掉，切换字幕时
+/// 又固定读 `textTracks[0]`。多条 cue 重叠时按文件顺序换行合并；ASS 的
+/// Dialogue 未必按时间排序，所以线性扫而不假设有序。
+String activeSubtitleText(List<VideoSubtitleCue> cues, int positionMs) {
+  if (cues.isEmpty) return '';
+  final lines = <String>[];
+  for (final cue in cues) {
+    if (cue.startMs <= positionMs && cue.endMs > positionMs) {
+      final text = cue.text.trim();
+      if (text.isNotEmpty) lines.add(text);
+    }
+  }
+  return lines.join('\n');
+}

@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import '../../shell/app_widgets.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nas_core/nas_core.dart';
@@ -243,7 +245,10 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
               ListTile(
                 dense: true,
                 leading: _sortBy == by && _sortOrder == order
-                    ? Icon(Icons.check, color: Theme.of(ctx).colorScheme.primary)
+                    ? Icon(
+                        Icons.check,
+                        color: Theme.of(ctx).colorScheme.primary,
+                      )
                     : const SizedBox(width: 24),
                 title: Text(tr(label)),
                 onTap: () => Navigator.pop(ctx, (by, order)),
@@ -271,8 +276,14 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
         title: Text(tr('video.media.delete')),
         content: Text(tr('video.dup.deleteConfirm', {'count': '1'})),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('common.cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('common.delete'))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('common.delete')),
+          ),
         ],
       ),
     );
@@ -284,7 +295,7 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
       await _load(reset: true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -295,8 +306,14 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
         title: Text(tr('video.media.delete')),
         content: Text(folder.name),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('common.cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('common.delete'))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('common.delete')),
+          ),
         ],
       ),
     );
@@ -311,7 +328,7 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
       await _load(reset: true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -322,19 +339,21 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
     final name = item.fileTitle.isEmpty ? item.title : item.fileTitle;
     if (PhotoDownload.supported) {
       try {
-        await PhotoDownload.save(url: url, headers: headers, suggestedName: name);
+        await PhotoDownload.save(
+          url: url,
+          headers: headers,
+          suggestedName: name,
+        );
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+          NasSnack.show(context, '$e');
         }
       }
       return;
     }
     await Clipboard.setData(ClipboardData(text: url));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('video.media.copyLink'))),
-      );
+      NasSnack.show(context, tr('video.media.copyLink'));
     }
   }
 
@@ -345,7 +364,10 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
       items: [
         PopupMenuItem(value: 'open', child: Text(tr('video.media.open'))),
         if (item.mediaType == 'image' || item.mediaType == 'video')
-          PopupMenuItem(value: 'download', child: Text(tr('video.media.download'))),
+          PopupMenuItem(
+            value: 'download',
+            child: Text(tr('video.media.download')),
+          ),
         const PopupMenuDivider(),
         PopupMenuItem(value: 'delete', child: Text(tr('video.media.delete'))),
       ],
@@ -372,7 +394,8 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
   }
 
   RelativeRect _relative(Offset pos) {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
     final size = overlay?.size ?? MediaQuery.of(context).size;
     return RelativeRect.fromRect(Rect.fromPoints(pos, pos), Offset.zero & size);
   }
@@ -386,14 +409,19 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
           child: _loading
               ? const NasLoading()
               : _error != null
-                  ? NasErrorState(message: _error!, onRetry: () => _load(reset: true))
-                  : _content(context),
+              ? NasErrorState(
+                  message: _error!,
+                  onRetry: () => _load(reset: true),
+                )
+              : _content(context),
         ),
       ],
     );
     if (widget.embedded) return body;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title.isEmpty ? tr('app.video') : widget.title)),
+      appBar: AppBar(
+        title: Text(widget.title.isEmpty ? tr('app.video') : widget.title),
+      ),
       body: body,
     );
   }
@@ -427,14 +455,18 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
               ),
               const SizedBox(width: NasTokens.spaceXs),
               IconButton(
-                tooltip: _folderMode ? tr('video.media.all') : tr('video.media.folder'),
+                tooltip: _folderMode
+                    ? tr('video.media.all')
+                    : tr('video.media.folder'),
                 onPressed: () {
                   setState(() {
                     _folderMode = !_folderMode;
                     if (!_folderMode) _folderPath = '';
                   });
                   SettingsStore.instance.setBool(_k('folderMode'), _folderMode);
-                  if (!_folderMode) SettingsStore.instance.setString(_k('folderPath'), '');
+                  if (!_folderMode) {
+                    SettingsStore.instance.setString(_k('folderPath'), '');
+                  }
                   _load(reset: true);
                 },
                 icon: Icon(
@@ -442,11 +474,7 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
                   color: _folderMode ? null : scheme.primary,
                 ),
               ),
-              IconButton(
-                tooltip: tr('common.refresh'),
-                onPressed: () => _load(reset: true),
-                icon: const Icon(Icons.refresh),
-              ),
+              NasRefreshButton(onPressed: () => _load(reset: true)),
             ],
           ),
           const SizedBox(height: 4),
@@ -481,20 +509,30 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
                 icon: const Icon(Icons.sort_by_alpha),
               ),
               IconButton(
-                tooltip: _waterfall ? tr('video.media.grid') : tr('video.media.waterfall'),
+                tooltip: _waterfall
+                    ? tr('video.media.grid')
+                    : tr('video.media.waterfall'),
                 onPressed: () {
                   setState(() => _waterfall = !_waterfall);
                   SettingsStore.instance.setBool(_k('waterfall'), _waterfall);
                 },
-                icon: Icon(_waterfall ? Icons.grid_view_rounded : Icons.view_quilt_rounded),
+                icon: Icon(
+                  _waterfall
+                      ? Icons.grid_view_rounded
+                      : Icons.view_quilt_rounded,
+                ),
               ),
               IconButton(
-                tooltip: _showName ? tr('video.media.hideName') : tr('video.media.showName'),
+                tooltip: _showName
+                    ? tr('video.media.hideName')
+                    : tr('video.media.showName'),
                 onPressed: () {
                   setState(() => _showName = !_showName);
                   SettingsStore.instance.setBool(_k('showName'), _showName);
                 },
-                icon: Icon(_showName ? Icons.title_rounded : Icons.hide_image_outlined),
+                icon: Icon(
+                  _showName ? Icons.title_rounded : Icons.hide_image_outlined,
+                ),
               ),
             ],
           ),
@@ -547,22 +585,26 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
 
   Widget _breadcrumb(BuildContext context) {
     final items = <Widget>[];
-    items.add(InkWell(
-      onTap: () => _enterFolder(''),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        child: Text(tr('video.browse.root')),
-      ),
-    ));
-    for (final s in _segments) {
-      items.add(const Text(' / '));
-      items.add(InkWell(
-        onTap: () => _enterFolder(s.path),
+    items.add(
+      InkWell(
+        onTap: () => _enterFolder(''),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          child: Text(s.name),
+          child: Text(tr('video.browse.root')),
         ),
-      ));
+      ),
+    );
+    for (final s in _segments) {
+      items.add(const Text(' / '));
+      items.add(
+        InkWell(
+          onTap: () => _enterFolder(s.path),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Text(s.name),
+          ),
+        ),
+      );
     }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -578,38 +620,68 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
         icon: Icons.photo_library_outlined,
       );
     }
-    return ListView(
+    // 用 CustomScrollView + SliverGrid，而不是 `ListView(children: [shrinkWrap: true 的 GridView])`：
+    // shrinkWrap 的网格为了算出总高度会把**已加载的全部条目**一次性建出来，
+    // 翻到十几页就有上千个图片 widget 同时存在（每张还要发请求），滚动必卡。
+    // sliver 由视口决定构建范围，翻多少建多少。
+    return CustomScrollView(
       controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(
-        NasTokens.spaceSm,
-        NasTokens.spaceXs,
-        NasTokens.spaceSm,
-        80,
-      ),
-      children: [
-        if (hasFolders) ...[
-          _sectionTitle(tr('video.media.folder'), _folders.length),
-          _folderGrid(context),
-          const SizedBox(height: NasTokens.spaceSm),
-        ],
-        if (_foldersLoading)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 4),
-            child: LinearProgressIndicator(minHeight: 2),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(
+            NasTokens.spaceSm,
+            NasTokens.spaceXs,
+            NasTokens.spaceSm,
+            80,
           ),
-        if (_items.isNotEmpty && hasFolders)
-          _sectionTitle(tr('video.list.filter.all'), _items.length),
-        if (_items.isEmpty)
-          const SizedBox(height: 40)
-        else if (_waterfall)
-          _waterfallLayout(context)
-        else
-          _grid(context),
-        if (_loadingMore)
-          const Padding(
-            padding: EdgeInsets.all(NasTokens.spaceSm),
-            child: Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
+          sliver: SliverMainAxisGroup(
+            slivers: [
+              if (hasFolders) ...[
+                SliverToBoxAdapter(
+                  child: _sectionTitle(
+                    tr('video.media.folder'),
+                    _folders.length,
+                  ),
+                ),
+                _folderGrid(context),
+              ],
+              if (_foldersLoading)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 4),
+                    child: LinearProgressIndicator(minHeight: 2),
+                  ),
+                ),
+              if (_items.isNotEmpty && hasFolders)
+                SliverToBoxAdapter(
+                  child: _sectionTitle(
+                    tr('video.list.filter.all'),
+                    _items.length,
+                  ),
+                ),
+              if (_items.isEmpty)
+                const SliverToBoxAdapter(child: SizedBox(height: 40))
+              else if (_waterfall)
+                // 瀑布流按「列」手工排布，没法直接交给 sliver，整段作为一个 box 放进视口
+                SliverToBoxAdapter(child: _waterfallLayout(context))
+              else
+                _grid(context),
+              if (_loadingMore)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(NasTokens.spaceSm),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
+        ),
       ],
     );
   }
@@ -621,49 +693,67 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
         children: [
           Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(width: 6),
-          Text('$count', style: TextStyle(fontSize: NasTokens.fontCaption, color: const Color(0x88000000))),
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: NasTokens.fontCaption,
+              color: const Color(0x88000000),
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _folderGrid(BuildContext context) {
-    return LayoutBuilder(
-      builder: (ctx, c) {
+    return SliverLayoutBuilder(
+      builder: (ctx, sc) {
         const spacing = 10.0;
-        final maxW = c.maxWidth;
+        final maxW = sc.crossAxisExtent;
         final desired = maxW < 520 ? 150.0 : 220.0;
-        final cols = ((maxW + spacing) / (desired + spacing)).floor().clamp(2, 8);
+        final cols = ((maxW + spacing) / (desired + spacing)).floor().clamp(
+          2,
+          8,
+        );
         final w = (maxW - spacing * (cols - 1)) / cols;
         final h = w * 3 / 4;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            for (final f in _folders)
-              SizedBox(
-                width: w,
-                height: h,
-                child: _folderCard(context, f, w),
-              ),
-          ],
+        return SliverGrid(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            mainAxisSpacing: spacing,
+            crossAxisSpacing: spacing,
+            mainAxisExtent: h,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            (ctx, i) =>
+                RepaintBoundary(child: _folderCard(ctx, _folders[i], w)),
+            childCount: _folders.length,
+          ),
         );
       },
     );
   }
 
-  Widget _folderCard(BuildContext context, VideoImageFolderNode folder, double width) {
+  Widget _folderCard(
+    BuildContext context,
+    VideoImageFolderNode folder,
+    double width,
+  ) {
     final theme = Theme.of(context);
     final cover = folder.cover is Map
         ? VideoItem.fromJson(Map<String, dynamic>.from(folder.cover as Map))
         : null;
-    final url = cover == null ? null : videoPosterUrl(cover);
+    final url = cover == null
+        ? null
+        : videoPosterUrl(cover, size: (width * 2).round());
     final card = InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: () => _enterFolder(folder.path),
       onLongPress: () {
         final box = context.findRenderObject() as RenderBox?;
-        final pos = box == null ? Offset.zero : box.localToGlobal(box.size.center(Offset.zero));
+        final pos = box == null
+            ? Offset.zero
+            : box.localToGlobal(box.size.center(Offset.zero));
         _showFolderMenu(folder, pos);
       },
       child: ClipRRect(
@@ -674,7 +764,9 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
             if (url == null)
               ColoredBox(
                 color: theme.colorScheme.surfaceContainerHighest,
-                child: const Center(child: Icon(Icons.folder_outlined, size: 40)),
+                child: const Center(
+                  child: Icon(Icons.folder_outlined, size: 40),
+                ),
               )
             else
               NasCoverImage(
@@ -690,7 +782,10 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withValues(alpha: 0.78)],
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.78),
+                    ],
                   ),
                 ),
               ),
@@ -704,7 +799,11 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
                   color: Colors.black.withValues(alpha: 0.45),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.folder_rounded, size: 15, color: Colors.white),
+                child: const Icon(
+                  Icons.folder_rounded,
+                  size: 15,
+                  color: Colors.white,
+                ),
               ),
             ),
             Positioned(
@@ -719,11 +818,18 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
                     folder.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   Text(
                     tr('video.media.folderCount', {'count': '${folder.count}'}),
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.82), fontSize: 11),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.82),
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),
@@ -739,29 +845,28 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
   }
 
   Widget _grid(BuildContext context) {
-    return LayoutBuilder(
-      builder: (ctx, c) {
+    return SliverLayoutBuilder(
+      builder: (ctx, sc) {
         const spacing = 12.0;
-        final maxW = c.maxWidth;
+        final maxW = sc.crossAxisExtent;
         final target = maxW < 520 ? 120.0 : 176.0;
         final cols = (maxW / (target + spacing)).floor().clamp(2, 12);
         final w = (maxW - spacing * (cols - 1)) / cols;
         final imageH = w * 3 / 4;
         final tileH = imageH + (_showName ? 22 : 0);
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _items.length,
+        return SliverGrid(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: cols,
             mainAxisSpacing: spacing,
             crossAxisSpacing: spacing,
-            childAspectRatio: w / tileH,
+            mainAxisExtent: tileH,
           ),
-          itemBuilder: (ctx, i) {
-            final item = _items[i];
-            return _mediaCell(context, item, i, w, imageH, 4 / 3);
-          },
+          delegate: SliverChildBuilderDelegate(
+            (ctx, i) => RepaintBoundary(
+              child: _mediaCell(ctx, _items[i], i, w, imageH, 4 / 3),
+            ),
+            childCount: _items.length,
+          ),
         );
       },
     );
@@ -830,14 +935,17 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
     final theme = Theme.of(context);
     final url = item.mediaType == 'image'
         ? '${ApiSession.instance.baseUrl}/api/v1/files/thumb?path=${Uri.encodeComponent(item.path)}&size=${(width * 2).round()}'
-        : videoPosterUrl(item);
+        // 视频条目同样要缩略图：不带 size 就是原图直出（SMB 上一张 1~2MB）
+        : videoPosterUrl(item, size: (width * 2).round());
     final isImage = item.mediaType == 'image';
     final cell = InkWell(
       borderRadius: BorderRadius.circular(10),
       onTap: () => _openItem(item, index),
       onLongPress: () {
         final box = context.findRenderObject() as RenderBox?;
-        final pos = box == null ? Offset.zero : box.localToGlobal(box.size.center(Offset.zero));
+        final pos = box == null
+            ? Offset.zero
+            : box.localToGlobal(box.size.center(Offset.zero));
         _showItemMenu(item, index, pos);
       },
       child: Column(
@@ -868,7 +976,11 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
                           color: Colors.black.withValues(alpha: 0.5),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.play_arrow, size: 16, color: Colors.white),
+                        child: const Icon(
+                          Icons.play_arrow,
+                          size: 16,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   if (!isImage && item.watched)
@@ -889,7 +1001,11 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, height: 1.15, color: theme.colorScheme.onSurface.withValues(alpha: 0.88)),
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.15,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.88),
+                ),
               ),
             ),
         ],

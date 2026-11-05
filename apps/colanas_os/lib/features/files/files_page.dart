@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/file_shortcuts.dart';
 import '../../core/session.dart';
+import '../../shell/app_nav_shell.dart';
 
 /// 文件浏览：面包屑下钻 / 返回上级，列表与网格两种视图（同一份数据）。
 ///
@@ -24,10 +26,28 @@ class _FilesPageState extends State<FilesPage> {
   /// 视图：`list` / `grid`
   String _view = 'list';
 
+  /// 手机端底部 tab：`browse`（文件夹）/ `favorites` / `recent`。
+  /// 桌面端不用它 —— 桌面有侧栏与面包屑，一屏就能看完。
+  String _mobileTab = 'browse';
+
+  final _shortcuts = FileShortcuts.instance;
+
   @override
   void initState() {
     super.initState();
+    _shortcuts.ensureLoaded();
+    _shortcuts.addListener(_onShortcutsChanged);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _shortcuts.removeListener(_onShortcutsChanged);
+    super.dispose();
+  }
+
+  void _onShortcutsChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
@@ -52,10 +72,34 @@ class _FilesPageState extends State<FilesPage> {
     }
   }
 
+  /// 当前目录 + 条目名 → 完整路径（收藏/最近都用它当 key）
+  String _fullPathOf(FilesListItem item) {
+    final base = _path == '/' ? '' : _path.replaceFirst(RegExp(r'/+$'), '');
+    return '$base/${item.name}';
+  }
+
   void _open(FilesListItem item) {
     if (!item.dir) return;
-    _path = _path.endsWith('/') ? '$_path${item.name}' : '$_path/${item.name}';
+    final target = _fullPathOf(item);
+    // 进目录才记「最近」——根视图（_path == '/'）不进列表，否则一打开就占一条
+    _shortcuts.recordRecent(FileShortcut(path: target, name: item.name));
+    _path = target;
     _load();
+  }
+
+  /// 收藏 / 取消收藏（只有目录能收藏：文件在这个页面没有预览入口，
+  /// 收藏了也点不开，等于给用户一个死链）
+  Future<void> _toggleFavorite(FilesListItem item) async {
+    if (!item.dir) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final added = await _shortcuts.toggleFavorite(
+      FileShortcut(path: _fullPathOf(item), name: item.name),
+    );
+    if (!mounted) return;
+    NasSnack.showOn(
+      messenger,
+      tr(added ? 'files.favorite.added' : 'files.favorite.removed'),
+    );
   }
 
   void _up() {
@@ -117,7 +161,7 @@ class _FilesPageState extends State<FilesPage> {
       await ApiSession.instance.client.filesMkdir(body: FilesOpPathBody(path: _relInCurrent(name)));
       await _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -131,7 +175,7 @@ class _FilesPageState extends State<FilesPage> {
       );
       await _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -155,29 +199,68 @@ class _FilesPageState extends State<FilesPage> {
       );
       if (!mounted) return;
       final failed = res.failed;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
+      NasSnack.showOn(messenger, 
             failed.isEmpty ? tr('files.deletedToTrash') : failed.first.error,
-          ),
-        ),
-      );
+          );
       await _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
   /// 行内「⋯」菜单：重命名 / 删除
+  /// 右键菜单（桌面 / Web）：与条目菜单 / 网格长按同一批动作。
+  List<NasMenuEntry> _fileMenuEntries(FilesListItem item) {
+    final fav = _shortcuts.isFavorite(_fullPathOf(item));
+    return [
+      if (item.dir)
+        NasMenuEntry(
+          label: tr('common.open'),
+          icon: Icons.folder_open_outlined,
+          onSelected: () => _open(item),
+        ),
+      if (item.dir)
+        NasMenuEntry(
+          label: tr(fav ? 'files.favorite.remove' : 'files.favorite.add'),
+          icon: fav ? Icons.star : Icons.star_outline,
+          onSelected: () => _toggleFavorite(item),
+        ),
+      NasMenuEntry(
+        label: tr('files.rename'),
+        icon: Icons.drive_file_rename_outline,
+        onSelected: () => _rename(item),
+      ),
+      const NasMenuEntry.divider(),
+      NasMenuEntry(
+        label: tr('files.delete'),
+        icon: Icons.delete_outline,
+        danger: true,
+        onSelected: () => _delete(item),
+      ),
+    ];
+  }
+
   Widget _itemMenu(FilesListItem item) {
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert, size: 18),
       tooltip: '',
       onSelected: (v) {
+        if (v == 'favorite') _toggleFavorite(item);
         if (v == 'rename') _rename(item);
         if (v == 'delete') _delete(item);
       },
       itemBuilder: (_) => [
+        if (item.dir)
+          PopupMenuItem(
+            value: 'favorite',
+            child: Text(
+              tr(
+                _shortcuts.isFavorite(_fullPathOf(item))
+                    ? 'files.favorite.remove'
+                    : 'files.favorite.add',
+              ),
+            ),
+          ),
         PopupMenuItem(value: 'rename', child: Text(tr('files.rename'))),
         PopupMenuItem(value: 'delete', child: Text(tr('files.delete'))),
       ],
@@ -192,6 +275,22 @@ class _FilesPageState extends State<FilesPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (item.dir)
+              ListTile(
+                leading: Icon(
+                  _shortcuts.isFavorite(_fullPathOf(item))
+                      ? Icons.star
+                      : Icons.star_outline,
+                ),
+                title: Text(
+                  tr(
+                    _shortcuts.isFavorite(_fullPathOf(item))
+                        ? 'files.favorite.remove'
+                        : 'files.favorite.add',
+                  ),
+                ),
+                onTap: () => Navigator.pop(ctx, 'favorite'),
+              ),
             ListTile(
               leading: const Icon(Icons.drive_file_rename_outline),
               title: Text(tr('files.rename')),
@@ -206,6 +305,7 @@ class _FilesPageState extends State<FilesPage> {
         ),
       ),
     );
+    if (picked == 'favorite') await _toggleFavorite(item);
     if (picked == 'rename') await _rename(item);
     if (picked == 'delete') await _delete(item);
   }
@@ -280,9 +380,7 @@ class _FilesPageState extends State<FilesPage> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('${tr('common.error')}：$e')),
-      );
+      NasSnack.showOn(messenger, '${tr('common.error')}：$e');
     }
   }
 
@@ -293,19 +391,13 @@ class _FilesPageState extends State<FilesPage> {
       final res = await ApiSession.instance.client.filesIndex();
       final taskId = res['taskId']?.toString() ?? '';
       final reused = res['reused'] == true;
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
+      NasSnack.showOn(messenger, 
             reused
                 ? tr('ui.files.h439f15')
                 : '${tr('home.quick.index')}：$taskId',
-          ),
-        ),
-      );
+          );
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('${tr('common.error')}：$e')),
-      );
+      NasSnack.showOn(messenger, '${tr('common.error')}：$e');
     }
   }
 
@@ -317,13 +409,55 @@ class _FilesPageState extends State<FilesPage> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = layoutFor(constraints.maxWidth) == LayoutMode.compact;
-        return Column(
+        final content = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _toolbar(compact),
             const SizedBox(height: NasTokens.spaceSm),
             Expanded(child: _content(constraints.maxWidth)),
           ],
+        );
+        // 手机端：文件页是单页模块，需要自己的 56 顶栏（房子 + 标题）。
+        // 桌面由 AppShell 的 NasTopBar 提供标题，这里不再叠一层。
+        if (!compact) return content;
+        // 手机端底部三个 tab 与参考实现一致：文件夹 / 收藏 / 最近。
+        // 收藏与最近**只存本机**（见 core/file_shortcuts.dart）
+        return NasAppScaffold(
+          title: tr('app.files'),
+          onHome: AppNavShell.onExitToHome,
+          homeTooltip: tr('nav.home'),
+          items: [
+            NasTabItem(
+              id: 'browse',
+              label: tr('nav.filesView'),
+              icon: Icons.folder_open_outlined,
+            ),
+            NasTabItem(
+              id: 'favorites',
+              label: tr('nav.favorites'),
+              icon: Icons.star_outline,
+            ),
+            NasTabItem(
+              id: 'recent',
+              label: tr('files.recent.title'),
+              icon: Icons.history,
+            ),
+          ],
+          selectedId: _mobileTab,
+          onSelect: (id) => setState(() => _mobileTab = id),
+          actions: [
+            if (_mobileTab == 'recent' && _shortcuts.hasRecent)
+              NasMobileAction(
+                icon: Icons.delete_sweep_outlined,
+                tooltip: tr('files.recent.clear'),
+                onPressed: _shortcuts.clearRecent,
+              ),
+          ],
+          body: switch (_mobileTab) {
+            'favorites' => _shortcutList(favorites: true),
+            'recent' => _shortcutList(favorites: false),
+            _ => content,
+          },
         );
       },
     );
@@ -487,7 +621,9 @@ class _FilesPageState extends State<FilesPage> {
         itemCount: _items.length,
         itemBuilder: (context, i) {
           final item = _items[i];
-          return GestureDetector(
+          return NasContextMenuRegion(
+            entries: _fileMenuEntries(item),
+            child: GestureDetector(
             onLongPress: () => _gridMenu(item),
             child: NasFileTile(
               name: item.name,
@@ -496,6 +632,7 @@ class _FilesPageState extends State<FilesPage> {
               grid: true,
               onTap: () => _open(item),
               onDoubleTap: () => _open(item),
+            ),
             ),
           );
         },
@@ -508,7 +645,9 @@ class _FilesPageState extends State<FilesPage> {
         itemBuilder: (context, i) {
           final item = _items[i];
           final kind = nasFileKindOf(item.name, isDir: item.dir);
-          return NasFileTile(
+          return NasContextMenuRegion(
+            entries: _fileMenuEntries(item),
+            child: NasFileTile(
             name: item.name,
             subtitle: _kindLabel(kind),
             kind: kind,
@@ -526,8 +665,80 @@ class _FilesPageState extends State<FilesPage> {
                 _itemMenu(item),
               ],
             ),
+            ),
           );
         },
+    );
+  }
+
+  /// 收藏 / 最近：都是「目录清单」，点一条就切回文件夹 tab 并跳过去。
+  Widget _shortcutList({required bool favorites}) {
+    final items = favorites ? _shortcuts.favorites : _shortcuts.recent;
+    if (items.isEmpty) {
+      return NasEmptyState(
+        title: tr('common.empty'),
+        message: tr(favorites ? 'files.favorite.empty' : 'files.recent.empty'),
+        icon: favorites ? Icons.star_outline : Icons.history,
+      );
+    }
+    final scheme = Theme.of(context).colorScheme;
+    return ListView.separated(
+      padding: const EdgeInsets.only(bottom: NasTokens.spaceLg),
+      itemCount: items.length,
+      separatorBuilder: (_, _) => const Divider(height: 1),
+      itemBuilder: (context, i) {
+        final s = items[i];
+        return ListTile(
+          leading: Icon(
+            favorites ? Icons.star : Icons.folder_outlined,
+            size: NasTokens.iconMd,
+            color: favorites ? scheme.primary : scheme.onSurfaceVariant,
+          ),
+          title: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: Text(
+            s.path,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: NasTokens.fontCaption,
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (favorites)
+                IconButton(
+                  tooltip: tr('files.favorite.remove'),
+                  icon: const Icon(Icons.star, size: 18),
+                  onPressed: () => _shortcuts.toggleFavorite(s),
+                ),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: scheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+          onTap: () => _openShortcut(s),
+        );
+      },
+    );
+  }
+
+  Future<void> _openShortcut(FileShortcut shortcut) async {
+    setState(() {
+      _mobileTab = 'browse';
+      _path = shortcut.path;
+    });
+    await _load();
+    if (!mounted || _error == null) return;
+    // 目录已被删/改名：忘掉它，别让用户反复点到打不开的条目
+    await _shortcuts.forget(shortcut.path);
+    if (!mounted) return;
+    NasSnack.showOn(
+      ScaffoldMessenger.of(context),
+      '${tr('common.error')}：$_error',
     );
   }
 

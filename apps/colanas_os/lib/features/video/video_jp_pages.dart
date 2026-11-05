@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../shell/app_widgets.dart';
+
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import 'video_card.dart';
@@ -142,11 +144,7 @@ class _VideoJpRankPageState extends State<VideoJpRankPage> {
                   },
                 ),
                 const Spacer(),
-                IconButton(
-                  tooltip: tr('common.refresh'),
-                  onPressed: _reload,
-                  icon: const Icon(Icons.refresh),
-                ),
+                NasRefreshButton(onPressed: _reload),
               ],
             ),
           ),
@@ -154,22 +152,20 @@ class _VideoJpRankPageState extends State<VideoJpRankPage> {
             child: _loading
                 ? const NasLoading()
                 : _error != null
-                    ? NasErrorState(message: _error!, onRetry: _reload)
-                    : _items.isEmpty
-                        ? NasEmptyState(
-                            title: tr('video.jp.empty'),
-                            icon: Icons.leaderboard_outlined,
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: NasTokens.spaceMd,
-                            ),
-                            itemCount: _items.length,
-                            separatorBuilder: (_, _) =>
-                                const Divider(height: 1),
-                            itemBuilder: (context, i) =>
-                                _row(context, _items[i]),
-                          ),
+                ? NasErrorState(message: _error!, onRetry: _reload)
+                : _items.isEmpty
+                ? NasEmptyState(
+                    title: tr('video.jp.empty'),
+                    icon: Icons.leaderboard_outlined,
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: NasTokens.spaceMd,
+                    ),
+                    itemCount: _items.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (context, i) => _row(context, _items[i]),
+                  ),
           ),
         ],
       ),
@@ -259,6 +255,13 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
   String? _error;
   List<Map<String, dynamic>> _actors = const [];
 
+  /// `_visibleActors` 的 memo：条件不变就不重排（搜索每敲一个字符都会 build）
+  List<Map<String, dynamic>>? _visibleCache;
+  String _visibleKey = '';
+
+  /// 收藏等就地修改 `_actors` 内容时自增，让上面的 memo 失效
+  int _actorsRevision = 0;
+
   Map<String, dynamic>? _selected;
   bool _worksLoading = false;
   String? _worksError;
@@ -301,6 +304,7 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
             .whereType<Map>()
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
+        _actorsRevision++;
         _loading = false;
       });
     } catch (e) {
@@ -359,15 +363,22 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
       if (!mounted) return;
       setState(() {
         actor['favorite'] = target;
+        _actorsRevision++;
         if (_selected == actor) _selected = Map<String, dynamic>.from(actor);
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
   List<Map<String, dynamic>> get _visibleActors {
+    // 500 个演员每次 build 都过滤 + 排序，搜索每敲一个字就重排一遍（2026-11-04：
+    // 打字也卡）。条件没变就复用上一次的结果。
+    final key =
+        '$_query\u0001$_sortBy\u0001$_onlyFavorite\u0001$_onlyUnwatched'
+        '\u0001${_actors.length}\u0001$_actorsRevision';
+    if (_visibleCache != null && _visibleKey == key) return _visibleCache!;
     final q = _query.trim().toLowerCase();
     final list = _actors.where((a) {
       if (_onlyFavorite && a['favorite'] != true) return false;
@@ -386,18 +397,25 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
         list.sort((a, b) => _int(b['hot']) - _int(a['hot']));
         break;
       case 'unwatched':
-        list.sort((a, b) => _int(b['unwatchedCount']) - _int(a['unwatchedCount']));
+        list.sort(
+          (a, b) => _int(b['unwatchedCount']) - _int(a['unwatchedCount']),
+        );
         break;
       case 'count':
-        list.sort((a, b) => _int(b['count'] ?? b['items']) - _int(a['count'] ?? a['items']));
+        list.sort(
+          (a, b) =>
+              _int(b['count'] ?? b['items']) - _int(a['count'] ?? a['items']),
+        );
         break;
       default:
         // 综合序（服务端已按同口径返回，这里再排一次
         // 是为了收藏切换后立即生效，不用重新请求）
         list.sort((a, b) {
-          var c = (b['favorite'] == true ? 1 : 0) - (a['favorite'] == true ? 1 : 0);
+          var c =
+              (b['favorite'] == true ? 1 : 0) - (a['favorite'] == true ? 1 : 0);
           if (c != 0) return c;
-          c = (_int(b['unwatchedCount']) > 0 ? 1 : 0) -
+          c =
+              (_int(b['unwatchedCount']) > 0 ? 1 : 0) -
               (_int(a['unwatchedCount']) > 0 ? 1 : 0);
           if (c != 0) return c;
           c = _int(b['unwatchedCount']) - _int(a['unwatchedCount']);
@@ -410,6 +428,8 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
         });
         break;
     }
+    _visibleCache = list;
+    _visibleKey = key;
     return list;
   }
 
@@ -501,11 +521,7 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
                 onPressed: () => setState(() => _showMovies = true),
                 icon: const Icon(Icons.movie_outlined),
               ),
-              IconButton(
-                tooltip: tr('common.refresh'),
-                onPressed: _loading ? null : _load,
-                icon: const Icon(Icons.refresh),
-              ),
+              NasRefreshButton(onPressed: _loading ? null : _load),
             ],
           ),
         ),
@@ -513,14 +529,14 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
           padding: const EdgeInsets.symmetric(horizontal: NasTokens.spaceMd),
           child: Row(
             children: [
-              FilterChip(
+              NasChip(
                 label: Text(tr('video.jp.favorites')),
                 selected: _onlyFavorite,
                 visualDensity: VisualDensity.compact,
                 onSelected: (v) => setState(() => _onlyFavorite = v),
               ),
               const SizedBox(width: NasTokens.spaceXs),
-              FilterChip(
+              NasChip(
                 label: Text(tr('video.jp.onlyUnwatched')),
                 selected: _onlyUnwatched,
                 visualDensity: VisualDensity.compact,
@@ -533,8 +549,8 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
           child: _loading
               ? const NasLoading()
               : _error != null
-                  ? NasErrorState(message: _error!, onRetry: _load)
-                  : _buildActorGrid(),
+              ? NasErrorState(message: _error!, onRetry: _load)
+              : _buildActorGrid(),
         ),
       ],
     );
@@ -558,16 +574,22 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
             .floor()
             .clamp(1, 12);
         final cellW = (cons.maxWidth - spacing * (cols + 1)) / cols;
-        return SingleChildScrollView(
+        // 卡片高度 = 图 + 文本块（见 _actorCard 的 Column：6 + 名 + 数量 + 身高）
+        final imgH = _showFanart ? cellW / 1.5 : cellW * 1.5;
+        // 必须用 GridView.builder 懒加载：Wrap + SingleChildScrollView 会把
+        // 全部演员（本库 500 个）一次性建出来，每人再发一张封面请求 ——
+        // 500 张图同时下、同时解码，滚动/点击全卡死（2026-11-04 反馈）。
+        return GridView.builder(
           padding: const EdgeInsets.fromLTRB(spacing, 8, spacing, 32),
-          child: Wrap(
-            spacing: spacing,
-            runSpacing: spacing + 4,
-            children: [
-              for (final actor in list)
-                SizedBox(width: cellW, child: _actorCard(actor, cellW)),
-            ],
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            mainAxisSpacing: spacing + 4,
+            crossAxisSpacing: spacing,
+            mainAxisExtent: imgH + 64,
           ),
+          itemCount: list.length,
+          itemBuilder: (context, i) =>
+              RepaintBoundary(child: _actorCard(list[i], cellW)),
         );
       },
     );
@@ -577,8 +599,15 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
     final fav = actor['favorite'] == true;
     final cover = _coverItemOf(actor);
     final avatar = _str(actor['avatarUrl']);
+    // 一定要带 size：不带就走原图直出（单张 200KB~2MB），
+    // 网格里几十张同时拉，SMB 上就是几十 MB 的网络盘读盘。
+    // 带 size 后走 /files/thumb 的本地缓存，命中后只有 20KB 左右。
     final url = cover != null
-        ? videoPosterUrl(cover, kind: _showFanart ? 'fanart' : 'poster')
+        ? videoPosterUrl(
+            cover,
+            kind: _showFanart ? 'fanart' : 'poster',
+            size: (width * 2).round(),
+          )
         : (avatar.isEmpty ? null : avatar);
     final unwatched = _int(actor['unwatchedCount']);
     final count = _int(actor['count'] ?? actor['items']);
@@ -600,7 +629,9 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
                   NasCoverImage(
                     url: url,
                     fit: _showFanart ? BoxFit.contain : BoxFit.cover,
-                    headers: videoArtHeaders,
+                    // 头像走远程 CDN（jdbstatic 等），带 Authorization 会触发 CORS 预检
+                    // 直接被浏览器挡掉；只有本服务的海报接口才需要认证头。
+                    headers: cover != null ? videoArtHeaders : const {},
                     icon: Icons.person_outline,
                     cacheWidth: (width * 2).round(),
                   ),
@@ -634,9 +665,7 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primary
+                          color: Theme.of(context).colorScheme.primary
                               .withValues(alpha: 0.88),
                           borderRadius: BorderRadius.circular(7),
                         ),
@@ -718,9 +747,7 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
             ],
           ),
         ),
-        Expanded(
-          child: VideoPage(embedded: true, libraryId: widget.libraryId),
-        ),
+        Expanded(child: VideoPage(embedded: true, libraryId: widget.libraryId)),
       ],
     );
   }
@@ -786,16 +813,16 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
           child: _worksLoading
               ? const NasLoading()
               : _worksError != null
-                  ? NasErrorState(
-                      message: _worksError!,
-                      onRetry: () => _openActor(actor),
-                    )
-                  : _works.isEmpty
-                      ? NasEmptyState(
-                          title: tr('video.jp.noWorks'),
-                          icon: Icons.movie_outlined,
-                        )
-                      : _buildWorksGrid(),
+              ? NasErrorState(
+                  message: _worksError!,
+                  onRetry: () => _openActor(actor),
+                )
+              : _works.isEmpty
+              ? NasEmptyState(
+                  title: tr('video.jp.noWorks'),
+                  icon: Icons.movie_outlined,
+                )
+              : _buildWorksGrid(),
         ),
       ],
     );
@@ -812,24 +839,29 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
             .floor()
             .clamp(1, 12);
         final cellW = (cons.maxWidth - spacing * (cols + 1)) / cols;
-        return SingleChildScrollView(
+        // VideoPosterCard 内部按「图 + 42px 文本块」排，网格高度必须一致
+        final imgH = _showFanart ? cellW / (3 / 2) : cellW * 1.5;
+        // 同演员网格：作品最多 200 条，Wrap 会全量构建，改成懒加载
+        return GridView.builder(
           padding: const EdgeInsets.fromLTRB(spacing, 8, spacing, 96),
-          child: Wrap(
-            spacing: spacing,
-            runSpacing: spacing,
-            children: [
-              for (final item in _works)
-                SizedBox(
-                  width: cellW,
-                  child: VideoPosterCard(
-                    item: item,
-                    width: cellW,
-                    showFanart: _showFanart,
-                    onTap: () => openVideoDetail(context, item),
-                  ),
-                ),
-            ],
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: cols,
+            mainAxisSpacing: spacing,
+            crossAxisSpacing: spacing,
+            mainAxisExtent: imgH + 44,
           ),
+          itemCount: _works.length,
+          itemBuilder: (context, i) {
+            final item = _works[i];
+            return RepaintBoundary(
+              child: VideoPosterCard(
+                item: item,
+                width: cellW,
+                showFanart: _showFanart,
+                onTap: () => openVideoDetail(context, item),
+              ),
+            );
+          },
         );
       },
     );
@@ -856,6 +888,7 @@ class _ActorHeader extends StatelessWidget {
     final hip = _int(actor['hip'] ?? actor['hips']);
     final cup = _str(actor['cup']);
     final birthday = _str(actor['birthday']);
+    final birthplace = _str(actor['birthplace']);
 
     final measurements = <String>[
       if (bust > 0) '$bust',
@@ -953,7 +986,8 @@ class _ActorHeader extends StatelessWidget {
                     weight > 0 ||
                     measurements.isNotEmpty ||
                     cup.isNotEmpty ||
-                    birthday.isNotEmpty) ...[
+                    birthday.isNotEmpty ||
+                    birthplace.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Wrap(
                     spacing: 10,
@@ -995,6 +1029,14 @@ class _ActorHeader extends StatelessWidget {
                       if (birthday.isNotEmpty)
                         Text(
                           birthday,
+                          style: TextStyle(
+                            fontSize: NasTokens.fontCaption,
+                            color: context.nasTextSecondary,
+                          ),
+                        ),
+                      if (birthplace.isNotEmpty)
+                        Text(
+                          birthplace,
                           style: TextStyle(
                             fontSize: NasTokens.fontCaption,
                             color: context.nasTextSecondary,

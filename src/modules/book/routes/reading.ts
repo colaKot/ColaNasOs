@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { secured } from '../../../../kernel/route';
 import { downloadHandler } from '../../files/download';
-import { filesRoot, resolveInRoot } from '../../files/fs-root';
+import { filesRoot, resolveAnyPath } from '../../files/fs-root';
 import { mimeOf, readBookCover, isBookFile } from '../metadata';
 import { readPage, readToc } from '../reader';
 import { Err } from '../../../../kernel/errors';
@@ -36,7 +36,7 @@ export async function registerBookReading(app: FastifyInstance, k: KernelApi, h:
 
         let abs: string;
         try {
-          abs = resolveInRoot(filesRoot(), row.rel_path);
+          abs = resolveAnyPath(filesRoot(), row.rel_path);
         } catch {
           return reply.code(404).send({ error: Err.notFound, message: 'source missing' });
         }
@@ -99,7 +99,7 @@ export async function registerBookReading(app: FastifyInstance, k: KernelApi, h:
 
         let abs: string;
         try {
-          abs = resolveInRoot(filesRoot(), row.rel_path);
+          abs = resolveAnyPath(filesRoot(), row.rel_path);
         } catch {
           return reply.code(404).send({ error: Err.notFound, message: 'source missing' });
         }
@@ -147,7 +147,7 @@ export async function registerBookReading(app: FastifyInstance, k: KernelApi, h:
 
         let abs: string;
         try {
-          abs = resolveInRoot(filesRoot(), row.rel_path);
+          abs = resolveAnyPath(filesRoot(), row.rel_path);
         } catch {
           return reply.code(404).send({ error: Err.notFound, message: 'source missing' });
         }
@@ -207,4 +207,78 @@ export async function registerBookReading(app: FastifyInstance, k: KernelApi, h:
       },
     );
 
+    app.get(
+      '/api/v1/book/cache',
+      secured('book:read', {
+        schema: {
+          operationId: 'bookCacheStats',
+          tags: TAG,
+          summary: '封面 / PDF 页图缓存占用',
+          response: { 200: h.ref('BookCacheStatsResponse') },
+        },
+      }),
+      async () => {
+        const dirs = [path.join(k.paths.dataDir, 'book-covers'), path.join(k.paths.dataDir, 'book-pdf')];
+        let files = 0;
+        let bytes = 0;
+        for (const dir of dirs) {
+          let names: string[];
+          try {
+            names = fs.readdirSync(dir);
+          } catch {
+            continue;
+          }
+          for (const name of names) {
+            try {
+              const st = fs.statSync(path.join(dir, name));
+              if (st.isFile()) {
+                files += 1;
+                bytes += st.size;
+              }
+            } catch {
+              /* 正在写 / 已删：跳过 */
+            }
+          }
+        }
+        return { files, bytes };
+      },
+    );
+
+    app.post(
+      '/api/v1/book/cache/clear',
+      secured('book:write', {
+        schema: {
+          operationId: 'bookCacheClear',
+          tags: TAG,
+          summary: '清空封面 / PDF 页图缓存',
+          response: { 200: h.ref('BookCacheClearResponse') },
+        },
+      }),
+      async () => {
+        const dirs = [path.join(k.paths.dataDir, 'book-covers'), path.join(k.paths.dataDir, 'book-pdf')];
+        let files = 0;
+        let bytes = 0;
+        for (const dir of dirs) {
+          let names: string[];
+          try {
+            names = fs.readdirSync(dir);
+          } catch {
+            continue;
+          }
+          for (const name of names) {
+            const target = path.join(dir, name);
+            try {
+              const st = fs.statSync(target);
+              if (!st.isFile()) continue;
+              files += 1;
+              bytes += st.size;
+              fs.rmSync(target, { force: true });
+            } catch {
+              /* 单个文件失败不影响其它 */
+            }
+          }
+        }
+        return { files, bytes };
+      },
+    );
 }

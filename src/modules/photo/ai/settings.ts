@@ -7,6 +7,7 @@ import type { KernelApi } from '../../../../kernel/types';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { now, ref } from './schemas';
 import { aiConfig, saveAiConfig, noteAiJob, aiJobRunning } from './config';
+import { enqueueScanOnce } from './vision';
 import { faceIndex, fromBuffer, toBuffer, mergeClusterPair } from './face';
 import { paramsFromEnv } from './cluster-v2';
 import { ensureSidecar, aiAvailable } from './sidecar';
@@ -108,11 +109,16 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
         enabled: boolean,
         percent: number,
         done: number,
+        totalCount = total,
       ) => ({
         key,
         label,
         status: !enabled ? 'disabled' : aiJobRunning(key) ? 'running' : 'idle',
-        pending: Math.max(0, total - done),
+        pending: Math.max(0, totalCount - done),
+        // 面板显示「已完成/总数」：几万张里识别 20 张，百分比会被四舍五入成 0%，
+        // 只有条数才能让人看出任务真的在推进
+        done,
+        total: totalCount,
         percent,
       });
       return {
@@ -126,7 +132,7 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
             job('place', '场景识别', cfg.placeEnabled, progress.place, doneOf.place),
             job('activity', '活动识别', cfg.activityEnabled, progress.activity, doneOf.activity),
             job('clip', '图像搜索', true, progress.clip, doneOf.clip),
-            job('similar', '重复照片', cfg.similarEnabled, 0, 0),
+            job('similar', '重复照片', cfg.similarEnabled, 0, 0, 0),
           ],
         },
       };
@@ -188,6 +194,8 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
         const { stopSidecar } = await import('./sidecar');
         await stopSidecar();
       }
+      // 开关一打开就自己开始识别，不需要用户再去找「开始识别」按钮
+      void enqueueScanOnce(k).catch(() => {});
       return cfg;
     },
   );

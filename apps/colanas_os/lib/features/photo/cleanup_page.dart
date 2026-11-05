@@ -81,7 +81,7 @@ class _PhotoCleanupPageState extends State<PhotoCleanupPage> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -194,8 +194,7 @@ class _PhotoCleanupPageState extends State<PhotoCleanupPage> {
       await _loadTrashCount();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.errorWith', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.errorWith', {'error': '$e'}));
     }
   }
 
@@ -205,15 +204,13 @@ class _PhotoCleanupPageState extends State<PhotoCleanupPage> {
         body: PhotoCleanupUndoBody(batchId: batchId),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('photo.cleanupRestored', {'count': '${res.restored}'}))));
+      NasSnack.show(context, tr('photo.cleanupRestored', {'count': '${res.restored}'}));
       await _loadBatches();
       await _loadTrashCount();
       await _previewNow();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('photo.undoFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('photo.undoFailed', {'error': '$e'}));
     }
   }
 
@@ -223,16 +220,11 @@ class _PhotoCleanupPageState extends State<PhotoCleanupPage> {
         body: const PhotoCleanupBackfillBody(limit: 500),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(tr('photo.md5Progress', {'hashed': '${res.hashed}', 'remaining': '${res.remaining}'})),
-        ),
-      );
+      NasSnack.show(context, tr('photo.md5Progress', {'hashed': '${res.hashed}', 'remaining': '${res.remaining}'}));
       await _previewNow();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('photo.md5Failed', {'error': '$e'}))));
+      NasSnack.show(context, tr('photo.md5Failed', {'error': '$e'}));
     }
   }
 

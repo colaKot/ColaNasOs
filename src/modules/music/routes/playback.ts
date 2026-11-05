@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { secured } from '../../../../kernel/route';
 import { downloadHandler } from '../../files/download';
-import { filesRoot, resolveInRoot } from '../../files/fs-root';
+import { filesRoot, resolveAnyPath } from '../../files/fs-root';
 import { writeCover, isAudioFile } from '../ffmpeg';
 import { readLyrics } from '../lyrics';
 import { ensureTranscoded, needsAudioTranscode } from '../transcode';
@@ -39,7 +39,7 @@ export async function registerMusicPlayback(app: FastifyInstance, k: KernelApi, 
 
         let abs: string;
         try {
-          abs = resolveInRoot(filesRoot(), row.rel_path);
+          abs = resolveAnyPath(filesRoot(), row.rel_path);
         } catch {
           return reply.code(404).send({ error: Err.notFound, message: 'source missing' });
         }
@@ -72,7 +72,7 @@ export async function registerMusicPlayback(app: FastifyInstance, k: KernelApi, 
 
         let abs: string;
         try {
-          abs = resolveInRoot(filesRoot(), row.rel_path);
+          abs = resolveAnyPath(filesRoot(), row.rel_path);
         } catch {
           return reply.code(404).send({ error: Err.notFound, message: 'source missing' });
         }
@@ -118,12 +118,14 @@ export async function registerMusicPlayback(app: FastifyInstance, k: KernelApi, 
         const row = q.id ? await h.loadTrack(q.id) : null;
         if (!row) return reply.code(404).send({ error: Err.notFound, message: 'track not found' });
 
-        const expiresInSec = 300;
+        // 与影视直链同一个口径：12 小时。音乐虽然多半「一首一签」，
+        // 但长音频（有声书 / 现场）缓冲超过 5 分钟后 seek 会撞 401。
+        const expiresInSec = 12 * 3600;
         const token = k.auth.sign({ sub: 'music-stream', scopes: ['music:read'] }, expiresInSec);
         let transcoded = false;
         if (q.format === 'auto' && needsAudioTranscode(row)) {
           try {
-            const abs = resolveInRoot(filesRoot(), row.rel_path);
+            const abs = resolveAnyPath(filesRoot(), row.rel_path);
             if (fs.existsSync(abs)) transcoded = (await ensureTranscoded(k, abs, row)) !== null;
           } catch {
             // 源文件不可读 / 缺 ffmpeg：回退原始地址，不阻断播放
@@ -157,7 +159,7 @@ export async function registerMusicPlayback(app: FastifyInstance, k: KernelApi, 
         if (q.format === 'transcoded') {
           let abs: string;
           try {
-            abs = resolveInRoot(filesRoot(), row.rel_path);
+            abs = resolveAnyPath(filesRoot(), row.rel_path);
           } catch {
             return reply.code(404).send({ error: Err.notFound, message: 'source missing' });
           }

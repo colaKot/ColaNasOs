@@ -33,14 +33,18 @@ String _rankDetail(VideoItem item) {
 }
 
 /// 海报地址：有刮削海报走 `/video/art`，否则回退服务端抽的首帧。
-String videoPosterUrl(VideoItem item, {String kind = 'poster'}) {
+///
+/// `size` > 0 时服务端会走缩略图（`thumbs` 目录缓存）：列表页把 1~2 MB 的原图
+/// 直传过来，SMB 库上十几张卡就能把「打开列表」拖成十几秒（2026-11-03）。
+String videoPosterUrl(VideoItem item, {String kind = 'poster', int size = 0}) {
   final base = ApiSession.instance.baseUrl;
   // 图片库 / 混合库：图片条目直接用服务端缩略图，不能走视频海报接口
   if (item.mediaType == 'image') {
     return '$base/api/v1/files/thumb?path=${Uri.encodeComponent(item.path)}&size=720';
   }
   final id = Uri.encodeComponent(item.id);
-  if (item.hasArt) return '$base/api/v1/video/art?id=$id&kind=$kind';
+  final sizeQ = size > 0 ? '&size=$size' : '';
+  if (item.hasArt) return '$base/api/v1/video/art?id=$id&kind=$kind$sizeQ';
   // 首帧只能当「海报」用，横版位置没有更好的回退
   return '$base/api/v1/video/poster?id=$id';
 }
@@ -241,9 +245,11 @@ class VideoPosterCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // 按显示宽度 ×2 要缩略图：列表一屏几十张，原图直传在 SMB 库上会卡住整个页面
+    final wantSize = (width * 2).round();
     final url = showFanart
-        ? videoPosterUrl(item, kind: 'fanart')
-        : videoPosterUrl(item);
+        ? videoPosterUrl(item, kind: 'fanart', size: wantSize)
+        : videoPosterUrl(item, size: wantSize);
     final radius = NasTokens.radiusSm;
     final flags = videoFlagsOf(item);
     final isImage = item.mediaType == 'image';
@@ -588,7 +594,11 @@ class VideoHeroCard extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               NasCoverImage(
-                url: videoPosterUrl(item, kind: 'fanart'),
+                url: videoPosterUrl(
+                  item,
+                  kind: 'fanart',
+                  size: (width * 2).round(),
+                ),
                 fit: BoxFit.cover,
                 headers: videoArtHeaders,
                 fallbackText: item.title,

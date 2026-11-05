@@ -21,7 +21,8 @@ export const AI_DEFAULTS: PhotoAiConfig = {
   activityEnabled: true,
   ocrEnabled: true,
   similarEnabled: false,
-  faceMinShowCount: 10,
+  // 默认 3：对齐参考实现（1~2 张的碎片组是路人 / 噪声，全部铺出来正是「人脸不好用」的主因）
+  faceMinShowCount: 3,
   gpuPrefer: true,
   paused: false,
   tuning: { matchSim: 0.45, minVotes: 2, threads: 3 },
@@ -77,9 +78,9 @@ export function aiJobRunning(key: string): boolean {
  *
  * 为什么用「宽度占比」而不是绝对像素：绝对阈值在不同分辨率下行为完全不同
  * （4000px 的合影里 40px 是小脸，800px 的图里 40px 是正常脸）。
- * 默认 0.02 = 占画面宽度 2% 以下视为背景路人。
+ * 默认 0.015 = 占画面宽度 1.5% 以下视为背景路人（与参考实现同一口径）。
  */
 export const FACE_MIN_WIDTH_RATIO =
   Number(process.env.COLANAS_FACE_MIN_WIDTH_RATIO) > 0
     ? Number(process.env.COLANAS_FACE_MIN_WIDTH_RATIO)
-    : 0.02;
+    : 0.015;

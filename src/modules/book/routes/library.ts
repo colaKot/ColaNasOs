@@ -2,10 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sql } from 'kysely';
 import { secured } from '../../../../kernel/route';
-import { filesRoot, resolveInRoot } from '../../files/fs-root';
+import {
+  absoluteInput,
+  filesRoot,
+  isAbsoluteInput,
+  registerExtraRoot,
+  resolveInRoot,
+} from '../../files/fs-root';
 import { scanBookLibrary, type BookLibraryRow } from '../scan';
 import { Err } from '../../../../kernel/errors';
 import { TAG, newId } from '../util';
+import { applyBookScanSchedule } from '../schedule';
 import type { FastifyInstance } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { BookHelpers } from '../helpers';
@@ -30,9 +37,10 @@ export async function registerBookLibrary(app: FastifyInstance, k: KernelApi, h:
         },
       }),
       async (req, reply) => {
-        const body = (req.body || {}) as { name?: string; path?: string };
+        const body = (req.body || {}) as { name?: string; path?: string; type?: string };
         const name = (body.name || '').trim();
         const raw = (body.path || '').trim();
+        const type = body.type === 'comic' ? 'comic' : 'book';
         if (!name || !raw) {
           return reply.code(400).send({ error: Err.badRequest, message: 'name and path required' });
         }
@@ -40,8 +48,15 @@ export async function registerBookLibrary(app: FastifyInstance, k: KernelApi, h:
         let rel: string;
         let abs: string;
         try {
-          abs = resolveInRoot(filesRoot(), raw);
-          rel = path.relative(filesRoot(), abs).split(path.sep).join('/');
+          // 绝对路径（D:/books、\\host\share\books）直接收：书库来源和音乐 / 影视一样，
+          // 用户想加的是本机哪个目录，不是 files 根下的哪个子目录。
+          if (isAbsoluteInput(raw)) {
+            abs = path.resolve(absoluteInput(raw));
+            rel = abs.split(path.sep).join('/');
+          } else {
+            abs = resolveInRoot(filesRoot(), raw);
+            rel = path.relative(filesRoot(), abs).split(path.sep).join('/');
+          }
         } catch {
           return reply.code(400).send({ error: Err.badRequest, message: 'path escapes root' });
         }
@@ -67,13 +82,91 @@ export async function registerBookLibrary(app: FastifyInstance, k: KernelApi, h:
 
         const id = newId();
         const now = Math.floor(Date.now() / 1000);
+        if (isAbsoluteInput(raw)) registerExtraRoot(absoluteInput(raw));
         await sql`
-          insert into book_libraries (id, name, root_path, created_at, last_scan_at, items)
-          values (${id}, ${name}, ${rel}, ${now}, null, 0)
+          insert into book_libraries (id, name, root_path, type, created_at, last_scan_at, items)
+          values (${id}, ${name}, ${rel}, ${type}, ${now}, null, 0)
         `.execute(k.db);
 
         void h.libWatch.refresh();
-        return { id, name, path: rel, items: 0, createdAt: now, lastScanAt: null };
+        void applyBookScanSchedule(k);
+        return {
+          id,
+          name,
+          path: rel,
+          type,
+          items: 0,
+          scanWhenStart: 0,
+          scanWhenChange: 0,
+          scanIntervalHours: 0,
+          createdAt: now,
+          lastScanAt: null,
+        };
+      },
+    );
+
+    app.post(
+      '/api/v1/book/libraries/update',
+      secured('book:write', {
+        schema: {
+          operationId: 'bookLibraryUpdate',
+          tags: TAG,
+          summary: '改名 / 切换书籍或漫画类型',
+          body: h.ref('BookLibraryUpdateBody'),
+          response: { 200: h.ref('BookLibraryItem'), 404: h.ref('BookErrorResponse') },
+        },
+      }),
+      async (req, reply) => {
+        const body = (req.body || {}) as {
+          id?: string;
+          name?: string;
+          type?: string;
+          scanWhenStart?: boolean;
+          scanWhenChange?: boolean;
+          scanIntervalHours?: number;
+        };
+        const lib = body.id ? await h.loadLibrary(body.id) : null;
+        if (!lib) return reply.code(404).send({ error: Err.notFound, message: 'library not found' });
+
+        const name = body.name !== undefined ? body.name.trim() || lib.name : lib.name;
+        const type = body.type === 'comic' ? 'comic' : body.type === 'book' ? 'book' : (lib.type || 'book');
+        const whenStart =
+          body.scanWhenStart === undefined ? Number(lib.scan_when_start) || 0 : body.scanWhenStart ? 1 : 0;
+        const whenChange =
+          body.scanWhenChange === undefined ? Number(lib.scan_when_change) || 0 : body.scanWhenChange ? 1 : 0;
+        const interval =
+          body.scanIntervalHours === undefined
+            ? Number(lib.scan_interval_hours) || 0
+            : Math.min(24, Math.max(0, Number(body.scanIntervalHours) || 0));
+        await k.db.transaction().execute(async (trx: any) => {
+          await sql`
+            update book_libraries
+               set name = ${name},
+                   type = ${type},
+                   scan_when_start = ${whenStart},
+                   scan_when_change = ${whenChange},
+                   scan_interval_hours = ${interval}
+             where id = ${lib.id}
+          `.execute(trx);
+          if (type !== lib.type) {
+            // 类型是「来源级」的，改来源就同步它下面所有书（列表按 books.type 过滤）
+            await sql`update books set type = ${type} where library_id = ${lib.id}`.execute(trx);
+          }
+        });
+        void applyBookScanSchedule(k);
+        void h.libWatch.refresh();
+        return {
+          id: lib.id,
+          name,
+          path: lib.root_path,
+          type,
+          items: Number(lib.items) || 0,
+          scanWhenStart: whenStart,
+          scanWhenChange: whenChange,
+          scanIntervalHours: interval,
+          createdAt: lib.created_at,
+          lastScanAt: lib.last_scan_at,
+        };
       },
     );
 
@@ -96,7 +189,11 @@ export async function registerBookLibrary(app: FastifyInstance, k: KernelApi, h:
             id: r.id,
             name: r.name,
             path: r.root_path,
+            type: r.type || 'book',
             items: Number(r.items) || 0,
+            scanWhenStart: Number(r.scan_when_start) || 0,
+            scanWhenChange: Number(r.scan_when_change) || 0,
+            scanIntervalHours: Number(r.scan_interval_hours) || 0,
             createdAt: r.created_at,
             lastScanAt: r.last_scan_at,
           })),
@@ -124,6 +221,7 @@ export async function registerBookLibrary(app: FastifyInstance, k: KernelApi, h:
           const ids = sql`select id from books where library_id = ${lib.id}`;
           await sql`delete from book_favorites where book_id in (${ids})`.execute(trx);
           await sql`delete from book_progress where book_id in (${ids})`.execute(trx);
+          await sql`delete from book_history where book_id in (${ids})`.execute(trx);
           await sql`delete from book_archived where book_id in (${ids})`.execute(trx);
           await sql`delete from book_list_items where book_id in (${ids})`.execute(trx);
           await sql`delete from books where library_id = ${lib.id}`.execute(trx);
@@ -131,6 +229,7 @@ export async function registerBookLibrary(app: FastifyInstance, k: KernelApi, h:
         });
 
         void h.libWatch.refresh();
+        void applyBookScanSchedule(k);
         return { ok: true };
       },
     );

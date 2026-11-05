@@ -24,6 +24,7 @@ export async function registerBookShelf(app: FastifyInstance, k: KernelApi, h: B
       async (req, reply) => {
         const q = (req.query || {}) as {
           libraryId?: string;
+          type?: string;
           q?: string;
           format?: string;
           favorite?: string;
@@ -41,6 +42,7 @@ export async function registerBookShelf(app: FastifyInstance, k: KernelApi, h: B
 
         let where = sql`1 = 1`;
         if (q.libraryId) where = sql`${where} and b.library_id = ${q.libraryId}`;
+        if (q.type === 'book' || q.type === 'comic') where = sql`${where} and b.type = ${q.type}`;
         if (q.format) where = sql`${where} and b.format = ${q.format}`;
         if (q.favorite === '1' || q.favorite === 'true') where = sql`${where} and f.book_id is not null`;
         if (q.archived === '1' || q.archived === 'true') where = sql`${where} and a.book_id is not null`;
@@ -121,12 +123,20 @@ export async function registerBookShelf(app: FastifyInstance, k: KernelApi, h: B
           select count(*) as n from book_libraries
         `.execute(k.db);
         const books = await sql<{ n: number }>`select count(*) as n from books`.execute(k.db);
+        const byType = await sql<{ type: string; n: number }>`
+          select type, count(*) as n from books group by type
+        `.execute(k.db);
+        const bookCount =
+          Number(byType.rows.find((r) => (r.type || 'book') === 'book')?.n) || 0;
+        const comicCount = Number(byType.rows.find((r) => r.type === 'comic')?.n) || 0;
         const favs = await sql<{ n: number }>`
           select count(*) as n from book_favorites where owner_id = ${owner}
         `.execute(k.db);
         return {
           libraries: Number(libs.rows[0]?.n) || 0,
           books: Number(books.rows[0]?.n) || 0,
+          bookCount,
+          comicCount,
           favorites: Number(favs.rows[0]?.n) || 0,
         };
       },

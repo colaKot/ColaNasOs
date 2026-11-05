@@ -137,6 +137,24 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '103_file_op_logs',
   // RSS 自动下载规则（命中新条目 → 自动建 PT 订阅）
   '104_rss_rules',
+  // 转码会话的客户端级音频覆盖（响度归一 / 降混双声道）
+  '105_player_audio',
+  // 每日刮削进度快照（待刮 / 已刮 / 无中字无字幕）
+  '106_video_scrape_stats',
+  // 音乐合集（用户自建的音乐目录分组，按 owner 隔离）
+  '107_music_collections',
+  // 书库类型（书籍 / 漫画）+ 阅读历史 + 用户自建图书合集
+  '108_book_type_history',
+  // 书库来源级扫描策略（启动 / 变更 / 定时）
+  '109_book_scan_schedule',
+  // 转码会话音轨选择 + HDR→SDR（audio_index / force_sdr / hdr_to_sdr）
+  '129_player_audio_index',
+  // FTS5 trigram 全文索引（>=3 字符走 MATCH，1-2 字回退 LIKE）
+  '130_video_fts',
+  '131_photo_fts',
+  '132_files_fts',
+  // 照片识别失败记账（避免坏图每轮被重新挑中，形成热循环）
+  '133_photo_ai_skip',
 ]);
 
 export interface OrderCheck {

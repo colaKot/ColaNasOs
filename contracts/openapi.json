@@ -19,7 +19,11 @@
           "id",
           "name",
           "path",
+          "type",
           "items",
+          "scanWhenStart",
+          "scanWhenChange",
+          "scanIntervalHours",
           "createdAt",
           "lastScanAt"
         ],
@@ -34,8 +38,24 @@
             "description": "相对 files 根的 POSIX 路径",
             "type": "string"
           },
+          "type": {
+            "description": "book 书籍 / comic 漫画",
+            "type": "string"
+          },
           "items": {
             "description": "已索引书籍数",
+            "type": "integer"
+          },
+          "scanWhenStart": {
+            "description": "1 启动时自动扫描",
+            "type": "integer"
+          },
+          "scanWhenChange": {
+            "description": "1 目录变化时自动扫描",
+            "type": "integer"
+          },
+          "scanIntervalHours": {
+            "description": "定时扫描间隔（小时，0 = 关闭）",
             "type": "integer"
           },
           "createdAt": {
@@ -77,6 +97,68 @@
             "minLength": 1,
             "description": "相对 files 根的目录",
             "type": "string"
+          },
+          "type": {
+            "default": "book",
+            "description": "book 书籍 / comic 漫画",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "book"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "comic"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "BookLibraryUpdateBody": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "maxLength": 64,
+            "type": "string"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "book"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "comic"
+                ]
+              }
+            ]
+          },
+          "scanWhenStart": {
+            "type": "boolean"
+          },
+          "scanWhenChange": {
+            "type": "boolean"
+          },
+          "scanIntervalHours": {
+            "minimum": 0,
+            "maximum": 24,
+            "type": "integer"
           }
         }
       },
@@ -156,6 +238,7 @@
           "id",
           "libraryId",
           "path",
+          "type",
           "title",
           "author",
           "language",
@@ -179,6 +262,10 @@
           },
           "path": {
             "description": "相对 files 根",
+            "type": "string"
+          },
+          "type": {
+            "description": "book 书籍 / comic 漫画",
             "type": "string"
           },
           "title": {
@@ -238,6 +325,23 @@
         "properties": {
           "libraryId": {
             "type": "string"
+          },
+          "type": {
+            "description": "只看书籍或只看漫画",
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "book"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "comic"
+                ]
+              }
+            ]
           },
           "q": {
             "maxLength": 200,
@@ -329,6 +433,8 @@
         "required": [
           "libraries",
           "books",
+          "bookCount",
+          "comicCount",
           "favorites"
         ],
         "properties": {
@@ -336,6 +442,15 @@
             "type": "integer"
           },
           "books": {
+            "description": "全部书籍 + 漫画",
+            "type": "integer"
+          },
+          "bookCount": {
+            "description": "书籍数",
+            "type": "integer"
+          },
+          "comicCount": {
+            "description": "漫画数",
             "type": "integer"
           },
           "favorites": {
@@ -702,6 +817,24 @@
           }
         }
       },
+      "BookListRenameBody": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "maxLength": 64,
+            "type": "string"
+          }
+        }
+      },
       "BookListRefBody": {
         "type": "object",
         "required": [
@@ -742,6 +875,170 @@
             "items": {
               "$ref": "#/components/schemas/BookItem"
             }
+          }
+        }
+      },
+      "BookHistoryQuery": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "minimum": 1,
+            "maximum": 200,
+            "default": 60,
+            "type": "integer"
+          }
+        }
+      },
+      "BookCacheStatsResponse": {
+        "type": "object",
+        "required": [
+          "files",
+          "bytes"
+        ],
+        "properties": {
+          "files": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          }
+        }
+      },
+      "BookCacheClearResponse": {
+        "type": "object",
+        "required": [
+          "files",
+          "bytes"
+        ],
+        "properties": {
+          "files": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          }
+        }
+      },
+      "BookUserCollection": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "paths",
+          "books",
+          "coverId",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "books": {
+            "description": "这些目录下已索引的书数",
+            "type": "integer"
+          },
+          "coverId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "BookUserCollectionListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BookUserCollection"
+            }
+          }
+        }
+      },
+      "BookUserCollectionBody": {
+        "type": "object",
+        "required": [
+          "name",
+          "paths"
+        ],
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "maxLength": 64,
+            "type": "string"
+          },
+          "paths": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 1024,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "BookUserCollectionUpdateBody": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "maxLength": 64,
+            "type": "string"
+          },
+          "paths": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 1024,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "BookUserCollectionItemsQuery": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "limit": {
+            "minimum": 1,
+            "maximum": 500,
+            "default": 200,
+            "type": "integer"
           }
         }
       },
@@ -996,6 +1293,7 @@
         "type": "object",
         "required": [
           "apiKeyConfigured",
+          "apiKey",
           "baseUrl",
           "language",
           "imageBase"
@@ -1003,6 +1301,10 @@
         "properties": {
           "apiKeyConfigured": {
             "type": "boolean"
+          },
+          "apiKey": {
+            "description": "TMDB API Key 明文",
+            "type": "string"
           },
           "baseUrl": {
             "type": "string"
@@ -1500,7 +1802,7 @@
         "type": "object",
         "properties": {
           "path": {
-            "description": "目录相对路径，缺省为根",
+            "description": "目录路径：相对文件根（缺省为根），或绝对路径（D:/Photos、\\\\host\\share）",
             "type": "string"
           },
           "cursor": {
@@ -1535,6 +1837,65 @@
           "nextCursor": {
             "type": "string",
             "nullable": true
+          }
+        }
+      },
+      "FilesRootItem": {
+        "type": "object",
+        "required": [
+          "path",
+          "label",
+          "kind"
+        ],
+        "properties": {
+          "path": {
+            "description": "POSIX 风格绝对路径，如 C:/ 或 \\\\host\\share",
+            "type": "string"
+          },
+          "label": {
+            "description": "展示名，如 C:",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "drive"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "home"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "share"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "FilesRootsResponse": {
+        "type": "object",
+        "required": [
+          "home",
+          "roots"
+        ],
+        "properties": {
+          "home": {
+            "description": "文件根（相对路径以此为基准）",
+            "type": "string"
+          },
+          "roots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilesRootItem"
+            }
           }
         }
       },
@@ -3087,6 +3448,40 @@
           }
         }
       },
+      "MusicCacheStatsResponse": {
+        "type": "object",
+        "required": [
+          "files",
+          "bytes"
+        ],
+        "properties": {
+          "files": {
+            "description": "缓存的音频文件数",
+            "type": "integer"
+          },
+          "bytes": {
+            "description": "缓存占用字节数",
+            "type": "integer"
+          }
+        }
+      },
+      "MusicCacheClearResponse": {
+        "type": "object",
+        "required": [
+          "removed",
+          "bytes"
+        ],
+        "properties": {
+          "removed": {
+            "description": "删掉的文件数",
+            "type": "integer"
+          },
+          "bytes": {
+            "description": "释放的字节数",
+            "type": "integer"
+          }
+        }
+      },
       "MusicScanBody": {
         "type": "object",
         "properties": {
@@ -3634,6 +4029,130 @@
           }
         }
       },
+      "MusicCollection": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "paths",
+          "tracks",
+          "coverTrackId",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tracks": {
+            "description": "这些目录下已索引的曲目数",
+            "type": "integer"
+          },
+          "coverTrackId": {
+            "description": "第一首带封面的曲目 id（用它请求 /music/cover）",
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "MusicCollectionListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MusicCollection"
+            }
+          }
+        }
+      },
+      "MusicCollectionBody": {
+        "type": "object",
+        "required": [
+          "name",
+          "paths"
+        ],
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "maxLength": 64,
+            "type": "string"
+          },
+          "paths": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 1024,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MusicCollectionUpdateBody": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "maxLength": 64,
+            "type": "string"
+          },
+          "paths": {
+            "minItems": 1,
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 1024,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "MusicCollectionItemsQuery": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "limit": {
+            "minimum": 1,
+            "maximum": 500,
+            "default": 200,
+            "type": "integer"
+          }
+        }
+      },
       "MusicPlaylist": {
         "type": "object",
         "required": [
@@ -3746,6 +4265,24 @@
         "properties": {
           "playlistId": {
             "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "MusicPlaylistRenameBody": {
+        "type": "object",
+        "required": [
+          "playlistId",
+          "name"
+        ],
+        "properties": {
+          "playlistId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "maxLength": 64,
             "type": "string"
           }
         }
@@ -4231,6 +4768,43 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PhotoCalendarMonth"
+            }
+          }
+        }
+      },
+      "PhotoYearCover": {
+        "type": "object",
+        "required": [
+          "year",
+          "count",
+          "coverPath"
+        ],
+        "properties": {
+          "year": {
+            "minimum": 1970,
+            "maximum": 2200,
+            "type": "integer"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "coverPath": {
+            "description": "该年代表图的相对路径；没有任何照片时为 null",
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "PhotoYearCoversResponse": {
+        "type": "object",
+        "required": [
+          "years"
+        ],
+        "properties": {
+          "years": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhotoYearCover"
             }
           }
         }
@@ -6130,6 +6704,8 @@
           "label",
           "status",
           "pending",
+          "done",
+          "total",
           "percent"
         ],
         "properties": {
@@ -6144,6 +6720,12 @@
             "type": "string"
           },
           "pending": {
+            "type": "integer"
+          },
+          "done": {
+            "type": "integer"
+          },
+          "total": {
             "type": "integer"
           },
           "percent": {
@@ -6577,6 +7159,46 @@
           }
         }
       },
+      "PhotoAiScanBody": {
+        "type": "object",
+        "properties": {
+          "force": {
+            "default": false,
+            "description": "已识别过的也重算",
+            "type": "boolean"
+          },
+          "ocr": {
+            "default": false,
+            "type": "boolean"
+          },
+          "activity": {
+            "default": false,
+            "type": "boolean"
+          },
+          "limit": {
+            "minimum": 1,
+            "maximum": 200,
+            "default": 50,
+            "type": "integer"
+          }
+        }
+      },
+      "PhotoAiScanResponse": {
+        "type": "object",
+        "required": [
+          "jobId",
+          "reused"
+        ],
+        "properties": {
+          "jobId": {
+            "type": "string"
+          },
+          "reused": {
+            "description": "已有同参数任务在跑时复用",
+            "type": "boolean"
+          }
+        }
+      },
       "PhotoAiAnalyzeBody": {
         "type": "object",
         "properties": {
@@ -6857,6 +7479,14 @@
           },
           "count": {
             "type": "integer"
+          },
+          "coverId": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverPath": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -9501,6 +10131,29 @@
           }
         }
       },
+      "SystemDbCompactResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "beforeBytes",
+          "afterBytes",
+          "freedBytes"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "beforeBytes": {
+            "type": "integer"
+          },
+          "afterBytes": {
+            "type": "integer"
+          },
+          "freedBytes": {
+            "type": "integer"
+          }
+        }
+      },
       "SystemUpdateCheckResponse": {
         "type": "object",
         "required": [
@@ -9583,6 +10236,52 @@
             "minLength": 1,
             "maxLength": 200000,
             "type": "string"
+          }
+        }
+      },
+      "SystemLogsResponse": {
+        "type": "object",
+        "required": [
+          "file",
+          "size",
+          "updatedAt",
+          "lines",
+          "truncated"
+        ],
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "time",
+                "level",
+                "msg"
+              ],
+              "properties": {
+                "time": {
+                  "type": "string"
+                },
+                "level": {
+                  "type": "string"
+                },
+                "msg": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "truncated": {
+            "type": "boolean"
           }
         }
       },
@@ -10698,6 +11397,11 @@
             "maximum": 500,
             "default": 100,
             "type": "integer"
+          },
+          "excludeActors": {
+            "maxLength": 2000,
+            "description": "要排除的演员原名，用 `|` 分隔（服务端按 actorKey 归一 + 标题/文件名兜底匹配；命中则整组不返回）",
+            "type": "string"
           }
         }
       },
@@ -10708,6 +11412,7 @@
           "title",
           "path",
           "size",
+          "mtime",
           "durationMs",
           "width",
           "height",
@@ -10726,6 +11431,8 @@
           "dolbyAtmos",
           "ltx",
           "isJp",
+          "actorKeys",
+          "part",
           "suggestedKeep"
         ],
         "properties": {
@@ -10739,6 +11446,9 @@
             "type": "string"
           },
           "size": {
+            "type": "integer"
+          },
+          "mtime": {
             "type": "integer"
           },
           "durationMs": {
@@ -10803,6 +11513,17 @@
           },
           "isJp": {
             "type": "boolean"
+          },
+          "actorKeys": {
+            "type": "array",
+            "items": {
+              "description": "演员名归一化键（NFO）",
+              "type": "string"
+            }
+          },
+          "part": {
+            "description": "分片标记，空串表示完整版",
+            "type": "string"
           },
           "suggestedKeep": {
             "type": "boolean"
@@ -10887,6 +11608,10 @@
               "minLength": 1,
               "type": "string"
             }
+          },
+          "permanent": {
+            "description": "true = 直接永久删除（不进回收站，不可恢复）；默认 false",
+            "type": "boolean"
           }
         }
       },
@@ -11272,6 +11997,116 @@
           },
           "expiresInSec": {
             "type": "integer"
+          },
+          "compat": {
+            "description": "片源兼容性信息；查不到列时 needTranscode=false",
+            "type": "object",
+            "required": [
+              "needTranscode",
+              "reasons",
+              "videoCodec",
+              "audioCodec",
+              "container",
+              "width",
+              "height",
+              "is4k"
+            ],
+            "properties": {
+              "needTranscode": {
+                "description": "true = 建议走 HLS 转码而非直链",
+                "type": "boolean"
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "dolbyVision"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "hdr10"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "hdr10plus"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "hlg"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "hevc"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "av1"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "10bit"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "eac3"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "truehd"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "atmos"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "videoCodec": {
+                "type": "string",
+                "nullable": true
+              },
+              "audioCodec": {
+                "type": "string",
+                "nullable": true
+              },
+              "container": {
+                "type": "string",
+                "nullable": true
+              },
+              "width": {
+                "type": "integer",
+                "nullable": true
+              },
+              "height": {
+                "type": "integer",
+                "nullable": true
+              },
+              "is4k": {
+                "type": "boolean"
+              }
+            }
           }
         }
       },
@@ -12277,7 +13112,7 @@
         ],
         "properties": {
           "apiKey": {
-            "description": "留空表示沿用「发现页」的 Key",
+            "description": "明文回传（自用 NAS：用户要能看见自己配的是哪个 Key）；留空表示沿用「发现页」的 Key",
             "type": "string"
           },
           "language": {
@@ -12345,6 +13180,12 @@
                 ]
               }
             ]
+          },
+          "size": {
+            "minimum": 0,
+            "maximum": 2048,
+            "description": "大于 0 时返回缩略图（走 thumbs 缓存），列表页用它省 SMB 带宽",
+            "type": "integer"
           }
         }
       },
@@ -12532,24 +13373,90 @@
             "type": "string"
           },
           "preset": {
-            "default": "web720",
+            "default": "1080p_3m",
             "anyOf": [
               {
                 "type": "string",
                 "enum": [
-                  "web480"
+                  "original"
                 ]
               },
               {
                 "type": "string",
                 "enum": [
-                  "web720"
+                  "2160p_15m"
                 ]
               },
               {
                 "type": "string",
                 "enum": [
-                  "web1080"
+                  "1440p_10m"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "1440p_8m"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "1440p_5m"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "1440p_3m"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "1080p_8m"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "1080p_5m"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "1080p_3m"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "1080p_2m"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "720p_3m"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "720p_2m"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "720p_1m"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "480p_1m"
                 ]
               }
             ]
@@ -12580,6 +13487,23 @@
           "subtitle": {
             "description": "同目录外挂字幕文件名（如 S01E01.zh.srt）；给定时烧录进画面",
             "type": "string"
+          },
+          "audioNormalize": {
+            "description": "响度归一（优先于库级开关）：true = 强制开，false = 强制关",
+            "type": "boolean"
+          },
+          "audioDownmix": {
+            "description": "降混双声道：5.1 / 7.1 压成 stereo",
+            "type": "boolean"
+          },
+          "audioIndex": {
+            "minimum": 0,
+            "description": "选第几条音轨转码（默认 0）",
+            "type": "integer"
+          },
+          "forceSdr": {
+            "description": "强制 HDR→SDR；不传时由服务端按片源标记自动判定",
+            "type": "boolean"
           }
         }
       },
@@ -12683,6 +13607,14 @@
           },
           "updatedAt": {
             "type": "integer"
+          },
+          "audioIndex": {
+            "description": "转码选用的音轨序号",
+            "type": "integer"
+          },
+          "hdrToSdr": {
+            "description": "是否做 HDR→SDR 转换",
+            "type": "boolean"
           }
         }
       },
@@ -15307,6 +16239,52 @@
         }
       }
     },
+    "/api/v1/book/libraries/update": {
+      "post": {
+        "operationId": "bookLibraryUpdate",
+        "summary": "改名 / 切换书籍或漫画类型",
+        "tags": [
+          "book"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookLibraryUpdateBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookLibraryItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/book/libraries/remove": {
       "post": {
         "operationId": "bookLibraryRemove",
@@ -15414,6 +16392,28 @@
             "in": "query",
             "name": "libraryId",
             "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "book"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "comic"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "description": "只看书籍或只看漫画"
           },
           {
             "schema": {
@@ -15857,6 +16857,58 @@
         "responses": {
           "200": {
             "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/book/cache": {
+      "get": {
+        "operationId": "bookCacheStats",
+        "summary": "封面 / PDF 页图缓存占用",
+        "tags": [
+          "book"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookCacheStatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/book/cache/clear": {
+      "post": {
+        "operationId": "bookCacheClear",
+        "summary": "清空封面 / PDF 页图缓存",
+        "tags": [
+          "book"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookCacheClearResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -16383,6 +17435,62 @@
         }
       }
     },
+    "/api/v1/book/lists/rename": {
+      "post": {
+        "operationId": "bookListRename",
+        "summary": "重命名自定义列表",
+        "tags": [
+          "book"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookListRenameBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookListItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/book/lists/remove": {
       "post": {
         "operationId": "bookListRemove",
@@ -16568,6 +17676,281 @@
         }
       }
     },
+    "/api/v1/book/history": {
+      "get": {
+        "operationId": "bookHistory",
+        "summary": "阅读历史（最近读的在最前）",
+        "tags": [
+          "book"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 60,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/book/history/clear": {
+      "post": {
+        "operationId": "bookHistoryClear",
+        "summary": "清空当前用户的阅读历史（不影响阅读进度）",
+        "tags": [
+          "book"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/book/user-collections": {
+      "get": {
+        "operationId": "bookUserCollectionList",
+        "summary": "当前用户的图书合集（含书数与封面）",
+        "tags": [
+          "book"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookUserCollectionListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "bookUserCollectionCreate",
+        "summary": "新建图书合集",
+        "tags": [
+          "book"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookUserCollectionBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookUserCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/book/user-collections/update": {
+      "post": {
+        "operationId": "bookUserCollectionUpdate",
+        "summary": "改名 / 换目录",
+        "tags": [
+          "book"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookUserCollectionUpdateBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookUserCollection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/book/user-collections/remove": {
+      "post": {
+        "operationId": "bookUserCollectionRemove",
+        "summary": "删除合集（不动书与索引）",
+        "tags": [
+          "book"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BookLibraryRemoveBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/book/user-collections/items": {
+      "get": {
+        "operationId": "bookUserCollectionItems",
+        "summary": "合集里的书",
+        "tags": [
+          "book"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 200,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BookErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/discover/douban": {
       "get": {
         "operationId": "discoverDouban",
@@ -16715,6 +18098,42 @@
       }
     },
     "/api/v1/discover/douban/settings": {
+      "get": {
+        "operationId": "discoverDoubanSettingsGet",
+        "summary": "读取豆瓣配置（Cookie 明文回传）",
+        "tags": [
+          "discover"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "cookie",
+                    "configured"
+                  ],
+                  "properties": {
+                    "cookie": {
+                      "type": "string"
+                    },
+                    "configured": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "operationId": "discoverDoubanSettings",
         "summary": "设置豆瓣 Cookie（可选）",
@@ -16758,6 +18177,64 @@
                   "properties": {
                     "ok": {
                       "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/discover/douban/test": {
+      "post": {
+        "operationId": "discoverDoubanTest",
+        "summary": "测试豆瓣连通性（用当前 Cookie）",
+        "tags": [
+          "discover"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cookie": {
+                    "maxLength": 4096,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "message",
+                    "latencyMs"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "latencyMs": {
+                      "type": "integer"
                     }
                   }
                 }
@@ -17388,7 +18865,7 @@
             "in": "query",
             "name": "path",
             "required": false,
-            "description": "目录相对路径，缺省为根"
+            "description": "目录路径：相对文件根（缺省为根），或绝对路径（D:/Photos、\\\\host\\share）"
           },
           {
             "schema": {
@@ -17423,6 +18900,32 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/FilesListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/files/roots": {
+      "get": {
+        "operationId": "filesRoots",
+        "summary": "可浏览的根（盘符 / 文件根 / 来源根）",
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FilesRootsResponse"
                 }
               }
             }
@@ -20480,7 +21983,7 @@
     "/api/v1/music/favorites": {
       "get": {
         "operationId": "musicFavorites",
-        "summary": "我的收藏（按收藏时间倒序）",
+        "summary": "我的收藏（按收藏时间倒序，返回完整曲目）",
         "tags": [
           "music"
         ],
@@ -20495,7 +21998,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MusicStateList"
+                  "$ref": "#/components/schemas/MusicListResponse"
                 }
               }
             }
@@ -20542,7 +22045,7 @@
     "/api/v1/music/history": {
       "get": {
         "operationId": "musicHistory",
-        "summary": "播放历史（按时间倒序）",
+        "summary": "播放历史（按时间倒序，返回完整曲目）",
         "tags": [
           "music"
         ],
@@ -20570,7 +22073,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MusicHistoryList"
+                  "$ref": "#/components/schemas/MusicListResponse"
                 }
               }
             }
@@ -20743,6 +22246,132 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MusicErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/music/scan/enqueue": {
+      "post": {
+        "operationId": "musicScanEnqueue",
+        "summary": "入队扫描（立即返回任务 id；进度与失败记录见 /tasks）",
+        "tags": [
+          "music"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MusicScanBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "tasks"
+                  ],
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "libraryId",
+                          "taskId",
+                          "reused"
+                        ],
+                        "properties": {
+                          "libraryId": {
+                            "type": "string"
+                          },
+                          "taskId": {
+                            "type": "string"
+                          },
+                          "reused": {
+                            "description": "true = 已有同库扫描在排队/运行",
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/music/cache": {
+      "get": {
+        "operationId": "musicCacheStats",
+        "summary": "音乐转码缓存占用",
+        "tags": [
+          "music"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicCacheStatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/music/cache/clear": {
+      "post": {
+        "operationId": "musicCacheClear",
+        "summary": "清空音乐转码缓存",
+        "tags": [
+          "music"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicCacheClearResponse"
                 }
               }
             }
@@ -21640,6 +23269,52 @@
         }
       }
     },
+    "/api/v1/music/playlists/rename": {
+      "post": {
+        "operationId": "musicPlaylistRename",
+        "summary": "重命名歌单",
+        "tags": [
+          "music"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MusicPlaylistRenameBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicOkResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/music/playlists/delete": {
       "post": {
         "operationId": "musicPlaylistDelete",
@@ -21759,6 +23434,216 @@
             }
           },
           "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/music/collections": {
+      "get": {
+        "operationId": "musicCollectionList",
+        "summary": "当前用户的音乐合集（含曲目数与封面）",
+        "tags": [
+          "music"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicCollectionListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "musicCollectionCreate",
+        "summary": "新建音乐合集",
+        "tags": [
+          "music"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MusicCollectionBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/music/collections/update": {
+      "post": {
+        "operationId": "musicCollectionUpdate",
+        "summary": "改名 / 换目录",
+        "tags": [
+          "music"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MusicCollectionUpdateBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicCollection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/music/collections/remove": {
+      "post": {
+        "operationId": "musicCollectionRemove",
+        "summary": "删除合集（不动磁盘文件与曲库索引）",
+        "tags": [
+          "music"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MusicLibraryRemoveBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/music/collections/items": {
+      "get": {
+        "operationId": "musicCollectionItems",
+        "summary": "合集里的曲目",
+        "tags": [
+          "music"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 200,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MusicListResponse"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -22550,6 +24435,52 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PhotoAiAnalyzeResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoAiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/ai/scan": {
+      "post": {
+        "operationId": "photoAiScan",
+        "summary": "整库后台识别（入队，重启后可续跑）",
+        "tags": [
+          "photo"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoAiScanBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoAiScanResponse"
                 }
               }
             }
@@ -26569,6 +28500,143 @@
         }
       }
     },
+    "/api/v1/photo/exif": {
+      "get": {
+        "operationId": "photoExif",
+        "summary": "照片属性与 EXIF（按需解析文件头；无 EXIF 字段返回 null）",
+        "tags": [
+          "photo"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "path",
+                    "size",
+                    "width",
+                    "height",
+                    "mime",
+                    "takenAt",
+                    "camera",
+                    "make",
+                    "lens",
+                    "software",
+                    "orientation",
+                    "iso",
+                    "fNumber",
+                    "exposureTimeSec",
+                    "focalLengthMm",
+                    "latitude",
+                    "longitude"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "height": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "mime": {
+                      "type": "string"
+                    },
+                    "takenAt": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "camera": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "make": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "lens": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "software": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "orientation": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "iso": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "fNumber": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "exposureTimeSec": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "focalLengthMm": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "latitude": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "longitude": {
+                      "type": "number",
+                      "nullable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/photo/search": {
       "get": {
         "operationId": "photoSearch",
@@ -26819,6 +28887,32 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PhotoCalendarResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/year-covers": {
+      "get": {
+        "operationId": "photoYearCovers",
+        "summary": "每年一张「有人像」的代表图（年视图卡片封面）",
+        "tags": [
+          "photo"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoYearCoversResponse"
                 }
               }
             }
@@ -33669,7 +35763,8 @@
                     ]
                   },
                   "error": {
-                    "maxLength": 500,
+                    "maxLength": 2000,
+                    "description": "本轮错误摘要（多条文件失败会拼接，客户端按 1800 截断）",
                     "type": "string"
                   }
                 }
@@ -33867,6 +35962,15 @@
                           },
                           "finishedAt": {
                             "type": "integer"
+                          },
+                          "failed": {
+                            "description": "本轮失败的文件数",
+                            "type": "integer"
+                          },
+                          "error": {
+                            "description": "本轮错误摘要（失败时非空）",
+                            "type": "string",
+                            "nullable": true
                           }
                         }
                       }
@@ -35205,6 +37309,42 @@
         }
       }
     },
+    "/api/v1/system/db/compact": {
+      "post": {
+        "operationId": "systemDbCompact",
+        "summary": "数据库碎片整理（VACUUM，重写数据文件回收空洞空间）",
+        "tags": [
+          "system"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemDbCompactResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/system/restart": {
       "post": {
         "operationId": "systemRestart",
@@ -35250,6 +37390,173 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SystemUpdateCheckResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/logs": {
+      "get": {
+        "operationId": "systemLogs",
+        "summary": "服务端日志尾部（logs/kernel.log，按时间正序返回最后 N 行）",
+        "tags": [
+          "system"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "lines",
+            "required": false
+          },
+          {
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "file",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "all"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "warn"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "error"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "info"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "description": "warn = warn+error（含 fatal）；error = 仅 error；info = 其余。筛选在截断**之前**做"
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemLogsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/client-log": {
+      "post": {
+        "operationId": "systemClientLog",
+        "summary": "上报一条客户端日志（前端错误 / 警告）",
+        "tags": [
+          "system"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "level",
+                  "message"
+                ],
+                "properties": {
+                  "level": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "error"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "warn"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "info"
+                        ]
+                      }
+                    ]
+                  },
+                  "message": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "route": {
+                    "maxLength": 300,
+                    "description": "接口 / 页面 / 操作",
+                    "type": "string"
+                  },
+                  "detail": {
+                    "maxLength": 4000,
+                    "description": "堆栈或上下文",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
                 }
               }
             }
@@ -36470,6 +38777,77 @@
         }
       }
     },
+    "/api/v1/video/scan/enqueue": {
+      "post": {
+        "operationId": "videoScanEnqueue",
+        "summary": "入队扫描（立即返回任务 id；进度与失败记录见 /tasks）",
+        "tags": [
+          "video"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "libraryId": {
+                    "minLength": 1,
+                    "description": "缺省 = 入队所有库",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "tasks"
+                  ],
+                  "properties": {
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "libraryId",
+                          "taskId",
+                          "reused"
+                        ],
+                        "properties": {
+                          "libraryId": {
+                            "type": "string"
+                          },
+                          "taskId": {
+                            "type": "string"
+                          },
+                          "reused": {
+                            "description": "true = 已有同库扫描在排队/运行",
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/video/scan": {
       "post": {
         "operationId": "videoScan",
@@ -36509,6 +38887,250 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VideoErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/video/scrape/progress": {
+      "get": {
+        "operationId": "videoScrapeProgress",
+        "summary": "刮削进度（每日快照，含按库明细；最新的在前）",
+        "tags": [
+          "video"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 120,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "days",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "latest",
+                    "items"
+                  ],
+                  "properties": {
+                    "latest": {
+                      "type": "object",
+                      "required": [
+                        "day",
+                        "total",
+                        "scraped",
+                        "unscraped",
+                        "withC",
+                        "withSub",
+                        "noCNoSub",
+                        "byLibrary",
+                        "createdAt"
+                      ],
+                      "properties": {
+                        "day": {
+                          "description": "本地日期 YYYY-MM-DD",
+                          "type": "string"
+                        },
+                        "total": {
+                          "description": "视频条目总数",
+                          "type": "integer"
+                        },
+                        "scraped": {
+                          "description": "已刮削（有 nfo / tmdb 来源）",
+                          "type": "integer"
+                        },
+                        "unscraped": {
+                          "description": "待刮削（无 NFO）",
+                          "type": "integer"
+                        },
+                        "withC": {
+                          "description": "文件名带 -C 中字标记",
+                          "type": "integer"
+                        },
+                        "withSub": {
+                          "description": "有外挂字幕",
+                          "type": "integer"
+                        },
+                        "noCNoSub": {
+                          "description": "没带 C 又没有字幕（可补字幕的量）",
+                          "type": "integer"
+                        },
+                        "byLibrary": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "name",
+                              "total",
+                              "scraped",
+                              "unscraped",
+                              "noCNoSub"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "total": {
+                                "type": "integer"
+                              },
+                              "scraped": {
+                                "type": "integer"
+                              },
+                              "unscraped": {
+                                "type": "integer"
+                              },
+                              "noCNoSub": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        },
+                        "createdAt": {
+                          "type": "integer"
+                        }
+                      },
+                      "nullable": true
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "day",
+                          "total",
+                          "scraped",
+                          "unscraped",
+                          "withC",
+                          "withSub",
+                          "noCNoSub",
+                          "byLibrary",
+                          "createdAt"
+                        ],
+                        "properties": {
+                          "day": {
+                            "description": "本地日期 YYYY-MM-DD",
+                            "type": "string"
+                          },
+                          "total": {
+                            "description": "视频条目总数",
+                            "type": "integer"
+                          },
+                          "scraped": {
+                            "description": "已刮削（有 nfo / tmdb 来源）",
+                            "type": "integer"
+                          },
+                          "unscraped": {
+                            "description": "待刮削（无 NFO）",
+                            "type": "integer"
+                          },
+                          "withC": {
+                            "description": "文件名带 -C 中字标记",
+                            "type": "integer"
+                          },
+                          "withSub": {
+                            "description": "有外挂字幕",
+                            "type": "integer"
+                          },
+                          "noCNoSub": {
+                            "description": "没带 C 又没有字幕（可补字幕的量）",
+                            "type": "integer"
+                          },
+                          "byLibrary": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "id",
+                                "name",
+                                "total",
+                                "scraped",
+                                "unscraped",
+                                "noCNoSub"
+                              ],
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "total": {
+                                  "type": "integer"
+                                },
+                                "scraped": {
+                                  "type": "integer"
+                                },
+                                "unscraped": {
+                                  "type": "integer"
+                                },
+                                "noCNoSub": {
+                                  "type": "integer"
+                                }
+                              }
+                            }
+                          },
+                          "createdAt": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/video/scrape/progress/refresh": {
+      "post": {
+        "operationId": "videoScrapeProgressRefresh",
+        "summary": "立即重算一次刮削进度（入队，不阻塞请求）",
+        "tags": [
+          "video"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "taskId"
+                  ],
+                  "properties": {
+                    "taskId": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -37709,6 +40331,100 @@
         }
       }
     },
+    "/api/v1/video/actor/avatars": {
+      "post": {
+        "operationId": "videoActorAvatars",
+        "summary": "按演员名批量取头像与档案（详情页演职人员区用）",
+        "tags": [
+          "video"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "names"
+                ],
+                "properties": {
+                  "names": {
+                    "maxItems": 64,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "libraryId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "name",
+                          "key",
+                          "avatarUrl",
+                          "heightCm",
+                          "birthday",
+                          "birthplace",
+                          "itemCount"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "key": {
+                            "type": "string"
+                          },
+                          "avatarUrl": {
+                            "type": "string"
+                          },
+                          "heightCm": {
+                            "type": "integer"
+                          },
+                          "birthday": {
+                            "type": "string"
+                          },
+                          "birthplace": {
+                            "type": "string"
+                          },
+                          "itemCount": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/video/poster": {
       "get": {
         "operationId": "videoPoster",
@@ -37967,6 +40683,69 @@
         }
       }
     },
+    "/api/v1/video/subtitle/fetch-library": {
+      "post": {
+        "operationId": "videoSubtitleFetchLibrary",
+        "summary": "按库补全字幕（入队 video.subtitle.fetch）",
+        "tags": [
+          "video"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id"
+                ],
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "description": "影视库 id",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "taskId",
+                    "reused"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "taskId": {
+                      "type": "string"
+                    },
+                    "reused": {
+                      "description": "true = 已有同库任务在跑，没重复入队",
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/video/collections": {
       "get": {
         "operationId": "videoCollectionList",
@@ -38068,6 +40847,78 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VideoOkResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/video/collections/merge": {
+      "post": {
+        "operationId": "videoCollectionMerge",
+        "summary": "合并两个合集（来源的影片并入目标，来源合集被删除）",
+        "tags": [
+          "video"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "sourceId",
+                  "targetId"
+                ],
+                "properties": {
+                  "sourceId": {
+                    "minLength": 1,
+                    "description": "被合并（将被删除）的合集",
+                    "type": "string"
+                  },
+                  "targetId": {
+                    "minLength": 1,
+                    "description": "接收影片并保留的合集",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoErrorResponse"
                 }
               }
             }
@@ -38279,6 +41130,16 @@
             "in": "query",
             "name": "limit",
             "required": false
+          },
+          {
+            "schema": {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "excludeActors",
+            "required": false,
+            "description": "要排除的演员原名，用 `|` 分隔（服务端按 actorKey 归一 + 标题/文件名兜底匹配；命中则整组不返回）"
           }
         ],
         "security": [
@@ -38293,6 +41154,89 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VideoDuplicatesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/video/actors": {
+      "get": {
+        "operationId": "videoActors",
+        "summary": "演员候选（从 NFO 演员聚合，供查重页排除指定演员）",
+        "tags": [
+          "video"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "maxLength": 80,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "description": "名字片段，忽略大小写"
+          },
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items",
+                    "total"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "name",
+                          "key",
+                          "count"
+                        ],
+                        "properties": {
+                          "name": {
+                            "description": "展示用原名",
+                            "type": "string"
+                          },
+                          "key": {
+                            "description": "归一化键（与查重条目的 actorKeys 同一套）",
+                            "type": "string"
+                          },
+                          "count": {
+                            "description": "有几个条目含这位演员",
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    },
+                    "total": {
+                      "description": "库里的演员总数（未按 q 过滤）",
+                      "type": "integer"
+                    }
+                  }
                 }
               }
             }
@@ -38329,6 +41273,55 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VideoDeleteItemsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/video/items/delete-task": {
+      "post": {
+        "operationId": "videoItemsDeleteTask",
+        "summary": "删除视频（后台任务，返回 taskId，用 /tasks/:id 看进度）",
+        "tags": [
+          "video"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VideoDeleteItemsBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "taskId",
+                    "total"
+                  ],
+                  "properties": {
+                    "taskId": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "description": "本次要删的条目数",
+                      "type": "integer"
+                    }
+                  }
                 }
               }
             }
@@ -38770,6 +41763,65 @@
         }
       }
     },
+    "/api/v1/video/tmdb/test": {
+      "post": {
+        "operationId": "videoTmdbTest",
+        "summary": "测试 TMDB 连通性（用当前配置的 Key）",
+        "tags": [
+          "video"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "apiKey": {
+                    "maxLength": 200,
+                    "description": "不传 = 用已保存的 Key",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "message",
+                    "latencyMs"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "latencyMs": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/video/art": {
       "get": {
         "operationId": "videoArt",
@@ -38808,6 +41860,17 @@
             "in": "query",
             "name": "kind",
             "required": false
+          },
+          {
+            "schema": {
+              "minimum": 0,
+              "maximum": 2048,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "description": "大于 0 时返回缩略图（走 thumbs 缓存），列表页用它省 SMB 带宽"
           }
         ],
         "security": [
@@ -38818,6 +41881,296 @@
         "responses": {
           "200": {
             "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/video/settings": {
+      "get": {
+        "operationId": "videoSettingsGet",
+        "summary": "影视设置（字幕抓取 + 转码）",
+        "tags": [
+          "video"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "subtitle",
+                    "transcode"
+                  ],
+                  "properties": {
+                    "subtitle": {
+                      "type": "object",
+                      "required": [
+                        "preExtract",
+                        "defaultLang",
+                        "javUser",
+                        "javPass",
+                        "javConfigured",
+                        "assrtToken",
+                        "assrtConfigured",
+                        "openSubtitlesKey",
+                        "openSubtitlesConfigured",
+                        "xunlei",
+                        "dailyEnable",
+                        "dailyHour"
+                      ],
+                      "properties": {
+                        "preExtract": {
+                          "type": "boolean"
+                        },
+                        "defaultLang": {
+                          "type": "string"
+                        },
+                        "javUser": {
+                          "type": "string"
+                        },
+                        "javPass": {
+                          "type": "string"
+                        },
+                        "javConfigured": {
+                          "description": "密码是否已存（同 javPass 非空）",
+                          "type": "boolean"
+                        },
+                        "assrtToken": {
+                          "description": "Assrt Token，明文回显",
+                          "type": "string"
+                        },
+                        "assrtConfigured": {
+                          "type": "boolean"
+                        },
+                        "openSubtitlesKey": {
+                          "description": "OpenSubtitles Key，明文回显",
+                          "type": "string"
+                        },
+                        "openSubtitlesConfigured": {
+                          "type": "boolean"
+                        },
+                        "xunlei": {
+                          "type": "boolean"
+                        },
+                        "dailyEnable": {
+                          "type": "boolean"
+                        },
+                        "dailyHour": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "transcode": {
+                      "type": "object",
+                      "required": [
+                        "hwaccel",
+                        "tempDir",
+                        "effectiveTempDir"
+                      ],
+                      "properties": {
+                        "hwaccel": {
+                          "type": "string"
+                        },
+                        "tempDir": {
+                          "type": "string"
+                        },
+                        "effectiveTempDir": {
+                          "description": "实际生效目录（配置无效时回落）",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "videoSettingsSet",
+        "summary": "写影视设置（只传要改的段 / 字段）",
+        "tags": [
+          "video"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "subtitle": {
+                    "type": "object",
+                    "properties": {
+                      "preExtract": {
+                        "type": "boolean"
+                      },
+                      "defaultLang": {
+                        "maxLength": 20,
+                        "type": "string"
+                      },
+                      "javUser": {
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      "javPass": {
+                        "maxLength": 200,
+                        "description": "空字符串 = 不修改",
+                        "type": "string"
+                      },
+                      "assrtToken": {
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "openSubtitlesKey": {
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "xunlei": {
+                        "type": "boolean"
+                      },
+                      "dailyEnable": {
+                        "type": "boolean"
+                      },
+                      "dailyHour": {
+                        "minimum": 0,
+                        "maximum": 23,
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "transcode": {
+                    "type": "object",
+                    "properties": {
+                      "hwaccel": {
+                        "description": "auto / nvenc / qsv / amf / cpu",
+                        "type": "string"
+                      },
+                      "tempDir": {
+                        "maxLength": 400,
+                        "description": "空 = 用默认缓存目录",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/video/subtitle/test-sources": {
+      "post": {
+        "operationId": "videoSubtitleSourcesTest",
+        "summary": "测试各字幕源链接（连通性，不下载）",
+        "tags": [
+          "video"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "assrtToken": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "openSubtitlesKey": {
+                    "maxLength": 200,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "sources"
+                  ],
+                  "properties": {
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "ok",
+                          "status",
+                          "latencyMs",
+                          "message"
+                        ],
+                        "properties": {
+                          "id": {
+                            "description": "jav / assrt / openSub / xunlei",
+                            "type": "string"
+                          },
+                          "ok": {
+                            "type": "boolean"
+                          },
+                          "status": {
+                            "type": "integer"
+                          },
+                          "latencyMs": {
+                            "type": "integer"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

@@ -45,7 +45,10 @@ class VideoListView extends StatefulWidget {
 }
 
 class _VideoListViewState extends State<VideoListView> {
-  static const _pageSize = 60;
+  /// 首屏只拉 4 行（6 列 × 4 = 24）；滚到底再续一页。
+  /// 一次 60 条时，SMB 库上要连着出 60 张「首帧海报」，每张都要从网络盘读几个 MB，
+  /// 打开列表能卡十几秒（2026-11-03 反馈）。宁可多拉几页，也别让首屏等图。
+  static const _pageSize = 24;
 
   final _scroll = ScrollController();
   final _searchCtrl = TextEditingController();
@@ -105,7 +108,8 @@ class _VideoListViewState extends State<VideoListView> {
   void _onScroll() {
     if (_loadingMore || _nextCursor == null) return;
     if (!_scroll.hasClients) return;
-    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 480) {
+    // 提前一屏（约 2 行）预取：够顺滑，又不会一进页面就囤几页数据
+    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 240) {
       _load(more: true);
     }
   }
@@ -213,7 +217,7 @@ class _VideoListViewState extends State<VideoListView> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -232,9 +236,7 @@ class _VideoListViewState extends State<VideoListView> {
     );
     if (ok != true || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
-    messenger.showSnackBar(
-      SnackBar(content: Text(tr('common.loading'))),
-    );
+    NasSnack.showOn(messenger, tr('common.loading'));
     try {
       final res = await ApiSession.instance.client.videoScrapeBatch(
         body: VideoScrapeBatchBody(
@@ -243,20 +245,19 @@ class _VideoListViewState extends State<VideoListView> {
           limit: 300,
         ),
       );
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(tr('video.scrape.batchDone', {
-            'scraped': '${res.scraped}',
-            'skipped': '${res.skipped}',
-            'notfound': '${res.notfound}',
-            'unavailable': '${res.unavailable}',
-          })),
-          duration: const Duration(seconds: 5),
-        ),
+      NasSnack.showOn(
+        messenger,
+        tr('video.scrape.batchDone', {
+          'scraped': '${res.scraped}',
+          'skipped': '${res.skipped}',
+          'notfound': '${res.notfound}',
+          'unavailable': '${res.unavailable}',
+        }),
+        duration: const Duration(seconds: 5),
       );
       await _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -421,6 +422,7 @@ class _VideoListViewState extends State<VideoListView> {
       ),
     );
     if (picked == null) return;
+    if (!mounted) return;
     setState(() {
       _sortBy = picked.$1;
       _sortOrder = picked.$2;
@@ -472,13 +474,13 @@ class _VideoListViewState extends State<VideoListView> {
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          FilterChip(
+                          NasChip(
                             label: Text(tr('video.list.filter.all')),
                             selected: target.isEmpty,
                             onSelected: (_) => setLocal(target.clear),
                           ),
                           for (final v in list)
-                            FilterChip(
+                            NasChip(
                               label: Text(v),
                               selected: target.contains(v),
                               onSelected: (on) => setLocal(() {
@@ -490,7 +492,7 @@ class _VideoListViewState extends State<VideoListView> {
                               }),
                             ),
                           if (emptyLabel != null)
-                            FilterChip(
+                            NasChip(
                               label: Text(emptyLabel),
                               selected: target.contains('0'),
                               onSelected: (on) => setLocal(() {
@@ -537,22 +539,22 @@ class _VideoListViewState extends State<VideoListView> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        FilterChip(
+                        NasChip(
                           label: Text(tr('video.list.filter.scraped')),
                           selected: _scrapedFilter == true,
                           onSelected: (on) => setLocal(() => _scrapedFilter = on ? true : null),
                         ),
-                        FilterChip(
+                        NasChip(
                           label: Text(tr('video.list.filter.unscraped')),
                           selected: _scrapedFilter == false,
                           onSelected: (on) => setLocal(() => _scrapedFilter = on ? false : null),
                         ),
-                        FilterChip(
+                        NasChip(
                           label: Text(tr('video.list.filter.watched')),
                           selected: _watched == true,
                           onSelected: (on) => setLocal(() => _watched = on ? true : null),
                         ),
-                        FilterChip(
+                        NasChip(
                           label: Text(tr('video.list.filter.unwatched')),
                           selected: _watched == false,
                           onSelected: (on) => setLocal(() => _watched = on ? false : null),
@@ -592,41 +594,114 @@ class _VideoListViewState extends State<VideoListView> {
     await _load();
   }
 
+  /// 海报大小：固定 150 高的紧凑弹窗。
+  ///
+  /// 为什么不用 `AlertDialog`：M3 的 AlertDialog 自带 title/content/actions 三段 padding
+  /// 与 IntrinsicWidth，在窄屏上会被撑成整屏高度，里面只有一个滑块，看着像"空面板"
+  /// （用户反馈「这个设置界面太大了」）。这里直接用 `Dialog` + 固定尺寸自己排版：
+  /// 标题行（含百分比 / 重置）、滑块行、按钮行，一共 150 高，宽度仍是 360。
   Future<void> _openScaleSheet() async {
     // 上限收窄：原来 1.8 倍会把海报撑到两百多像素，整页显得过大
     var value = _scale.clamp(0.7, 1.15);
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('video.list.posterSize')),
-        content: SizedBox(
+      builder: (ctx) => Dialog(
+        child: SizedBox(
           width: 360,
+          height: 150,
           child: StatefulBuilder(
-            builder: (ctx, setLocal) => Row(
-              children: [
-                const Icon(Icons.photo_size_select_small, size: 18),
-                Expanded(
-                  child: Slider(
-                    value: value,
-                    min: 0.7,
-                    max: 1.15,
-                    divisions: 9,
-                    label: '${(value * 100).round()}%',
-                    onChanged: (v) => setLocal(() => value = v),
-                  ),
+            builder: (ctx, setLocal) {
+              final pct = (value * 100).round();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(18, 12, 12, 10),
+                child: Column(
+                  children: [
+                    // 标题行：图标 + 标题 + 当前百分比 + 重置
+                    // 不写死行高：系统字号放大时由内容撑开，靠下面的 Expanded 吸收差额
+                    Row(
+                      children: [
+                        const Icon(Icons.aspect_ratio, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            tr('video.list.posterSize'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Text(
+                          '$pct%',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(ctx).colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        TextButton(
+                          onPressed: () => setLocal(() => value = 1.0),
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(0, 28),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text(tr('video.list.reset'), style: const TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                    // 滑块行：小图标 —— 滑轨 —— 大图标
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(Icons.photo_size_select_small,
+                              size: 18, color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+                          Expanded(
+                            child: SliderTheme(
+                              data: SliderTheme.of(ctx).copyWith(
+                                trackHeight: 3,
+                                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                              ),
+                              child: Slider(
+                                value: value,
+                                min: 0.7,
+                                max: 1.15,
+                                divisions: 9,
+                                label: '$pct%',
+                                onChanged: (v) => setLocal(() => value = v),
+                              ),
+                            ),
+                          ),
+                          Icon(Icons.photo_size_select_large,
+                              size: 18, color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+                        ],
+                      ),
+                    ),
+                    // 按钮行
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: Text(tr('common.cancel')),
+                        ),
+                        const SizedBox(width: 6),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: Text(tr('common.ok')),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                const Icon(Icons.photo_size_select_large, size: 18),
-              ],
-            ),
+              );
+            },
           ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('common.cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('common.ok'))),
-        ],
       ),
     );
     if (ok != true) return;
+    if (!mounted) return;
     setState(() => _scale = value);
     await SettingsStore.instance.setInt(_keyScale, (value * 100).round());
   }
@@ -670,7 +745,10 @@ class _VideoListViewState extends State<VideoListView> {
           itemBuilder: (context, i) {
             final item = _items[i];
             final selected = _selected.contains(item.id);
-            return VideoPosterCard(
+            // 桌面 / Web 右键：与长按菜单同一批动作
+            return NasContextMenuRegion(
+              entries: _videoMenuEntries(item),
+              child: VideoPosterCard(
               item: item,
               width: itemWidth,
               showFanart: _fanart,
@@ -699,6 +777,7 @@ class _VideoListViewState extends State<VideoListView> {
                 );
               },
               onMore: () => _showCardMenu(item),
+              ),
             );
           },
         );
@@ -763,6 +842,57 @@ class _VideoListViewState extends State<VideoListView> {
       ),
     );
     if (action == null || !mounted) return;
+    await _videoAction(action, item);
+  }
+
+  /// 卡片右键菜单（桌面 / Web）：与长按菜单同一批动作
+  List<NasMenuEntry> _videoMenuEntries(VideoItem item) => [
+    NasMenuEntry(
+      label: tr(
+        item.watched
+            ? 'video.action.markUnwatched'
+            : (item.series != null
+                  ? 'video.action.markTvWatched'
+                  : 'video.action.markWatched'),
+      ),
+      icon: item.watched ? Icons.remove_done : Icons.done_all,
+      onSelected: () => _videoAction('watched', item),
+    ),
+    NasMenuEntry(
+      label: tr('video.list.selected', {'count': '0'}),
+      icon: Icons.checklist,
+      onSelected: () => _videoAction('select', item),
+    ),
+    NasMenuEntry(
+      label: tr('video.action.locateFile'),
+      icon: Icons.open_in_new,
+      onSelected: () => _videoAction('detail', item),
+    ),
+    const NasMenuEntry.divider(),
+    NasMenuEntry(
+      label: tr('video.action.scrape'),
+      icon: Icons.auto_awesome_outlined,
+      onSelected: () => _videoAction('scrape', item),
+    ),
+    NasMenuEntry(
+      label: tr('video.action.matchTmdb'),
+      icon: Icons.search,
+      onSelected: () => _videoAction('match', item),
+    ),
+    NasMenuEntry(
+      label: tr('video.action.scrapeCleanup'),
+      icon: Icons.delete_outline,
+      onSelected: () => _videoAction('cleanup', item),
+    ),
+    NasMenuEntry(
+      label: tr('video.action.excludeScrape'),
+      icon: Icons.block,
+      onSelected: () => _videoAction('exclude', item),
+    ),
+  ];
+
+  /// 长按菜单与右键菜单共用的动作分发（原来内联在 _showCardMenu 里）
+  Future<void> _videoAction(String action, VideoItem item) async {
     switch (action) {
       case 'watched':
         await _toggleWatched([item.id], !item.watched);
@@ -795,12 +925,11 @@ class _VideoListViewState extends State<VideoListView> {
             body: VideoScrapeCleanupBody(id: item.id),
           );
           if (!mounted) return;
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(tr('video.scrape.cleaned'))));
+          NasSnack.show(context, tr('video.scrape.cleaned'));
           await _load();
         } catch (e) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+          NasSnack.show(context, '$e');
         }
       case 'exclude':
         try {
@@ -808,11 +937,10 @@ class _VideoListViewState extends State<VideoListView> {
             body: VideoMatchNfoBody(id: item.id, match: false),
           );
           if (!mounted) return;
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(tr('video.scrape.excluded'))));
+          NasSnack.show(context, tr('video.scrape.excluded'));
         } catch (e) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+          NasSnack.show(context, '$e');
         }
     }
   }
@@ -827,7 +955,7 @@ class _VideoListViewState extends State<VideoListView> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 

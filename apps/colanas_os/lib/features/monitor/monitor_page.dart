@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../shell/app_widgets.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
+import '../../shell/mobile_frame.dart';
 
 /// 系统监控：CPU / 内存 / 磁盘，5 秒自动刷新。
 class MonitorPage extends StatefulWidget {
@@ -66,11 +68,10 @@ class _MonitorPageState extends State<MonitorPage> {
     final perCore = ((cpu?['perCore'] as List?) ?? const []).toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(tr('ui.monitor.001')),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
-        ],
+      appBar: nasPageAppBar(
+        context,
+        title: tr('ui.monitor.001'),
+        actions: [NasRefreshButton(onPressed: _load)],
       ),
       body: _error != null && d == null
           ? Center(

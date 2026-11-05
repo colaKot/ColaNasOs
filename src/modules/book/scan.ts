@@ -1,7 +1,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { sql } from 'kysely';
-import { filesRoot, resolveInRoot } from '../files/fs-root';
+import { filesRoot, resolveAnyPath, resolveInRoot } from '../files/fs-root';
 import { walkFiles } from '../files/walk';
 import { mapLimit } from '../media/concurrency';
 import { extensionOf, isBookFile, readBookMeta, titleOf } from './metadata';
@@ -17,6 +17,10 @@ export interface BookLibraryRow {
   id: string;
   name: string;
   root_path: string;
+  type: string;
+  scan_when_start: number;
+  scan_when_change: number;
+  scan_interval_hours: number;
   created_at: number;
   last_scan_at: number | null;
   items: number;
@@ -61,7 +65,9 @@ export async function scanBookLibrary(
   const root = filesRoot();
   let rootAbs: string;
   try {
-    rootAbs = resolveInRoot(root, lib.root_path);
+    // root_path 可能是绝对路径（书库来源允许任意本机目录 / SMB 共享），
+    // 相对路径仍按 files 根解析
+    rootAbs = resolveAnyPath(root, lib.root_path);
   } catch {
     return { books: 0, added: 0, updated: 0, skipped: 0, parsed: 0, missing: 0, pruned: 0 };
   }
@@ -135,14 +141,15 @@ export async function scanBookLibrary(
         const m = p.meta;
         await sql`
           insert into books
-            (id, library_id, rel_path, title, author, language, publisher, format,
+            (id, library_id, rel_path, type, title, author, language, publisher, format,
              page_count, has_cover, size, mtime, created_at)
           values
             (${`${lib.id}_${Buffer.from(p.rel).toString('base64url')}`}, ${lib.id}, ${p.fullRel},
-             ${m.title || titleOf(p.rel)}, ${m.author}, ${m.language}, ${m.publisher},
-             ${extensionOf(p.rel)}, ${m.pageCount}, ${m.hasCover ? 1 : 0},
+             ${lib.type || 'book'}, ${m.title || titleOf(p.rel)}, ${m.author}, ${m.language},
+             ${m.publisher}, ${extensionOf(p.rel)}, ${m.pageCount}, ${m.hasCover ? 1 : 0},
              ${p.size}, ${p.mtime}, ${nowSec})
           on conflict(library_id, rel_path) do update set
+            type = excluded.type,
             title = excluded.title,
             author = excluded.author,
             language = excluded.language,

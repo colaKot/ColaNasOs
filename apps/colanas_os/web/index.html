@@ -24,10 +24,12 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="ColaNasOs">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png?v=2">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <!-- Favicon
+       换图标时把 ?v=N 的 N 加一：Chrome 对 favicon 的缓存非常顽固，
+       同 URL 换了文件也不会刷新，带上版本串才会重新取。 -->
+  <link rel="icon" type="image/png" href="favicon.png?v=2"/>
 
   <title>ColaNasOs</title>
   <link rel="manifest" href="manifest.json">
@@ -70,6 +72,24 @@
         });
       });
     }
+  </script>
+  <!--
+    右键交给应用自己的菜单（相册 / 文件 / 音乐 / 影视都有右键菜单）。
+    浏览器默认菜单会盖住 Flutter 画出来的菜单，所以默认拦掉；
+    输入框与文本域保留默认行为，否则右键粘贴、拼写检查都没了。
+  -->
+  <script>
+    window.addEventListener(
+      'contextmenu',
+      function (e) {
+        var t = e.target;
+        var tag = t && t.tagName ? t.tagName.toUpperCase() : '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        if (t && t.isContentEditable) return;
+        e.preventDefault();
+      },
+      true,
+    );
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

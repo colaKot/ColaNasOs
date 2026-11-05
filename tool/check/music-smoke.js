@@ -313,6 +313,12 @@ function makeAudio(out, opts) {
     ? await app.inject({ method: 'GET', url: streamUrl.url, headers: { range: 'bytes=0-4' } })
     : { statusCode: 0 };
   check('stream_url_playable', r.statusCode === 200 && direct.statusCode === 206, `url=${r.statusCode} play=${direct.statusCode}`);
+  // 与影视同一个口径：有效期必须远大于「一首歌缓冲 + 暂停」的时长
+  check(
+    'stream_url_ttl_long_enough',
+    Number(streamUrl.expiresInSec) >= 6 * 3600,
+    'expiresInSec=' + streamUrl.expiresInSec,
+  );
 
   const noAuth = await app.inject({
     method: 'GET',

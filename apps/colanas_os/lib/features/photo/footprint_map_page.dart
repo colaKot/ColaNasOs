@@ -291,8 +291,7 @@ class _FootprintMapPageState extends State<FootprintMapPage> {
       setState(() => _server = server);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('photo.mapSwitchFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('photo.mapSwitchFailed', {'error': '$e'}));
     }
   }
 
@@ -321,16 +320,12 @@ class _FootprintMapPageState extends State<FootprintMapPage> {
         _loadingJourney = false;
       });
       if (res.points == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(tr('photo.map.journeyEmpty'))),
-        );
+        NasSnack.show(context, tr('photo.map.journeyEmpty'));
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingJourney = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('photo.map.journeyFailed', {'error': '$e'}))),
-      );
+      NasSnack.show(context, tr('photo.map.journeyFailed', {'error': '$e'}));
     }
   }
 
@@ -432,6 +427,9 @@ class _FootprintMapPageState extends State<FootprintMapPage> {
                     initialZoom: 5,
                     minZoom: 2,
                     maxZoom: 18,
+                    // 首屏必须自己取一次：`onPositionChanged` 只在位置**真的变了**
+                    // 时回调，刚进页面不动鼠标就永远没有数据（2026-11-04 反馈）。
+                    onMapReady: () => _onMapChanged(_map.camera, false),
                     onPositionChanged: _onMapChanged,
                   ),
                   children: [
@@ -459,9 +457,15 @@ class _FootprintMapPageState extends State<FootprintMapPage> {
                             height: _markerDiameterForTier(_tier),
                             child: _ClusterMarker(
                               count: cluster.photoCount,
-                              photoUrl: cluster.seed.path.isEmpty || _zoom < 6
+                              // 之前 zoom<6 一律不给图，而初始 zoom 正好是 5 ——
+                              // 只平移不缩放时整页都是灰色占位（2026-11-04 反馈）。
+                              // 小倍率用更小的缩略图控制流量。
+                              photoUrl: cluster.seed.path.isEmpty
                                   ? null
-                                  : _thumbUrl(cluster.seed.path, size: 160),
+                                  : _thumbUrl(
+                                      cluster.seed.path,
+                                      size: _zoom < 6 ? 120 : 200,
+                                    ),
                               takenAt: cluster.seed.takenAt,
                               size: _markerDiameterForTier(_tier),
                               headers: ApiSession.instance.authHeaders,

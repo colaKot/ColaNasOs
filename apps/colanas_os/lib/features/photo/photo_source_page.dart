@@ -1,5 +1,6 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import '../../shell/app_widgets.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
@@ -65,16 +66,12 @@ class _PhotoSourcePageState extends State<PhotoSourcePage> {
       final res = await ApiSession.instance.client.photoScan(
         body: PhotoScanBody(libraryId: libraryId, force: true),
       );
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            '${tr('photo.source.scanAll')}: +${res.added} / ${res.skipped}',
-          ),
-        ),
-      );
+      NasSnack.showOn(messenger, 
+            '${tr('common.scanAll')}: +${res.added} / ${res.skipped}',
+          );
       await _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.toString())));
+      NasSnack.showOn(messenger, e.toString());
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -92,22 +89,17 @@ class _PhotoSourcePageState extends State<PhotoSourcePage> {
         body: PhotoLibraryCreateBody(name: name.isEmpty ? picked : name, path: picked),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('photo.source.added'))));
+      NasSnack.show(context, tr('photo.source.added'));
       await _load();
       await _scan(libraryId: created.id);
     } catch (e) {
       if (!mounted) return;
       final text = e.toString();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
+      NasSnack.show(context, 
             text.contains('409') || text.contains('UNIQUE')
                 ? tr('photo.source.exists')
                 : text,
-          ),
-        ),
-      );
+          );
     }
   }
 
@@ -137,8 +129,7 @@ class _PhotoSourcePageState extends State<PhotoSourcePage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      NasSnack.show(context, e.toString());
     }
   }
 
@@ -218,7 +209,7 @@ class _PhotoSourcePageState extends State<PhotoSourcePage> {
                     style: TextStyle(fontSize: NasTokens.fontCaption),
                   ),
                 ),
-                DropdownButton<int>(
+                NasDropdown<int>(
                   value: hours.contains(policy.verifyHours)
                       ? policy.verifyHours
                       : 6,
@@ -324,7 +315,7 @@ class _PhotoSourcePageState extends State<PhotoSourcePage> {
               TextButton.icon(
                 onPressed: _busy ? null : () => _scan(),
                 icon: const Icon(Icons.sync, size: 18),
-                label: Text(tr('photo.source.scanAll')),
+                label: Text(tr('common.scanAll')),
               ),
             ],
           ),
@@ -383,9 +374,9 @@ class _PhotoSourcePageState extends State<PhotoSourcePage> {
                             ),
                           ),
                         ),
-                        IconButton(
+                        NasRefreshButton(
+                          size: 18,
                           tooltip: tr('photo.source.refresh'),
-                          icon: const Icon(Icons.refresh, size: 18),
                           onPressed: _busy
                               ? null
                               : () => _scan(libraryId: item.id),

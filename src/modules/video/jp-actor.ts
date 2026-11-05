@@ -135,6 +135,12 @@ async function fetchText(
 function stripTags(html: string): string {
   return html
     .replace(/<[^>]+>/g, ' ')
+    // wiki 标记：`{{JPN}}・[[東京都]][[新宿区]]` → `東京都新宿区`
+    // 之前只去 HTML 标签，出生地原样留在库里，详情页显示成 `{{JPN}}・[[愛知県]]`（2026-11-04）
+    .replace(/\{\{[^{}]*\}\}/g, ' ')
+    .replace(/\[\[([^\]|]*\|)?([^\]]*)\]\]/g, '$2')
+    .replace(/'{2,}/g, '')
+    .replace(/[・\s]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -174,8 +180,17 @@ export function parseWikiProfile(raw: string): Partial<ActorProfile> {
     out.hips = Number(three[3]);
   }
 
-  const birthday = /生年月日\s*[=＝]\s*([0-9]{4}年[0-9]{1,2}月[0-9]{1,2}日)/.exec(raw);
-  if (birthday) out.birthday = birthday[1];
+  // 生日：优先完整日期；很多个人条目只有 `生年 = 1996`（如 桃乃木かな），
+  // 之前只认 `生年月日`、解析不出来就整项留空，看起来像「没有详情」。
+  const birthday =
+    /生年月日\s*[=＝]\s*([0-9]{4}年[0-9]{1,2}月[0-9]{1,2}日)/.exec(raw) ??
+    /生年月日\s*[=＝]\s*([0-9]{4}-[0-9]{1,2}-[0-9]{1,2})/.exec(raw);
+  if (birthday) {
+    out.birthday = birthday[1];
+  } else {
+    const bornYear = /生年\s*[=＝]\s*([0-9]{4})/.exec(raw);
+    if (bornYear) out.birthday = `${bornYear[1]}年`;
+  }
 
   const birthplace = /出身地\s*[=＝]\s*([^\n|]+)/.exec(raw);
   if (birthplace) out.birthplace = stripTags(birthplace[1]).slice(0, 40);
@@ -190,6 +205,15 @@ export interface FetchActorOptions {
   /** JavDB 地址（可配置） */
   javdbBase?: string;
   wikiBase?: string;
+  /**
+   * 是否查 JavDB（默认 true）。
+   *
+   * 批量补档案时传 false：JavDB 在多数国内网络下不可达，`get()` 要等满
+   * timeout（8s）才失败，1177 个演员就是 2.6 小时纯等待；而**头像本来就能从
+   * 本地 NFO 的 `<actor><thumb>` 拿到**（见 jp-links.backfillActorThumbs），
+   * 批量这趟只需要维基的身高 / 生日 / 出身地。
+   */
+  withJavdb?: boolean;
 }
 
 /**
@@ -234,7 +258,9 @@ export async function fetchActorProfile(
   const sources: string[] = [];
   let avatarUrl: string | null = null;
 
-  const search = await get(`${javdbBase}/search?f=actor&q=${encodeURIComponent(name)}`);
+  const search = opts.withJavdb === false
+    ? null
+    : await get(`${javdbBase}/search?f=actor&q=${encodeURIComponent(name)}`);
   if (search) {
     const picked = pickExactActor(search, name);
     if (picked) {

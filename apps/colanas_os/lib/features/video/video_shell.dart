@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/scan_refresh.dart';
 import '../../core/session.dart';
 import '../../shell/app_nav_shell.dart';
 import '../../shell/nav_spec_adapter.dart';
@@ -11,6 +12,8 @@ import 'video_image_library_page.dart';
 import 'video_jp_pages.dart';
 import 'video_media_browser_page.dart';
 import 'video_page.dart';
+import 'video_app_settings_page.dart';
+import 'video_client_settings_page.dart';
 import 'video_settings_pages.dart';
 import 'video_smart_albums_page.dart';
 
@@ -30,10 +33,27 @@ class VideoShellPage extends StatefulWidget {
 class _VideoShellPageState extends State<VideoShellPage> {
   List<VideoLibraryItem> _libraries = const [];
 
+  /// SMB 状态翻转时 +1，让当前页按新 key 重建（内容随离线过滤重新拉一次）
+  int _epoch = 0;
+  void Function()? _offSmb;
+
   @override
   void initState() {
     super.initState();
     _loadLibraries();
+    // SMB 库离线时服务端把内容过滤掉，探到在线后要自己「长出来」。
+    // 只订阅翻转事件（服务端每 20s 心跳，但只在状态变化时发），不做定时刷新。
+    _offSmb = listenSmbOnline(() {
+      if (!mounted) return;
+      _loadLibraries();
+      setState(() => _epoch++);
+    });
+  }
+
+  @override
+  void dispose() {
+    _offSmb?.call();
+    super.dispose();
   }
 
   Future<void> _loadLibraries() async {
@@ -85,7 +105,7 @@ class _VideoShellPageState extends State<VideoShellPage> {
         ],
       },
       conditions: {if (_hasJpLibrary) 'hasJpLibrary'},
-      content: _content,
+      content: (key) => KeyedSubtree(key: ValueKey('$key#$_epoch'), child: _content(key)),
     );
   }
 
@@ -134,11 +154,10 @@ class _VideoShellPageState extends State<VideoShellPage> {
         return const VideoSmartAlbumsPage();
       case 'settings.library':
         return VideoLibrarySettingsPage(onLibrariesChanged: _loadLibraries);
-      case 'settings.scrape':
-        return const VideoScrapeSettingsPage();
-      case 'settings.other':
-      case 'settings':
-        return const VideoSettingsPage();
+      case 'settings.app':
+        return const VideoAppSettingsPage();
+      case 'settings.client':
+        return const VideoClientSettingsPage();
       case 'duplicates':
         return const VideoDuplicatesPage();
       // 未列出的菜单项落到这个默认页
@@ -191,35 +210,34 @@ class _VideoSeriesPageState extends State<VideoSeriesPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const NasLoading();
-    if (_error != null) return NasErrorState(message: _error!, onRetry: _load);
-    if (_items.isEmpty) {
-      return ListView(
-        children: [
-          NasEmptyState(
-            title: tr('video.nav.emptyFiles'),
-            icon: Icons.video_library_outlined,
-          ),
-        ],
-      );
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceSm),
-      itemCount: _items.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, i) {
-        final s = _items[i];
-        return ListTile(
-          leading: const Icon(Icons.video_library_outlined),
-          title: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(
-            tr('video.seasonsEpisodes', {
-              'seasons': '${s.seasons}',
-              'episodes': '${s.episodes}',
-            }),
-          ),
-        );
-      },
+    return NasAsyncView<List<VideoSeriesItem>>(
+      loading: _loading,
+      error: _error,
+      onRetry: _load,
+      data: _items,
+      isEmpty: (items) => items.isEmpty,
+      empty: NasEmptyState(
+        title: tr('video.nav.emptyFiles'),
+        icon: Icons.video_library_outlined,
+      ),
+      builder: (items) => ListView.separated(
+        padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceSm),
+        itemCount: items.length,
+        separatorBuilder: (_, _) => const Divider(height: 1),
+        itemBuilder: (context, i) {
+          final s = items[i];
+          return ListTile(
+            leading: const Icon(Icons.video_library_outlined),
+            title: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: Text(
+              tr('video.seasonsEpisodes', {
+                'seasons': '${s.seasons}',
+                'episodes': '${s.episodes}',
+              }),
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -305,15 +323,11 @@ class _VideoHistoryPageState extends State<VideoHistoryPage> {
         body: VideoProgressClearBody(onlyFinished: onlyFinished),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(tr('video.history.cleared', {'n': '${res.cleared}'})),
-        ),
-      );
+      NasSnack.show(context, tr('video.history.cleared', {'n': '${res.cleared}'}));
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -337,7 +351,7 @@ class _VideoHistoryPageState extends State<VideoHistoryPage> {
               ])
                 Padding(
                   padding: const EdgeInsets.only(right: NasTokens.spaceXs),
-                  child: ChoiceChip(
+                  child: NasChip(
                     visualDensity: VisualDensity.compact,
                     label: Text(tr(key)),
                     selected: _state == value,
@@ -470,8 +484,7 @@ class _VideoFavoritesPageState extends State<VideoFavoritesPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      NasSnack.show(context, e.toString());
     }
   }
 
@@ -535,7 +548,7 @@ class _VideoFavoritesPageState extends State<VideoFavoritesPage> {
                           Align(
                             alignment: Alignment.centerRight,
                             child: IconButton(
-                              tooltip: tr('photo.nav.favorites'),
+                              tooltip: tr('nav.favorites'),
                               icon: const Icon(Icons.favorite, size: 16),
                               onPressed: () => _remove(item),
                             ),
@@ -635,120 +648,6 @@ class _VideoFavoritesPageState extends State<VideoFavoritesPage> {
             },
           ),
         ),
-      ],
-    );
-  }
-}
-
-/// 设置：影视库（新建 / 删除 / 扫描 / SMB 来源）
-class VideoSettingsPage extends StatefulWidget {
-  const VideoSettingsPage({super.key});
-
-  @override
-  State<VideoSettingsPage> createState() => _VideoSettingsPageState();
-}
-
-class _VideoSettingsPageState extends State<VideoSettingsPage> {
-  bool _loading = true;
-  bool _busy = false;
-  String? _error;
-  List<VideoLibraryItem> _libs = const [];
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final res = await ApiSession.instance.client.videoLibraryList();
-      if (!mounted) return;
-      setState(() {
-        _libs = res.items;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _scan(String id) async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ApiSession.instance.client.videoScan(
-        body: VideoScanBody(libraryId: id),
-      );
-      messenger.showSnackBar(SnackBar(content: Text(tr('video.nav.scanDone'))));
-      await _load();
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.toString())));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) return const NasLoading();
-    if (_error != null) return NasErrorState(message: _error!, onRetry: _load);
-    return ListView(
-      padding: const EdgeInsets.all(NasTokens.spaceLg),
-      children: [
-        Text(
-          tr('video.nav.settingsHint'),
-          style: TextStyle(
-            fontSize: NasTokens.fontCaption,
-            color: context.nasTextSecondary,
-          ),
-        ),
-        const SizedBox(height: NasTokens.spaceMd),
-        for (final lib in _libs)
-          NasCard(
-            padding: const EdgeInsets.all(NasTokens.spaceSm),
-            child: Row(
-              children: [
-                const Icon(Icons.video_library_outlined),
-                const SizedBox(width: NasTokens.spaceSm),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        lib.name,
-                        style: TextStyle(
-                          fontSize: NasTokens.fontBody,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        '${lib.libType} · ${lib.items}',
-                        style: TextStyle(
-                          fontSize: NasTokens.fontCaption,
-                          color: context.nasTextSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: _busy ? null : () => _scan(lib.id),
-                  icon: const Icon(Icons.sync, size: 16),
-                  label: Text(tr('photo.source.scanAll')),
-                ),
-              ],
-            ),
-          ),
       ],
     );
   }

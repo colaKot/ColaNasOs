@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { filesRoot, httpError, relativeInRoot, sha256File } from './fs-root';
+import { httpError, resolveWriteTarget, sha256File } from './fs-root';
 import type { Logger } from './list';
 
 /** 单分片请求体上限 */
@@ -57,8 +57,7 @@ async function uploadedIndexes(dir: string): Promise<number[]> {
 
 /** POST /api/v1/files/check：秒传判定 + 已上传分片列表（断点续传） */
 export async function checkHandler(dataDir: string, body: CheckBody) {
-  const root = filesRoot();
-  const { abs, rel } = relativeInRoot(root, body.path);
+  const { abs, rel } = resolveWriteTarget(body.path);
 
   let exists: boolean;
   try {
@@ -82,8 +81,7 @@ export async function checkHandler(dataDir: string, body: CheckBody) {
 
 /** POST /api/v1/files/chunk：落单分片（先写 .tmp 再 rename，避免半片） */
 export async function chunkHandler(dataDir: string, q: ChunkQuery, payload: unknown) {
-  const root = filesRoot();
-  const { rel } = relativeInRoot(root, q.path);
+  const { rel } = resolveWriteTarget(q.path);
 
   const index = Number(q.index);
   const total = q.total === undefined ? undefined : Number(q.total);
@@ -125,8 +123,7 @@ async function applyMtime(abs: string, mtimeMs?: number): Promise<void> {
 
 /** POST /api/v1/files/merge：按序拼接 → 校验 → 原子落盘（幂等） */
 export async function mergeHandler(dataDir: string, body: MergeBody, log: Logger) {
-  const root = filesRoot();
-  const { abs, rel } = relativeInRoot(root, body.path);
+  const { abs, rel } = resolveWriteTarget(body.path);
 
   const total = Number(body.total);
   if (!Number.isInteger(total) || total < 0) throw httpError(400, 'invalid total');

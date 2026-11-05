@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
+import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
 import '../../shell/app_nav_shell.dart';
@@ -58,11 +59,7 @@ class _DiscoverShellPageState extends State<DiscoverShellPage> {
             alignment: Alignment.centerRight,
             child: Padding(
               padding: const EdgeInsets.only(right: NasTokens.spaceXs),
-              child: IconButton(
-                tooltip: tr('ui.accounts.021'),
-                icon: const Icon(Icons.refresh, size: 20),
-                onPressed: () => setState(() => _reloadTick += 1),
-              ),
+              child: NasRefreshButton(onPressed: () => setState(() => _reloadTick += 1)),
             ),
           ),
           Expanded(
@@ -150,7 +147,7 @@ class _DiscoverHubState extends State<_DiscoverHub> {
                         padding: const EdgeInsets.only(
                           right: NasTokens.spaceXs,
                         ),
-                        child: ChoiceChip(
+                        child: NasChip(
                           label: Text(tr(tag.$2)),
                           selected: _tag == tag.$1,
                           onSelected: (_) => setState(() => _tag = tag.$1),
@@ -578,7 +575,7 @@ class _SiteManagerDialogState extends State<_SiteManagerDialog> {
                         ),
                         const SizedBox(width: NasTokens.spaceSm),
                         Expanded(
-                          child: DropdownButtonFormField<String>(
+                          child: NasDropdown<String>(
                             initialValue: kind,
                             isDense: true,
                             decoration: InputDecoration(
@@ -642,9 +639,7 @@ class _SiteManagerDialogState extends State<_SiteManagerDialog> {
         );
         await _load();
       } catch (e) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(tr('common.saveFailed', {'error': '$e'}))),
-        );
+        NasSnack.showOn(messenger, tr('common.saveFailed', {'error': '$e'}));
       }
     } finally {
       nameCtrl.dispose();
@@ -684,7 +679,7 @@ class _SiteManagerDialogState extends State<_SiteManagerDialog> {
       );
       await _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -883,7 +878,7 @@ class _SubscriptionManagerDialogState extends State<_SubscriptionManagerDialog> 
                     Row(
                       children: [
                         Expanded(
-                          child: DropdownButtonFormField<String>(
+                          child: NasDropdown<String>(
                             initialValue: quality,
                             isDense: true,
                             decoration: InputDecoration(
@@ -899,7 +894,7 @@ class _SubscriptionManagerDialogState extends State<_SubscriptionManagerDialog> 
                         ),
                         const SizedBox(width: NasTokens.spaceSm),
                         Expanded(
-                          child: DropdownButtonFormField<String>(
+                          child: NasDropdown<String>(
                             initialValue: hdr,
                             isDense: true,
                             decoration: InputDecoration(
@@ -998,9 +993,7 @@ class _SubscriptionManagerDialogState extends State<_SubscriptionManagerDialog> 
         );
         await _load();
       } catch (e) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(tr('common.saveFailed', {'error': '$e'}))),
-        );
+        NasSnack.showOn(messenger, tr('common.saveFailed', {'error': '$e'}));
       }
     } finally {
       titleCtrl.dispose();
@@ -1019,11 +1012,9 @@ class _SubscriptionManagerDialogState extends State<_SubscriptionManagerDialog> 
         body: <String, dynamic>{'id': '${sub['id']}'},
       );
       await _load();
-      messenger.showSnackBar(
-        SnackBar(content: Text('${res['message'] ?? ''}')),
-      );
+      NasSnack.showOn(messenger, '${res['message'] ?? ''}');
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -1055,7 +1046,7 @@ class _SubscriptionManagerDialogState extends State<_SubscriptionManagerDialog> 
       );
       await _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -1216,9 +1207,7 @@ class _RssRuleDialogState extends State<_RssRuleDialog> {
 
   Future<void> _edit(Map<String, dynamic>? rule) async {
     if (_feeds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('discover.rss.emptyRules'))),
-      );
+      NasSnack.show(context, tr('discover.rss.emptyRules'));
       return;
     }
     final regexCtrl = TextEditingController(text: '${rule?['titleRegex'] ?? ''}');
@@ -1238,7 +1227,7 @@ class _RssRuleDialogState extends State<_RssRuleDialog> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  DropdownButtonFormField<String>(
+                  NasDropdown<String>(
                     initialValue: feedId,
                     isDense: true,
                     decoration: InputDecoration(
@@ -1308,9 +1297,7 @@ class _RssRuleDialogState extends State<_RssRuleDialog> {
         );
         await _load();
       } catch (e) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(tr('common.saveFailed', {'error': '$e'}))),
-        );
+        NasSnack.showOn(messenger, tr('common.saveFailed', {'error': '$e'}));
       }
     } finally {
       regexCtrl.dispose();
@@ -1324,16 +1311,12 @@ class _RssRuleDialogState extends State<_RssRuleDialog> {
         body: <String, dynamic>{'id': '${rule['id']}'},
       );
       await _load();
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(tr('discover.rss.ruleResult', {
+      NasSnack.showOn(messenger, tr('discover.rss.ruleResult', {
             'matched': '${res['matched'] ?? 0}',
             'created': '${res['created'] ?? 0}',
-          })),
-        ),
-      );
+          }));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -1365,7 +1348,7 @@ class _RssRuleDialogState extends State<_RssRuleDialog> {
       );
       await _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -1543,8 +1526,7 @@ class _RssTabState extends State<_RssTab> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -1561,8 +1543,7 @@ class _RssTabState extends State<_RssTab> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -1572,8 +1553,7 @@ class _RssTabState extends State<_RssTab> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -1728,7 +1708,7 @@ class _TasksTabState extends State<_TasksTab> {
       );
       await _load();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -1770,56 +1750,97 @@ class _TasksTabState extends State<_TasksTab> {
       itemBuilder: (context, i) {
         final r = _items[i];
         final status = '${r['status'] ?? ''}';
-        return ListTile(
-          dense: true,
-          leading: Icon(
-            status == 'failed'
-                ? Icons.error_outline
-                : status == 'removed'
-                    ? Icons.delete_outline
-                    : status == 'paused'
-                        ? Icons.pause_circle_outline
-                        : status == 'done'
-                            ? Icons.check_circle_outline
-                            : Icons.downloading,
-            size: 18,
-          ),
-          title: Text('${r['title'] ?? ''}',
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(
-            '${_statusLabel(status)}'
-            '${(r['message'] as String? ?? '').isNotEmpty ? ' · ${r['message']}' : ''}'
-            ' · ${_time((r['createdAt'] as num?)?.toInt() ?? 0)}',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: r['canControl'] == true
-              ? Wrap(
-                  spacing: NasTokens.spaceXs,
-                  children: [
-                    if (status == 'added')
+        return NasContextMenuRegion(
+          entries: _taskMenuEntries(r),
+          child: ListTile(
+            dense: true,
+            leading: Icon(
+              status == 'failed'
+                  ? Icons.error_outline
+                  : status == 'removed'
+                      ? Icons.delete_outline
+                      : status == 'paused'
+                          ? Icons.pause_circle_outline
+                          : status == 'done'
+                              ? Icons.check_circle_outline
+                              : Icons.downloading,
+              size: 18,
+            ),
+            title: Text('${r['title'] ?? ''}',
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: Text(
+              '${_statusLabel(status)}'
+              '${(r['message'] as String? ?? '').isNotEmpty ? ' · ${r['message']}' : ''}'
+              ' · ${_time((r['createdAt'] as num?)?.toInt() ?? 0)}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: r['canControl'] == true
+                ? Wrap(
+                    spacing: NasTokens.spaceXs,
+                    children: [
+                      if (status == 'added')
+                        IconButton(
+                          tooltip: tr('discover.tasks.pause'),
+                          icon: const Icon(Icons.pause_circle_outline, size: 20),
+                          onPressed: () => _action(r, 'pause'),
+                        ),
+                      if (status == 'paused')
+                        IconButton(
+                          tooltip: tr('discover.tasks.resume'),
+                          icon: const Icon(Icons.play_circle_outline, size: 20),
+                          onPressed: () => _action(r, 'resume'),
+                        ),
                       IconButton(
-                        tooltip: tr('discover.tasks.pause'),
-                        icon: const Icon(Icons.pause_circle_outline, size: 20),
-                        onPressed: () => _action(r, 'pause'),
+                        tooltip: tr('discover.tasks.remove'),
+                        icon: const Icon(Icons.delete_outline, size: 20),
+                        onPressed: () => _action(r, 'remove'),
                       ),
-                    if (status == 'paused')
-                      IconButton(
-                        tooltip: tr('discover.tasks.resume'),
-                        icon: const Icon(Icons.play_circle_outline, size: 20),
-                        onPressed: () => _action(r, 'resume'),
-                      ),
-                    IconButton(
-                      tooltip: tr('discover.tasks.remove'),
-                      icon: const Icon(Icons.delete_outline, size: 20),
-                      onPressed: () => _action(r, 'remove'),
-                    ),
-                  ],
-                )
-              : null,
+                    ],
+                  )
+                : null,
+          ),
         );
       },
     );
+  }
+
+  /// 右键菜单：与行尾按钮同一批动作，按状态给出可用项。
+  ///
+  /// 只有 `canControl`（有 infoHash 且已在 transmission 里）才有可操作项，
+  /// 否则服务端会 400，菜单里就不摆死项。
+  List<NasMenuEntry> _taskMenuEntries(Map<String, dynamic> r) {
+    if (r['canControl'] != true) return const [];
+    final status = '${r['status'] ?? ''}';
+    final out = <NasMenuEntry>[];
+    if (status == 'added') {
+      out.add(
+        NasMenuEntry(
+          label: tr('discover.tasks.pause'),
+          icon: Icons.pause_circle_outline,
+          onSelected: () => _action(r, 'pause'),
+        ),
+      );
+    }
+    if (status == 'paused') {
+      out.add(
+        NasMenuEntry(
+          label: tr('discover.tasks.resume'),
+          icon: Icons.play_circle_outline,
+          onSelected: () => _action(r, 'resume'),
+        ),
+      );
+    }
+    if (out.isNotEmpty) out.add(const NasMenuEntry.divider());
+    out.add(
+      NasMenuEntry(
+        label: tr('discover.tasks.remove'),
+        icon: Icons.delete_outline,
+        danger: true,
+        onSelected: () => _action(r, 'remove'),
+      ),
+    );
+    return out;
   }
 
   static String _time(int seconds) {
@@ -1936,11 +1957,9 @@ class _SettingsTabState extends State<_SettingsTab> {
         _settings = res;
         _key.clear();
       });
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('discover.settings.saved'))),
-      );
+      NasSnack.showOn(messenger, tr('discover.settings.saved'));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     } finally {
       if (mounted) setState(() => _savingTmdb = false);
     }
@@ -1953,11 +1972,9 @@ class _SettingsTabState extends State<_SettingsTab> {
       await ApiSession.instance.client.discoverDoubanSettings(
         body: {'cookie': _cookie.text.trim()},
       );
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('discover.settings.saved'))),
-      );
+      NasSnack.showOn(messenger, tr('discover.settings.saved'));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     } finally {
       if (mounted) setState(() => _savingDouban = false);
     }
@@ -2036,11 +2053,9 @@ class _SettingsTabState extends State<_SettingsTab> {
       );
       if (!mounted) return;
       setState(() {});
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('discover.settings.saved'))),
-      );
+      NasSnack.showOn(messenger, tr('discover.settings.saved'));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     } finally {
       if (mounted) setState(() => _savingDownload = false);
     }
@@ -2061,16 +2076,12 @@ class _SettingsTabState extends State<_SettingsTab> {
         );
         if (r['ok'] == true) ok++;
       }
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(tr('discover.settings.scanDone', {
+      NasSnack.showOn(messenger, tr('discover.settings.scanDone', {
             'ok': '$ok',
             'total': '${enabled.length}',
-          })),
-        ),
-      );
+          }));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -2083,7 +2094,7 @@ class _SettingsTabState extends State<_SettingsTab> {
     final current = ids.contains(value) ? value : '';
     return Padding(
       padding: const EdgeInsets.only(bottom: NasTokens.spaceSm),
-      child: DropdownButtonFormField<String>(
+      child: NasDropdown<String>(
         initialValue: current,
         isDense: true,
         decoration: InputDecoration(labelText: label, isDense: true),
@@ -2180,7 +2191,7 @@ class _SettingsTabState extends State<_SettingsTab> {
                 runSpacing: NasTokens.spaceXs,
                 children: [
                   for (final site in _ptSites)
-                    FilterChip(
+                    NasChip(
                       label: Text('${site['name'] ?? site['id'] ?? ''}'),
                       selected: _siteIds.contains('${site['id'] ?? ''}'),
                       onSelected: (on) => setState(() {
@@ -2198,7 +2209,7 @@ class _SettingsTabState extends State<_SettingsTab> {
             Row(
               children: [
                 Expanded(
-                  child: DropdownButtonFormField<String>(
+                  child: NasDropdown<String>(
                     initialValue: _quality,
                     isDense: true,
                     decoration: InputDecoration(
@@ -2214,7 +2225,7 @@ class _SettingsTabState extends State<_SettingsTab> {
                 ),
                 const SizedBox(width: NasTokens.spaceSm),
                 Expanded(
-                  child: DropdownButtonFormField<String>(
+                  child: NasDropdown<String>(
                     initialValue: _hdr,
                     isDense: true,
                     decoration: InputDecoration(
@@ -2250,7 +2261,7 @@ class _SettingsTabState extends State<_SettingsTab> {
               runSpacing: NasTokens.spaceXs,
               children: [
                 for (final a in audioOptions)
-                  FilterChip(
+                  NasChip(
                     label: Text(tr(a.$2)),
                     selected: _audioLangs.contains(a.$1),
                     onSelected: (on) => setState(() {

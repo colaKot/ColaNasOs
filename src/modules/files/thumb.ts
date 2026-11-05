@@ -5,7 +5,14 @@ import path from 'node:path';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { KernelApi } from '../../../kernel/types';
 import { createLimiter } from '../media/ffmpeg-run';
-import { filesRoot, httpError, isAbsoluteInput, relativeInRoot, resolveAnyPath } from './fs-root';
+import {
+  absoluteInput,
+  filesRoot,
+  httpError,
+  isAbsoluteInput,
+  relativeInRoot,
+  resolveAnyPath,
+} from './fs-root';
 import { matchesEtag } from './download';
 import { Err } from '../../../kernel/errors';
 
@@ -43,6 +50,12 @@ export interface ThumbQuery {
 }
 
 const limit = createLimiter(4);
+
+/** target 是否在 base 目录内（含 base 本身） */
+function isInsideDir(base: string, target: string): boolean {
+  const rel = path.relative(path.resolve(base), path.resolve(target));
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
 
 /** 同一张图的并发请求共享一次 ffmpeg（避免滚动时重复转码） */
 const inflight = new Map<string, Promise<void>>();
@@ -90,16 +103,30 @@ export async function thumbHandler(
   // 相册来源可以登记 filesRoot 之外的目录，这里再兜一次白名单
   let abs: string;
   let rel: string;
+  /** 是否服务端自己的缓存文件（扩展名不可信：TMDB 图缓存是 `<hash>.img`） */
+  let ownCache = false;
   try {
     ({ abs, rel } = relativeInRoot(root, q.path));
   } catch (err) {
     if (!isAbsoluteInput(q.path)) throw err;
-    abs = resolveAnyPath(root, q.path);
+    const direct = path.resolve(absoluteInput(q.path));
+    // 服务端**自己写的缓存**（视频抽帧 / 刮削海报 `dataDir/video-art`、音乐封面、
+    // 相册缓存）既不在 filesRoot 也不在来源白名单里 —— 以前这里直接走
+    // resolveAnyPath，结果 `?size=` 一传就 403 `path outside allowed root`，
+    // 表现是影视列表整片裂图。这些路径由本进程落盘，直接放行；
+    // 其它绝对路径仍然走白名单（相册来源 / SMB 共享根），越界照旧 403。
+    ownCache = isInsideDir(k.paths.dataDir, direct);
+    if (!ownCache) {
+      resolveAnyPath(root, q.path);
+    }
+    abs = direct;
     rel = path.relative(root, abs).split(path.sep).join('/');
   }
 
   const ext = path.extname(abs).slice(1).toLowerCase();
-  if (!IMAGE_EXT.has(ext)) {
+  // 自建缓存不按扩展名卡（`w500/<hash>.img` 实际是 jpg）；真的不是图片时
+  // ffmpeg 会失败并返回 503，不会读出错内容。
+  if (!ownCache && !IMAGE_EXT.has(ext)) {
     throw httpError(400, `unsupported thumbnail source: .${ext || 'unknown'}`);
   }
 

@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:nas_ui/nas_ui.dart';
+import '../../shell/app_nav_shell.dart';
+import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
 import 'sync_autostart.dart';
@@ -8,6 +12,7 @@ import 'sync_engine.dart';
 import 'sync_record_dialog.dart';
 import 'sync_scheduler.dart';
 import 'sync_task_card.dart';
+import 'sync_tray_bridge.dart';
 
 /// 目录同步：左侧二级菜单 + 任务列表。
 ///
@@ -29,8 +34,6 @@ class _SyncPageState extends State<SyncPage> {
   String? _error;
   List<SyncTask> _tasks = const [];
   String _keyword = '';
-  String _page = 'tasks';
-  bool _collapsed = false;
   String _deviceId = '';
   String _deviceName = '';
 
@@ -109,6 +112,8 @@ class _SyncPageState extends State<SyncPage> {
             .toList();
         _loading = false;
       });
+      // 任务增删后托盘里的「立即同步」是否可点要跟着变
+      unawaited(syncTrayBridge.refresh());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -157,8 +162,7 @@ class _SyncPageState extends State<SyncPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -166,9 +170,7 @@ class _SyncPageState extends State<SyncPage> {
     final messenger = ScaffoldMessenger.of(context);
     final result = await _engine.run(task);
     if (!mounted) return;
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
+    NasSnack.showOn(messenger, 
           result.ok
               ? tr('sync.run.ok', {
                   'up': result.uploaded,
@@ -180,9 +182,7 @@ class _SyncPageState extends State<SyncPage> {
                   'error': result.error ??
                       (result.errors.isEmpty ? '' : result.errors.first),
                 }),
-        ),
-      ),
-    );
+        );
     await _load();
   }
 
@@ -218,7 +218,7 @@ class _SyncPageState extends State<SyncPage> {
                   ),
                 ),
                 const SizedBox(height: NasTokens.spaceSm),
-                DropdownButtonFormField<int>(
+                NasDropdown<int>(
                   initialValue: interval,
                   decoration: InputDecoration(
                     labelText: tr('sync.auto.interval'),
@@ -257,9 +257,7 @@ class _SyncPageState extends State<SyncPage> {
             TextButton(
               onPressed: () async {
                 await SyncScheduler.instance.tickNow();
-                messenger.showSnackBar(
-                  SnackBar(content: Text(tr('sync.auto.checkNow'))),
-                );
+                NasSnack.showOn(messenger, tr('sync.auto.checkNow'));
               },
               child: Text(tr('sync.auto.runCheck')),
             ),
@@ -281,9 +279,7 @@ class _SyncPageState extends State<SyncPage> {
     if (autoStart.supported && autoStartEnabled != autoStart.enabled) {
       final changed = await autoStart.setEnabled(autoStartEnabled);
       if (!changed) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(tr('sync.autostart.failed'))),
-        );
+        NasSnack.showOn(messenger, tr('sync.autostart.failed'));
       }
     }
   }
@@ -301,155 +297,76 @@ class _SyncPageState extends State<SyncPage> {
   @override
   Widget build(BuildContext context) {
     final canSync = _engine.fs.canSync;
-    final wide = MediaQuery.sizeOf(context).width >= 760;
-    final help = _page == 'help';
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(help ? tr('sync.menu.help') : tr('app.sync')),
-        actions: [
-          if (!wide)
-            IconButton(
-              tooltip: help ? tr('sync.menu.tasks') : tr('sync.menu.help'),
-              icon: Icon(help ? Icons.sync_outlined : Icons.help_outline),
-              onPressed: () => setState(() => _page = help ? 'tasks' : 'help'),
-            ),
-          if (!wide && canSync)
-            IconButton(
-              tooltip: tr('sync.createTask'),
-              onPressed: () => _openWizard(),
-              icon: const Icon(Icons.add),
-            ),
-          if (!wide)
-            IconButton(
-              tooltip: tr('common.refresh'),
-              onPressed: _load,
-              icon: const Icon(Icons.refresh),
-            ),
-          if (wide)
-            IconButton(
-              tooltip: _collapsed
-                  ? tr('nav.expand')
-                  : tr('nav.collapse'),
-              icon: Icon(
-                _collapsed
-                    ? Icons.keyboard_double_arrow_right
-                    : Icons.keyboard_double_arrow_left,
-              ),
-              onPressed: () => setState(() => _collapsed = !_collapsed),
-            ),
-        ],
-      ),
-      body: wide
-          ? Row(
-              children: [
-                _nav(canSync),
-                const VerticalDivider(width: 1),
-                Expanded(child: help ? _help() : _tasksView(canSync)),
-              ],
-            )
-          : (help ? _help() : _tasksView(canSync)),
+    // 2026-11-04：改用统一的二级菜单（AppNavShell）——菜单项来自
+    // `contracts/apps.json#sync.nav`，和影视/相册/音乐同一套骨架，
+    // 不再自己手写一套侧栏（宽度、折叠、选中态都各自一套，看着就不是一家人）。
+    return AppNavShell(
+      appId: 'sync',
+      defaultKey: 'tasks',
+      content: (key) => _content(key, canSync),
     );
   }
 
-  Widget _nav(bool canSync) {
+  /// 二级菜单分发（`tool/check/app-nav-check.js` 按这个方法名做对账）
+  Widget _content(String key, bool canSync) {
+    switch (key) {
+      case 'help':
+        return _help();
+      // nav-default: tasks
+      default:
+        return _tasksView(canSync);
+    }
+  }
+
+  /// 「自动同步未开启」提示条：点一下直接打开自动同步设置
+  Widget _autoOffBanner() {
     final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: _collapsed ? 56 : 176,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(
-                horizontal: NasTokens.spaceXs,
-                vertical: NasTokens.spaceSm,
-              ),
-              children: [
-                _navTile(
-                  icon: Icons.sync_outlined,
-                  labelKey: 'sync.menu.tasks',
-                  selected: _page == 'tasks',
-                  onTap: () => setState(() => _page = 'tasks'),
-                ),
-                _navTile(
-                  icon: Icons.help_outline,
-                  labelKey: 'sync.menu.help',
-                  selected: _page == 'help',
-                  onTap: () => setState(() => _page = 'help'),
-                ),
-              ],
-            ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        NasTokens.spaceMd,
+        NasTokens.spaceSm,
+        NasTokens.spaceMd,
+        0,
+      ),
+      child: InkWell(
+        onTap: _openAutoSync,
+        borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: NasTokens.spaceMd,
+            vertical: NasTokens.spaceSm,
           ),
-          if (canSync)
-            Padding(
-              padding: const EdgeInsets.all(NasTokens.spaceSm),
-              child: _collapsed
-                  ? IconButton.filled(
-                      tooltip: tr('sync.createTask'),
-                      onPressed: () => _openWizard(),
-                      icon: const Icon(Icons.add, size: 18),
-                    )
-                  : FilledButton.icon(
-                      onPressed: () => _openWizard(),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: Text(
-                        tr('sync.createTask'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-            ),
-          const SizedBox(height: NasTokens.spaceXs),
-        ],
-      ),
-    ).withColor(scheme);
-  }
-
-  Widget _navTile({
-    required IconData icon,
-    required String labelKey,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    final fg = selected ? scheme.primary : scheme.onSurface.withValues(alpha: 0.74);
-    final tile = InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-      child: Container(
-        height: 42,
-        padding: EdgeInsets.symmetric(
-          horizontal: _collapsed ? 0 : NasTokens.spaceSm,
-        ),
-        alignment: _collapsed ? Alignment.center : Alignment.centerLeft,
-        decoration: BoxDecoration(
-          color: selected ? scheme.primary.withValues(alpha: 0.10) : null,
-          borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-        ),
-        child: _collapsed
-            ? Icon(icon, size: NasTokens.iconMd, color: fg)
-            : Row(
-                children: [
-                  Icon(icon, size: NasTokens.iconMd, color: fg),
-                  const SizedBox(width: NasTokens.spaceSm),
-                  Expanded(
-                    child: Text(
-                      tr(labelKey),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: NasTokens.fontBody,
-                        color: fg,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w500,
-                      ),
-                    ),
+          decoration: BoxDecoration(
+            color: scheme.error.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+            border: Border.all(color: scheme.error.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.schedule, size: 18, color: scheme.error),
+              const SizedBox(width: NasTokens.spaceXs),
+              Expanded(
+                child: Text(
+                  tr('sync.auto.offHint'),
+                  style: TextStyle(
+                    fontSize: NasTokens.fontCaption,
+                    color: scheme.onSurface,
                   ),
-                ],
+                ),
               ),
+              Text(
+                tr('sync.auto.enable'),
+                style: TextStyle(
+                  fontSize: NasTokens.fontCaption,
+                  fontWeight: FontWeight.w700,
+                  color: scheme.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
-    return _collapsed ? Tooltip(message: tr(labelKey), child: tile) : tile;
   }
 
   Widget _tasksView(bool canSync) {
@@ -459,6 +376,12 @@ class _SyncPageState extends State<SyncPage> {
     final wide = MediaQuery.sizeOf(context).width >= 760;
     return Column(
       children: [
+        // 用户以为「每任务 30 分钟」就会自己跑，但总开关默认关着 —— 不提示的话
+        // 表现就是「同步记录停在某一条再也不动」，很难自己发现。
+        if (canSync &&
+            !SyncScheduler.instance.enabled &&
+            items.any((t) => t.syncConfig.intervalMinutes > 0))
+          _autoOffBanner(),
         Padding(
           padding: const EdgeInsets.fromLTRB(
             NasTokens.spaceMd,
@@ -505,11 +428,22 @@ class _SyncPageState extends State<SyncPage> {
                   onPressed: _openAutoSync,
                   icon: const Icon(Icons.schedule),
                 ),
-              if (wide)
-                IconButton(
-                  tooltip: tr('common.refresh'),
-                  onPressed: _load,
-                  icon: const Icon(Icons.refresh),
+              // 换成统一二级菜单后没有 AppBar 了，刷新与「新建」挪到这里
+              NasRefreshButton(onPressed: _load),
+              if (canSync)
+                Padding(
+                  padding: const EdgeInsets.only(left: NasTokens.spaceXs),
+                  child: wide
+                      ? FilledButton.icon(
+                          onPressed: () => _openWizard(),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: Text(tr('sync.createTask')),
+                        )
+                      : IconButton.filled(
+                          tooltip: tr('sync.createTask'),
+                          onPressed: () => _openWizard(),
+                          icon: const Icon(Icons.add, size: 18),
+                        ),
                 ),
             ],
           ),
@@ -592,12 +526,5 @@ class _SyncPageState extends State<SyncPage> {
           ),
       ],
     );
-  }
-}
-
-extension on Widget {
-  /// 左栏底色：桌面形态下与内容区区分
-  Widget withColor(ColorScheme scheme) {
-    return Container(color: scheme.surfaceContainerLow, child: this);
   }
 }

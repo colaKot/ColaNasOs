@@ -8,11 +8,13 @@ import { bindLibraryWatch } from '../library-watch';
 
 import { MUSIC_MIGRATIONS } from './migrations';
 import { makeMusicHelpers } from './helpers';
+import { absoluteInput, isAbsoluteInput, registerExtraRoot } from '../files/fs-root';
 import { registerMusicLibrary } from './routes/library';
 import { registerMusicItems } from './routes/items';
 import { registerMusicPlayback } from './routes/playback';
 import { registerMusicPlaylists } from './routes/playlists';
 import { registerMusicAutoPlaylists } from './routes/auto-playlists';
+import { registerMusicCollections } from './routes/collections';
 
 /**
  * SP3-04 music：库 / 索引 / 列表 / 搜索 / 内嵌封面 / 播放 / 自建播放列表（一期）。
@@ -49,6 +51,15 @@ export const music: ServerModule = {
 
   async register(app, k) {
     for (const schema of MUSIC_SCHEMAS) app.addSchema(schema);
+    // 绝对路径来源（D:/music、\\host\share\music）在**创建时**登记过 extraRoots，
+    // 但那是内存白名单，进程重启后就空了 —— 封面 / 歌词 / 转码都会 403。
+    // 模块启动时按库里已有来源重建一遍，保证重启后媒体路径仍可解析。
+    const libs = await sql<{ root_path: string }>`
+      select root_path from music_libraries
+    `.execute(k.db);
+    for (const lib of libs.rows) {
+      if (isAbsoluteInput(lib.root_path)) registerExtraRoot(absoluteInput(lib.root_path));
+    }
     const libWatch = bindLibraryWatch<MusicLibraryRow>({
       k,
       domain: 'music',
@@ -63,5 +74,6 @@ export const music: ServerModule = {
     await registerMusicPlayback(app, k, h);
     await registerMusicPlaylists(app, k, h);
     await registerMusicAutoPlaylists(app, k, h);
+    await registerMusicCollections(app, k, h);
   },
 };

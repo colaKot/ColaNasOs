@@ -11,6 +11,7 @@ import {
 import path from 'node:path';
 import fs from 'node:fs';
 import { WatchdogSupervisor } from '../kernel/watchdog-supervisor';
+import { onTrayState, registerSyncBridge } from './sync-bridge';
 import type { WatchdogMetrics } from '../kernel/watchdog';
 
 const PORT = Number(process.env.PORT || 7788);
@@ -44,6 +45,15 @@ let kernel: Electron.UtilityProcess | null = null;
 let tray: Tray | null = null;
 let quitting = false;
 let crashes = 0;
+
+/**
+ * 托盘菜单里的同步状态，由渲染进程上报（Dart 侧 `SyncTrayBridge.publish`）。
+ *
+ * 为什么不在主进程算：同步的调度、任务列表、自动同步开关都在客户端里
+ * （`SyncScheduler` 读写本地设置、`SyncEngine` 按任务跑三向同步），主进程
+ * 没有 token 也没有这些状态。所以主进程只负责「画菜单 + 把点击转给页面」。
+ */
+let traySync = { paused: true, taskCount: 0 };
 
 // 开发实例与日常实例隔离：锁绑定在 userData 路径上，开发实例用独立 userData，
 // 两个实例可以同时在线（不再「必须关掉日常实例才能调试」）。
@@ -164,10 +174,15 @@ function createWindow(): void {
     height: 800,
     show: false,
     title: 'ColaNasOs',
+    // 开发模式（electron .）不读 exe 图标，窗口/任务栏会是 Electron 默认图标；
+    // 显式指一份，打包前后一致。托盘是 tray.png，这里是 512 的 icon.png。
+    icon: path.join(resourcesDir(), 'icon.png'),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // 同步要访问本地目录：渲染进程是 Web 产物，只能通过 preload 转给主进程
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -227,6 +242,23 @@ function createWindow(): void {
     trace(`window load failed code=${code} ${desc} url=${url}`);
     retryLoad();
   });
+  // 托盘里的「立即同步 / 暂停自动同步 / 同步任务」靠页面里的 window.colanasTray
+  // 转发。这里落一行日志，排查时不用猜。
+  // 注意要延迟探测：Flutter 的 main 是异步启动的（读设置 → 恢复会话 → 装桥），
+  // 加载完成的那一刻一定还是 undefined。
+  win.webContents.on('did-finish-load', () => {
+    setTimeout(() => {
+      void win?.webContents
+        .executeJavaScript('typeof window.colanasTray', true)
+        .then((kind) => {
+          trace(`tray bridge=${String(kind)}`);
+          if (String(kind) !== 'function') {
+            trace('tray sync items will be no-ops (web build without the bridge?)');
+          }
+        })
+        .catch((err) => trace(`tray bridge probe failed: ${String(err)}`));
+    }, 5000);
+  });
   void win.loadURL(targetUrl);
 }
 
@@ -244,11 +276,75 @@ function createTray(): void {
   const icon = nativeImage.createFromPath(path.join(resourcesDir(), 'tray.png'));
   tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
   tray.setToolTip('ColaNasOs');
+  rebuildTrayMenu();
+  tray.on('click', () => showWindow());
+}
+
+/**
+ * 把托盘点击转给页面：Dart 侧在 `SyncTrayBridge` 里挂了 `window.colanasTray`。
+ *
+ * 窗口还没加载完（或页面崩了）时 `executeJavaScript` 会失败，这里兜底把窗口
+ * 显示出来 —— 用户点了「同步任务」至少要看到界面，而不是毫无反应。
+ */
+function sendTrayAction(action: 'syncNow' | 'toggleAutoSync' | 'openTasks'): void {
+  if (!win || win.isDestroyed() || win.webContents.isLoading()) {
+    showWindow();
+    return;
+  }
+  void win.webContents
+    .executeJavaScript(
+      `window.colanasTray && window.colanasTray(${JSON.stringify(action)});`,
+      true,
+    )
+    .catch((err) => trace(`tray action ${action} failed: ${String(err)}`));
+}
+
+function rebuildTrayMenu(): void {
+  if (!tray) return;
+  let startOnBoot: boolean;
+  try {
+    startOnBoot = app.getLoginItemSettings().openAtLogin;
+  } catch {
+    startOnBoot = false;
+  }
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '打开主界面', click: () => showWindow() },
-      { label: '在浏览器中打开', click: () => void shell.openExternal(`${kernelUrl()}/health`) },
+      { label: '显示主窗口', click: () => showWindow() },
+      {
+        label: '开机自动启动',
+        type: 'checkbox',
+        checked: startOnBoot,
+        click: (item) => {
+          try {
+            // Windows 写 HKCU\...\Run，macOS 写 LaunchAgent，Linux 写 autostart。
+            // 开发模式（electron .）会登记成 electron.exe —— 测完记得取消勾选。
+            app.setLoginItemSettings({ openAtLogin: item.checked });
+          } catch (err) {
+            trace(`setLoginItemSettings failed: ${String(err)}`);
+          }
+          rebuildTrayMenu();
+        },
+      },
       { type: 'separator' },
+      {
+        label: '立即同步',
+        // 没登录 / 没有本机任务时置灰：点了也没事可做，不如直说
+        enabled: traySync.taskCount > 0,
+        click: () => sendTrayAction('syncNow'),
+      },
+      {
+        label: traySync.paused ? '恢复自动同步' : '暂停自动同步',
+        click: () => sendTrayAction('toggleAutoSync'),
+      },
+      {
+        label: '同步任务',
+        click: () => {
+          showWindow();
+          sendTrayAction('openTasks');
+        },
+      },
+      { type: 'separator' },
+      { label: '在浏览器中打开', click: () => void shell.openExternal(`${kernelUrl()}/`) },
       {
         label: '重启内核',
         click: () => {
@@ -267,11 +363,23 @@ function createTray(): void {
       },
     ]),
   );
-  tray.on('click', () => showWindow());
+}
+
+/** 渲染进程上报的状态（sync-bridge 的 `trayState` op 调到这里） */
+function applyTrayState(state: { paused: boolean; taskCount: number }): void {
+  traySync = {
+    paused: state.paused,
+    taskCount: Math.max(0, Math.trunc(state.taskCount) || 0),
+  };
+  // 这条日志 = 页面里的托盘桥确实在位（菜单文案/置灰都跟着它变）
+  trace(`tray state paused=${traySync.paused} tasks=${traySync.taskCount}`);
+  rebuildTrayMenu();
 }
 
 app.whenReady().then(() => {
   trace('app ready');
+  registerSyncBridge();
+  onTrayState(applyTrayState);
   startKernel();
   createWindow();
   createTray();

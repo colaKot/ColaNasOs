@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import '../../shell/app_widgets.dart';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
+import '../../shell/mobile_frame.dart';
 
 /// 传输中心（附录 B.2 / D「文件 → 传输中心」）：分片上传队列。
 ///
@@ -66,6 +68,7 @@ class _TransferPageState extends State<TransferPage> {
     final files = await openFiles();
     if (files.isEmpty) return;
     final dir = _dirCtrl.text.trim().isEmpty ? '/' : _dirCtrl.text.trim();
+    if (!mounted) return;
     setState(() {
       for (final f in files) {
         _tasks.add(_Task(file: f, targetDir: dir));
@@ -210,8 +213,11 @@ class _TransferPageState extends State<TransferPage> {
   Widget build(BuildContext context) {
     final active = _tasks.where((t) => t.status == _Status.uploading).length;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(active > 0 ? tr('transfer.titleActive', {'count': '$active'}) : tr('ui.transfer.001')),
+      appBar: nasPageAppBar(
+        context,
+        title: active > 0
+            ? tr('transfer.titleActive', {'count': '$active'})
+            : tr('ui.transfer.001'),
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
@@ -308,11 +314,7 @@ class _TransferPageState extends State<TransferPage> {
                                 onPressed: () => _cancel(t),
                               ),
                             if (failed || t.status == _Status.canceled)
-                              IconButton(
-                                icon: const Icon(Icons.refresh),
-                                tooltip: tr('ui.transfer.008'),
-                                onPressed: () => _retry(t),
-                              ),
+                              NasRefreshButton(tooltip: tr('ui.transfer.008'), onPressed: () => _retry(t)),
                           ],
                         ),
                       );

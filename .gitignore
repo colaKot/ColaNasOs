@@ -25,12 +25,13 @@ apps/colanas_os/ohos/**/oh_modules/
 apps/colanas_os/ohos/**/.hvigor/
 apps/colanas_os/ohos/**/oh-package-lock.json5
 
-# 内部核对记录（对照既有实现逐项比对的施工过程稿，含第三方源码路径与行号引用）。
-# 仅供本机留档，不随仓库发布。
+# 本机施工过程稿，仅供本地留档，不随仓库发布。
 docs/11-改进移植差距矩阵.md
 docs/12-影视与发现差距核对.md
 docs/13-相册与音乐差距核对.md
 docs/16-功能1对1对照-同步媒体工具用户配置发现.md
+docs/16-移动端布局方案.md
+docs/17-右键菜单对照.md
 docs/_archive/
 
 # 本地工具与临时产物（不含项目源码，不入库）
@@ -43,5 +44,8 @@ docs/_archive/
 .trae/
 .screenshots/
 .tmp-chrome-profile/
+.tmp/
 .merkle-snapshot.json
 vr9.txt
+# 带水印的原始图标导出，不入库（去水印版在 resources/）
+图标.png

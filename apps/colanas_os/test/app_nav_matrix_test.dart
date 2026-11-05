@@ -101,7 +101,11 @@ Future<void> _settle(WidgetTester tester) async {
 }
 
 /// 卸载整棵树：让所有页面的 `dispose` 跑完，避免「Timer is still pending」
+///
+/// 先推进 7s：同步页在 `initState` 里探测设备号时挂了 6s 超时定时器
+/// （`IoSyncFs.resolveDeviceId` 的 `Process.run(...).timeout`），不推进时间会残留。
 Future<void> _dispose(WidgetTester tester) async {
+  await tester.pump(const Duration(seconds: 7));
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pump();
 }

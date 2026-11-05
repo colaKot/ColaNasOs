@@ -5,6 +5,9 @@ import 'package:nas_core/nas_core.dart';
 VideoSubtitleFile sub(String name, String? lang) =>
     VideoSubtitleFile(name: name, lang: lang, format: 'srt', size: 1);
 
+VideoSubtitleCue cue(int start, int end, String text) =>
+    VideoSubtitleCue(startMs: start, endMs: end, text: text);
+
 void main() {
   test('关闭字幕返回 null', () {
     expect(
@@ -37,5 +40,36 @@ void main() {
     final items = [sub('plain.srt', null), sub('a.en.srt', 'en')];
     expect(pickSubtitle(items, 'zh')!.name, 'plain.srt');
     expect(pickSubtitle(items, 'en')!.name, 'a.en.srt');
+  });
+
+  group('activeSubtitleText', () {
+    test('只在区间内显示，起止边界为左闭右开', () {
+      final cues = [cue(1000, 3000, '第一句')];
+      expect(activeSubtitleText(cues, 999), '');
+      expect(activeSubtitleText(cues, 1000), '第一句');
+      expect(activeSubtitleText(cues, 2999), '第一句');
+      expect(activeSubtitleText(cues, 3000), '');
+    });
+
+    test('重叠 cue 按文件顺序换行合并', () {
+      final cues = [
+        cue(1000, 3000, '第一行'),
+        cue(1200, 2600, '第二行'),
+        cue(4000, 5000, '下一句'),
+      ];
+      expect(activeSubtitleText(cues, 2000), '第一行\n第二行');
+      expect(activeSubtitleText(cues, 4500), '下一句');
+    });
+
+    test('空文本与空列表不显示', () {
+      expect(activeSubtitleText(const [], 1000), '');
+      expect(activeSubtitleText([cue(0, 5000, '   ')], 1000), '');
+    });
+
+    test('乱序 cue 也能取到', () {
+      final cues = [cue(4000, 5000, '后'), cue(0, 2000, '先')];
+      expect(activeSubtitleText(cues, 1000), '先');
+      expect(activeSubtitleText(cues, 4500), '后');
+    });
   });
 }

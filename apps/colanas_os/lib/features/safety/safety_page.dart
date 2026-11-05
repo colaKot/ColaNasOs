@@ -1,10 +1,13 @@
 import 'dart:convert';
+import '../../shell/app_widgets.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
+import '../../shell/app_nav_shell.dart';
+import '../../shell/mobile_frame.dart';
 
 /// 安全中心：备份 / 加密空间（SP3-09 的客户端页面）。
 ///
@@ -115,16 +118,12 @@ class _SafetyPageState extends State<SafetyPage> {
           if (nameCtrl.text.trim().isNotEmpty) 'name': nameCtrl.text.trim(),
         },
       );
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
+      NasSnack.showOn(messenger, 
             tr('safety.backupDone', {'files': '${res['files'] ?? 0}', 'bytes': formatBytes((res['bytes'] as num?)?.toInt() ?? 0)}),
-          ),
-        ),
-      );
+          );
       await _loadBackups();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('safety.backupFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('safety.backupFailed', {'error': '$e'}));
     }
   }
 
@@ -161,15 +160,11 @@ class _SafetyPageState extends State<SafetyPage> {
       final res = await ApiSession.instance.client.backupRestore(
         body: {'id': job['id'], 'target': targetCtrl.text.trim()},
       );
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
+      NasSnack.showOn(messenger, 
             tr('safety.restoreDone', {'restored': '${res['restored'] ?? 0}', 'skipped': '${res['skipped'] ?? 0}'}),
-          ),
-        ),
-      );
+          );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('safety.restoreFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('safety.restoreFailed', {'error': '$e'}));
     }
   }
 
@@ -200,9 +195,7 @@ class _SafetyPageState extends State<SafetyPage> {
         _unlocked = true;
       });
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr(create ? 'common.createFailed' : 'safety.unlockFailed', {'error': '$e'}))),
-      );
+      NasSnack.showOn(messenger, tr(create ? 'common.createFailed' : 'safety.unlockFailed', {'error': '$e'}));
     }
   }
 
@@ -264,10 +257,10 @@ class _SafetyPageState extends State<SafetyPage> {
           'password': _vaultPassCtrl.text,
         },
       );
-      messenger.showSnackBar(SnackBar(content: Text(tr('ui.safety.010'))));
+      NasSnack.showOn(messenger, tr('ui.safety.010'));
       await _unlockVault();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('safety.writeFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('safety.writeFailed', {'error': '$e'}));
     }
   }
 
@@ -312,7 +305,7 @@ class _SafetyPageState extends State<SafetyPage> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('safety.readFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('safety.readFailed', {'error': '$e'}));
     }
   }
 
@@ -337,7 +330,7 @@ class _SafetyPageState extends State<SafetyPage> {
       );
       await _unlockVault();
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('common.deleteFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('common.deleteFailed', {'error': '$e'}));
     }
   }
 
@@ -354,11 +347,7 @@ class _SafetyPageState extends State<SafetyPage> {
               onPressed: _runBackup,
             ),
           if (_tab == 0)
-            IconButton(
-              tooltip: tr('ui.accounts.021'),
-              icon: const Icon(Icons.refresh, size: 18),
-              onPressed: _loadBackups,
-            ),
+            NasRefreshButton(onPressed: _loadBackups),
         ],
       ),
     );
@@ -366,6 +355,43 @@ class _SafetyPageState extends State<SafetyPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 手机端：侧栏搬到下方（2 项刚好两个 tab），顶栏有房子。
+    if (isCompactWidth(context)) {
+      return NasAppScaffold(
+        title: tr('app.backup'),
+        onHome: AppNavShell.onExitToHome,
+        actions: [
+          if (_tab == 0)
+            NasMobileAction(
+              icon: Icons.backup_outlined,
+              tooltip: tr('ui.safety.001'),
+              onPressed: _runBackup,
+            ),
+          if (_tab == 0)
+            NasMobileAction(
+              icon: Icons.refresh,
+              tooltip: tr('common.refresh'),
+              onPressed: _loadBackups,
+            ),
+        ],
+        items: [
+          NasTabItem(
+            id: 'backup',
+            label: tr('ui.safety.013'),
+            icon: Icons.backup_outlined,
+          ),
+          NasTabItem(
+            id: 'vault',
+            label: tr('ui.safety.014'),
+            icon: Icons.lock_outline,
+          ),
+        ],
+        selectedId: _tab == 0 ? 'backup' : 'vault',
+        onSelect: (id) => setState(() => _tab = id == 'vault' ? 1 : 0),
+        body: _tab == 0 ? _backupPane() : _vaultPane(),
+      );
+    }
+
     return Scaffold(
       body: Row(
         children: [

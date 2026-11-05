@@ -89,8 +89,10 @@ export interface VideoScanResult {
   pruned: number;
   /** 文件没变、只补读了本地 NFO 的条数（老库升级后第一次扫描会看到） */
   nfoFilled?: number;
-  /** 本次扫不动的原因（目录不存在 / 越界 / 离线）；空 = 全部来源都正常 */
+  /** 本次扫不动的原因（目录不存在 / 越界）；空 = 全部来源都正常 */
   errors?: string[];
+  /** 因 SMB 离线被**跳过**的来源根（不是错误，前端只用来提示「这部分暂时没扫」） */
+  skippedSources?: string[];
 }
 
 const UPSERT_BATCH = 100;
@@ -145,7 +147,13 @@ export async function scanVideoLibrary(
   lib: VideoLibraryRow,
   limit = 200000,
   subDir?: string,
-  opts: { prune?: boolean; sourceRoot?: string } = {},
+  opts: {
+    prune?: boolean;
+    sourceRoot?: string;
+    onProgress?: (pct: number) => void;
+    /** 条目口径：已处理文件数 / 已发现文件数（面板显示「12/50」） */
+    onFiles?: (done: number, total: number) => void;
+  } = {},
 ): Promise<VideoScanResult> {
   const all = await effectiveSources(db, lib);
   const only = String(opts.sourceRoot || '').trim();
@@ -157,12 +165,19 @@ export async function scanVideoLibrary(
   const nowSec = Math.floor(Date.now() / 1000);
   const total = emptyResult();
   const errors: string[] = [];
+  const skippedSources: string[] = [];
   const missingVideo: string[] = [];
   const missingImage: string[] = [];
   // 只有「扫全库」才有资格判定缺失：子目录扫描 / 单来源扫描的 seen 集不完整
   const fullLibrary = !subDir && !only;
 
+  let srcDone = 0;
+  // 多来源时条目数要跨来源累加，否则第二个来源从 0 开始（用户看到 800/800 → 3/400）
+  let fileBase = 0;
   for (const src of targets) {
+    // 进度按来源粒度上报（一个来源可能几万文件，内部再细分收益不大）
+    opts.onProgress?.((srcDone / Math.max(1, targets.length)) * 90);
+    srcDone += 1;
     let rootAbs: string;
     const unc = uncPathOf(src);
     try {
@@ -193,7 +208,10 @@ export async function scanVideoLibrary(
             `.execute(db);
           }
           if (state === ONLINE_NO) {
-            errors.push(`${src.root_path}: smb offline`);
+            // 来源离线是**预期状态**，不是扫描失败：跳过这一台，其余来源照扫。
+            // 以前这里 push 到 errors，前端弹「扫描失败：…smb offline」，
+            // 用户会以为自己点的扫描坏了（而且失败来源的内容本来就已经被列表过滤掉）。
+            skippedSources.push(String(src.root_path || ''));
             continue;
           }
         }
@@ -225,7 +243,18 @@ export async function scanVideoLibrary(
     }
 
     try {
-      const part = await scanOneSource(db, lib, src, rootAbs, libType, nowSec, limit, subDir, fullLibrary);
+      const part = await scanOneSource(
+        db,
+        lib,
+        src,
+        rootAbs,
+        libType,
+        nowSec,
+        limit,
+        subDir,
+        fullLibrary,
+        (done, total) => opts.onFiles?.(fileBase + done, fileBase + total),
+      );
       total.videos += part.result.videos;
       total.images += part.result.images;
       total.added += part.result.added;
@@ -235,6 +264,7 @@ export async function scanVideoLibrary(
       total.nfoFilled = (total.nfoFilled || 0) + (part.result.nfoFilled || 0);
       missingVideo.push(...part.missingVideo);
       missingImage.push(...part.missingImage);
+      fileBase += part.result.videos + part.result.images;
 
       // 单个来源被完整扫过时顺手刷新它自己的统计（列表页按来源显示条数）
       if (!subDir) {
@@ -289,7 +319,9 @@ export async function scanVideoLibrary(
       `.execute(db);
     }
   }
+  opts.onProgress?.(95);
   if (errors.length > 0) total.errors = errors;
+  if (skippedSources.length > 0) total.skippedSources = skippedSources;
   return total;
 }
 
@@ -310,6 +342,7 @@ async function scanOneSource(
   limit: number,
   subDir: string | undefined,
   wantMissing: boolean,
+  onFiles?: (done: number, total: number) => void,
 ): Promise<SourceScanOutcome> {
   const libTypeWantsVideo = libType !== 'image';
   const libTypeWantsImage = libType === 'image' || libType === 'mixed';
@@ -356,6 +389,10 @@ async function scanOneSource(
   const seenImage = new Set<string>();
   const result = emptyResult();
 
+  // 「已完成/总数」的累计基数（跨视频趟 / 图片趟单调递增）
+  let fileDone = 0;
+  let fileTotal = 0;
+
   const collect = async (
     predicate: (name: string) => boolean,
     existing: Map<string, ExistingRow>,
@@ -364,7 +401,14 @@ async function scanOneSource(
   ): Promise<Candidate[]> => {
     const files = await walkFiles(baseAbs, Math.max(1, Math.min(limit, 200000)), predicate);
     const needs: Candidate[] = [];
-    for (const scanned of files) {
+    // 条目口径：视频趟跑完接着跑图片趟，所以用累计基数，
+    // 否则第二趟的数字会从头开始（用户看到 500/500 → 0/80 会以为任务重跑了）
+    const base = fileDone;
+    const total = Math.max(fileTotal, base + files.length);
+    for (let fi = 0; fi < files.length; fi += 1) {
+      // 每 25 个报一次：一个来源能有几万文件，每次都写库反而拖慢扫描
+      if (onFiles && fi % 25 === 0) onFiles(base + fi, total);
+      const scanned = files[fi];
       const rel = prefix ? `${prefix}/${scanned}` : scanned;
       const abs = path.join(rootAbs, rel.split('/').join(path.sep));
       let st;
@@ -399,6 +443,8 @@ async function scanOneSource(
       else result.added += 1;
       needs.push({ rel, fullRel, abs, size: st.size, mtime, existingId: prev?.id });
     }
+    fileDone = base + files.length;
+    fileTotal = Math.max(fileTotal, fileDone);
     return needs;
   };
 
@@ -622,8 +668,18 @@ async function applyNfo(
 
   // 演员关联从 nfo_actors 派生（`jp_actor_items` 以前没有任何写入点，
   // 所以演员列表的"影片数"恒为 0）。只有本次 NFO 带演员时才重建，避免把已有联动清空。
+  // 顺带把 NFO 里的 `<actor><thumb>` 写进 `jp_actors.thumb_path` —— 演员头像的来源。
   if (ing.actors) {
-    await syncActorLinks(trx, id, parseActorNames(ing.actors), nowSec).catch(() => 0);
+    let thumbs: Record<string, string> | null = null;
+    if (ing.actorThumbs) {
+      try {
+        const parsed = JSON.parse(ing.actorThumbs);
+        if (parsed && typeof parsed === 'object') thumbs = parsed as Record<string, string>;
+      } catch {
+        /* 坏 JSON 就当没有，不影响关联 */
+      }
+    }
+    await syncActorLinks(trx, id, parseActorNames(ing.actors), nowSec, thumbs).catch(() => 0);
   }
   return Number(res.numAffectedRows ?? 0);
 }

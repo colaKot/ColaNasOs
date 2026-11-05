@@ -114,66 +114,33 @@ const shell = `import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
-import '../../core/settings_store.dart';
-import '../../shell/nav_spec_adapter.dart';
+import '../../shell/app_nav_shell.dart';
 
 /// ${name}（脚手架生成于 tool/new-app.js）。
 ///
 /// 菜单结构**不在这里写**：改 \`contracts/apps.json#nav\` 后跑 \`npm run gen:apps\`。
-/// 这个文件只负责「当前选中项 → 内容」的分发，以及侧栏的折叠状态。
-class ${cls}Shell extends StatefulWidget {
+/// 折叠状态、标题、竖分隔都由 [AppNavShell] 提供（四个模块共用一份实现），
+/// 这里只负责「菜单项 id → 内容」。
+class ${cls}Shell extends StatelessWidget {
   const ${cls}Shell({super.key});
 
-  @override
-  State<${cls}Shell> createState() => _${cls}ShellState();
-}
-
-class _${cls}ShellState extends State<${cls}Shell> {
-  static final AppNavSpec _spec = kAppNavSpecs['${id}']!;
-  static const _collapsedKey = 'ui.nav.collapsed.${id}';
-
-  String _key = '${firstItem}';
-  bool _collapsed =
-      SettingsStore.instance.getBool(_collapsedKey) ?? false;
-
-  void _toggleCollapsed() {
-    setState(() => _collapsed = !_collapsed);
-    SettingsStore.instance.setBool(_collapsedKey, _collapsed);
-  }
-
-  String get _title => navItemLabel(_spec, _key, tr, fallback: tr('app.${id}'));
-
-  Widget _content() {
-    switch (_key) {
+  Widget _content(String key) {
+    switch (key) {
       // TODO: 每个菜单项接上真正的页面，然后把下面的 _PendingPane 删掉。
       // 没接的项会被 \`npm run app-nav.check\` 报出来（它在 _content 里找不到对应 id）。
       // 未列出的菜单项落到这个默认页
       // nav-default: ${firstItem}
       default:
-        return _PendingPane(label: _title);
+        return const _PendingPane();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Row(
-        children: [
-          NasSideNav(
-            groups: buildNavGroups(spec: _spec, translate: tr),
-            selectedId: _key,
-            onSelect: (key) => setState(() => _key = key),
-            width: _collapsed ? 56 : 128,
-            iconOnly: _collapsed,
-            title: _title,
-            onToggleCollapsed: _toggleCollapsed,
-            expandTooltip: tr('photo.nav.expand'),
-            collapseTooltip: tr('photo.nav.collapse'),
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(child: _content()),
-        ],
-      ),
+    return AppNavShell(
+      appId: '${id}',
+      defaultKey: '${firstItem}',
+      content: _content,
     );
   }
 }
@@ -181,15 +148,13 @@ class _${cls}ShellState extends State<${cls}Shell> {
 /// 占位页：脚手架刚生成时所有菜单项都落在这里。
 /// 接完真实页面就删掉它，\`app-nav.check\` 会因此开始要求每个 id 都有 case。
 class _PendingPane extends StatelessWidget {
-  const _PendingPane({required this.label});
-
-  final String label;
+  const _PendingPane();
 
   @override
   Widget build(BuildContext context) {
     return NasEmptyState(
-      title: label,
-      message: tr('photo.nav.pending'),
+      title: tr('common.pending'),
+      message: tr('common.pendingHint'),
       icon: Icons.construction_outlined,
     );
   }
@@ -204,7 +169,7 @@ const summary = [
   `  骨架      ${path.relative(root, shellPath)}`,
   '',
   '  之后还要手工做两件事：',
-  `    1. 在 apps/colanas_os/lib/shell/app_shell.dart 的 _content 里加一行：`,
+  `    1. 在 apps/colanas_os/lib/shell/app_shell.dart 的 _pageById 里加一行：`,
   `         case '${id}': return const ${cls}Shell();`,
   `    2. 跑 npm run gen（生成 AppNavSpec）、npm run gen:i18n`,
 ];

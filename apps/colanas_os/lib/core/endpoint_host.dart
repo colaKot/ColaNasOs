@@ -19,5 +19,11 @@ class EndpointHost {
       _override ??
       host.detectEndpoint(tvMode: AppSettings.instance.tvMode.value);
 
+  /// 当前是不是「PC 客户端」（原生桌面构建，或 Electron 外壳）。
+  ///
+  /// 注意：Electron 外壳加载的是 Flutter Web 产物，[endpoint] 会报 `web`；
+  /// 但产品语义上它属于 PC 客户端，所以单独有这个判据（见 `app_visibility.dart`）。
+  static bool get isPcClient => host.detectPcShell();
+
   static void overrideForTest(CapabilityEndpoint? value) => _override = value;
 }

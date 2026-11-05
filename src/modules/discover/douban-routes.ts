@@ -82,7 +82,73 @@ export async function registerDoubanRoutes(app: any, k: KernelApi): Promise<void
     },
   );
 
-  app.post(
+  // 读取豆瓣配置（Cookie 明文回传：用户要能看见自己配了什么）
+  app.get(
+    '/api/v1/discover/douban/settings',
+      secured('discover:read', {
+        schema: {
+          operationId: 'discoverDoubanSettingsGet',
+          tags: TAG,
+          summary: '读取豆瓣配置（Cookie 明文回传）',
+          response: {
+            200: Type.Object({
+              cookie: Type.String(),
+              configured: Type.Boolean(),
+            }),
+          },
+        },
+      }),
+      async () => {
+        const cookie = String(k.config.get('discover.doubanCookie') || '');
+        return { cookie, configured: cookie.trim().length > 0 };
+      },
+    );
+
+    // 连通性自检：真打一次豆瓣榜单；Cookie 失效也会返回 403/空列表
+    app.post(
+      '/api/v1/discover/douban/test',
+      secured('discover:read', {
+        schema: {
+          operationId: 'discoverDoubanTest',
+          tags: TAG,
+          summary: '测试豆瓣连通性（用当前 Cookie）',
+          body: Type.Object({
+            cookie: Type.Optional(Type.String({ maxLength: 4096 })),
+          }),
+          response: {
+            200: Type.Object({
+              ok: Type.Boolean(),
+              message: Type.String(),
+              latencyMs: Type.Integer(),
+            }),
+          },
+        },
+      }),
+      async (req: FastifyRequest) => {
+        const body = (req.body || {}) as { cookie?: string };
+        const cookie = String(body.cookie ?? '').trim()
+          || String(k.config.get('discover.doubanCookie') || '').trim();
+        const started = Date.now();
+        try {
+          const items = await fetchDoubanChart('热门', cookie ? { cookie } : {});
+          return {
+            ok: items.length > 0,
+            message: items.length > 0
+              ? `连接成功：取到 ${items.length} 条`
+              : '连接失败：能访问但没取到数据（Cookie 可能失效）',
+            latencyMs: Date.now() - started,
+          };
+        } catch (err) {
+          return {
+            ok: false,
+            message: `连接失败：${String((err as Error)?.message || err)}`,
+            latencyMs: Date.now() - started,
+          };
+        }
+      },
+    );
+
+    app.post(
     '/api/v1/discover/douban/settings',
     secured('discover:write', {
       schema: {

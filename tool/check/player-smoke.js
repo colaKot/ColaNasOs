@@ -154,6 +154,14 @@ process.chdir(root);
     );
     if (r.statusCode === 200) {
       const id = r.json().id;
+      // 边转边播：会话还没 done 时播放列表就必须可读（EVENT 或空 EVENT 占位）。
+      // 以前这里返回 404「session not ready」，客户端只能等全片转完才起播。
+      const early = await inject('GET', r.json().url);
+      check(
+        'session_playlist_while_running',
+        early.statusCode === 200 && early.body.includes('#EXTM3U'),
+        'status=' + early.statusCode + ' ' + String(early.body).slice(0, 80),
+      );
       let job;
       const t0 = Date.now();
       for (;;) {
@@ -208,7 +216,7 @@ process.chdir(root);
         // 按编码分档：h265 应产出 fMP4（带 EXT-X-MAP）；编码不可用时自动降级 h264
         r = await inject('POST', '/api/v1/player/sessions', admin, {
           id: itemId,
-          preset: 'web1080',
+          preset: '1080p_3m',
           codec: 'h265',
         });
         const id2 = r.json().id;
@@ -225,13 +233,15 @@ process.chdir(root);
           `codec=${job2 && job2.codec} container=${job2 && job2.container} err=${job2 && job2.error}`,
         );
         if (job2 && job2.container === 'fmp4') {
-          const pl = await inject('GET', `/api/v1/player/hls/${id2}/index.m3u8`);
+          // 播放地址必须带会话令牌：下面「无令牌一律 401」那条正是这个约定，
+          // 这里以前直接请求裸路径 → 恒 401，而 codec 没接通时永远走 mpegts 分支所以没人发现。
+          const pl = await inject('GET', job2.url);
           check(
             'fmp4_ext_x_map',
             pl.statusCode === 200 && pl.body.includes('#EXT-X-MAP'),
-            'map=' + pl.body.includes('#EXT-X-MAP'),
+            `status=${pl.statusCode} map=${pl.body.includes('#EXT-X-MAP')}`,
           );
-          const init = await inject('GET', `/api/v1/player/hls/${id2}/init.mp4`);
+          const init = await inject('GET', job2.url.replace('/index.m3u8', '/init.mp4'));
           check('fmp4_init_mp4', init.statusCode === 200, 'status=' + init.statusCode);
         } else {
           // 降级路径也是正确行为：编码器不可用时回 H.264 / MPEG-TS

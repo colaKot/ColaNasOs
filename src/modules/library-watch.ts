@@ -23,6 +23,8 @@ export interface WatchableLibrary {
   id: string;
   name: string;
   root_path: string;
+  /** 可选：1 目录变化时自动重扫；0 / 缺省按旧行为（自动） */
+  scan_when_change?: number;
 }
 
 export interface LibraryWatchSpec<T extends WatchableLibrary> {
@@ -181,7 +183,8 @@ export function bindLibraryWatch<T extends WatchableLibrary>(spec: LibraryWatchS
 
   const onBatch = (batch: FsBatch) => {
     if (stopped || !watching()) return;
-    const all = [...libs.values()];
+    // 来源级「变更自动扫描」开关：只有显式 0 才跳过；其它模块没有该字段 → 保持自动
+    const all = [...libs.values()].filter((l) => l.scan_when_change !== 0);
     for (const ev of batch.events) {
       if (ev.kind === 'rescan') {
         for (const lib of all) schedule(lib, null);
@@ -256,6 +259,7 @@ export function bindLibraryWatch<T extends WatchableLibrary>(spec: LibraryWatchS
     if (stopped) return;
     // 错峰：多个库同时全量 walk 会互相拖慢，也会和用户请求抢 IO；0~60 s 随机散开
     for (const lib of libs.values()) {
+      if (lib.scan_when_change === 0) continue;
       const timer = setTimeout(
         () => {
           if (!stopped) schedule(lib, null);

@@ -7,7 +7,11 @@ import { Type } from '@sinclair/typebox';
 
 export const ListQuery = Type.Object(
   {
-    path: Type.Optional(Type.String({ description: '目录相对路径，缺省为根' })),
+    path: Type.Optional(
+      Type.String({
+        description: '目录路径：相对文件根（缺省为根），或绝对路径（D:/Photos、\\\\host\\share）',
+      }),
+    ),
     cursor: Type.Optional(Type.String({ description: '游标（当前未启用）' })),
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200, default: 200 })),
   },
@@ -29,6 +33,23 @@ export const ListResponse = Type.Object(
     nextCursor: Type.Union([Type.String(), Type.Null()]),
   },
   { $id: 'FilesListResponse' },
+);
+
+export const RootItem = Type.Object(
+  {
+    path: Type.String({ description: 'POSIX 风格绝对路径，如 C:/ 或 \\\\host\\share' }),
+    label: Type.String({ description: '展示名，如 C:' }),
+    kind: Type.Union([Type.Literal('drive'), Type.Literal('home'), Type.Literal('share')]),
+  },
+  { $id: 'FilesRootItem' },
+);
+
+export const RootsResponse = Type.Object(
+  {
+    home: Type.String({ description: '文件根（相对路径以此为基准）' }),
+    roots: Type.Array(Type.Ref(RootItem)),
+  },
+  { $id: 'FilesRootsResponse' },
 );
 
 export const CheckBody = Type.Object(

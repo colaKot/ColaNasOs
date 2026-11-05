@@ -22,9 +22,7 @@ class _PhotoPreviewSettingsPageState extends State<PhotoPreviewSettingsPage> {
     await SettingsStore.instance.setInt('photo.grid.extent', _extent.round());
     await SettingsStore.instance.setInt('photo.page.size', _pageSize.round());
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(tr('photo.preview.saved'))),
-    );
+    NasSnack.show(context, tr('photo.preview.saved'));
   }
 
   @override

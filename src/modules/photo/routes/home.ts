@@ -3,6 +3,7 @@ import { secured } from '../../../../kernel/route';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { PhotoHelpers } from '../helpers';
+import { aiConfig } from '../ai/config';
 import { TAG, toItem, type PhotoItemRow } from '../util';
 
 /** 相册首页看板：把统计 / 足迹 / 人物 / 那年今日聚合成一次请求 */
@@ -75,6 +76,9 @@ export async function registerPhotoHome(
          where in_trash = 0 and latitude is not null and longitude is not null and ${owner}
       `.execute(k.db);
 
+      // 首页人物同样跟随「AI 设置 → 人脸显示下限」：1~2 张的碎片组不占卡片位。
+      // 旧实现写死兜底 10，用户把下限设成 0/3 时首页与列表口径不一致。
+      const minShowCount = Math.max(1, aiConfig(k).faceMinShowCount);
       const people = await sql<{
         id: string;
         name: string | null;
@@ -85,7 +89,7 @@ export async function registerPhotoHome(
         select c.id, c.name, c.size, c.cover_photo_id,
                (select i.rel_path from photo_items i where i.id = c.cover_photo_id) as cover_path
           from photo_face_clusters c
-         where c.size >= ${Math.max(1, Number(k.config.get<any>('photo.ai')?.faceMinShowCount) || 10)}
+         where c.size >= ${minShowCount}
            or (c.name is not null and c.name <> '')
          order by c.size desc limit 8
       `.execute(k.db);

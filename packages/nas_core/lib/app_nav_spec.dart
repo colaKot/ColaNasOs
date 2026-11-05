@@ -62,18 +62,51 @@ class NavSectionSpec {
 }
 
 class AppNavSpec {
-  const AppNavSpec({required this.appId, required this.style, required this.sections});
+  const AppNavSpec({
+    required this.appId,
+    required this.style,
+    required this.sections,
+    this.mobileTabs = const <String>[],
+    this.mobileTabLabels = const <String, String>{},
+    this.mobileTabAliases = const <String, List<String>>{},
+  });
 
   final String appId;
   final NavStyle style;
   final List<NavSectionSpec> sections;
+
+  /// 手机端底部 tab（契约 `nav.mobile.tabs`）。空 = 手机端不显示底部 tab。
+  /// 末项可以是 [kNavMoreTabId]，表示「更多」整页。
+  final List<String> mobileTabs;
+
+  /// 底部 tab 的文案覆盖（tab id → i18n 键）。不给就用菜单项自己的 labelKey。
+  final Map<String, String> mobileTabLabels;
+
+  /// 选中别名：tab → 菜单项 id 列表。用于「一个 tab 涵盖多个菜单项」
+  /// （如影视的「库」tab 同时涵盖 `home` 与动态的 `lib:<id>`）。
+  final Map<String, List<String>> mobileTabAliases;
+
+  bool get hasMobileTabs => mobileTabs.isNotEmpty;
 
   /// 全部静态项 id（不含动态项），用于「契约 ↔ 实现」对账与测试遍历
   Iterable<String> get staticItemIds => sections
       .expand((s) => s.items)
       .where((i) => !i.isDynamic)
       .map((i) => i.id);
+
+  /// 按 id 取菜单项（不含动态项）；找不到返回 null
+  NavItemSpec? itemById(String id) {
+    for (final section in sections) {
+      for (final item in section.items) {
+        if (!item.isDynamic && item.id == id) return item;
+      }
+    }
+    return null;
+  }
 }
+
+/// 契约里表示「更多」的伪 tab id
+const String kNavMoreTabId = '@more';
 
 /// 有二级菜单的 App（生成自契约，新增模块只要在 apps.json 写 nav）
 const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
@@ -89,8 +122,8 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
           NavItemSpec(id: 'home', labelKey: 'photo.nav.home', icon: 'home_outlined'),
           NavItemSpec(id: 'timeline', labelKey: 'ui.photo.056', icon: 'timeline_outlined'),
           NavItemSpec(id: 'footprint', labelKey: 'ui.photo.021', icon: 'place_outlined'),
-          NavItemSpec(id: 'favorites', labelKey: 'photo.nav.favorites', icon: 'favorite_outline'),
-          NavItemSpec(id: 'folders', labelKey: 'photo.nav.files', icon: 'folder_outlined'),
+          NavItemSpec(id: 'favorites', labelKey: 'nav.favorites', icon: 'favorite_outline'),
+          NavItemSpec(id: 'folders', labelKey: 'nav.filesView', icon: 'folder_outlined'),
         ],
       ),
       NavSectionSpec(
@@ -118,6 +151,7 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         titleKey: 'photo.nav.ai',
         icon: 'auto_awesome_outlined',
         items: <NavItemSpec>[
+          NavItemSpec(id: 'photoAiCenter', labelKey: 'photo.nav.aiCenter', icon: 'auto_awesome_outlined'),
           NavItemSpec(id: 'faces', labelKey: 'ui.photo.038', icon: 'face_retouching_natural_outlined'),
           NavItemSpec(id: 'relations', labelKey: 'photo.relations.title', icon: 'hub_outlined'),
           NavItemSpec(id: 'scenes', labelKey: 'ui.photo.036', icon: 'landscape_outlined'),
@@ -137,9 +171,12 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
           NavItemSpec(id: 'preview', labelKey: 'photo.nav.preview', icon: 'photo_size_select_large_outlined'),
           NavItemSpec(id: 'aiSettings', labelKey: 'photo.nav.aiSettings', icon: 'tag_faces_outlined'),
           NavItemSpec(id: 'trash', labelKey: 'photo.nav.trash', icon: 'delete_sweep_outlined'),
+          NavItemSpec(id: 'backup', labelKey: 'photo.nav.backup', icon: 'cloud_upload_outlined', when: 'mobileApp'),
         ],
       ),
     ],
+    mobileTabs: <String>['timeline', 'footprint', 'album', 'photoAiCenter', '@more'],
+    mobileTabLabels: <String, String>{'timeline': 'ui.photo.041'},
   ),
   'video': AppNavSpec(
     appId: 'video',
@@ -153,7 +190,7 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
           NavItemSpec(id: 'home', labelKey: 'video.nav.home', icon: 'home_outlined'),
           NavItemSpec(id: 'lib', dynamic: 'video.libraries', idPrefix: 'lib:', labelFrom: 'name', iconFrom: 'libType'),
           NavItemSpec(id: 'history', labelKey: 'video.nav.history', icon: 'history'),
-          NavItemSpec(id: 'favorites', labelKey: 'photo.nav.favorites', icon: 'favorite_outline'),
+          NavItemSpec(id: 'favorites', labelKey: 'nav.favorites', icon: 'favorite_outline'),
           NavItemSpec(id: 'jp_rank', labelKey: 'video.nav.jpRank', icon: 'leaderboard_outlined', when: 'hasJpLibrary'),
           NavItemSpec(id: 'jp_actor', labelKey: 'video.nav.jpActor', icon: 'people_outline', when: 'hasJpLibrary'),
           NavItemSpec(id: 'series', labelKey: 'video.nav.series', icon: 'video_library_outlined'),
@@ -176,11 +213,14 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         icon: 'settings_outlined',
         items: <NavItemSpec>[
           NavItemSpec(id: 'settings.library', labelKey: 'video.nav.librarySettings', icon: 'video_library_outlined'),
-          NavItemSpec(id: 'settings.scrape', labelKey: 'video.nav.scrapeSettings', icon: 'auto_awesome_outlined'),
-          NavItemSpec(id: 'settings.other', labelKey: 'video.nav.otherSettings', icon: 'tune'),
+          NavItemSpec(id: 'settings.app', labelKey: 'video.nav.appSettings', icon: 'tune'),
+          NavItemSpec(id: 'settings.client', labelKey: 'video.nav.clientSettings', icon: 'devices'),
         ],
       ),
     ],
+    mobileTabs: <String>['home', 'history', 'collections', 'favorites', '@more'],
+    mobileTabLabels: <String, String>{'home': 'video.nav.libraries'},
+    mobileTabAliases: <String, List<String>>{'home': <String>['lib']},
   ),
   'discover': AppNavSpec(
     appId: 'discover',
@@ -206,6 +246,7 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         ],
       ),
     ],
+    mobileTabs: <String>['discover', 'pt', 'rss', 'tasks', 'settings'],
   ),
   'music': AppNavSpec(
     appId: 'music',
@@ -216,12 +257,12 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         titleKey: 'music.nav.library',
         icon: 'library_music_outlined',
         items: <NavItemSpec>[
-          NavItemSpec(id: 'songs', labelKey: 'ui.music.009', icon: 'music_note_outlined'),
-          NavItemSpec(id: 'favorites', labelKey: 'photo.nav.favorites', icon: 'favorite_outline'),
+          NavItemSpec(id: 'songs', labelKey: 'music.nav.songs', icon: 'music_note_outlined'),
+          NavItemSpec(id: 'favorites', labelKey: 'nav.favorites', icon: 'favorite_outline'),
           NavItemSpec(id: 'history', labelKey: 'music.nav.history', icon: 'history_outlined'),
           NavItemSpec(id: 'albums', labelKey: 'music.nav.albums', icon: 'album_outlined'),
           NavItemSpec(id: 'artists', labelKey: 'music.nav.artists', icon: 'people_outlined'),
-          NavItemSpec(id: 'files', labelKey: 'photo.nav.files', icon: 'folder_outlined'),
+          NavItemSpec(id: 'files', labelKey: 'nav.filesView', icon: 'folder_outlined'),
         ],
       ),
       NavSectionSpec(
@@ -230,10 +271,7 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         icon: 'queue_music',
         items: <NavItemSpec>[
           NavItemSpec(id: 'playlists', labelKey: 'ui.music.030', icon: 'queue_music_outlined'),
-          NavItemSpec(id: 'recentAdded', labelKey: 'ui.music.026', icon: 'new_releases_outlined'),
-          NavItemSpec(id: 'recentPlayed', labelKey: 'ui.music.027', icon: 'history'),
-          NavItemSpec(id: 'mostPlayed', labelKey: 'ui.music.028', icon: 'trending_up'),
-          NavItemSpec(id: 'neverPlayed', labelKey: 'ui.music.029', icon: 'play_circle_outline'),
+          NavItemSpec(id: 'collections', labelKey: 'music.nav.collections', icon: 'collections_bookmark_outlined'),
         ],
       ),
       NavSectionSpec(
@@ -241,10 +279,67 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         titleKey: 'ui.settings.017',
         icon: 'settings_outlined',
         items: <NavItemSpec>[
-          NavItemSpec(id: 'settings', labelKey: 'music.nav.settings', icon: 'tune'),
+          NavItemSpec(id: 'settings.source', labelKey: 'music.nav.sources', icon: 'folder_outlined'),
+          NavItemSpec(id: 'settings.app', labelKey: 'music.nav.appSettings', icon: 'tune'),
+          NavItemSpec(id: 'settings.client', labelKey: 'music.nav.cache', icon: 'devices'),
         ],
       ),
     ],
+    mobileTabs: <String>['songs', 'playlists', 'favorites', 'history', '@more'],
+    mobileTabLabels: <String, String>{'songs': 'music.nav.songs'},
+  ),
+  'book': AppNavSpec(
+    appId: 'book',
+    style: NavStyle.side,
+    sections: <NavSectionSpec>[
+      NavSectionSpec(
+        id: 'library',
+        titleKey: 'book.nav.library',
+        icon: 'local_library_outlined',
+        items: <NavItemSpec>[
+          NavItemSpec(id: 'books', labelKey: 'book.nav.books', icon: 'book_outlined'),
+          NavItemSpec(id: 'comics', labelKey: 'book.nav.comics', icon: 'auto_stories_outlined'),
+          NavItemSpec(id: 'favorites', labelKey: 'nav.favorites', icon: 'favorite_outline'),
+          NavItemSpec(id: 'history', labelKey: 'book.nav.history', icon: 'history'),
+          NavItemSpec(id: 'files', labelKey: 'nav.filesView', icon: 'folder_outlined'),
+        ],
+      ),
+      NavSectionSpec(
+        id: 'lists',
+        titleKey: 'book.nav.lists',
+        icon: 'playlist_play_outlined',
+        items: <NavItemSpec>[
+          NavItemSpec(id: 'lists', labelKey: 'book.nav.myLists', icon: 'playlist_add_outlined'),
+          NavItemSpec(id: 'collections', labelKey: 'book.nav.collections', icon: 'collections_bookmark_outlined'),
+        ],
+      ),
+      NavSectionSpec(
+        id: 'settings',
+        titleKey: 'ui.settings.017',
+        icon: 'settings_outlined',
+        items: <NavItemSpec>[
+          NavItemSpec(id: 'settings.source', labelKey: 'book.nav.sources', icon: 'folder_special_outlined'),
+          NavItemSpec(id: 'settings.cache', labelKey: 'book.nav.cache', icon: 'download_for_offline_outlined'),
+        ],
+      ),
+    ],
+    mobileTabs: <String>['books', 'comics', 'favorites', '@more'],
+  ),
+  'sync': AppNavSpec(
+    appId: 'sync',
+    style: NavStyle.side,
+    sections: <NavSectionSpec>[
+      NavSectionSpec(
+        id: 'main',
+        titleKey: 'sync.menu.group',
+        icon: 'sync',
+        items: <NavItemSpec>[
+          NavItemSpec(id: 'tasks', labelKey: 'sync.menu.tasks', icon: 'sync'),
+          NavItemSpec(id: 'help', labelKey: 'sync.menu.help', icon: 'help_outline'),
+        ],
+      ),
+    ],
+    mobileTabs: <String>['tasks', 'help'],
   ),
 };
 

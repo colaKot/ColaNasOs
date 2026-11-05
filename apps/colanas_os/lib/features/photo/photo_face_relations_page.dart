@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import '../../shell/app_widgets.dart';
 
 import 'package:flutter/material.dart';
 import 'package:nas_media/nas_media.dart';
@@ -134,8 +135,7 @@ class _PhotoFaceRelationsPageState extends State<PhotoFaceRelationsPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -182,11 +182,7 @@ class _PhotoFaceRelationsPageState extends State<PhotoFaceRelationsPage> {
                                   ),
                                 ),
                               ),
-                              IconButton(
-                                tooltip: tr('common.refresh'),
-                                onPressed: _load,
-                                icon: const Icon(Icons.refresh),
-                              ),
+                              NasRefreshButton(onPressed: _load),
                             ],
                           ),
                         ),

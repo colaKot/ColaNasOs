@@ -183,7 +183,7 @@ class AppRegistry {
       icon: 'sync',
       group: AppGroup.service,
       accent: <int>[0xFF8B5CF6, 0xFF6366F1],
-      endpoints: <ClientEndpoint>{ClientEndpoint.desktop, ClientEndpoint.tablet, ClientEndpoint.mobile, ClientEndpoint.web},
+      endpoints: <ClientEndpoint>{ClientEndpoint.desktop},
       available: true,
     ),
     AppDescriptor(
@@ -204,7 +204,7 @@ class AppRegistry {
       group: AppGroup.service,
       accent: <int>[0xFFF43F5E, 0xFFFB7185],
       endpoints: <ClientEndpoint>{ClientEndpoint.desktop, ClientEndpoint.tablet, ClientEndpoint.mobile, ClientEndpoint.web},
-      available: false,
+      available: true,
     ),
     AppDescriptor(
       id: 'accounts',
@@ -234,7 +234,7 @@ class AppRegistry {
       group: AppGroup.service,
       accent: <int>[0xFF475569, 0xFF1E293B],
       endpoints: <ClientEndpoint>{ClientEndpoint.desktop},
-      available: false,
+      available: true,
     ),
     AppDescriptor(
       id: 'settings',

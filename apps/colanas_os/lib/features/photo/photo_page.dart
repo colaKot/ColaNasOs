@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../shell/app_widgets.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import '../../core/scan_refresh.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import '../../core/task_poll.dart';
+import '../../shell/mobile_frame.dart';
 import 'photo_download.dart';
 import 'photo_place_picker.dart';
 import 'photo_similar_page.dart';
@@ -30,6 +32,8 @@ class PhotoPage extends StatefulWidget {
     this.view = PhotoPageView.timeline,
     this.favoriteOnly = false,
     this.todayOnly = false,
+    this.initialYear,
+    this.initialMonth,
   });
 
   final PhotoPageView view;
@@ -39,6 +43,10 @@ class PhotoPage extends StatefulWidget {
 
   /// 只看今天（左侧「今天」入口）
   final bool todayOnly;
+
+  /// 首屏就缩到某年（年视图下钻回来用）；[initialMonth] 非空再缩到某月
+  final int? initialYear;
+  final int? initialMonth;
 
   @override
   State<PhotoPage> createState() => _PhotoPageState();
@@ -87,6 +95,10 @@ class _PhotoPageState extends State<PhotoPage> {
   bool _selecting = false;
   final Set<String> _selected = <String>{};
 
+  /// 手机端多选工具条的通道（外壳给的）。桌面端取不到 → 用页面内的 [_selectBar]
+  NasBulkController? _bulkCtl;
+  bool _bulkSyncScheduled = false;
+
   /// 搜索联想（防抖 320ms）
   Timer? _suggestTimer;
   List<Map<String, dynamic>> _suggestions = const [];
@@ -111,6 +123,19 @@ class _PhotoPageState extends State<PhotoPage> {
   void initState() {
     final savedExtent = SettingsStore.instance.getInt('photo.grid.extent');
     if (savedExtent != null) _thumbExtent = savedExtent.toDouble();
+    // 年视图下钻：首帧就带上筛选，否则 _bootstrap() 会先拉一遍全量再被覆盖（两次请求）
+    final initYear = widget.initialYear;
+    if (initYear != null) {
+      _yearFilter = initYear;
+      _visibleYear = initYear;
+      final month = widget.initialMonth;
+      if (month != null) {
+        final from = DateTime(initYear, month, 1);
+        final to = DateTime(initYear, month + 1, 1);
+        _fromSec = from.millisecondsSinceEpoch ~/ 1000;
+        _toSec = to.millisecondsSinceEpoch ~/ 1000 - 1;
+      }
+    }
     super.initState();
     _unsubScan = listenScanDone('photo', () {
       if (mounted) _bootstrap();
@@ -122,6 +147,8 @@ class _PhotoPageState extends State<PhotoPage> {
 
   @override
   void dispose() {
+    // 多选态是"模式"，页面没了必须收回，否则工具条会挂在别的 tab 上
+    _bulkCtl?.hide();
     _suggestTimer?.cancel();
     _searchCtrl.removeListener(_onSearchChanged);
     _unsubScan();
@@ -277,10 +304,17 @@ class _PhotoPageState extends State<PhotoPage> {
     }
   }
 
+  /// 右侧年份刻度的宽度。手机端不显示（入口改成「照片」tab 的浮动胶囊「年份」），
+  /// 否则 64px 会吃掉 390 宽屏幕的 1/6。
+  double _railWidth(BuildContext context) => isCompactWidth(context) ? 0 : 64;
+
   /// 按网格几何估算当前可见的第一张照片，取其年份做刻度联动
   void _updateVisibleYear() {
     if (!mounted || !_scroll.hasClients || _items.isEmpty) return;
-    final width = MediaQuery.sizeOf(context).width - 64 - NasTokens.spaceSm * 2;
+    final width =
+        MediaQuery.sizeOf(context).width -
+        _railWidth(context) -
+        NasTokens.spaceSm * 2;
     final cell = _thumbExtent + NasTokens.spaceXs;
     final cols = (width / cell).floor().clamp(1, 50);
     final pos = _scroll.position;
@@ -399,6 +433,7 @@ class _PhotoPageState extends State<PhotoPage> {
     }
     _resetHybrid();
     if (more && (_loadingMore || _nextCursor == null)) return;
+    if (!mounted) return;
     setState(() {
       if (more) {
         _loadingMore = true;
@@ -510,25 +545,23 @@ class _PhotoPageState extends State<PhotoPage> {
         body: const PhotoScanBody(),
       );
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(tr('photo.scanQueued'))));
+      NasSnack.showOn(messenger, tr('photo.scanQueued'));
 
       final task = await waitTask(queued.taskId);
       if (!mounted) return;
       if (task == null) {
-        messenger.showSnackBar(SnackBar(content: Text(tr('photo.scanTimeout'))));
+        NasSnack.showOn(messenger, tr('photo.scanTimeout'));
         return;
       }
       if ('${task['state']}' != 'done') {
-        messenger.showSnackBar(
-          SnackBar(content: Text('${task['error'] ?? task['state']}')),
-        );
+        NasSnack.showOn(messenger, '${task['error'] ?? task['state']}');
         return;
       }
       await _bootstrap();
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(tr('photo.scanFinished'))));
+      NasSnack.showOn(messenger, tr('photo.scanFinished'));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('common.scanFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('common.scanFailed', {'error': '$e'}));
     }
   }
 
@@ -564,18 +597,18 @@ class _PhotoPageState extends State<PhotoPage> {
       final task = await waitTask(queued.taskId);
       if (!mounted) return;
       if (task == null) {
-        messenger.showSnackBar(SnackBar(content: Text(tr('photo.scanTimeout'))));
+        NasSnack.showOn(messenger, tr('photo.scanTimeout'));
         return;
       }
       if ('${task['state']}' != 'done') {
-        messenger.showSnackBar(SnackBar(content: Text('${task['error'] ?? task['state']}')));
+        NasSnack.showOn(messenger, '${task['error'] ?? task['state']}');
         return;
       }
       await _bootstrap();
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(tr('photo.scanFinished'))));
+      NasSnack.showOn(messenger, tr('photo.scanFinished'));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(tr('common.cleanupFailed', {'error': '$e'}))));
+      NasSnack.showOn(messenger, tr('common.cleanupFailed', {'error': '$e'}));
     }
   }
 
@@ -596,7 +629,7 @@ class _PhotoPageState extends State<PhotoPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('ui.accounts.006')),
+            child: Text(tr('common.create')),
           ),
         ],
       ),
@@ -610,8 +643,7 @@ class _PhotoPageState extends State<PhotoPage> {
       await _refreshAlbums();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.createFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.createFailed', {'error': '$e'}));
     }
   }
 
@@ -647,8 +679,7 @@ class _PhotoPageState extends State<PhotoPage> {
       await _refreshAlbums();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.deleteFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.deleteFailed', {'error': '$e'}));
     }
   }
 
@@ -710,8 +741,7 @@ class _PhotoPageState extends State<PhotoPage> {
       await _refreshAlbums();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.saveFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.saveFailed', {'error': '$e'}));
     }
   }
 
@@ -734,8 +764,7 @@ class _PhotoPageState extends State<PhotoPage> {
       await _refreshAlbums();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.saveFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.saveFailed', {'error': '$e'}));
     }
   }
 
@@ -750,13 +779,13 @@ class _PhotoPageState extends State<PhotoPage> {
       );
       // 收藏页取消收藏后该项应从列表消失
       if (widget.favoriteOnly && !next) {
+        if (!mounted) return;
         setState(() => _items = _items.where((e) => e.id != item.id).toList());
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _favOverride[item.id] = !next);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      NasSnack.show(context, e.toString());
     }
   }
 
@@ -777,8 +806,7 @@ class _PhotoPageState extends State<PhotoPage> {
       if (widget.favoriteOnly) await _loadTimeline();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      NasSnack.show(context, e.toString());
     }
   }
 
@@ -834,13 +862,9 @@ if (ok != true) return;
         _selecting = false;
       });
       await _loadTimeline();
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('photo.delete.done', {'count': '${res.count}'}))),
-      );
+      NasSnack.showOn(messenger, tr('photo.delete.done', {'count': '${res.count}'}));
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('photo.delete.failed', {'error': '$e'}))),
-      );
+      NasSnack.showOn(messenger, tr('photo.delete.failed', {'error': '$e'}));
     }
   }
 
@@ -848,9 +872,7 @@ if (ok != true) return;
     final res = await ApiSession.instance.client.photoCollectionList();
     if (!mounted) return;
     if (res.items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('photo.timeline.noCollection'))),
-      );
+      NasSnack.show(context, tr('photo.timeline.noCollection'));
       return;
     }
     final picked = await showDialog<String>(
@@ -879,13 +901,10 @@ if (ok != true) return;
         _selected.clear();
         _selecting = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('photo.collection.added').replaceAll('{n}', '${_selected.length}'))),
-      );
+      NasSnack.show(context, tr('photo.collection.added').replaceAll('{n}', '${_selected.length}'));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      NasSnack.show(context, e.toString());
     }
   }
 
@@ -953,9 +972,7 @@ if (ok != true) return;
       );
       if (!mounted) return;
       if (res.items.isEmpty) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(tr('photo.similar.empty'))),
-        );
+        NasSnack.showOn(messenger, tr('photo.similar.empty'));
         return;
       }
       await showDialog<void>(
@@ -1002,7 +1019,7 @@ if (ok != true) return;
       );
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.showOn(messenger, '$e');
     }
   }
 
@@ -1028,14 +1045,75 @@ if (ok != true) return;
     );
   }
 
+  /// 把当前多选状态报给手机端外壳（桌面端没有这个通道，取到 null 就什么也不做）。
+  ///
+  /// 为什么在 build 之后同步而不是在每个 setState 点手写一次：选中的照片会被
+  /// 滚动 / 收藏 / 删除等十来个地方改，逐个补必然漏；这里按「build 后对一次账」，
+  /// 用 [NasBulkSpec.signature] 去重，内容没变就不会触发外壳重建。
+  void _scheduleBulkSync() {
+    if (_bulkSyncScheduled) return;
+    _bulkSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _bulkSyncScheduled = false;
+      if (!mounted) return;
+      final ctl = NasBulkScope.maybeOf(context);
+      _bulkCtl = ctl;
+      if (ctl == null) return;
+      if (!_selecting) {
+        ctl.hide();
+        return;
+      }
+      final single = _selected.length == 1;
+      final any = _selected.isNotEmpty;
+      ctl.show(
+        NasBulkSpec(
+          title: tr(
+            'photo.timeline.selected',
+          ).replaceAll('{n}', '${_selected.length}'),
+          onClose: () => setState(() {
+            _selecting = false;
+            _selected.clear();
+          }),
+          actions: [
+            NasBulkAction(
+              icon: Icons.image_search,
+              tooltip: tr('photo.similar.title'),
+              enabled: single,
+              onPressed: _similarFromSelection,
+            ),
+            NasBulkAction(
+              icon: Icons.favorite_border,
+              tooltip: tr('photo.timeline.batchFavorite'),
+              enabled: any,
+              onPressed: () => _batchFavorite(true),
+            ),
+            NasBulkAction(
+              icon: Icons.collections_outlined,
+              tooltip: tr('photo.timeline.addToCollection'),
+              enabled: any,
+              onPressed: _addSelectedToCollection,
+            ),
+            NasBulkAction(
+              icon: Icons.delete_outline,
+              tooltip: tr('common.delete'),
+              enabled: any,
+              onPressed: _deleteSelected,
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    _scheduleBulkSync();
     // 相册已独立成二级导航入口：时间轴页不再出现相册列表（宽屏/窄屏都不出现）
     if (widget.view == PhotoPageView.album) return _albumPane();
     return Row(
       children: [
         Expanded(child: _timelinePane()),
-        _yearRail(),
+        if (_railWidth(context) > 0) _yearRail(),
       ],
     );
   }
@@ -1141,15 +1219,11 @@ if (ok != true) return;
       );
       if (!mounted) return;
       if (path != null) {
-        messenger.showSnackBar(
-          SnackBar(content: Text(tr('photo.longPress.saved', {'path': path}))),
-        );
+        NasSnack.showOn(messenger, tr('photo.longPress.saved', {'path': path}));
       }
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(tr('photo.longPress.saveFailed', {'error': '$e'}))),
-      );
+      NasSnack.showOn(messenger, tr('photo.longPress.saveFailed', {'error': '$e'}));
     }
   }
 
@@ -1282,6 +1356,62 @@ if (ok != true) return;
       ),
     );
     if (!mounted || action == null) return;
+    await _photoAction(action, item, index);
+  }
+
+  /// 右键菜单（桌面 / Web）：与长按菜单同一批动作，只是换成鼠标触发。
+  List<NasMenuEntry> _photoMenuEntries(PhotoItem item, int index) {
+    final fav = _isFavorite(item);
+    return [
+      NasMenuEntry(
+        label: tr('photo.longPress.open'),
+        icon: Icons.open_in_full,
+        onSelected: () => _photoAction('open', item, index),
+      ),
+      NasMenuEntry(
+        label: tr('photo.similar.title'),
+        icon: Icons.travel_explore,
+        onSelected: () => _photoAction('similar', item, index),
+      ),
+      NasMenuEntry(
+        label: tr(
+          PhotoDownload.supported
+              ? 'photo.longPress.save'
+              : 'photo.longPress.copyLink',
+        ),
+        icon: PhotoDownload.supported
+            ? Icons.download_outlined
+            : Icons.link,
+        onSelected: () => _photoAction(
+          PhotoDownload.supported ? 'save' : 'copyLink',
+          item,
+          index,
+        ),
+      ),
+      NasMenuEntry(
+        label: tr(
+          fav ? 'photo.longPress.unfavorite' : 'photo.longPress.favorite',
+        ),
+        icon: fav ? Icons.favorite : Icons.favorite_border,
+        onSelected: () => _photoAction('fav', item, index),
+      ),
+      const NasMenuEntry.divider(),
+      NasMenuEntry(
+        label: tr('photo.timeline.select'),
+        icon: Icons.checklist,
+        onSelected: () => _photoAction('select', item, index),
+      ),
+      NasMenuEntry(
+        label: tr('photo.longPress.delete'),
+        icon: Icons.delete_outline,
+        danger: true,
+        onSelected: () => _photoAction('delete', item, index),
+      ),
+    ];
+  }
+
+  /// 长按菜单与右键菜单共用的动作分发
+  Future<void> _photoAction(String action, PhotoItem item, int index) async {
     switch (action) {
       case 'open':
         _openViewer(index);
@@ -1301,14 +1431,14 @@ if (ok != true) return;
       case 'copyLink':
         await Clipboard.setData(ClipboardData(text: _media.file(item.path)));
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(tr('photo.longPress.linkCopied'))));
+        NasSnack.show(context, tr('photo.longPress.linkCopied'));
       case 'select':
         setState(() {
           _selecting = true;
           _selected.add(item.id);
         });
       case 'delete':
+        if (!mounted) return;
         setState(() {
           _selecting = true;
           _selected
@@ -1317,6 +1447,44 @@ if (ok != true) return;
         });
         await _deleteSelected();
     }
+  }
+
+  /// 手机端工具栏只留「筛选 / 多选 / 更多」。
+  ///
+  /// 原来这一行摆了 8 个 IconButton（排序/缩放×2/年视图/扫描/多选/筛选/刷新），
+  /// 390 宽的屏上实测 `RenderFlex overflowed by 4.0 pixels`，所以低频动作收进菜单；
+  /// 缩放单独不放进来 —— 手机端固定 3 列（见网格 delegate），缩放已经没有意义。
+  Widget _moreMenu() {
+    return PopupMenuButton<String>(
+      tooltip: tr('common.more'),
+      icon: const Icon(Icons.more_vert),
+      onSelected: (v) {
+        switch (v) {
+          case 'sort':
+            setState(() => _asc = !_asc);
+            _loadTimeline();
+          case 'year':
+            _openYearView();
+          case 'scan':
+            _scan();
+          case 'prune':
+            _pruneMissing();
+        }
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'sort',
+          child: Text(
+            _asc
+                ? tr('photo.timeline.sortAsc')
+                : tr('photo.timeline.sortDesc'),
+          ),
+        ),
+        PopupMenuItem(value: 'year', child: Text(tr('photo.yearView.title'))),
+        PopupMenuItem(value: 'scan', child: Text(tr('common.scan'))),
+        PopupMenuItem(value: 'prune', child: Text(tr('ui.photo.048'))),
+      ],
+    );
   }
 
   Widget _timelinePane() {
@@ -1335,7 +1503,7 @@ if (ok != true) return;
               Expanded(
                 child: widget.favoriteOnly
                     ? Text(
-                        tr('photo.nav.favorites'),
+                        tr('nav.favorites'),
                         style: TextStyle(
                           fontSize: NasTokens.fontSubtitle,
                           fontWeight: FontWeight.w600,
@@ -1355,37 +1523,43 @@ if (ok != true) return;
                 ),
               ),
               const SizedBox(width: NasTokens.spaceSm),
-              Text(
-                stats == null ? '' : tr('photo.count', {'count': '${stats.items}'}),
-                style: TextStyle(
-                  color: context.nasTextSecondary,
-                  fontSize: NasTokens.fontCaption,
+              if (!isCompactWidth(context))
+                Text(
+                  stats == null
+                      ? ''
+                      : tr('photo.count', {'count': '${stats.items}'}),
+                  style: TextStyle(
+                    color: context.nasTextSecondary,
+                    fontSize: NasTokens.fontCaption,
+                  ),
                 ),
-              ),
-              IconButton(
-                tooltip: _asc
-                    ? tr('photo.timeline.sortAsc')
-                    : tr('photo.timeline.sortDesc'),
-                icon: Icon(_asc ? Icons.arrow_upward : Icons.arrow_downward),
-                onPressed: () {
-                  setState(() => _asc = !_asc);
-                  _loadTimeline();
-                },
-              ),
-              IconButton(
-                tooltip: tr('photo.timeline.zoomOut'),
-                icon: const Icon(Icons.zoom_out),
-                onPressed: () => setState(
-                  () => _thumbExtent = (_thumbExtent - 40).clamp(100, 320),
+              if (!isCompactWidth(context))
+                IconButton(
+                  tooltip: _asc
+                      ? tr('photo.timeline.sortAsc')
+                      : tr('photo.timeline.sortDesc'),
+                  icon: Icon(_asc ? Icons.arrow_upward : Icons.arrow_downward),
+                  onPressed: () {
+                    setState(() => _asc = !_asc);
+                    _loadTimeline();
+                  },
                 ),
-              ),
-              IconButton(
-                tooltip: tr('photo.timeline.zoomIn'),
-                icon: const Icon(Icons.zoom_in),
-                onPressed: () => setState(
-                  () => _thumbExtent = (_thumbExtent + 40).clamp(100, 320),
+              if (!isCompactWidth(context)) ...[
+                IconButton(
+                  tooltip: tr('photo.timeline.zoomOut'),
+                  icon: const Icon(Icons.zoom_out),
+                  onPressed: () => setState(
+                    () => _thumbExtent = (_thumbExtent - 40).clamp(100, 320),
+                  ),
                 ),
-              ),
+                IconButton(
+                  tooltip: tr('photo.timeline.zoomIn'),
+                  icon: const Icon(Icons.zoom_in),
+                  onPressed: () => setState(
+                    () => _thumbExtent = (_thumbExtent + 40).clamp(100, 320),
+                  ),
+                ),
+              ],
               IconButton(
                 tooltip: tr('photo.filter.title'),
                 icon: Icon(
@@ -1394,11 +1568,12 @@ if (ok != true) return;
                 ),
                 onPressed: _openFilterSheet,
               ),
-              IconButton(
-                tooltip: tr('photo.yearView.title'),
-                icon: const Icon(Icons.calendar_view_month),
-                onPressed: _openYearView,
-              ),
+              if (!isCompactWidth(context))
+                IconButton(
+                  tooltip: tr('photo.yearView.title'),
+                  icon: const Icon(Icons.calendar_view_month),
+                  onPressed: _openYearView,
+                ),
               IconButton(
                 tooltip: tr('photo.timeline.select'),
                 icon: Icon(
@@ -1412,23 +1587,24 @@ if (ok != true) return;
               // 扫描 / 清理缺失：两个动作放一个菜单里。
               // 扫描改异步后拿不到「本次发现多少张已不存在」，所以清理缺失不能
               // 再挂成扫描结果上的一个 action，得有自己的入口。
-              PopupMenuButton<String>(
-                tooltip: tr('ui.book.012'),
-                icon: const Icon(Icons.sync),
-                onSelected: (v) {
-                  if (v == 'scan') _scan();
-                  if (v == 'prune') _pruneMissing();
-                },
-                itemBuilder: (_) => [
-                  PopupMenuItem(value: 'scan', child: Text(tr('ui.book.012'))),
-                  PopupMenuItem(value: 'prune', child: Text(tr('ui.photo.048'))),
-                ],
-              ),
-              IconButton(
-                tooltip: tr('ui.accounts.021'),
-                icon: const Icon(Icons.refresh),
-                onPressed: _bootstrap,
-              ),
+              if (!isCompactWidth(context))
+                PopupMenuButton<String>(
+                  tooltip: tr('common.scan'),
+                  icon: const Icon(Icons.sync),
+                  onSelected: (v) {
+                    if (v == 'scan') _scan();
+                    if (v == 'prune') _pruneMissing();
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(value: 'scan', child: Text(tr('common.scan'))),
+                    PopupMenuItem(
+                      value: 'prune',
+                      child: Text(tr('ui.photo.048')),
+                    ),
+                  ],
+                ),
+              if (isCompactWidth(context)) _moreMenu(),
+              NasRefreshButton(onPressed: _bootstrap),
             ],
           ),
         ),
@@ -1477,13 +1653,18 @@ if (ok != true) return;
                 )
               : LayoutBuilder(
                   builder: (context, c) {
+                    // 手机端固定 3 列（2026-11-04 用户要求：一行 3 个、就用这个大小）。
+                    // 桌面沿用「160 基准 → 6 列」的缩放换算。
+                    final compactGrid =
+                        layoutFor(c.maxWidth) == LayoutMode.compact;
                     return GridView.builder(
                       controller: _scroll,
                       padding: const EdgeInsets.all(NasTokens.spaceSm),
                       // 默认 6 列；缩放档位按 160 / _thumbExtent 换算列数
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount:
-                            (6 * 160 / _thumbExtent).round().clamp(2, 12),
+                        crossAxisCount: compactGrid
+                            ? 3
+                            : (6 * 160 / _thumbExtent).round().clamp(2, 12),
                         crossAxisSpacing: 3,
                         mainAxisSpacing: 3,
                       ),
@@ -1535,22 +1716,28 @@ if (ok != true) return;
                               ],
                             );
                         }
-                        return _PhotoTile(
-                          item: item,
-                          url: _thumbUrl(item.path),
-                          headers: _imageHeaders,
-                          favorite: _isFavorite(item),
-                          onToggleFavorite: () => _toggleFavorite(item),
-                          showFavorite: false,
-                          onTap: () => _openViewer(i),
-                          onLongPress: () => _longPressPhoto(i),
+                        // 桌面 / Web 右键：与长按同一批动作（多选态下不弹）
+                        return NasContextMenuRegion(
+                          entries: _photoMenuEntries(item, i),
+                          child: _PhotoTile(
+                            item: item,
+                            url: _thumbUrl(item.path),
+                            headers: _imageHeaders,
+                            favorite: _isFavorite(item),
+                            onToggleFavorite: () => _toggleFavorite(item),
+                            showFavorite: false,
+                            onTap: () => _openViewer(i),
+                            onLongPress: () => _longPressPhoto(i),
+                          ),
                         );
                       },
                     );
                   },
                 ),
         ),
-        if (_selecting) _selectBar(),
+        // 手机端多选工具条由外壳顶掉底部 tab 来显示（NasBulkBar），
+        // 页面内这条只在桌面端用，否则会出现两条一模一样的工具条
+        if (_selecting && !isCompactWidth(context)) _selectBar(),
       ],
     );
   }
@@ -1884,12 +2071,10 @@ class _AlbumDetailPageState extends State<_AlbumDetailPage> {
       );
       if (!mounted) return;
       setState(() => _coverId = item.id);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('photo.album.coverSet'))));
+      NasSnack.show(context, tr('photo.album.coverSet'));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('common.saveFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('common.saveFailed', {'error': '$e'}));
     }
   }
 
@@ -1947,8 +2132,7 @@ class _AlbumDetailPageState extends State<_AlbumDetailPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _favOverride[item.id] = !next);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      NasSnack.show(context, e.toString());
     }
   }
 
@@ -1987,8 +2171,7 @@ class _AlbumDetailPageState extends State<_AlbumDetailPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr('photo.removeFailed', {'error': '$e'}))));
+      NasSnack.show(context, tr('photo.removeFailed', {'error': '$e'}));
     }
   }
 
@@ -2141,7 +2324,8 @@ class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
   Future<void> _load() async {
     final client = ApiSession.instance.client;
     try {
-      final clusters = await client.photoFaceClusters(minCount: 1);
+      // 不传 minCount：跟随「AI 设置 → 人脸显示下限」，避免碎片组铺满筛选面板
+      final clusters = await client.photoFaceClusters();
       if (mounted) setState(() => _clusters = clusters.items);
     } catch (_) {
       // 人脸模型没跑过：这一栏空着即可，不影响其它条件
@@ -2251,7 +2435,7 @@ class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
                       runSpacing: 2,
                       children: [
                         for (final c in _clusters.take(24))
-                          ChoiceChip(
+                          NasChip(
                             visualDensity: VisualDensity.compact,
                             label: Text(_clusterLabel(c)),
                             selected: _person == c.id,
@@ -2277,7 +2461,7 @@ class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
                       runSpacing: 2,
                       children: [
                         for (final s in _scenes.take(16))
-                          ChoiceChip(
+                          NasChip(
                             visualDensity: VisualDensity.compact,
                             label: Text('${s.label} (${s.count})'),
                             selected: _scene == s.label,
@@ -2302,7 +2486,7 @@ class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
                         (1, 'photo.filter.lastYear'),
                         (3, 'photo.filter.last3Years'),
                       ])
-                        ChoiceChip(
+                        NasChip(
                           visualDensity: VisualDensity.compact,
                           label: Text(tr(key)),
                           selected: _timePreset == value,

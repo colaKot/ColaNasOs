@@ -1,3 +1,4 @@
+import { enqueueScanOnce } from '../ai/vision';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sql } from 'kysely';
@@ -69,6 +70,8 @@ export async function runPhotoScan(k: KernelApi, body: PhotoScanInput, uid: stri
     total.pruned += r.pruned;
   }
   k.log.info(total, 'photo.scan');
+  // 扫完就把新照片送去识别：开关开着就自动跑，不用人再点一次
+  void enqueueScanOnce(k).catch(() => null);
   return total;
 }
 

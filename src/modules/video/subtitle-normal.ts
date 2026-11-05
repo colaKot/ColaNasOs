@@ -1,3 +1,4 @@
+import { proxyFetch } from '../../../kernel/proxy-fetch';
 import fs from 'node:fs';
 import path from 'node:path';
 import { decodeSubtitle, SUB_STATE, unzipFirstSubtitle, writeSubtitleBeside } from './subtitle-fetch';
@@ -206,7 +207,8 @@ async function fetchJson(url: string, init: RequestInit = {}): Promise<any | nul
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
   try {
-    const res = await fetch(url, {
+    // 走系统代理：字幕源（assrt / opensubtitles / 迅雷）都在境外或有地域限制
+    const res = await proxyFetch(url, {
       ...init,
       signal: controller.signal,
       headers: {
@@ -228,7 +230,8 @@ async function fetchBuffer(url: string): Promise<Buffer | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30_000);
   try {
-    const res = await fetch(url, {
+    // 走系统代理：字幕源（assrt / opensubtitles / 迅雷）都在境外或有地域限制
+    const res = await proxyFetch(url, {
       signal: controller.signal,
       redirect: 'follow',
       headers: { 'user-agent': UA },
@@ -359,52 +362,70 @@ async function downloadOpenSubtitles(apiKey: string, fileId: number): Promise<Bu
   return link ? fetchBuffer(link) : null;
 }
 
-async function searchXunlei(parsed: ParsedName): Promise<Candidate[]> {
+const XUNLEI_QUERY_ORIGIN = 'https://api-shoulei-ssl.xunlei.com';
+const XUNLEI_QUERY_PATH = '/oracle/subtitle';
+
+/** 字幕检索地址统一在这里生成，查询串不散落在各个调用点。 */
+export function xunleiSubtitleUrl(keyword: string): string {
+  const url = new URL(XUNLEI_QUERY_PATH, XUNLEI_QUERY_ORIGIN);
+  url.search = `name=${encodeURIComponent(String(keyword || '').trim())}`;
+  return url.toString();
+}
+
+/** 检索词按「季集 → 年份 → 纯标题」逐级放宽，第一级命中就不再往下试。 */
+function subtitleQueries(parsed: ParsedName): string[] {
   const queries: string[] = [];
   if (parsed.isEpisode) {
-    const s = String(parsed.season || 0).padStart(2, '0');
-    const e = String(parsed.episode || 0).padStart(2, '0');
-    queries.push(parsed.season ? `${parsed.title} S${s}E${e}` : `${parsed.title} E${e}`);
+    const season = String(parsed.season || 0).padStart(2, '0');
+    const episode = String(parsed.episode || 0).padStart(2, '0');
+    queries.push(parsed.season
+      ? `${parsed.title} S${season}E${episode}`
+      : `${parsed.title} E${episode}`);
   } else if (parsed.year) {
     queries.push(`${parsed.title} ${parsed.year}`);
   }
   queries.push(parsed.title);
+  return queries;
+}
 
-  const out: Candidate[] = [];
-  const seen = new Set<string>();
-  for (const q of queries) {
-    const json = await fetchJson(
-      `https://api-shoulei-ssl.xunlei.com/oracle/subtitle?name=${encodeURIComponent(q)}`,
-    );
-    const list = json?.data;
-    if (!Array.isArray(list)) continue;
-    for (const it of list) {
-      const url = String(it?.url || '').trim();
-      if (!url || seen.has(url)) continue;
-      seen.add(url);
-      const text = [it.name, it.simple_name, Array.isArray(it.languages) ? it.languages.join(' ') : '']
+async function searchXunlei(parsed: ParsedName): Promise<Candidate[]> {
+  const found = new Map<string, Candidate>();
+  for (const keyword of subtitleQueries(parsed)) {
+    const json = await fetchJson(xunleiSubtitleUrl(keyword));
+    const rows = json?.code === undefined || Number(json.code) === 0 ? json?.data : null;
+    if (!Array.isArray(rows)) continue;
+
+    for (const row of rows) {
+      const url = String(row?.url || '').trim();
+      if (!url || found.has(url)) continue;
+
+      const words = [row.name, row.simple_name, Array.isArray(row.languages) ? row.languages.join(' ') : '']
         .filter(Boolean)
         .join(' ');
-      if (!titleMatches(parsed, text) || !episodeMatches(parsed, text)) continue;
-      const langs = Array.isArray(it.languages) ? it.languages.map((x: unknown) => String(x)) : [];
+      if (!titleMatches(parsed, words) || !episodeMatches(parsed, words)) continue;
+
+      const langs: string[] = Array.isArray(row.languages)
+        ? row.languages.map((x: unknown) => String(x))
+        : [];
       const chinese =
-        langs.some((l: string) => CJK_RE.test(l) || /^zh/i.test(l)) ||
-        looksChinese(it.simple_name) ||
-        looksChinese(it.name);
+        langs.some((l) => CJK_RE.test(l) || /^zh/i.test(l)) ||
+        looksChinese(row.simple_name) ||
+        looksChinese(row.name);
       const simplified =
-        langs.some((l: string) => l.includes('简')) || /\bchs\b|zh[-_]?cn/i.test(String(it.name));
-      out.push({
+        langs.some((l) => l.includes('简')) ||
+        /\bchs\b|zh[-_]?cn/i.test(String(row.name));
+
+      found.set(url, {
         provider: 'xunlei',
-        name: String(it.name || it.simple_name || ''),
+        name: String(row.name || row.simple_name || ''),
         chinese,
         score: (chinese ? 100 : 0) + (simplified ? 20 : 0),
         payload: { url },
       });
     }
-    if (out.length > 0) break;
+    if (found.size > 0) break;
   }
-  out.sort((a, b) => b.score - a.score);
-  return out;
+  return [...found.values()].sort((a, b) => b.score - a.score);
 }
 
 export interface NormalSubtitleOptions {

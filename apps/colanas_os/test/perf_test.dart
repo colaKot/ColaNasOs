@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:colanas_os/core/session.dart';
-import 'package:colanas_os/features/book/book_page.dart';
+import 'package:colanas_os/features/book/book_shelf_page.dart';
 import 'package:colanas_os/features/files/files_page.dart';
 import 'package:colanas_os/features/music/music_page.dart';
 import 'package:colanas_os/features/notes/notes_page.dart';
@@ -49,7 +49,7 @@ void main() {
     'photo': () => const PhotoPage(),
     'video': () => const VideoPage(),
     'music': () => const MusicPage(),
-    'book': () => const BookPage(),
+    'book': () => const BookShelfPage(type: 'book', embedded: false),
     'files': () => const FilesPage(),
     'notes': () => const NotesPage(),
   };

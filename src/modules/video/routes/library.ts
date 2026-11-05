@@ -1,4 +1,5 @@
 import { sql } from 'kysely';
+import { Type } from '@sinclair/typebox';
 import { secured } from '../../../../kernel/route';
 import { scanVideoLibrary, type VideoLibraryRow } from '../scan';
 import { libTypeOf, normalizeLibType } from '../media-type';
@@ -25,6 +26,7 @@ import {
 } from '../sources';
 import { Err } from '../../../../kernel/errors';
 import { TAG, newId } from '../util';
+import { listScrapeStats } from '../scrape-stats';
 import type { FastifyInstance } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { VideoHelpers } from '../helpers';
@@ -573,6 +575,68 @@ export async function registerVideoLibrary(
     },
   );
 
+  // 入队扫描：点「扫描」立刻返回，进度走 /tasks（同步 /scan 保留给脚本与冒烟测试）
+  app.post(
+    '/api/v1/video/scan/enqueue',
+      secured('video:write', {
+        schema: {
+          operationId: 'videoScanEnqueue',
+          tags: TAG,
+          summary: '入队扫描（立即返回任务 id；进度与失败记录见 /tasks）',
+          body: Type.Object({
+            libraryId: Type.Optional(
+              Type.String({ minLength: 1, description: '缺省 = 入队所有库' }),
+            ),
+          }),
+          response: {
+            200: Type.Object({
+              tasks: Type.Array(
+                Type.Object({
+                  libraryId: Type.String(),
+                  taskId: Type.String(),
+                  reused: Type.Boolean({ description: 'true = 已有同库扫描在排队/运行' }),
+                }),
+              ),
+            }),
+          },
+        },
+      }),
+      async (req, reply) => {
+        const body = (req.body || {}) as { libraryId?: string };
+        let libs: VideoLibraryRow[];
+        if (body.libraryId) {
+          const one = await h.loadLibrary(body.libraryId);
+          if (!one)
+            return reply.code(404).send({ error: Err.notFound, message: 'library not found' });
+          libs = [one];
+        } else {
+          libs = (await sql<VideoLibraryRow>`select * from video_libraries`.execute(k.db)).rows;
+        }
+        const out: Array<{ libraryId: string; taskId: string; reused: boolean }> = [];
+        for (const lib of libs) {
+          const r = await k.tasks.enqueueIfIdle(
+            'video.scan',
+            { libraryId: lib.id },
+            { maxAttempts: 1 },
+          );
+          out.push({ libraryId: lib.id, taskId: r.id, reused: r.reused });
+          // 开了「入库即刮 / 自动补字幕」的库，点扫描时**一起**把这两个任务排上，
+          // 否则用户点完扫描，任务面板里只有扫描在动，刮削要等扫完才出现。
+          if (Number(lib.auto_scrape) === 1) {
+            await k.tasks
+              .enqueueIfIdle('video.scrape.auto', { libraryId: lib.id }, { maxAttempts: 1 })
+              .catch(() => null);
+          }
+          if (Number(lib.auto_subtitle) === 1) {
+            await k.tasks
+              .enqueueIfIdle('video.subtitle.fetch', { libraryId: lib.id }, { maxAttempts: 2 })
+              .catch(() => null);
+          }
+        }
+        return { tasks: out };
+      },
+    );
+
   app.post(
     '/api/v1/video/scan',
     secured('video:write', {
@@ -637,6 +701,72 @@ export async function registerVideoLibrary(
           .catch((err) => k.log.warn({ err: String(err) }, 'enqueue subtitle task failed'));
       }
       return total;
+    },
+  );
+
+  // 刮削进度：每日快照的读取口。任务 `video.scrape.progress` 每天写一条，
+  // 这里只读不跑（用户想立刻刷新时用 POST /scrape/progress/refresh 入队）。
+  const statsItem = Type.Object({
+    day: Type.String({ description: '本地日期 YYYY-MM-DD' }),
+    total: Type.Integer({ description: '视频条目总数' }),
+    scraped: Type.Integer({ description: '已刮削（有 nfo / tmdb 来源）' }),
+    unscraped: Type.Integer({ description: '待刮削（无 NFO）' }),
+    withC: Type.Integer({ description: '文件名带 -C 中字标记' }),
+    withSub: Type.Integer({ description: '有外挂字幕' }),
+    noCNoSub: Type.Integer({ description: '没带 C 又没有字幕（可补字幕的量）' }),
+    byLibrary: Type.Array(
+      Type.Object({
+        id: Type.String(),
+        name: Type.String(),
+        total: Type.Integer(),
+        scraped: Type.Integer(),
+        unscraped: Type.Integer(),
+        noCNoSub: Type.Integer(),
+      }),
+    ),
+    createdAt: Type.Integer(),
+  });
+
+  app.get(
+    '/api/v1/video/scrape/progress',
+    secured('video:read', {
+      schema: {
+        operationId: 'videoScrapeProgress',
+        tags: TAG,
+        summary: '刮削进度（每日快照，含按库明细；最新的在前）',
+        querystring: Type.Object({
+          days: Type.Optional(Type.Integer({ minimum: 1, maximum: 120 })),
+        }),
+        response: {
+          200: Type.Object({
+            latest: Type.Union([statsItem, Type.Null()]),
+            items: Type.Array(statsItem),
+          }),
+        },
+      },
+    }),
+    async (req) => {
+      const q = (req.query || {}) as { days?: number };
+      const items = await listScrapeStats(k.db, Number(q.days) || 14);
+      return { latest: items[0] ?? null, items };
+    },
+  );
+
+  app.post(
+    '/api/v1/video/scrape/progress/refresh',
+    secured('video:write', {
+      schema: {
+        operationId: 'videoScrapeProgressRefresh',
+        tags: TAG,
+        summary: '立即重算一次刮削进度（入队，不阻塞请求）',
+        response: {
+          200: Type.Object({ taskId: Type.String() }),
+        },
+      },
+    }),
+    async () => {
+      const r = await k.tasks.enqueueIfIdle('video.scrape.progress', {}, { maxAttempts: 1 });
+      return { taskId: r.id };
     },
   );
 }

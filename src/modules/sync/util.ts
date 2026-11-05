@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { Type } from '@sinclair/typebox';
-import { filesRoot, resolveInRoot } from '../files/fs-root';
+import { absoluteInput, filesRoot, isAbsoluteInput, resolveInRoot } from '../files/fs-root';
 import { buildPlan, inScope, type SyncEntry, type SyncMode } from './plan';
 
 export const TAG = ['sync'];
@@ -304,7 +304,12 @@ export const ReportBody = Type.Object({
   status: Type.Optional(
     Type.Union([Type.Literal('done'), Type.Literal('failed'), Type.Literal('partial')]),
   ),
-  error: Type.Optional(Type.String({ maxLength: 500 })),
+  error: Type.Optional(
+    Type.String({
+      maxLength: 2000,
+      description: '本轮错误摘要（多条文件失败会拼接，客户端按 1800 截断）',
+    }),
+  ),
 });
 export const ReportResponse = Type.Object({
   runId: Type.String(),
@@ -373,7 +378,8 @@ export function scanRemote(
   exclude: string[],
   filter: SyncFilterConfig = DEFAULT_FILTER,
 ): SyncEntry[] {
-  const abs = resolveInRoot(root, relDir);
+  // 绝对路径（D:/Photos、\\host\share）直通：同步目标允许在文件根之外
+  const abs = isAbsoluteInput(relDir) ? path.resolve(absoluteInput(relDir)) : resolveInRoot(root, relDir);
   if (!fs.existsSync(abs) || !fs.statSync(abs).isDirectory()) return [];
   const out: SyncEntry[] = [];
   const stack: Array<{ rel: string }> = [{ rel: '' }];

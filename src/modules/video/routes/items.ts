@@ -1,4 +1,7 @@
 import { sql } from 'kysely';
+import { Type } from '@sinclair/typebox';
+import { ftsPhrase } from '../../files/fts';
+import { actorKey } from '../jp-actor';
 import { secured } from '../../../../kernel/route';
 import { libTypeOf, normalizeLibType } from '../media-type';
 import { missingEpisodes } from '../series';
@@ -198,7 +201,10 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           (q.mediaType !== 'video' && (libType === 'image' || libType === 'mixed'));
         const wantVideo = q.mediaType !== 'image' && libType !== 'image';
 
-        const keyword = q.q && q.q.trim() ? likePattern(q.q.trim()) : '';
+        const kwRaw = q.q && q.q.trim() ? q.q.trim() : '';
+        const keyword = kwRaw ? likePattern(kwRaw) : '';
+        // ≥3 字走 FTS5（trigram），1-2 字（中文两字词）仍用 LIKE，结果不变
+        const fts = ftsPhrase(kwRaw);
         const uid = String(req.user?.sub || '');
         // 离线 SMB 来源：索引还在，但文件取不到。列表 / 搜索 / 首页统统不显示，
         // 免得用户看到一排裂图、点进去又失败。
@@ -291,7 +297,9 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           if (keyword) {
             // 搜索只查本地索引（nfo 在扫描时已落库）：名字 / 原名 / 番号 / 演员，
             // 都不需要再去 SMB 上读一遍。
-            where = sql`${where} and (coalesce(v.nfo_name, '') like ${keyword} escape '\\'
+            where = fts
+              ? sql`${where} and v.rowid in (select rowid from video_items_fts where video_items_fts match ${fts})`
+              : sql`${where} and (coalesce(v.nfo_name, '') like ${keyword} escape '\\'
                          or coalesce(v.nfo_original_name, '') like ${keyword} escape '\\'
                          or v.title like ${keyword} escape '\\'
                          or v.rel_path like ${keyword} escape '\\'
@@ -384,7 +392,9 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
         if (keyword) {
           // 搜索只查本地索引（nfo 已在扫描时缓存进库），覆盖名字 / 原名 / 番号 / 演员，
           // 不依赖 SMB 在线，也不用每次去网络盘找一遍。
-          where = sql`${where} and (coalesce(nfo_name, '') like ${keyword} escape '\\'
+          where = fts
+            ? sql`${where} and rowid in (select rowid from video_items_fts where video_items_fts match ${fts})`
+            : sql`${where} and (coalesce(nfo_name, '') like ${keyword} escape '\\'
                        or coalesce(nfo_original_name, '') like ${keyword} escape '\\'
                        or title like ${keyword} escape '\\'
                        or rel_path like ${keyword} escape '\\'
@@ -815,7 +825,10 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
         } catch {
           return { total: 0, scraped: 0 };
         }
-        const keyword = q.q && q.q.trim() ? likePattern(q.q.trim()) : '';
+        const kwRaw = q.q && q.q.trim() ? q.q.trim() : '';
+        const keyword = kwRaw ? likePattern(kwRaw) : '';
+        // ≥3 字走 FTS5（trigram），1-2 字（中文两字词）仍用 LIKE，结果不变
+        const fts = ftsPhrase(kwRaw);
         const offline = await offlineSmbPrefixes(k.db);
         const wantImages =
           q.mediaType !== 'video' && (libType === 'image' || libType === 'mixed');
@@ -850,13 +863,15 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           else if (q.series && q.series.trim())
             where = sql`${where} and v.series = ${q.series.trim()}`;
           if (keyword) {
-            where = sql`${where} and (coalesce(v.nfo_name, '') like ${keyword} escape '\\'
-                         or coalesce(v.nfo_original_name, '') like ${keyword} escape '\\'
-                         or v.title like ${keyword} escape '\\'
-                         or v.rel_path like ${keyword} escape '\\'
-                         or coalesce(v.code, '') like ${keyword} escape '\\'
-                         or coalesce(v.nfo_actors, '') like ${keyword} escape '\\'
-                         or coalesce(v.nfo_directors, '') like ${keyword} escape '\\')`;
+            where = fts
+              ? sql`${where} and v.rowid in (select rowid from video_items_fts where video_items_fts match ${fts})`
+              : sql`${where} and (coalesce(v.nfo_name, '') like ${keyword} escape '\\'
+                           or coalesce(v.nfo_original_name, '') like ${keyword} escape '\\'
+                           or v.title like ${keyword} escape '\\'
+                           or v.rel_path like ${keyword} escape '\\'
+                           or coalesce(v.code, '') like ${keyword} escape '\\'
+                           or coalesce(v.nfo_actors, '') like ${keyword} escape '\\'
+                           or coalesce(v.nfo_directors, '') like ${keyword} escape '\\')`;
           }
           if (offline.length > 0) where = sql`${where} and ${offlineCond(offline, 'v.rel_path')}`;
           const row = (
@@ -1347,6 +1362,94 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
             coverId: r.cover_id || undefined,
             createdAt: Number(r.created_at || 0),
           })),
+        };
+      },
+    );
+
+    // 详情页「演职人员」区用的演员资料：一条影片只带几个名字，
+    // 前端拿到名字后一次问头像 / 身高 / 生日，避免为每个演员发一次请求。
+    // 头像是 NFO 里的 `<thumb>`（jdbstatic 等 CDN），档案来自维基（可能为空）。
+    app.post(
+      '/api/v1/video/actor/avatars',
+      secured('video:read', {
+        schema: {
+          operationId: 'videoActorAvatars',
+          tags: TAG,
+          summary: '按演员名批量取头像与档案（详情页演职人员区用）',
+          body: Type.Object({
+            names: Type.Array(Type.String(), { maxItems: 64 }),
+            libraryId: Type.Optional(Type.String()),
+          }),
+          response: {
+            200: Type.Object({
+              items: Type.Array(
+                Type.Object({
+                  name: Type.String(),
+                  key: Type.String(),
+                  avatarUrl: Type.String(),
+                  heightCm: Type.Integer(),
+                  birthday: Type.String(),
+                  birthplace: Type.String(),
+                  itemCount: Type.Integer(),
+                }),
+              ),
+            }),
+          },
+        },
+      }),
+      async (req) => {
+        const body = (req.body || {}) as { names?: string[]; libraryId?: string };
+        const names = (body.names || []).map((n) => String(n || '').trim()).filter(Boolean);
+        if (names.length === 0) return { items: [] };
+        const keys = [...new Set(names.map((n) => actorKey(n)).filter(Boolean))] as string[];
+        if (keys.length === 0) return { items: [] };
+
+        const rows = (
+          await sql<{
+            id: string;
+            name: string;
+            thumb_path: string | null;
+            profile: string | null;
+            n: number;
+          }>`
+            select a.id, a.name, a.thumb_path, a.profile,
+                   (select count(*) from jp_actor_items ai
+                     where ai.actor_id = a.id) as n
+              from jp_actors a
+             where a.id in (${sql.join(
+               keys.map((k) => sql`${k}`),
+               sql`, `,
+             )})
+          `.execute(k.db)
+        ).rows;
+
+        const byKey = new Map(rows.map((r) => [r.id, r]));
+        return {
+          items: names.map((name) => {
+            const key = actorKey(name);
+            const row = byKey.get(key);
+            let profile: Record<string, unknown> = {};
+            if (row?.profile) {
+              try {
+                profile = JSON.parse(row.profile) as Record<string, unknown>;
+              } catch {
+                profile = {};
+              }
+            }
+            const num = (v: unknown) => {
+              const n = Number(v);
+              return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+            };
+            return {
+              name,
+              key,
+              avatarUrl: String(row?.thumb_path || profile.avatarUrl || ''),
+              heightCm: num(profile.heightCm),
+              birthday: String(profile.birthday ?? ''),
+              birthplace: String(profile.birthplace ?? ''),
+              itemCount: Number(row?.n || 0),
+            };
+          }),
         };
       },
     );

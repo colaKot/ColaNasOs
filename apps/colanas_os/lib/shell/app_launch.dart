@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../core/app_settings.dart';
+import '../core/client_log.dart';
 import '../core/i18n_setup.dart';
 import '../core/session.dart';
 import '../core/tv_mode.dart';
@@ -10,6 +13,8 @@ import '../features/login/login_page.dart';
 import '../features/music/music_page.dart';
 import '../features/photo/photo_page.dart';
 import '../features/sync/sync_page.dart';
+import '../features/sync/sync_scheduler.dart';
+import '../features/sync/sync_tray_bridge.dart';
 import 'app_shell.dart';
 import 'desktop_tray.dart';
 
@@ -27,9 +32,30 @@ Future<void> runColanasApp({AppLaunchMode mode = AppLaunchMode.full}) async {
   await AppSettings.instance.load();
   await initI18n();
   await ApiSession.instance.restore();
+  // 前端异常也进服务端日志：日志页只有一份，排查时不用两头找
+  ClientLogger.instance.install();
   MediaKit.ensureInitialized();
   // 桌面端托盘：关窗缩到托盘常驻；初始化失败自动降级为普通关闭
   await desktopTray.init();
+  // Electron 托盘的同步三项：**登录前就要挂上**，否则「同步任务」点了没反应
+  // （页面停在登录页时 AppShell 还没创建）。动作本身在未登录时会自己空转。
+  unawaited(
+    syncTrayBridge.install(
+      SyncTrayHandlers(
+        onSyncNow: () => SyncScheduler.instance.runAllNow(),
+        onToggleAutoSync: () async {
+          await SyncScheduler.instance.setEnabled(
+            !SyncScheduler.instance.enabled,
+          );
+        },
+        onOpenTasks: () async => AppShell.openApp('sync'),
+      ),
+    ),
+  );
+  syncTrayBridge.bindScheduler();
+  // 装好就把状态报一次：主进程据此画「暂停/恢复自动同步」「立即同步是否可点」。
+  // 未登录时 `localTaskCount` 返回 0，菜单里「立即同步」是灰的 —— 符合实际。
+  unawaited(syncTrayBridge.refresh());
   runApp(ColaNasApp(launchMode: mode));
 }
 

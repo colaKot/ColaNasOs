@@ -49,6 +49,16 @@ export interface HlsResult {
   container?: string;
 }
 
+/** 容器内的字幕轨（按 ffmpeg 流信息解析） */
+export interface SubtitleTrackInfo {
+  /** 第几条字幕流（`-map 0:s:<index>`） */
+  index: number;
+  lang: string | null;
+  codec: string;
+  /** 文本字幕（可直接转 WebVTT / SRT）；图形字幕为 false */
+  text: boolean;
+}
+
 export class MediaBridge {
   private sup: SidecarSupervisor | null = null;
   private starting: Promise<SidecarSupervisor> | null = null;
@@ -114,6 +124,12 @@ export class MediaBridge {
       subtitle?: string;
       audioFilter?: string;
       timeoutMs?: number;
+      /** 选第几条音轨转码（默认 0） */
+      audioIndex?: number;
+      /** 强制/自动 HDR→SDR 色彩转换 */
+      hdrToSdr?: boolean;
+      /** 片源视频编码（h264 / hevc / av1）：决定「原画」能否直接 copy */
+      srcVideoCodec?: string;
     } = {},
   ): Promise<HlsResult> {
     const sup = await this.ensure();
@@ -126,6 +142,37 @@ export class MediaBridge {
       container?: string;
     }>('hls', { src, dir, ...opts }, timeoutMs);
     return { segments: res.segments, ms: res.ms, codec: res.codec, container: res.container };
+  }
+
+  /**
+   * 取消某个会话目录下正在跑的 HLS 转码。
+   * 用于「用户换档 / 重新点播放」时抢占旧会话，避免一条转不动的片把队列堵死。
+   */
+  async cancel(dir: string): Promise<boolean> {
+    if (!this.sup) return false;
+    try {
+      const res = await this.sup.request<{ canceled?: boolean }>('cancel', { dir }, 5_000);
+      return res?.canceled === true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** 列出容器内字幕轨；文件不可解析时返回空数组（不抛错，调用方按「没有」处理） */
+  async subtitleTracks(src: string): Promise<SubtitleTrackInfo[]> {
+    const sup = await this.ensure();
+    try {
+      const res = await sup.request<{ tracks?: SubtitleTrackInfo[] }>('subtitleTracks', { src }, 30_000);
+      return Array.isArray(res?.tracks) ? res.tracks : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** 抽取一条字幕轨到 `dst`（默认 srt）；图形字幕 / 轨道不存在时抛错 */
+  async extractSubtitle(src: string, index: number, dst: string, format = 'srt'): Promise<void> {
+    const sup = await this.ensure();
+    await sup.request('extractSubtitle', { src, index, dst, format }, 120_000);
   }
 
   async stop(): Promise<void> {

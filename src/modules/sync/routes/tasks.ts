@@ -5,7 +5,7 @@ import { Type } from '@sinclair/typebox';
 import { sql } from 'kysely';
 import { secured } from '../../../../kernel/route';
 import { checkPathAccess, readPolicy } from '../../../../kernel/access-policy';
-import { filesRoot, resolveInRoot } from '../../files/fs-root';
+import { filesRoot, resolveInRoot, resolveRemoteDir } from '../../files/fs-root';
 import { buildPlan, inScope, type SyncEntry, type SyncMode } from '../plan';
 import { Err } from '../../../../kernel/errors';
 import type { FastifyRequest } from 'fastify';
@@ -65,7 +65,7 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
 
         let remoteAbs: string;
         try {
-          remoteAbs = resolveInRoot(filesRoot(), body.remoteDir);
+          remoteAbs = resolveRemoteDir(body.remoteDir);
         } catch {
           return reply.code(400).send({ error: Err.badRequest, message: 'remoteDir escapes root' });
         }
@@ -277,9 +277,11 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
         const applied = body.applied ?? [];
         const count = (kind: string) => applied.filter((a) => a.kind === kind && a.ok).length;
         const conflicts = applied.filter((a) => a.kind === 'conflict').length;
+        const failedItems = applied.filter((a) => !a.ok);
         const runId = crypto.randomBytes(8).toString('base64url');
         const ts = h.now();
         const status = body.status ?? (body.error ? 'failed' : conflicts > 0 ? 'partial' : 'done');
+        const runError = (body.error ?? '').slice(0, 2000);
 
         // 同步后的公共状态 = 远端当前状态；整表替换，避免残留「已删除但基线还在」
         await k.db.transaction().execute(async (trx: any) => {
@@ -297,7 +299,13 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
             values (${runId}, ${task.id}, ${task.last_run_at ?? ts}, ${ts}, ${status},
                     ${count('upload')}, ${count('download')}, ${count('deleteLocal')},
                     ${count('deleteRemote')}, ${count('skip')}, ${conflicts},
-                    ${Number(body.bytes) || 0}, ${JSON.stringify({ applied: applied.slice(0, 5000) })})
+                    ${Number(body.bytes) || 0}, ${JSON.stringify({
+                      applied: applied.slice(0, 5000),
+                      // 失败原因要能在「同步记录」里看到 —— 只存 applied 的话，
+                      // 用户只能看到红点，不知道是哪几个文件、为什么失败。
+                      error: runError || null,
+                      failed: failedItems.length,
+                    })})
           `.execute(trx);
           await sql`
             update sync_tasks
@@ -340,6 +348,12 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
                       conflicts: Type.Integer(),
                       bytes: Type.Integer(),
                       finishedAt: Type.Integer(),
+                      failed: Type.Optional(Type.Integer({ description: '本轮失败的文件数' })),
+                      error: Type.Optional(
+                        Type.Union([Type.String(), Type.Null()], {
+                          description: '本轮错误摘要（失败时非空）',
+                        }),
+                      ),
                     },
                     { additionalProperties: true },
                   ),
@@ -367,19 +381,30 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
               `.execute(k.db)
         ).rows as Array<Record<string, any>>;
         return {
-          items: rows.map((r) => ({
-            id: r.id,
-            taskId: r.task_id,
-            status: r.status,
-            uploaded: Number(r.uploaded),
-            downloaded: Number(r.downloaded),
-            deletedLocal: Number(r.deleted_local),
-            deletedRemote: Number(r.deleted_remote),
-            skipped: Number(r.skipped),
-            conflicts: Number(r.conflicts),
-            bytes: Number(r.bytes),
-            finishedAt: Number(r.finished_at),
-          })),
+          items: rows.map((r) => {
+            // detail_json 里带 error / failed（见 /sync/report）；解析失败按无错处理
+            let detail: { error?: unknown; failed?: unknown };
+            try {
+              detail = JSON.parse(String(r.detail_json ?? '{}'));
+            } catch {
+              detail = {};
+            }
+            return {
+              id: r.id,
+              taskId: r.task_id,
+              status: r.status,
+              uploaded: Number(r.uploaded),
+              downloaded: Number(r.downloaded),
+              deletedLocal: Number(r.deleted_local),
+              deletedRemote: Number(r.deleted_remote),
+              skipped: Number(r.skipped),
+              conflicts: Number(r.conflicts),
+              bytes: Number(r.bytes),
+              finishedAt: Number(r.finished_at),
+              failed: Number(detail.failed ?? 0),
+              error: typeof detail.error === 'string' && detail.error ? detail.error : null,
+            };
+          }),
         };
       },
     );
@@ -410,7 +435,7 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
         for (const rel of body.paths ?? []) {
           let abs: string;
           try {
-            abs = resolveInRoot(path.join(root, task.remote_dir), rel);
+            abs = resolveInRoot(resolveRemoteDir(task.remote_dir), rel);
           } catch {
             return reply.code(400).send({ error: Err.badRequest, message: 'path escapes remoteDir' });
           }
@@ -448,7 +473,7 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
             .send({ error: Err.forbidden, message: 'remoteDir requires write permission' });
         }
         try {
-          const abs = resolveInRoot(path.join(filesRoot(), task.remote_dir), body.path || '');
+          const abs = resolveInRoot(resolveRemoteDir(task.remote_dir), body.path || '');
           fs.mkdirSync(abs, { recursive: true });
         } catch {
           return reply.code(400).send({ error: Err.badRequest, message: 'path escapes remoteDir' });
@@ -474,7 +499,7 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
         const body = (req.body || {}) as { remoteDir?: string };
         let abs: string;
         try {
-          abs = resolveInRoot(filesRoot(), body.remoteDir || '');
+          abs = resolveRemoteDir(body.remoteDir || '');
         } catch {
           return { exists: false, writable: false, allowed: false, message: 'remoteDir escapes root' };
         }

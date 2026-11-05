@@ -42,7 +42,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   hostname: '',
   welcome: '',
   proxy: '',
-  javFallback: false,
+  javFallback: true,
 };
 
 function intIn(value: unknown, fallback: number, min: number, max: number): number {
@@ -67,7 +67,8 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
     welcome: text(raw.welcome, 100),
     // 只接受 http(s)://；非法值不静默落库，交由路由层报错
     proxy: /^https?:\/\//i.test(proxy) ? proxy : '',
-    javFallback: raw.javFallback === true,
+    // 默认开启：没写过这个键的老配置也算开（用户要求「删掉按钮，默认打开」）
+    javFallback: raw.javFallback !== false,
   };
 }
 

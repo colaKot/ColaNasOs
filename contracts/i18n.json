@@ -1,6 +1,7 @@
 {
   "version": 1,
   "keys": {
+    "accounts.active": {},
     "accounts.audit.2faDisable": {},
     "accounts.audit.2faEnable": {},
     "accounts.audit.policyUpdate": {},
@@ -12,8 +13,15 @@
       "name": {}
     },
     "accounts.deleteTitle": {},
+    "accounts.disable2faFailed": {
+      "error": {}
+    },
+    "accounts.disabledState": {},
     "accounts.edit": {},
     "accounts.editTitle": {},
+    "accounts.enable2faFailed": {
+      "error": {}
+    },
     "accounts.fileLog.action": {},
     "accounts.fileLog.action.copy": {},
     "accounts.fileLog.action.delete": {},
@@ -41,23 +49,6 @@
     "accounts.fileLog.total": {
       "count": {}
     },
-    "accounts.lastLogin": {
-      "time": {}
-    },
-    "accounts.loginEmpty": {},
-    "accounts.loginFailed": {},
-    "accounts.loginOk": {},
-    "accounts.passwordKeep": {},
-    "accounts.phone": {},
-    "accounts.remark": {},
-    "accounts.active": {},
-    "accounts.disable2faFailed": {
-      "error": {}
-    },
-    "accounts.disabledState": {},
-    "accounts.enable2faFailed": {
-      "error": {}
-    },
     "accounts.info": {},
     "accounts.ipBlacklist": {},
     "accounts.ipRulesCount": {
@@ -66,10 +57,18 @@
     "accounts.joinFailed": {
       "error": {}
     },
+    "accounts.lastLogin": {
+      "time": {}
+    },
+    "accounts.loginEmpty": {},
+    "accounts.loginFailed": {},
+    "accounts.loginOk": {},
     "accounts.logs.audit": {},
     "accounts.logs.files": {},
     "accounts.logs.unavailable": {},
     "accounts.mobileBack": {},
+    "accounts.passwordKeep": {},
+    "accounts.phone": {},
     "accounts.policy.access.ro": {},
     "accounts.policy.access.rw": {},
     "accounts.policy.addPath": {},
@@ -81,6 +80,7 @@
     "accounts.policy.paths": {},
     "accounts.policy.restrict": {},
     "accounts.policy.saved": {},
+    "accounts.remark": {},
     "accounts.removeFailed": {
       "error": {}
     },
@@ -89,10 +89,14 @@
     "accounts.tab.logins": {},
     "accounts.tab.logs": {},
     "accounts.tab.policy": {},
-    "accounts.tab.twofa": {},
     "accounts.tab.tokens": {},
-    "accounts.tokens.copy": {},
+    "accounts.tab.twofa": {},
+    "accounts.toggleFailed": {
+      "action": {},
+      "error": {}
+    },
     "accounts.tokens.copied": {},
+    "accounts.tokens.copy": {},
     "accounts.tokens.created": {
       "time": {}
     },
@@ -113,15 +117,11 @@
     "accounts.tokens.scopes": {},
     "accounts.tokens.secretHint": {},
     "accounts.tokens.secretTitle": {},
-    "accounts.toggleFailed": {
-      "action": {},
-      "error": {}
-    },
+    "accounts.twofa.disableConfirm": {},
     "accounts.twofa.off": {},
     "accounts.twofa.on": {},
-    "accounts.twofa.disableConfirm": {},
-    "accounts.twofa.scanHint": {},
     "accounts.twofa.orManual": {},
+    "accounts.twofa.scanHint": {},
     "app.accounts": {},
     "app.ai": {},
     "app.backup": {},
@@ -145,18 +145,69 @@
     "auth.logout": {},
     "auth.scopes": {},
     "auth.token": {},
+    "book.cache.empty": {},
+    "book.cache.hint": {},
+    "book.cache.open": {},
+    "book.cache.serverHint": {},
+    "book.cache.serverTitle": {},
+    "book.cache.title": {},
+    "book.collection.addPath": {},
+    "book.collection.create": {},
+    "book.collection.deleteConfirm": {
+      "name": {}
+    },
+    "book.collection.edit": {},
+    "book.collection.empty": {},
+    "book.collection.emptyHint": {},
+    "book.collection.name": {},
+    "book.collection.noPath": {},
+    "book.collection.paths": {},
+    "book.collection.pathsHint": {},
+    "book.empty.books": {},
+    "book.empty.comics": {},
+    "book.filter.all": {},
+    "book.filter.favorite": {},
     "book.fulltextTitle": {
       "keyword": {}
     },
+    "book.history.clear": {},
+    "book.history.clearConfirm": {},
+    "book.history.empty": {},
+    "book.lists.addBook": {},
+    "book.lists.create": {},
+    "book.lists.deleteConfirm": {
+      "name": {}
+    },
+    "book.lists.empty": {},
+    "book.lists.emptyBooks": {},
+    "book.lists.removeBook": {},
+    "book.lists.rename": {},
+    "book.nav.books": {},
+    "book.nav.cache": {},
+    "book.nav.collections": {},
+    "book.nav.comics": {},
+    "book.nav.history": {},
+    "book.nav.library": {},
+    "book.nav.lists": {},
+    "book.nav.myLists": {},
+    "book.nav.sources": {},
     "book.pruneConfirm": {
       "count": {}
     },
+    "book.reader.direction": {},
+    "book.reader.ltr": {},
+    "book.reader.rtl": {},
     "book.scanDone": {
       "added": {},
       "updated": {},
       "skipped": {},
       "parsed": {}
     },
+    "book.select.all": {},
+    "book.select.count": {
+      "count": {}
+    },
+    "book.select.none": {},
     "book.shareCopied": {
       "minutes": {}
     },
@@ -166,6 +217,32 @@
     "book.shelfCount": {
       "count": {}
     },
+    "book.sort.asc": {},
+    "book.sort.author": {},
+    "book.sort.created": {},
+    "book.sort.desc": {},
+    "book.sort.progress": {},
+    "book.sort.title": {},
+    "book.sort.updated": {},
+    "book.source.add": {},
+    "book.source.books": {
+      "n": {}
+    },
+    "book.source.removeConfirm": {
+      "name": {}
+    },
+    "book.source.scanInterval": {},
+    "book.source.scanIntervalEvery": {
+      "hours": {}
+    },
+    "book.source.scanIntervalOff": {},
+    "book.source.scanNow": {},
+    "book.source.scanWhenChange": {},
+    "book.source.scanWhenStart": {},
+    "book.source.title": {},
+    "book.source.type": {},
+    "book.source.type.book": {},
+    "book.source.type.comic": {},
     "book.stats": {
       "books": {},
       "favorites": {}
@@ -177,13 +254,16 @@
       "name": {}
     },
     "capability.webHint": {},
+    "common.back": {},
     "common.cancel": {},
     "common.cleanupFailed": {
       "error": {}
     },
     "common.close": {},
     "common.confirm": {},
+    "common.copied": {},
     "common.copy": {},
+    "common.create": {},
     "common.createFailed": {
       "error": {}
     },
@@ -196,6 +276,9 @@
     "common.errorWith": {
       "error": {}
     },
+    "common.getFailed": {
+      "error": {}
+    },
     "common.loadFailed": {
       "error": {}
     },
@@ -203,7 +286,11 @@
     "common.missingOnDisk": {
       "count": {}
     },
+    "common.more": {},
     "common.ok": {},
+    "common.open": {},
+    "common.pending": {},
+    "common.pendingHint": {},
     "common.progressSaved": {
       "percent": {}
     },
@@ -211,12 +298,16 @@
       "count": {}
     },
     "common.refresh": {},
+    "common.rename": {},
     "common.retry": {},
     "common.retryLater": {},
     "common.save": {},
     "common.saveFailed": {
       "error": {}
     },
+    "common.scan": {},
+    "common.scanAll": {},
+    "common.scanDone": {},
     "common.scanFailed": {
       "error": {}
     },
@@ -225,6 +316,11 @@
       "error": {}
     },
     "common.select": {},
+    "common.size": {},
+    "common.test": {},
+    "discover.board.info": {
+      "name": {}
+    },
     "discover.country.CN": {},
     "discover.country.DE": {},
     "discover.country.ES": {},
@@ -236,9 +332,6 @@
     "discover.country.KR": {},
     "discover.country.TH": {},
     "discover.country.TW": {},
-    "discover.board.info": {
-      "name": {}
-    },
     "discover.country.US": {},
     "discover.detail.copyLink": {},
     "discover.detail.episodeCount": {
@@ -256,6 +349,8 @@
       "reason": {}
     },
     "discover.douban": {},
+    "discover.douban.cookie": {},
+    "discover.douban.hint": {},
     "discover.doubanAnime": {},
     "discover.doubanHot": {},
     "discover.doubanMovie": {},
@@ -264,21 +359,19 @@
     "discover.filter.allGenres": {},
     "discover.filter.allYears": {},
     "discover.filter.anyCountry": {},
-    "discover.filter.anyScore": {},
     "discover.filter.anyLanguage": {},
+    "discover.filter.anyScore": {},
     "discover.filter.back": {},
     "discover.filter.browse": {},
     "discover.filter.country": {},
     "discover.filter.genre": {},
+    "discover.filter.language": {},
     "discover.filter.minScore": {},
     "discover.filter.minScoreValue": {
       "score": {}
     },
     "discover.filter.reset": {},
     "discover.filter.sort": {},
-    "discover.filter.language": {},
-    "discover.filter.yearFrom": {},
-    "discover.filter.yearTo": {},
     "discover.filter.total": {
       "count": {}
     },
@@ -286,6 +379,8 @@
       "count": {}
     },
     "discover.filter.year": {},
+    "discover.filter.yearFrom": {},
+    "discover.filter.yearTo": {},
     "discover.genre.action": {},
     "discover.genre.adventure": {},
     "discover.genre.animation": {},
@@ -322,6 +417,7 @@
     "discover.nav.manage": {},
     "discover.owned": {},
     "discover.pt": {},
+    "discover.pt.actions": {},
     "discover.pt.apiKey": {},
     "discover.pt.cookie": {},
     "discover.pt.deleteConfirm": {
@@ -345,21 +441,20 @@
     "discover.pt.newSub": {},
     "discover.pt.priority": {},
     "discover.pt.quality": {},
+    "discover.pt.results": {},
     "discover.pt.runNow": {},
     "discover.pt.saved": {},
+    "discover.pt.searchNow": {},
     "discover.pt.season": {},
     "discover.pt.siteName": {},
-    "discover.pt.sites": {},
     "discover.pt.siteUrl": {},
+    "discover.pt.sites": {},
+    "discover.pt.subscribe": {},
+    "discover.pt.subscribed": {},
     "discover.pt.subscriptions": {},
     "discover.pt.title": {},
     "discover.pt.userAgent": {},
     "discover.pt.year": {},
-    "discover.pt.actions": {},
-    "discover.pt.results": {},
-    "discover.pt.searchNow": {},
-    "discover.pt.subscribe": {},
-    "discover.pt.subscribed": {},
     "discover.ptEmpty": {},
     "discover.ptGo": {},
     "discover.ptNoSites": {},
@@ -368,9 +463,11 @@
     "discover.rss": {},
     "discover.rss.addFeed": {},
     "discover.rss.editRule": {},
+    "discover.rss.empty": {},
     "discover.rss.emptyRules": {},
     "discover.rss.enabled": {},
     "discover.rss.feed": {},
+    "discover.rss.feeds": {},
     "discover.rss.lastRun": {
       "time": {}
     },
@@ -385,51 +482,49 @@
     },
     "discover.rss.ruleRun": {},
     "discover.rss.rules": {},
-    "discover.rss.empty": {},
-    "discover.rss.feeds": {},
     "discover.rss.url": {},
     "discover.runtime": {
       "minutes": {}
     },
     "discover.settings": {},
+    "discover.settings.any": {},
     "discover.settings.apiUrl": {},
-    "discover.settings.audio.ko": {},
-    "discover.settings.audio.ja": {},
     "discover.settings.audio.en": {},
+    "discover.settings.audio.ja": {},
+    "discover.settings.audio.ko": {},
     "discover.settings.audio.yue": {},
     "discover.settings.audio.zh": {},
     "discover.settings.audio.zhTW": {},
     "discover.settings.audioLangs": {},
     "discover.settings.autoDownload": {},
-    "discover.settings.any": {},
+    "discover.settings.doubanCookie": {},
     "discover.settings.downloadDirs": {},
     "discover.settings.downloadFilter": {},
     "discover.settings.downloadHint": {},
     "discover.settings.excluded": {},
     "discover.settings.hdr": {},
-    "discover.settings.doubanCookie": {},
     "discover.settings.hint": {},
+    "discover.settings.imageBase": {},
+    "discover.settings.language": {},
     "discover.settings.maxSize": {},
     "discover.settings.minSeeders": {},
     "discover.settings.movieDir": {},
     "discover.settings.noLibrary": {},
     "discover.settings.quality": {},
+    "discover.settings.saved": {},
     "discover.settings.scanDone": {
       "ok": {},
       "total": {}
     },
     "discover.settings.scanFavorites": {},
     "discover.settings.scanInterval": {},
-    "discover.settings.sites": {},
-    "discover.settings.tvDir": {},
-    "discover.settings.imageBase": {},
-    "discover.settings.language": {},
-    "discover.settings.saved": {},
     "discover.settings.scoreSystem": {},
+    "discover.settings.sites": {},
     "discover.settings.tmdb": {},
     "discover.settings.tmdbConfigured": {},
     "discover.settings.tmdbKey": {},
     "discover.settings.tmdbNotConfigured": {},
+    "discover.settings.tvDir": {},
     "discover.sort.new": {},
     "discover.sort.popular": {},
     "discover.sort.rating": {},
@@ -439,13 +534,13 @@
     "discover.tasks": {},
     "discover.tasks.empty": {},
     "discover.tasks.pause": {},
-    "discover.tasks.resume": {},
     "discover.tasks.remove": {},
+    "discover.tasks.resume": {},
     "discover.tasks.status.added": {},
-    "discover.tasks.status.paused": {},
-    "discover.tasks.status.removed": {},
     "discover.tasks.status.failed": {},
+    "discover.tasks.status.paused": {},
     "discover.tasks.status.proposed": {},
+    "discover.tasks.status.removed": {},
     "error.conflict": {},
     "error.forbidden": {},
     "error.internal": {},
@@ -461,6 +556,11 @@
     "files.deletedToTrash": {},
     "files.dir": {},
     "files.download": {},
+    "files.favorite.add": {},
+    "files.favorite.added": {},
+    "files.favorite.empty": {},
+    "files.favorite.remove": {},
+    "files.favorite.removed": {},
     "files.items": {},
     "files.kind.archive": {},
     "files.kind.audio": {},
@@ -476,6 +576,9 @@
     "files.nameHint": {},
     "files.newFolder": {},
     "files.path": {},
+    "files.recent.clear": {},
+    "files.recent.empty": {},
+    "files.recent.title": {},
     "files.rename": {},
     "files.root": {},
     "files.size": {},
@@ -488,6 +591,8 @@
     "files.view.grid": {},
     "files.view.list": {},
     "home.apps": {},
+    "home.backup.hint": {},
+    "home.backup.title": {},
     "home.cores": {},
     "home.cpu": {},
     "home.disk": {},
@@ -508,29 +613,43 @@
     "home.viewGrid": {},
     "home.viewList": {},
     "login.autoLogin": {},
+    "login.changeServer": {},
+    "login.connect": {},
+    "login.connectedTo": {
+      "host": {}
+    },
     "login.failed": {
       "reason": {}
     },
     "login.hidePassword": {},
     "login.password": {},
     "login.server": {},
+    "login.serverRequired": {},
+    "login.serverStep": {},
+    "login.serverStepHint": {},
     "login.showPassword": {},
     "login.submit": {},
     "login.title": {},
     "login.totp": {},
     "login.twoFactor": {},
     "login.username": {},
+    "media_tool.action.edit": {},
+    "media_tool.action.new": {},
+    "media_tool.action.start": {},
+    "media_tool.action.stop": {},
     "media_tool.cancelFailed": {
       "error": {}
     },
     "media_tool.comingSoon": {},
     "media_tool.comingSoonHint": {},
-    "media_tool.action.edit": {},
-    "media_tool.action.new": {},
-    "media_tool.action.start": {},
-    "media_tool.action.stop": {},
     "media_tool.empty": {},
     "media_tool.entry.arrange": {},
+    "media_tool.entry.audioTrans": {},
+    "media_tool.entry.batchCompress": {},
+    "media_tool.entry.singleCompress": {},
+    "media_tool.entry.tasks": {},
+    "media_tool.entry.thumbnails": {},
+    "media_tool.entry.videoTrans": {},
     "media_tool.field.abrate": {},
     "media_tool.field.acodec": {},
     "media_tool.field.by": {},
@@ -560,6 +679,19 @@
     "media_tool.field.thumbSize": {},
     "media_tool.field.vbitrate": {},
     "media_tool.field.vcodec": {},
+    "media_tool.group.audio": {},
+    "media_tool.group.image": {},
+    "media_tool.group.other": {},
+    "media_tool.group.video": {},
+    "media_tool.jobFailed": {
+      "failed": {}
+    },
+    "media_tool.stats": {
+      "done": {},
+      "total": {},
+      "skipped": {},
+      "failed": {}
+    },
     "media_tool.status.stopped": {},
     "media_tool.upload": {},
     "media_tool.uploadFailed": {
@@ -571,25 +703,6 @@
     },
     "media_tool.zip": {},
     "media_tool.zipHint": {},
-    "media_tool.stats": {
-      "done": {},
-      "total": {},
-      "skipped": {},
-      "failed": {}
-    },
-    "media_tool.entry.audioTrans": {},
-    "media_tool.entry.batchCompress": {},
-    "media_tool.entry.singleCompress": {},
-    "media_tool.entry.tasks": {},
-    "media_tool.entry.thumbnails": {},
-    "media_tool.entry.videoTrans": {},
-    "media_tool.group.audio": {},
-    "media_tool.group.image": {},
-    "media_tool.group.other": {},
-    "media_tool.group.video": {},
-    "media_tool.jobFailed": {
-      "failed": {}
-    },
     "messages.markFailed": {
       "error": {}
     },
@@ -637,12 +750,38 @@
     "music.cache.failed": {
       "error": {}
     },
+    "music.client.cacheHint": {},
+    "music.client.cacheTitle": {},
+    "music.client.cacheUsed": {
+      "files": {},
+      "size": {}
+    },
+    "music.client.clearCache": {},
+    "music.client.cleared": {
+      "size": {}
+    },
+    "music.collection.addPath": {},
+    "music.collection.create": {},
+    "music.collection.deleteConfirm": {
+      "name": {}
+    },
+    "music.collection.edit": {},
+    "music.collection.empty": {},
+    "music.collection.emptyHint": {},
+    "music.collection.name": {},
+    "music.collection.nameHint": {},
+    "music.collection.noPath": {},
+    "music.collection.paths": {},
+    "music.collection.pathsHint": {},
+    "music.collection.title": {},
     "music.copyUrl": {
       "minutes": {}
     },
     "music.deleteConfirm": {
       "name": {}
     },
+    "music.favorite.add": {},
+    "music.favorite.remove": {},
     "music.group.albumCount": {
       "count": {}
     },
@@ -650,6 +789,7 @@
     "music.joinFailed": {
       "error": {}
     },
+    "music.lyrics.title": {},
     "music.lyricsFailed": {
       "error": {}
     },
@@ -657,7 +797,11 @@
       "title": {}
     },
     "music.nav.albums": {},
+    "music.nav.appSettings": {},
     "music.nav.artists": {},
+    "music.nav.cache": {},
+    "music.nav.clientSettings": {},
+    "music.nav.collections": {},
     "music.nav.empty": {},
     "music.nav.emptyFavorites": {},
     "music.nav.emptyHistory": {},
@@ -665,6 +809,9 @@
     "music.nav.library": {},
     "music.nav.settings": {},
     "music.nav.settingsHint": {},
+    "music.nav.songs": {},
+    "music.nav.sources": {},
+    "music.play": {},
     "music.play.repeatAll": {},
     "music.play.repeatOff": {},
     "music.play.repeatOne": {},
@@ -672,6 +819,7 @@
     "music.playUrlFailed": {
       "error": {}
     },
+    "music.playlist.rename": {},
     "music.pruneConfirm": {
       "count": {}
     },
@@ -695,14 +843,45 @@
       "skipped": {},
       "probed": {}
     },
+    "music.scanQueued": {},
+    "music.scanAlreadyRunning": {},
+    "music.settings.limit": {},
+    "music.settings.prune": {},
+    "music.settings.pruneHint": {},
+    "music.settings.scanTitle": {},
     "music.sort.album": {},
     "music.sort.artist": {},
     "music.sort.asc": {},
+    "music.sort.count": {},
     "music.sort.created": {},
     "music.sort.desc": {},
     "music.sort.duration": {},
+    "music.sort.favorite": {},
+    "music.sort.name": {},
     "music.sort.title": {},
     "music.sort.year": {},
+    "music.source.add": {},
+    "music.source.added": {},
+    "music.source.all": {},
+    "music.source.empty": {},
+    "music.source.emptyHint": {},
+    "music.source.hint": {},
+    "music.source.name": {},
+    "music.source.nameHint": {},
+    "music.source.neverScanned": {},
+    "music.source.remove": {},
+    "music.source.removeConfirm": {
+      "name": {}
+    },
+    "music.source.removed": {},
+    "music.source.scannedAt": {
+      "date": {}
+    },
+    "music.source.scanning": {},
+    "music.source.title": {},
+    "music.source.tracks": {
+      "n": {}
+    },
     "music.stats": {
       "tracks": {},
       "albums": {},
@@ -710,6 +889,8 @@
     },
     "nav.collapse": {},
     "nav.expand": {},
+    "nav.favorites": {},
+    "nav.filesView": {},
     "nav.group.data": {},
     "nav.group.media": {},
     "nav.group.service": {},
@@ -740,8 +921,12 @@
     "notes.versionTitle": {
       "count": {}
     },
+    "notes.preview": {},
+    "notes.edit": {},
+    "notes.previewEmpty": {},
     "photo.ai.activities": {},
     "photo.ai.allDone": {},
+    "photo.ai.alreadyQueued": {},
     "photo.ai.autoHide": {},
     "photo.ai.autoHideHint": {},
     "photo.ai.backfillDone": {
@@ -788,6 +973,11 @@
     "photo.ai.ocr": {},
     "photo.ai.pause": {},
     "photo.ai.paused": {},
+    "photo.ai.progressDoneTotal": {
+      "done": {},
+      "total": {},
+      "percent": {}
+    },
     "photo.ai.progressSuffix": {
       "percent": {}
     },
@@ -796,6 +986,7 @@
       "pending": {}
     },
     "photo.ai.purge": {},
+    "photo.ai.queued": {},
     "photo.ai.recluster": {},
     "photo.ai.rescanMissing": {},
     "photo.ai.reset": {},
@@ -1246,6 +1437,7 @@
     },
     "photo.nav.activities": {},
     "photo.nav.ai": {},
+    "photo.nav.aiCenter": {},
     "photo.nav.aiSettings": {},
     "photo.nav.backup": {},
     "photo.nav.chapter": {},
@@ -1281,6 +1473,24 @@
     "photo.placePicker.radius": {},
     "photo.placePicker.title": {},
     "photo.preview": {},
+    "photo.info.title": {},
+    "photo.info.file": {},
+    "photo.info.size": {},
+    "photo.info.dimensions": {},
+    "photo.info.takenAt": {},
+    "photo.info.camera": {},
+    "photo.info.lens": {},
+    "photo.info.exposure": {},
+    "photo.info.iso": {},
+    "photo.info.aperture": {},
+    "photo.info.shutter": {},
+    "photo.info.focal": {},
+    "photo.info.software": {},
+    "photo.info.gps": {},
+    "photo.info.orientation": {},
+    "photo.info.loadFailed": {
+      "error": {}
+    },
     "photo.preview.extent": {},
     "photo.preview.hint": {},
     "photo.preview.pageSize": {},
@@ -1402,6 +1612,7 @@
     "photo.source.saved": {},
     "photo.source.scanAll": {},
     "photo.source.unavailable": {},
+    "photo.source.up": {},
     "photo.suggest.activity": {},
     "photo.suggest.camera": {},
     "photo.suggest.filename": {},
@@ -1420,6 +1631,7 @@
     "photo.timeline.sortAsc": {},
     "photo.timeline.sortDesc": {},
     "photo.timeline.today": {},
+    "photo.timeline.year": {},
     "photo.timeline.zoomIn": {},
     "photo.timeline.zoomOut": {},
     "photo.trash.batchEmpty": {},
@@ -1468,6 +1680,80 @@
     },
     "photo.yearView.title": {},
     "photo.yearView.wholeYear": {},
+    "player.audioCodec": {},
+    "player.audioDownmix": {},
+    "player.audioNormalize": {},
+    "player.audioTrack": {},
+    "player.back": {},
+    "player.compatOn": {},
+    "player.dolbyVision": {},
+    "player.fit": {},
+    "player.fitContain": {},
+    "player.fitCover": {},
+    "player.forward30": {},
+    "player.fullscreen": {},
+    "player.fullscreenExit": {},
+    "player.hdr": {},
+    "player.help": {},
+    "player.helpContent": {},
+    "player.info": {},
+    "player.lock": {},
+    "player.loop": {},
+    "player.loopAll": {},
+    "player.loopSequence": {},
+    "player.loopShuffle": {},
+    "player.loopSingle": {},
+    "player.mediaInfo": {},
+    "player.next": {},
+    "player.noAudioTracks": {},
+    "player.noPlaylist": {},
+    "player.noSubtitles": {},
+    "player.embeddedSubtitle": {
+      "n": {}
+    },
+    "player.off": {},
+    "player.on": {},
+    "player.original": {},
+    "player.pause": {},
+    "player.play": {},
+    "player.playFailed": {},
+    "player.playlist": {},
+    "player.preparing": {},
+    "player.preparingHint": {
+      "reason": {}
+    },
+    "player.prev": {},
+    "player.quality": {},
+    "player.qualityHint": {
+      "preset": {}
+    },
+    "player.reason.10bit": {},
+    "player.reason.atmos": {},
+    "player.reason.av1": {},
+    "player.reason.dolbyVision": {},
+    "player.reason.eac3": {},
+    "player.reason.hdr10": {},
+    "player.reason.hdr10plus": {},
+    "player.reason.hevc": {},
+    "player.reason.hlg": {},
+    "player.reason.truehd": {},
+    "player.resolution": {},
+    "player.retry": {},
+    "player.rewind10": {},
+    "player.settings": {},
+    "player.sourceDirect": {},
+    "player.sourceTranscode": {},
+    "player.speed": {},
+    "player.speedBoost": {},
+    "player.subtitle": {},
+    "player.switchFailed": {
+      "error": {}
+    },
+    "player.switching": {},
+    "player.tryOriginal": {},
+    "player.unlock": {},
+    "player.videoCodec": {},
+    "player.volume": {},
     "safety.backupDone": {
       "files": {},
       "bytes": {}
@@ -1514,8 +1800,32 @@
       "name": {}
     },
     "settings.appearance": {},
+    "help.title": {},
+    "help.subtitle": {},
+    "help.start.title": {},
+    "help.start.body": {},
+    "help.video.title": {},
+    "help.video.body": {},
+    "help.music.title": {},
+    "help.music.body": {},
+    "help.photo.title": {},
+    "help.photo.body": {},
+    "help.book.title": {},
+    "help.book.body": {},
+    "help.files.title": {},
+    "help.files.body": {},
+    "help.trouble.title": {},
+    "help.trouble.body": {},
+    "guide.title": {},
+    "guide.body": {},
+    "guide.ok": {},
     "settings.cache": {},
     "settings.cacheClear": {},
+    "settings.dbCompact": {},
+    "settings.dbCompactHint": {},
+    "settings.dbCompacted": {
+      "size": {}
+    },
     "settings.cacheCleared": {
       "size": {}
     },
@@ -1523,7 +1833,12 @@
       "size": {},
       "files": {}
     },
+    "settings.capabilityNotice": {},
+    "settings.capabilityNoticeHint": {},
     "settings.concurrency": {},
+    "settings.deleteTitle": {
+      "name": {}
+    },
     "settings.font": {},
     "settings.font.mono": {},
     "settings.font.sans": {},
@@ -1535,23 +1850,36 @@
     "settings.httpsEnabled": {},
     "settings.httpsHint": {},
     "settings.httpsPort": {},
-    "settings.tlsCert": {},
-    "settings.tlsClear": {},
-    "settings.tlsNone": {},
-    "settings.tlsSubject": {
-      "subject": {}
-    },
-    "settings.tlsUploaded": {},
-    "settings.tlsValid": {
-      "from": {},
-      "to": {}
-    },
     "settings.javFallback": {},
     "settings.javFallbackHint": {},
+    "settings.language": {},
     "settings.legal": {},
     "settings.legalHint": {},
+    "settings.libSummary": {
+      "path": {},
+      "count": {}
+    },
     "settings.librariesMoved": {},
+    "settings.logsAutoRefresh": {},
+    "settings.logsEmpty": {},
+    "settings.logsFilter": {},
+    "settings.logsLevelError": {},
+    "settings.logsLevelErrorWarn": {},
+    "settings.logsLevelInfo": {},
+    "settings.logsLevelWarn": {},
+    "settings.logsTruncated": {
+      "lines": {}
+    },
+    "settings.mediaSection": {},
+    "settings.nav.appearance": {},
+    "settings.nav.logs": {},
+    "settings.nav.other": {},
+    "settings.nav.server": {},
     "settings.needAdmin": {},
+    "settings.newLibrary": {
+      "kind": {}
+    },
+    "settings.notLoggedIn": {},
     "settings.port": {},
     "settings.proxy": {},
     "settings.proxyActive": {
@@ -1559,35 +1887,6 @@
     },
     "settings.proxyHint": {},
     "settings.proxyOff": {},
-    "settings.restart": {},
-    "settings.restartConfirm": {},
-    "settings.restartHint": {},
-    "settings.restarting": {},
-    "settings.saved": {},
-    "settings.server": {},
-    "settings.update": {},
-    "settings.updateAvailable": {
-      "version": {}
-    },
-    "settings.updateNone": {},
-    "settings.version": {
-      "version": {}
-    },
-    "settings.welcome": {},
-    "settings.welcomeHint": {},
-    "settings.deleteTitle": {
-      "name": {}
-    },
-    "settings.language": {},
-    "settings.libSummary": {
-      "path": {},
-      "count": {}
-    },
-    "settings.mediaSection": {},
-    "settings.newLibrary": {
-      "kind": {}
-    },
-    "settings.notLoggedIn": {},
     "settings.rebuildFailed": {
       "error": {}
     },
@@ -1595,6 +1894,11 @@
       "indexed": {},
       "skipped": {}
     },
+    "settings.restart": {},
+    "settings.restartConfirm": {},
+    "settings.restartHint": {},
+    "settings.restarting": {},
+    "settings.saved": {},
     "settings.scanBook": {
       "added": {},
       "updated": {},
@@ -1621,12 +1925,34 @@
       "skipped": {},
       "probed": {}
     },
+    "settings.server": {},
     "settings.sessionOnly": {
       "locale": {}
     },
     "settings.switched": {
       "url": {}
     },
+    "settings.tlsCert": {},
+    "settings.tlsClear": {},
+    "settings.tlsNone": {},
+    "settings.tlsSubject": {
+      "subject": {}
+    },
+    "settings.tlsUploaded": {},
+    "settings.tlsValid": {
+      "from": {},
+      "to": {}
+    },
+    "settings.update": {},
+    "settings.updateAvailable": {
+      "version": {}
+    },
+    "settings.updateNone": {},
+    "settings.version": {
+      "version": {}
+    },
+    "settings.welcome": {},
+    "settings.welcomeHint": {},
     "setup.alreadyDone": {},
     "setup.checkAgain": {},
     "setup.confirm": {},
@@ -1669,6 +1995,7 @@
     "sync.auto.minutes": {
       "n": {}
     },
+    "sync.auto.offHint": {},
     "sync.auto.runCheck": {},
     "sync.auto.title": {},
     "sync.autostart.enable": {},
@@ -1709,6 +2036,15 @@
     "sync.phase.reporting": {},
     "sync.phase.scanning": {},
     "sync.phase.transferring": {},
+    "sync.picker.choose": {},
+    "sync.picker.computer": {},
+    "sync.picker.drive": {},
+    "sync.picker.empty": {},
+    "sync.picker.loadFailed": {
+      "reason": {}
+    },
+    "sync.picker.root": {},
+    "sync.picker.title": {},
     "sync.records": {},
     "sync.remoteDir": {},
     "sync.rulesMore": {
@@ -1728,6 +2064,7 @@
     "sync.stat.conflict": {},
     "sync.stat.delete": {},
     "sync.stat.download": {},
+    "sync.stat.failed": {},
     "sync.stat.skip": {},
     "sync.stat.upload": {},
     "sync.status.error": {},
@@ -1748,32 +2085,20 @@
       "count": {}
     },
     "sync.webUnsupported": {},
-    "sync.wizard.deviceHint": {},
-    "sync.wizard.exclude": {},
-    "sync.wizard.include": {},
-    "sync.wizard.interval": {},
-    "sync.wizard.intervalHint": {},
-    "sync.wizard.intervalMinutes": {},
-    "sync.wizard.localHint": {},
-    "sync.wizard.modeHint": {},
-    "sync.wizard.next": {},
-    "sync.wizard.pickDir": {},
-    "sync.wizard.prev": {},
-    "sync.wizard.remoteHint": {},
-    "sync.wizard.required": {},
-    "sync.wizard.ruleHint": {},
-    "sync.wizard.rulePreset": {},
     "sync.wizard.advanced": {},
     "sync.wizard.comingSoon": {},
     "sync.wizard.conflict": {},
     "sync.wizard.conflictLocal": {},
+    "sync.wizard.conflictManual": {},
     "sync.wizard.conflictNewer": {},
     "sync.wizard.conflictRemote": {},
-    "sync.wizard.conflictManual": {},
     "sync.wizard.deleteExtra": {},
     "sync.wizard.deleteExtraHint": {},
+    "sync.wizard.deviceConfirmHint": {},
+    "sync.wizard.deviceHint": {},
+    "sync.wizard.deviceTitle": {},
     "sync.wizard.editFilter": {},
-    "sync.wizard.filterTitle": {},
+    "sync.wizard.exclude": {},
     "sync.wizard.filterExt": {},
     "sync.wizard.filterHidden": {},
     "sync.wizard.filterLarge": {},
@@ -1783,19 +2108,31 @@
     "sync.wizard.filterSummary": {
       "summary": {}
     },
-    "sync.wizard.deviceConfirmHint": {},
-    "sync.wizard.deviceTitle": {},
+    "sync.wizard.filterTitle": {},
+    "sync.wizard.include": {},
+    "sync.wizard.interval": {},
+    "sync.wizard.intervalHint": {},
+    "sync.wizard.intervalMinutes": {},
+    "sync.wizard.localHint": {},
     "sync.wizard.loggedIn": {},
+    "sync.wizard.modeHint": {},
     "sync.wizard.name": {},
     "sync.wizard.nameHint": {},
     "sync.wizard.nameRequired": {},
     "sync.wizard.nasTitle": {},
+    "sync.wizard.next": {},
     "sync.wizard.pathSummary": {},
+    "sync.wizard.pickDir": {},
+    "sync.wizard.prev": {},
     "sync.wizard.probeEscape": {},
     "sync.wizard.probeReadonly": {},
     "sync.wizard.ready": {},
     "sync.wizard.realtime": {},
     "sync.wizard.realtimeHint": {},
+    "sync.wizard.remoteHint": {},
+    "sync.wizard.required": {},
+    "sync.wizard.ruleHint": {},
+    "sync.wizard.rulePreset": {},
     "sync.wizard.safety": {},
     "sync.wizard.step.device": {},
     "sync.wizard.step.paths": {},
@@ -2076,6 +2413,11 @@
     "ui.notes.h6a5c4d": {},
     "ui.notes.h78f683": {},
     "ui.notes.h7aeae1": {},
+    "ui.notes.h_conflictBody": {},
+    "ui.notes.h_conflictOverwrite": {},
+    "ui.notes.h_conflictReload": {},
+    "ui.notes.h_conflictReloaded": {},
+    "ui.notes.h_conflictTitle": {},
     "ui.photo.001": {},
     "ui.photo.002": {},
     "ui.photo.003": {},
@@ -2343,6 +2685,9 @@
     "video.action.scrapeCleanup": {},
     "video.action.scrapeForce": {},
     "video.action.unfavorite": {},
+    "video.badge.chinese": {},
+    "video.badge.subtitle": {},
+    "video.badge.uncensored": {},
     "video.browse.empty": {},
     "video.browse.noLibrary": {},
     "video.browse.root": {},
@@ -2351,9 +2696,6 @@
     "video.browse.title": {},
     "video.browse.unindexed": {},
     "video.browse.up": {},
-    "video.badge.chinese": {},
-    "video.badge.subtitle": {},
-    "video.badge.uncensored": {},
     "video.card.more": {},
     "video.card.rankBadge": {
       "rank": {}
@@ -2365,6 +2707,21 @@
     },
     "video.card.unwatched": {},
     "video.card.watched": {},
+    "video.client.audioNormalize": {},
+    "video.client.audioNormalizeHint": {},
+    "video.client.bitrateNow": {
+      "rate": {}
+    },
+    "video.client.codec": {},
+    "video.client.codecHint": {},
+    "video.client.copyNoTranscode": {},
+    "video.client.downmix": {},
+    "video.client.downmixHint": {},
+    "video.client.group.audio": {},
+    "video.client.group.play": {},
+    "video.client.localOnly": {},
+    "video.client.playQuality": {},
+    "video.client.playQualityHint": {},
     "video.collection.addTo": {},
     "video.collection.added": {
       "count": {}
@@ -2389,6 +2746,16 @@
     "video.collection.name": {},
     "video.collection.nameHint": {},
     "video.collection.new": {},
+    "video.collection.merge": {},
+    "video.collection.mergeTitle": {},
+    "video.collection.mergeBody": {
+      "source": {}
+    },
+    "video.collection.mergeTarget": {},
+    "video.collection.mergeNoTarget": {},
+    "video.collection.merged": {
+      "count": {}
+    },
     "video.collection.removeItem": {},
     "video.collection.rename": {},
     "video.collection.setCover": {},
@@ -2398,10 +2765,15 @@
     },
     "video.detail.actor": {},
     "video.detail.director": {},
+    "video.detail.episodes": {},
+    "video.detail.file": {},
+    "video.detail.fileLocation": {},
+    "video.detail.fileSize": {},
     "video.detail.genre": {},
     "video.detail.minutes": {
       "count": {}
     },
+    "video.detail.movie": {},
     "video.detail.notScraped": {},
     "video.detail.notScrapedHint": {},
     "video.detail.overview": {},
@@ -2412,7 +2784,27 @@
     "video.detail.score": {},
     "video.detail.source": {},
     "video.detail.studio": {},
+    "video.detail.trackAudio": {},
+    "video.detail.trackSubtitle": {},
+    "video.detail.trackVideo": {},
     "video.detail.year": {},
+    "video.dup.actorClear": {},
+    "video.dup.actorCount": {
+      "count": {}
+    },
+    "video.dup.actorEmpty": {},
+    "video.dup.actorExclude": {},
+    "video.dup.actorExcludeHint": {},
+    "video.dup.actorExcluded": {
+      "count": {}
+    },
+    "video.dup.actorHidden": {
+      "count": {}
+    },
+    "video.dup.actorSearch": {},
+    "video.dup.actorTotal": {
+      "count": {}
+    },
     "video.dup.autoSelect": {},
     "video.dup.autoSelectEmpty": {},
     "video.dup.clearSelection": {},
@@ -2429,12 +2821,19 @@
     "video.dup.deleteSelected": {
       "count": {}
     },
+    "video.dup.deleteTaskTimeout": {},
+    "video.dup.deleting": {},
+    "video.dup.deletingHint": {},
     "video.dup.fanart": {},
     "video.dup.hint2": {},
     "video.dup.keep": {},
     "video.dup.keys": {},
+    "video.dup.mtime": {},
+    "video.dup.permanentHint": {},
     "video.dup.poster": {},
     "video.dup.selectRest": {},
+    "video.dup.toTrash": {},
+    "video.dup.toTrashHint": {},
     "video.dup.total": {
       "groups": {},
       "scanned": {},
@@ -2446,6 +2845,7 @@
       "count": {}
     },
     "video.duplicate.hint": {},
+    "video.duplicate.hint2": {},
     "video.duplicate.scanned": {
       "count": {}
     },
@@ -2469,6 +2869,7 @@
     "video.home.continue": {},
     "video.home.empty": {},
     "video.home.emptyHint": {},
+    "video.home.main": {},
     "video.home.recentAdd": {},
     "video.home.recommend": {},
     "video.home.scrapeAll": {},
@@ -2596,6 +2997,13 @@
     "video.list.sort": {},
     "video.list.sort.createAsc": {},
     "video.list.sort.createDesc": {},
+    "video.list.sort.nameAsc": {},
+    "video.list.sort.nameDesc": {},
+    "video.list.sort.scoreAsc": {},
+    "video.list.sort.scoreDesc": {},
+    "video.list.sort.viewDesc": {},
+    "video.list.sort.yearAsc": {},
+    "video.list.sort.yearDesc": {},
     "video.media.all": {},
     "video.media.close": {},
     "video.media.copyLink": {},
@@ -2624,13 +3032,8 @@
     "video.media.sortViewDesc": {},
     "video.media.viewerHint": {},
     "video.media.waterfall": {},
-    "video.list.sort.nameAsc": {},
-    "video.list.sort.nameDesc": {},
-    "video.list.sort.scoreAsc": {},
-    "video.list.sort.scoreDesc": {},
-    "video.list.sort.viewDesc": {},
-    "video.list.sort.yearAsc": {},
-    "video.list.sort.yearDesc": {},
+    "video.nav.appSettings": {},
+    "video.nav.clientSettings": {},
     "video.nav.emptyFavorites": {},
     "video.nav.emptyFiles": {},
     "video.nav.emptyHistory": {},
@@ -2681,6 +3084,7 @@
       "source": {}
     },
     "video.scrape.excluded": {},
+    "video.scrape.group": {},
     "video.scrape.key": {},
     "video.scrape.keyHint": {},
     "video.scrape.language": {},
@@ -2760,14 +3164,78 @@
       "count": {},
       "duration": {}
     },
+    "video.stats.actorFill": {},
+    "video.stats.actorFillQueued": {},
+    "video.stats.byLibrary": {},
+    "video.stats.noCNoSub": {},
+    "video.stats.none": {},
+    "video.stats.recount": {},
+    "video.stats.scraped": {},
+    "video.stats.title": {},
+    "video.stats.unscraped": {},
+    "video.sub.assrt": {},
+    "video.sub.auto": {},
+    "video.sub.autoHint": {},
+    "video.sub.daily": {},
+    "video.sub.dailyHint": {},
+    "video.sub.dailyHour": {},
+    "video.sub.defaultLang": {},
+    "video.sub.defaultLangHint": {},
+    "video.sub.fetchDone": {},
+    "video.sub.fetchNow": {},
+    "video.sub.group": {},
+    "video.sub.javConfigured": {},
+    "video.sub.javPass": {},
+    "video.sub.javPassHint": {},
+    "video.sub.javUser": {},
+    "video.sub.langAuto": {},
+    "video.sub.notConfigured": {},
+    "video.sub.openSub": {},
+    "video.sub.preExtract": {},
+    "video.sub.preExtractHint": {},
+    "video.sub.sources": {},
+    "video.sub.sourcesHint": {},
+    "video.sub.src.assrt": {},
+    "video.sub.src.jav": {},
+    "video.sub.src.openSub": {},
+    "video.sub.src.xunlei": {},
+    "video.sub.testFailed": {
+      "error": {}
+    },
+    "video.sub.testSources": {},
+    "video.sub.testing": {},
+    "video.sub.xunlei": {},
+    "video.sub.xunleiHint": {},
     "video.subtitleFailed": {
       "error": {}
     },
+    "video.task.hint": {},
+    "video.task.kind.scan": {},
+    "video.task.kind.scrape": {},
+    "video.task.kind.subtitle": {},
+    "video.task.none": {},
+    "video.task.state.canceled": {},
+    "video.task.state.done": {},
+    "video.task.state.failed": {},
+    "video.task.state.pending": {},
+    "video.task.state.running": {},
+    "video.task.title": {},
+    "video.tmdb.test": {},
     "video.transcode.codec": {},
+    "video.transcode.effective": {
+      "path": {}
+    },
+    "video.transcode.group": {},
+    "video.transcode.hwaccel": {},
+    "video.transcode.hwaccelAuto": {},
+    "video.transcode.hwaccelCpu": {},
+    "video.transcode.hwaccelHint": {},
     "video.transcode.none": {},
     "video.transcode.preset": {},
     "video.transcode.start": {},
     "video.transcode.subtitle": {},
+    "video.transcode.tempDir": {},
+    "video.transcode.tempDirHint": {},
     "video.transcode.title": {},
     "video.transcodeFailed": {
       "error": {}
@@ -2775,8 +3243,6 @@
     "video.transcodeIncomplete": {
       "status": {},
       "error": {}
-    },
-    "settings.capabilityNotice": {},
-    "settings.capabilityNoticeHint": {}
+    }
   }
 }

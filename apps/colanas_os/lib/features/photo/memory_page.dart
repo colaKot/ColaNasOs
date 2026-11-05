@@ -78,7 +78,7 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -90,7 +90,7 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -102,7 +102,7 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -114,7 +114,7 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
       await _load();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      NasSnack.show(context, '$e');
     }
   }
 
@@ -625,7 +625,7 @@ class _DayFramesTabState extends State<_DayFramesTab> {
                 ),
               ),
               Spacer(),
-              DropdownButton<int>(
+              NasDropdown<int>(
                 value: _days,
                 underline: SizedBox.shrink(),
                 items: [

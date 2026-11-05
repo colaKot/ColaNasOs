@@ -649,4 +649,55 @@ export const PHOTO_MIGRATIONS: Migration[] = [
         `.execute(db);
       },
     },
+    {
+      // OCR 全文索引：语义搜索 / 相册联想里的 `text like '%kw%'` 以前是整表扫。
+      // trigram 要求 ≥3 字符；1-2 字由查询侧回退 LIKE。
+      id: '131_photo_fts',
+      async up(db) {
+        await sql`
+          create virtual table if not exists photo_ocr_fts using fts5(
+            text,
+            content='photo_ocr',
+            content_rowid='rowid',
+            tokenize='trigram'
+          )
+        `.execute(db);
+        await sql`
+          create trigger if not exists photo_ocr_fts_ai after insert on photo_ocr begin
+            insert into photo_ocr_fts(rowid, text) values (new.rowid, new.text);
+          end
+        `.execute(db);
+        await sql`
+          create trigger if not exists photo_ocr_fts_ad after delete on photo_ocr begin
+            insert into photo_ocr_fts(photo_ocr_fts, rowid, text)
+            values ('delete', old.rowid, old.text);
+          end
+        `.execute(db);
+        await sql`
+          create trigger if not exists photo_ocr_fts_au after update on photo_ocr begin
+            insert into photo_ocr_fts(photo_ocr_fts, rowid, text)
+            values ('delete', old.rowid, old.text);
+            insert into photo_ocr_fts(rowid, text) values (new.rowid, new.text);
+          end
+        `.execute(db);
+        await sql`insert into photo_ocr_fts(photo_ocr_fts) values('rebuild')`.execute(db);
+      },
+    },
+    {
+      // 识别失败记账。挑片条件是「没有 embedding 就做」，而损坏 / 解不了的
+      // 图片永远产不出 embedding —— 一张坏图就能让 photo.ai.scan 每轮都重新
+      // 挑中它，变成 0.2 秒一轮的热循环（实测 HEIC 解码失败刷满日志）。
+      // 失败时记时间与原因，后续批次跳过；用户点「重新识别」(force) 时清零重试。
+      id: '133_photo_ai_skip',
+      async up(db) {
+        await sql`alter table photo_items add column ai_skip_at integer not null default 0`.execute(
+          db,
+        );
+        await sql`alter table photo_items add column ai_skip_reason text`.execute(db);
+        await sql`
+          create index if not exists idx_photo_items_ai_pending
+            on photo_items(ai_skip_at)
+        `.execute(db);
+      },
+    },
 ];

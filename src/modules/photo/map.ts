@@ -80,7 +80,16 @@ const BUILTIN_TILE_SERVERS: TileServer[] = [
     maxLevel: 19,
   },
 ];
-const DEFAULT_TILE_SERVER: TileServer = BUILTIN_TILE_SERVERS[0];
+/**
+ * 默认底图：高德中文标注。
+ *
+ * 不能取列表第一个 —— 那是 Esri 卫星图，卫星影像没有行政边界和地名，
+ * 打开就是「一片地貌，没有省份和城市」（2026-11-04 反馈）。
+ * 高德矢量图自带省界 / 市名 / 区名，且随 zoom 自动切换颗粒度（省→市→区）。
+ */
+const DEFAULT_TILE_SERVER: TileServer =
+  BUILTIN_TILE_SERVERS.find((server) => server.id === 'amap-vec') ??
+  BUILTIN_TILE_SERVERS[0];
 
 const Marker = Type.Object(
   {
