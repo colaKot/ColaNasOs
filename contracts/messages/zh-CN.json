@@ -1222,6 +1222,7 @@
     "player.outputCodec": "输出编码",
     "player.pause": "暂停",
     "player.play": "播放",
+    "player.playbackSource": "播放来源",
     "player.playFailed": "播放失败",
     "player.playlist": "播放列表",
     "player.preparing": "正在准备兼容播放",

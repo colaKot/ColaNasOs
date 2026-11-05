@@ -965,7 +965,7 @@ class _PlayerPageState extends State<PlayerPage> {
               style: const TextStyle(color: Colors.white, fontSize: 17),
             ),
             const SizedBox(height: NasTokens.spaceMd),
-            _infoRow(tr('player.sourceTranscode'),
+            _infoRow(tr('player.playbackSource'),
                 _isTranscode ? tr('player.sourceTranscode') : tr('player.sourceDirect')),
             // 是否转码中：直连时这一行没有意义，不显示
             if (_isTranscode) _infoRow(tr('player.transcodeState'), _jobStateText),

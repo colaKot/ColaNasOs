@@ -1222,6 +1222,7 @@
     "player.outputCodec": "Output codec",
     "player.pause": "Pause",
     "player.play": "Play",
+    "player.playbackSource": "Playback source",
     "player.playFailed": "Playback failed",
     "player.playlist": "Playlist",
     "player.preparing": "Preparing compatible stream",

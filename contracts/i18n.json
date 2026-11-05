@@ -1722,6 +1722,7 @@
     "player.outputCodec": {},
     "player.pause": {},
     "player.play": {},
+    "player.playbackSource": {},
     "player.playFailed": {},
     "player.playlist": {},
     "player.preparing": {},
