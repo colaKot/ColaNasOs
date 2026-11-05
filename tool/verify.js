@@ -253,6 +253,15 @@ function selectSteps(files) {
       full = true;
       break;
     }
+    // kernel 里的「纯类型 / sidecar 桥 / 迁移清单」不写业务逻辑：
+    // 编译 + lint + 全量单测 + 契约层 + 相关 smoke 已经覆盖，不必退全量。
+    // 真正的内核实现（kernel/index.ts、kernel/route.ts …）仍旧保守全量。
+    if (/^kernel\/(types\.ts|sidecar\/media-bridge\.ts|migrations\/manifest\.ts)$/.test(p)) {
+      CONTRACT_STEPS.forEach((s) => pick.add(s));
+      ['smoke:player', 'smoke:media', 'smoke:db', 'behavior'].forEach((s) => pick.add(s));
+      domains.add('video');
+      continue;
+    }
     // `test/` 下的单测由基础 `test` 步骤（`node --test test/*.test.ts`）全量执行，
     // 新增 / 改一个单测不该让整条门禁退回全量。以前没这条规则，
     // 加一个 test/video-xxx.test.ts 就会触发「未识别路径 → full」跑满 80 步。
