@@ -13564,7 +13564,8 @@
           "leadMinutes": {
             "minimum": 0,
             "maximum": 60,
-            "description": "提前转码时长（分钟），0 = 整片",
+            "default": 3,
+            "description": "提前转码时长（分钟），不传 = 3 分钟；0 = 整片一次转完",
             "type": "integer"
           }
         }

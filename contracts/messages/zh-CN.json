@@ -2085,7 +2085,7 @@
     "video.client.group.play": "播放",
     "video.client.leadFull": "整片一次转完",
     "video.client.leadMinutes": "默认提前转码时长",
-    "video.client.leadMinutesHint": "只转播放位置前面的一小段，看到哪儿转到哪儿，不浪费 CPU；选「整片一次转完」则从片头一路转到底",
+    "video.client.leadMinutesHint": "默认 3 分钟：只转播放位置前面的一小段，看到哪儿转到哪儿，不浪费 CPU；选「整片一次转完」则从片头一路转到底",
     "video.client.leadN": "{n} 分钟",
     "video.client.localOnly": "只播本地文件，不转码",
     "video.client.playQuality": "画质",

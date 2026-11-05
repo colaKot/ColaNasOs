@@ -39,7 +39,8 @@ class _VideoClientSettingsPageState extends State<VideoClientSettingsPage> {
   late bool _downmix = PlayPreferences.audioDownmix;
   late int _lead = PlayPreferences.leadMinutes;
 
-  /// 提前转码时长的可选档；0 = 整片一次转完（默认）。
+  /// 提前转码时长的可选档；默认选中 [PlayPreferences.defaultLeadMinutes]（3 分钟），
+  /// 0 = 用户显式选「整片一次转完」。
   static const _leadOptions = [0, 1, 3, 5, 10, 20];
 
   /// 本机有编码被砍掉时才提示原因，全都支持就别啰嗦。
@@ -127,7 +128,7 @@ class _VideoClientSettingsPageState extends State<VideoClientSettingsPage> {
           title: tr('video.client.leadMinutes'),
           hint: tr('video.client.leadMinutesHint'),
           trailing: NasDropdown<int>(
-            value: _leadOptions.contains(_lead) ? _lead : 0,
+            value: _leadOptions.contains(_lead) ? _lead : PlayPreferences.defaultLeadMinutes,
             isDense: true,
             underline: const SizedBox.shrink(),
             items: [

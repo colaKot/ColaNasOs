@@ -351,6 +351,8 @@ class VideoDetailPageState extends State<VideoDetailPage> {
           // 客户端音频偏好：只有显式打开才带（null = 不传 = 跟随库级 audio_normalize）
           audioNormalize: PlayPreferences.audioNormalize ? true : null,
           audioDownmix: PlayPreferences.audioDownmix ? true : null,
+          // 详情页「转码」也要走同一份默认提前转码时长，不能漏传后由服务端兜底成别的档
+          leadMinutes: PlayPreferences.leadMinutes,
         ),
       );
       var job = await ApiSession.instance.client.playerSessionGet(

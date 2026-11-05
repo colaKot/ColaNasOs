@@ -2085,7 +2085,7 @@
     "video.client.group.play": "Playback",
     "video.client.leadFull": "Transcode the whole file",
     "video.client.leadMinutes": "Default transcode-ahead time",
-    "video.client.leadMinutesHint": "Only transcode a short stretch ahead of the playhead; stop wasting CPU on parts you never watch. Choose the whole-file option to transcode from start to finish.",
+    "video.client.leadMinutesHint": "Defaults to 3 min: only transcode a short stretch ahead of the playhead, so unwatched parts never burn CPU. Choose the whole-file option to transcode from start to finish.",
     "video.client.leadN": "{n} min",
     "video.client.localOnly": "Play local files only, no transcoding",
     "video.client.playQuality": "Quality",

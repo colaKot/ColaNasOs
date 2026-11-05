@@ -35,15 +35,24 @@ class PlayPreferences {
 
   static bool get audioDownmix => SettingsStore.instance.getBool(_downmixKey) == true;
 
-  /// 默认提前转码时长（分钟）。0 = 整片一次转完（老行为，也是默认值）。
-  /// 只转播放位置前面的一小段，看到哪儿转到哪儿，不浪费 CPU。
+  /// 所有端统一的默认提前转码时长（分钟）。
+  /// 服务端 API 有同样的兜底值（`DEFAULT_LEAD_MINUTES`），保证 SDK / 直接调用
+  /// 不传这个字段时也是 3 分钟，而不是偷偷退回整片。
+  static const int defaultLeadMinutes = 3;
+
+  /// 默认提前转码时长（分钟）。0 只有用户显式选「整片一次转完」时才会出现；
+  /// 没存过值 / 值非法 → [defaultLeadMinutes]。
   static int get leadMinutes {
-    final v = int.tryParse(SettingsStore.instance.getString(_leadKey) ?? '') ?? 0;
-    return v <= 0 ? 0 : (v > 60 ? 60 : v);
+    final v = int.tryParse(SettingsStore.instance.getString(_leadKey) ?? '');
+    if (v == null || v < 0) return defaultLeadMinutes;
+    if (v == 0) return 0;
+    return v > 60 ? 60 : v;
   }
 
-  static Future<void> saveLeadMinutes(int minutes) =>
-      SettingsStore.instance.setString(_leadKey, '${minutes <= 0 ? 0 : minutes}');
+  static Future<void> saveLeadMinutes(int minutes) => SettingsStore.instance.setString(
+        _leadKey,
+        '${minutes <= 0 ? 0 : (minutes > 60 ? 60 : minutes)}',
+      );
 
   static Future<void> save({required String preset, required String codec}) async {
     await SettingsStore.instance.setString(_presetKey, preset);

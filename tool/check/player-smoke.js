@@ -301,9 +301,18 @@ process.chdir(root);
   );
 
   // ---- 建会话并等完成 ----
-  r = await inject('POST', '/api/v1/player/sessions', admin, { id: itemId, subtitle: 'demo.srt' });
+  // 下面这一整组是「整片一次转完」的旧路径：默认已经改成 3 分钟分段，
+  // 所以必须显式传 0，否则 .session.json 会落到 p0/ 子目录，断言全部跑偏。
+  r = await inject('POST', '/api/v1/player/sessions', admin, {
+    id: itemId,
+    subtitle: 'demo.srt',
+    leadMinutes: 0,
+  });
   if (r.statusCode === 503) {
     check('session_create', true, 'skipped: media unavailable');
+    check('session_default_lead_3min', true, 'skipped: media unavailable');
+    check('session_default_lead_part_dir', true, 'skipped: media unavailable');
+    check('session_default_lead_playlist_part', true, 'skipped: media unavailable');
   } else {
     check(
       'session_create',
@@ -349,6 +358,12 @@ process.chdir(root);
         job && job.status === 'done',
         `status=${job && job.status} err=${job && job.error}`,
       );
+      // 显式传 0 仍然整片转（老行为不能被默认值改动弄丢）
+      check(
+        'session_explicit_full_lead_0',
+        job && job.leadMs === 0,
+        `leadMs=${job && job.leadMs}`,
+      );
       check(
         'session_actual_codec',
         echoes.length > 0 && echoes.every((x) => x.file === x.api),
@@ -369,7 +384,10 @@ process.chdir(root);
             id: libId,
             audioNormalize: true,
           });
-          const rNorm = await inject('POST', '/api/v1/player/sessions', admin, { id: itemId });
+          const rNorm = await inject('POST', '/api/v1/player/sessions', admin, {
+            id: itemId,
+            leadMinutes: 0,
+          });
           const idNorm = rNorm.json().id;
           let jobNorm = null;
           for (let i = 0; i < 120; i += 1) {
@@ -394,6 +412,7 @@ process.chdir(root);
           id: itemId,
           preset: '1080p_3m',
           codec: 'h265',
+          leadMinutes: 0,
         });
         const id2 = r.json().id;
         let job2 = null;
@@ -459,6 +478,50 @@ process.chdir(root);
         check('hls_segment_with_token', true, 'skipped');
         check('hls_path_guard_404', true, 'skipped');
       }
+    }
+
+    // ---- 默认提前转码时长：不传 leadMinutes 时所有端统一 3 分钟 ----
+    // 上面整组用例都显式传 0 走整片旧路径；这里专测「不传」的默认语义：
+    // SDK / 直接 API / 漏传参数的客户端都不能偷偷退回整片。
+    // 放在最后是因为建会话会取消同片 pending/running 的旧会话，前面几组都已等到 done。
+    r = await inject('POST', '/api/v1/player/sessions', admin, { id: itemId });
+    if (r.statusCode === 200) {
+      const idDef = r.json().id;
+      let jobDef = null;
+      for (let i = 0; i < 120; i += 1) {
+        const q = await inject(
+          'GET',
+          `/api/v1/player/sessions?id=${encodeURIComponent(idDef)}`,
+          admin,
+        );
+        jobDef = q.json();
+        // 2 s 测试片一段就到片尾：正常是 done，片长元数据缺失时也可能是 paused
+        if (['done', 'paused', 'failed'].includes(jobDef.status)) break;
+        await new Promise((res) => setTimeout(res, 300));
+      }
+      check(
+        'session_default_lead_3min',
+        Boolean(jobDef) && jobDef.leadMs === 180000,
+        `leadMs=${jobDef && jobDef.leadMs} status=${jobDef && jobDef.status}`,
+      );
+      // 分段产物落在 p0/ 而不是会话根目录，这是「默认不是整片」最直接的证据
+      const partIndex = path.join(dataDir, 'hls', idDef, 'p0', 'index.m3u8');
+      check(
+        'session_default_lead_part_dir',
+        fs.existsSync(partIndex) &&
+          Boolean(jobDef) && ['done', 'paused'].includes(jobDef.status),
+        `p0=${fs.existsSync(partIndex)} status=${jobDef && jobDef.status}`,
+      );
+      const plDef = await inject('GET', r.json().url);
+      check(
+        'session_default_lead_playlist_part',
+        plDef.statusCode === 200 && String(plDef.body).includes('part=p0'),
+        `status=${plDef.statusCode} part=${String(plDef.body).includes('part=p0')}`,
+      );
+    } else {
+      check('session_default_lead_3min', true, 'skipped: create failed');
+      check('session_default_lead_part_dir', true, 'skipped: create failed');
+      check('session_default_lead_playlist_part', true, 'skipped: create failed');
     }
   }
 

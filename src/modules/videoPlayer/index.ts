@@ -31,6 +31,12 @@ import { Err } from '../../../kernel/errors';
  * （内嵌字幕轨的提取留给后续迭代）。
  */
 const TAG = ['player'];
+/**
+ * 所有端统一的默认提前转码时长（分钟）。
+ * 不传 `leadMinutes` 的客户端 / SDK / 直接 API 调用都落这个值；
+ * 只有显式传 0 才回到「整片一次转完」的旧行为。
+ */
+const DEFAULT_LEAD_MINUTES = 3;
 const ref = (id: string) => ({ $ref: `${id}#` });
 
 interface SessionRow {
@@ -47,7 +53,7 @@ interface SessionRow {
   force_sdr: number | null;
   /** pump 按片源标记算出的最终 HDR→SDR 决策（供响应回显） */
   hdr_to_sdr: number | null;
-  /** 提前转码时长（毫秒）；0 = 整片一次转完（默认，旧行为） */
+  /** 提前转码时长（毫秒）；0 = 用户显式选了整片一次转完（老会话默认值） */
   lead_ms: number | null;
   status: string;
   segments: number;
@@ -294,8 +300,8 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
     if (normalize) filters.push('dynaudnorm');
     // 降混双声道：aformat 把 5.1 / 7.1 压成 stereo，单声道不会再被升混
     if (Number(job.audio_downmix) === 1) filters.push('aformat=channel_layouts=stereo');
-    // 分段续转：leadMs=0 时完全走原来的「一次转完整片」路径（产物在会话根目录）；
-    // >0 时每段一个 pN 子目录，ffmpeg 只转 [已转出位置, +leadMs) 这一截。
+    // 分段续转：leadMs=0（用户显式选整片）时完全走原来的「一次转完整片」单目录路径；
+    // >0（默认 3 分钟）时每段一个 pN 子目录，ffmpeg 只转 [已转出位置, +leadMs) 这一截。
     const leadMs = Math.max(0, Number(job.lead_ms) || 0);
     const parts = leadMs > 0 ? partsOf(k, job.id) : [];
     const alreadyMs = transcodedMsOf(parts);
@@ -502,7 +508,8 @@ export const videoPlayer: ServerModule = {
     {
       id: '135_player_lead',
       async up(db) {
-        // 提前转码时长（毫秒）。0 = 整片一次转完；老数据默认 0，行为不变。
+        // 提前转码时长（毫秒）。列默认值 / 老数据 0 = 整片一次转完，行为不变；
+        // 新会话建会话时显式写 lead_ms（不传参数 = 3 分钟），不受这个旧列默认影响。
         const cols = (
           (await sql`pragma table_info(player_sessions)`.execute(db)).rows as Array<{
             name: string;
@@ -599,12 +606,15 @@ export const videoPlayer: ServerModule = {
         const n = Number(body.audioIndex);
         const audioIndex = Number.isInteger(n) && n >= 0 ? n : 0;
         const forceSdr = body.forceSdr === true ? 1 : 0;
-        // 提前转码时长：分钟 → 毫秒，0 / 非法值 = 整片一次转完（旧行为）
-        const leadMin = Number(body.leadMinutes);
-        const leadMs =
-          Number.isFinite(leadMin) && leadMin > 0
-            ? Math.min(60, Math.round(leadMin)) * 60_000
-            : 0;
+        // 提前转码时长：分钟 → 毫秒。不传 / 非法值 = 3 分钟（所有端统一默认）；
+        // 显式 0 才是用户选了「整片一次转完」，走原来的单目录路径。
+        const rawLead =
+          body.leadMinutes == null ? DEFAULT_LEAD_MINUTES : Number(body.leadMinutes);
+        const leadMin =
+          Number.isFinite(rawLead) && rawLead >= 0
+            ? Math.min(60, Math.round(rawLead))
+            : DEFAULT_LEAD_MINUTES;
+        const leadMs = leadMin * 60_000;
         // 同参数会话复用：pump 是串行的，重复点播放会不断往队列里塞「全片转码」，
         // 后面所有片都得等前面跑完。done 的直接秒开，pending/running 共用同一份
         // 产物边转边播。

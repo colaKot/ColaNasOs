@@ -264,6 +264,25 @@ function selectSteps(files) {
       domains.add('video');
       continue;
     }
+    // 改「门禁 / 冒烟脚本本身」不该把整条门禁推成全量：用 package.json 的命令
+    // 反查哪些步骤真的会执行这个文件，只跑那几步 + 基础层。
+    // 以前 /^tool\// 无条件 full，改一个 player-smoke.js 就跑满 80 步；
+    // 上次只挡住了落在 tool/ 下的未跟踪草稿，已跟踪的 check 脚本仍会误伤。
+    // 反查不到任何已登记步骤（例如改了脚本却没有对应门禁）仍保守退全量。
+    if (/^tool\//.test(p)) {
+      const rel = p.replace(/\\/g, '/');
+      const known = new Set(STEPS.map((s) => s.script));
+      const hits = Object.entries(commands)
+        .filter(([, cmd]) => typeof cmd === 'string' && cmd.includes(rel))
+        .map(([name]) => name)
+        .filter((name) => known.has(name));
+      if (hits.length === 0) {
+        full = true;
+        break;
+      }
+      hits.forEach((s) => pick.add(s));
+      continue;
+    }
     if (FULL_TRIGGERS.some((re) => re.test(p))) {
       full = true;
       break;

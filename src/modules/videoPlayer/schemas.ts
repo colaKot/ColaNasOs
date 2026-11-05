@@ -47,11 +47,17 @@ export const SessionCreateBody = Type.Object(
       Type.Boolean({ description: '强制 HDR→SDR；不传时由服务端按片源标记自动判定' }),
     ),
     /**
-     * 默认提前转码时长（分钟）。0 / 不传 = 整片一次转完（旧行为）；
-     * >0 时按段转：每段只转这么多分钟，播放位置接近已转出末尾才接着转下一段。
+     * 提前转码时长（分钟）。**不传 = 3 分钟**（所有端统一默认，服务端兜底）；
+     * 0 = 用户显式选「整片一次转完」；>0 时按段转：每段只转这么多分钟，
+     * 播放位置接近已转出末尾才接着转下一段。
      */
     leadMinutes: Type.Optional(
-      Type.Integer({ minimum: 0, maximum: 60, description: '提前转码时长（分钟），0 = 整片' }),
+      Type.Integer({
+        minimum: 0,
+        maximum: 60,
+        default: 3,
+        description: '提前转码时长（分钟），不传 = 3 分钟；0 = 整片一次转完',
+      }),
     ),
   },
   { $id: 'PlayerSessionCreateBody' },
@@ -82,7 +88,7 @@ export const SessionItem = Type.Object(
     segments: Type.Integer(),
     /** 已转出的总时长（毫秒）：进度条画「已转到这里」的刻度用 */
     transcodedMs: Type.Optional(Type.Integer()),
-    /** 本会话的提前转码时长（毫秒），0 = 整片 */
+    /** 本会话的提前转码时长（毫秒），0 = 用户显式选了整片 */
     leadMs: Type.Optional(Type.Integer()),
     error: Type.Union([Type.String(), Type.Null()]),
     url: Type.String(),
