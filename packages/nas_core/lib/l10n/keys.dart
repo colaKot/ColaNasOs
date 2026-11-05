@@ -1214,6 +1214,8 @@ class I18nKeys {
   static const playerAudioNormalize = 'player.audioNormalize';
   static const playerAudioTrack = 'player.audioTrack';
   static const playerBack = 'player.back';
+  static const playerBitrate = 'player.bitrate';
+  static const playerCodecFallback = 'player.codecFallback';
   static const playerCompatOn = 'player.compatOn';
   static const playerDolbyVision = 'player.dolbyVision';
   static const playerFit = 'player.fit';
@@ -1241,6 +1243,7 @@ class I18nKeys {
   static const playerOff = 'player.off';
   static const playerOn = 'player.on';
   static const playerOriginal = 'player.original';
+  static const playerOutputCodec = 'player.outputCodec';
   static const playerPause = 'player.pause';
   static const playerPlay = 'player.play';
   static const playerPlayFailed = 'player.playFailed';
@@ -1250,6 +1253,7 @@ class I18nKeys {
   static const playerPrev = 'player.prev';
   static const playerQuality = 'player.quality';
   static const playerQualityHint = 'player.qualityHint';
+  static const playerRateTo = 'player.rateTo';
   static const playerReason10bit = 'player.reason.10bit';
   static const playerReasonAtmos = 'player.reason.atmos';
   static const playerReasonAv1 = 'player.reason.av1';
@@ -1271,6 +1275,10 @@ class I18nKeys {
   static const playerSubtitle = 'player.subtitle';
   static const playerSwitchFailed = 'player.switchFailed';
   static const playerSwitching = 'player.switching';
+  static const playerTranscodeState = 'player.transcodeState';
+  static const playerTranscodeDone = 'player.transcodeDone';
+  static const playerTranscodePending = 'player.transcodePending';
+  static const playerTranscoding = 'player.transcoding';
   static const playerTryOriginal = 'player.tryOriginal';
   static const playerUnlock = 'player.unlock';
   static const playerVideoCodec = 'player.videoCodec';
@@ -2107,6 +2115,7 @@ class I18nKeys {
   static const videoClientBitrateNow = 'video.client.bitrateNow';
   static const videoClientCodec = 'video.client.codec';
   static const videoClientCodecHint = 'video.client.codecHint';
+  static const videoClientCodecWebForced = 'video.client.codecWebForced';
   static const videoClientCopyNoTranscode = 'video.client.copyNoTranscode';
   static const videoClientDownmix = 'video.client.downmix';
   static const videoClientDownmixHint = 'video.client.downmixHint';
@@ -2519,4 +2528,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2475;
+const int i18nKeyCount = 2484;

@@ -70,6 +70,25 @@ void main() {
     });
   });
 
+  group('码率文案：源码率也用同一套写法', () {
+    test('mbpsLabel 带单位、拿不到时给破折号', () {
+      expect(mbpsLabel(19600), '19.6 Mbps');
+      expect(mbpsLabel(1400), '1.4 Mbps');
+      expect(mbpsLabel(0), '—');
+    });
+
+    test('源码率 = 字节 × 8 ÷ 时长（匹诺曹 17.2GB / 117min ≈ 19.7Mbps）', () {
+      final kbps = sourceKbpsOf(17245608381, 117 * 60 * 1000);
+      expect(kbps, inInclusiveRange(19400, 19800));
+      expect(mbpsLabel(kbps), '19.7 Mbps');
+    });
+
+    test('缺 size / 时长时返回 0，不显示 0 Mbps', () {
+      expect(sourceKbpsOf(0, 1000), 0);
+      expect(sourceKbpsOf(1000, 0), 0);
+    });
+  });
+
   group('clampPresetForSource 按片源收敛偏好档位', () {
     test('片源够高时原样保留（尊重用户，不多花流量）', () {
       expect(clampPresetForSource('1080p_2m', 1080, codec: 'av1'), '1080p_2m');

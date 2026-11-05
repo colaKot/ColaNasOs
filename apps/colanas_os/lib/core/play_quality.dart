@@ -34,7 +34,7 @@ class PlayQualityPreset {
     if (copy) return '不转码';
     final kbps = bitrateFor(codecKey);
     if (kbps <= 0) return '';
-    return '${_mbpsText(kbps)} Mbps';
+    return '${mbpsText(kbps)} Mbps';
   }
 
   /// 菜单 / 下拉框里唯一该显示的文案：`1080P 1.4Mbps`。
@@ -46,7 +46,7 @@ class PlayQualityPreset {
     if (copy) return label;
     final kbps = bitrateFor(codecKey);
     if (kbps <= 0) return label;
-    return '$label ${_mbpsText(kbps)}Mbps';
+    return '$label ${mbpsText(kbps)}Mbps';
   }
 
   /// 兼容旧调用：按 H.264 显示。
@@ -269,7 +269,9 @@ const String defaultPlayCodec = 'h264';
 const int playAudioBitrateKbps = 128;
 
 /// kbps → 紧凑文本：900 → `0.9`、1400 → `1.4`、7000 → `7`、15000 → `15`。
-String _mbpsText(int kbps) {
+///
+/// 公开：源码率（按文件大小 / 时长算）也用同一套写法，别两处各写一个格式化。
+String mbpsText(int kbps) {
   final s = (kbps / 1000).toStringAsFixed(1);
   return s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
 }

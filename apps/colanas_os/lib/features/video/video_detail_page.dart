@@ -211,6 +211,8 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             compat: res.compat,
             // 档位菜单按片源分辨率收敛，别列出这部片转不出来的档
             sourceHeight: _item.height,
+            // 媒体信息面板要显示「源码率 → 目标码率」，源码率 = size ÷ 时长
+            sourceBytes: _item.size,
             // 转码是边转边播，播放器拿不到总长，用片源时长兜进度条
             durationMs: _item.durationMs,
           ),
@@ -385,6 +387,7 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             // 这个地址已经是选定档位的 HLS 会话，别让播放器再按直链处理
             initialPreset: preset,
             sourceHeight: _item.height,
+            sourceBytes: _item.size,
             durationMs: _item.durationMs,
           ),
         ),

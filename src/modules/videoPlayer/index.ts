@@ -91,6 +91,36 @@ function hlsRootOf(k: KernelApi): string {
   return path.join(k.paths.dataDir, 'hls');
 }
 
+/**
+ * 播放中「这一轮实际用上的编码」。
+ *
+ * sidecar 在首片落盘时会写 `<hls 目录>/.session.json`（见 sidecars/media/main.js
+ * 的 watch 看门狗）。为什么不在建会话时就定死：用户选了 AV1，但机器上 AV1 编码器
+ * 起不来时 sidecar 会**静默降级**回 H.264，只有首片真的落盘才知道跑的是哪条路径。
+ * 而 `player_sessions.codec` 要到整片转完才更新 —— 不读这个文件，播放中界面就会
+ * 一直显示 AV1，用户看到的现象是「我选了 AV1，为什么实际是 264」。
+ */
+function actualCodecOf(k: KernelApi, id: string): { codec?: string; container?: string } {
+  const dirs = [path.join(hlsRootOf(k), id), path.join(k.paths.dataDir, 'hls', id)];
+  for (const dir of dirs) {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(dir, '.session.json'), 'utf8')) as {
+        codec?: unknown;
+        container?: unknown;
+      };
+      if (typeof j?.codec === 'string' && j.codec) {
+        return {
+          codec: j.codec,
+          container: typeof j.container === 'string' ? j.container : undefined,
+        };
+      }
+    } catch {
+      // 还没出片 / 文件被清掉了：保持会话行里的请求值
+    }
+  }
+  return {};
+}
+
 const toItem = (r: SessionRow, token?: string) => ({
   id: r.id,
   itemId: r.item_id,
@@ -523,7 +553,20 @@ export const videoPlayer: ServerModule = {
         ).rows;
         if (!rows[0])
           return reply.code(404).send({ error: Err.notFound, message: 'session not found' });
-        return toItem(rows[0], hlsToken(k, rows[0].id));
+        const row = rows[0];
+        // 转码中：把 sidecar 自报的实际编码带出来（降级是静默的，不读就看不出来）
+        if (row.status === 'running' || row.status === 'pending') {
+          const actual = actualCodecOf(k, row.id);
+          if (actual.codec && actual.codec !== row.codec) {
+            row.codec = actual.codec;
+            if (actual.container) row.container = actual.container;
+            await sql`
+              update player_sessions set codec = ${row.codec}, container = ${row.container ?? null}
+               where id = ${row.id}
+            `.execute(k.db);
+          }
+        }
+        return toItem(row, hlsToken(k, row.id));
       },
     );
 

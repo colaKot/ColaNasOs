@@ -49,6 +49,20 @@ int maxPresetHeightForSource(int sourceHeight) {
   return h;
 }
 
+/// kbps → `19.6 Mbps`；拿不到时给破折号，别在界面上显示 `0 Mbps`。
+String mbpsLabel(int kbps) => kbps <= 0 ? '—' : '${mbpsText(kbps)} Mbps';
+
+/// 片源码率（整片平均）：文件字节数 × 8 ÷ 时长。
+///
+/// 库里的 `video_items` 没有存码率列，但 `size` 和 `duration_ms` 都有 ——
+/// 对「从什么码率转到什么码率」这个问题，平均码率就是用户能感知的那个数
+/// （《匹诺曹》17.2 GB / 117 min ≈ 19.7 Mbps）。
+int sourceKbpsOf(int bytes, int durationMs) {
+  if (bytes <= 0 || durationMs <= 0) return 0;
+  // bit/s = bytes × 8 ÷ (ms / 1000) = bytes × 8000 ÷ ms；再 /1000 换 kbps
+  return (bytes * 8 / durationMs).round();
+}
+
 /// 把「用户偏好档位」贴到这部片实际能做到的档位上。
 ///
 /// - 片源高度未知、或偏好档位本来就不超过片源 → 原样返回（尊重用户，不多花流量）；

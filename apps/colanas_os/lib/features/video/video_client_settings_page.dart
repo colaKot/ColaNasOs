@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:nas_ui/nas_ui.dart';
 
@@ -12,6 +13,11 @@ import '../../core/play_preferences.dart';
 ///
 /// 音频两项是「覆盖」语义：关 = 不传参数 = 跟随库级 `audio_normalize` 开关，
 /// 打开才在本次会话强制生效。默认值与改动前完全一致。
+///
+/// 编码一项在浏览器里只有 H.264 可选：hls.js 建不出 AV1 / HEVC 的 fMP4
+/// SourceBuffer（实测反复拉 init.mp4 后黑屏），播放器与转码接口都会强制改回
+/// H.264。以前这里照样列出 AV1 / H.265，用户选完发现「设了 AV1 还是跑 264」，
+/// 现在按平台过滤 + 明写原因；**不改写已存的值**，桌面客户端仍用用户选的编码。
 class VideoClientSettingsPage extends StatefulWidget {
   const VideoClientSettingsPage({super.key});
 
@@ -21,7 +27,9 @@ class VideoClientSettingsPage extends StatefulWidget {
 
 class _VideoClientSettingsPageState extends State<VideoClientSettingsPage> {
   late String _preset = PlayPreferences.preset;
-  late String _codec = PlayPreferences.codec;
+  /// 浏览器端显示成 H.264：播放器和转码接口都会强制改回它，这里显示 AV1 只会
+  /// 让用户以为设置生效了。**只影响显示**，本地存的值不动。
+  late String _codec = kIsWeb ? 'h264' : PlayPreferences.codec;
   late bool _normalize = PlayPreferences.audioNormalize;
   late bool _downmix = PlayPreferences.audioDownmix;
 
@@ -83,13 +91,16 @@ class _VideoClientSettingsPageState extends State<VideoClientSettingsPage> {
         ),
         _setting(
           title: tr('video.client.codec'),
-          hint: tr('video.client.codecHint'),
+          hint: kIsWeb
+              ? tr('video.client.codecWebForced')
+              : tr('video.client.codecHint'),
           trailing: NasDropdown<String>(
             value: _codec,
             isDense: true,
             underline: const SizedBox.shrink(),
             items: [
-              for (final c in playCodecs)
+              // 与详情页 / 播放器的编码菜单同一条规则：浏览器只留 H.264
+              for (final c in playCodecs.where((c) => !kIsWeb || c.key == 'h264'))
                 DropdownMenuItem<String>(value: c.key, child: Text(c.label)),
             ],
             onChanged: (v) async {

@@ -39,6 +39,7 @@ class PlayerPage extends StatefulWidget {
     this.initialPreset,
     this.durationMs,
     this.sourceHeight,
+    this.sourceBytes,
   });
 
   /// 带短期令牌的原画直链（`/api/v1/video/stream-url` 签发）
@@ -65,6 +66,10 @@ class PlayerPage extends StatefulWidget {
   /// 片源高度（像素）。画质菜单按它收敛：转不出 1080p 的片就不列 1080P。
   /// 直链进来时 `compat.height` 也有，两者取先有的那个。
   final int? sourceHeight;
+
+  /// 片源字节数。媒体信息面板用它算「源码率 → 目标码率」
+  /// （库表没有码率列，`size ÷ duration` 就是整片平均码率）。
+  final int? sourceBytes;
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
@@ -108,6 +113,15 @@ class _PlayerPageState extends State<PlayerPage> {
   bool _locked = false;
   bool _immersive = false;
   Timer? _hideTimer;
+
+  /// 当前转码会话（只有转码时才有）。媒体信息面板要显示
+  /// 「是否转码中」和「实际用了什么编码」—— 实际编码是服务端读
+  /// sidecar 首片自报的结果，用户请求的 AV1 可能已经降级成 H.264 了。
+  String? _sessionId;
+  String? _jobStatus;
+
+  /// 服务端回传的**实际**编码（降级后以它为准）；为空表示还没出片。
+  String? _actualCodec;
 
   /// 上次刷新隐藏定时器的时间，用来给 `onHover` 做节流。
   DateTime _lastPoke = DateTime.fromMillisecondsSinceEpoch(0);
@@ -290,22 +304,39 @@ class _PlayerPageState extends State<PlayerPage> {
     final u = created.url.startsWith('http')
         ? created.url
         : '${ApiSession.instance.baseUrl}${created.url}';
+    // 记下会话：媒体信息面板要拿它查「转码中 / 完成」和实际编码
+    _sessionId = created.id;
+    _jobStatus = null;
+    // 实际编码换会话后必须清空，否则换了档还显示上一轮的结果
+    _actualCodec = null;
     // 后台只盯失败：转码挂了要明确说出来，别让用户对着无限缓冲猜。
     _watchSession(created.id);
     return u;
   }
 
-  /// 后台观察会话终态；不阻塞播放，成功就静默结束。
+  /// 后台盯会话状态：失败要明确说出来，成功就静默结束。
+  ///
+  /// 顺手把「转码中 / 完成」和**实际编码**写进 State：媒体信息面板直接读这两个
+  /// 字段。用户选的 AV1 可能已经被服务端降级成 H.264（编码器起不来 / 硬编不支持），
+  /// 面板必须显示真的那个，否则就是「我设了 AV1，为什么跑的是 264」。
   Future<void> _watchSession(String id) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     for (var i = 0; i < 120; i++) {
       await Future<void>.delayed(const Duration(seconds: 5));
-      if (!mounted) return;
+      // 换档 / 换片后旧会话的轮询要立刻停手，否则会把新会话的字段覆盖成旧值
+      if (!mounted || _sessionId != id) return;
       try {
         final job = await ApiSession.instance.client.playerSessionGet(id: id);
-        if (job.status == 'done') return;
-        if (job.status == 'failed') {
-          if (mounted && messenger != null) {
+        if (!mounted || _sessionId != id) return;
+        final st = '${job.status}';
+        final codec = job.codec ?? '';
+        setState(() {
+          _jobStatus = st;
+          if (codec.isNotEmpty) _actualCodec = codec;
+        });
+        if (st == 'done' || st == 'canceled') return;
+        if (st == 'failed') {
+          if (messenger != null) {
             NasSnack.showOn(
               messenger,
               '${tr('player.playFailed')}: ${job.error ?? 'transcode failed'}',
@@ -849,9 +880,65 @@ class _PlayerPageState extends State<PlayerPage> {
     );
   }
 
-  void _showInfo() {
+  /// 打开面板前主动拉一次会话：转码中的状态和实际编码只存在服务端。
+  Future<void> _refreshJob() async {
+    final id = _sessionId;
+    if (id == null) return;
+    try {
+      final job = await ApiSession.instance.client.playerSessionGet(id: id);
+      if (!mounted) return;
+      final codec = job.codec ?? '';
+      setState(() {
+        _jobStatus = '${job.status}';
+        if (codec.isNotEmpty) _actualCodec = codec;
+      });
+    } catch (_) {
+      // 查不到就用手上已有的值，面板不能因为一次请求失败就打不开
+    }
+  }
+
+  /// 转码状态文案。`_jobStatus` 为空 = 会话刚建、还没被服务端领走。
+  String get _jobStateText {
+    switch (_jobStatus) {
+      case 'done':
+        return tr('player.transcodeDone');
+      case 'pending':
+        return tr('player.transcodePending');
+      case 'failed':
+      case 'canceled':
+        return tr('player.playFailed');
+      default:
+        return tr('player.transcoding');
+    }
+  }
+
+  /// 实际输出编码的文案：服务端降级过就直说「谁不可用、回落成了什么」。
+  String get _outputCodecText {
+    final actual = _actualCodec;
+    if (actual == null || actual.isEmpty) {
+      // 还没出片：先把请求值标成「待定」，别让人以为已经在跑这个编码
+      return '${playCodecOf(_codec)?.label ?? _codec}（${tr('player.transcodePending')}）';
+    }
+    final actualLabel = playCodecOf(actual)?.label ?? actual;
+    if (actual == _codec) return actualLabel;
+    return tr('player.codecFallback', {
+      'want': playCodecOf(_codec)?.label ?? _codec,
+      'actual': actualLabel,
+    });
+  }
+
+  Future<void> _showInfo() async {
     final c = widget.compat ?? const <String, dynamic>{};
     String? v(dynamic x) => x == null || '$x'.isEmpty ? '—' : '$x';
+    if (_sessionId != null) {
+      await _refreshJob();
+      if (!mounted) return;
+    }
+    // 码率：源码率按「文件大小 ÷ 时长」算，目标码率取当前档位 × 实际编码
+    final srcKbps = sourceKbpsOf(widget.sourceBytes ?? 0, widget.durationMs ?? 0);
+    final tgtKbps = _isTranscode
+        ? (playQualityPresetOf(_preset)?.bitrateFor(_actualCodec ?? _codec) ?? 0)
+        : 0;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF1B1B1B),
@@ -868,9 +955,21 @@ class _PlayerPageState extends State<PlayerPage> {
             const SizedBox(height: NasTokens.spaceMd),
             _infoRow(tr('player.sourceTranscode'),
                 _isTranscode ? tr('player.sourceTranscode') : tr('player.sourceDirect')),
+            // 是否转码中：直连时这一行没有意义，不显示
+            if (_isTranscode) _infoRow(tr('player.transcodeState'), _jobStateText),
+            _infoRow(
+              tr('player.bitrate'),
+              _isTranscode && tgtKbps > 0
+                  ? tr('player.rateTo', {
+                      'from': mbpsLabel(srcKbps),
+                      'to': mbpsLabel(tgtKbps),
+                    })
+                  : mbpsLabel(srcKbps),
+            ),
             _infoRow(tr('player.quality'),
-                playQualityPresetOf(_preset)?.labelFor(_codec) ?? _preset),
+                playQualityPresetOf(_preset)?.labelFor(_actualCodec ?? _codec) ?? _preset),
             _infoRow(tr('player.videoCodec'), v(c['videoCodec']) ?? '—'),
+            if (_isTranscode) _infoRow(tr('player.outputCodec'), _outputCodecText),
             _infoRow(tr('player.audioCodec'), v(c['audioCodec']) ?? '—'),
             _infoRow(
               tr('player.resolution'),
@@ -1019,6 +1118,7 @@ class _PlayerPageState extends State<PlayerPage> {
             title: it.title,
             itemId: it.id,
             compat: res.compat,
+            sourceBytes: it.size,
             durationMs: it.durationMs,
           ),
         ),

@@ -86,6 +86,22 @@ function runFfmpeg(args, timeoutMs = 120_000, opts = {}) {
     // 用户对着黑屏等半小时）。杀掉换下一条路径，比等 30 分钟好。
     let watchTimer = null;
     const watch = opts.watch;
+    // 把「这一轮真正用上的编码」写进 <dir>/.session.json，上层 playerSessionGet 读它。
+    // 为什么需要：选了 AV1 但机器上 AV1 编码器起不来时，sidecar 会**静默降级**
+    // 回 H.264，而会话行要到整片转完才更新实际编码 —— 没有这个文件，播放中
+    // 界面会一直显示 AV1（用户看到的就是「我选了 AV1，为什么还是 264」）。
+    // 两个触发点：首片落盘（转码中就能看见）、正常退出（几秒的短片也补一份）。
+    const writeSessionMeta = () => {
+      if (!watch || !watch.dir || !watch.meta) return;
+      try {
+        fs.writeFileSync(
+          nodePath.join(watch.dir, '.session.json'),
+          JSON.stringify({ ...watch.meta, at: Date.now() }),
+        );
+      } catch {
+        /* 写不了不影响转码本身 */
+      }
+    };
     if (watch && watch.dir) {
       const firstMs = Number(watch.firstMs) || 90000;
       const idleMs = Number(watch.idleMs) || 120000;
@@ -103,8 +119,11 @@ function runFfmpeg(args, timeoutMs = 120_000, opts = {}) {
         }
         if (count < 0) return;
         if (count > lastCount) {
+          const firstSegment = lastCount === 0;
           lastCount = count;
           lastAt = Date.now();
+          // 首片落盘 = 这一轮确实跑起来了，转码中就能回显实际编码
+          if (firstSegment) writeSessionMeta();
           return;
         }
         const nowMs = Date.now();
@@ -144,6 +163,9 @@ function runFfmpeg(args, timeoutMs = 120_000, opts = {}) {
         return;
       }
       if (code === 0) {
+        // 短片（几秒的测试片）可能在整个 2s 采样周期内就跑完了，首片那次没赶上；
+        // 正常退出补写一次，保证上层始终能拿到这一轮的实际编码
+        writeSessionMeta();
         finish(resolve);
         return;
       }
@@ -807,6 +829,14 @@ async function hls(params) {
             dir,
             firstMs: Number(process.env.COLANAS_HLS_FIRST_SEGMENT_MS) || 90000,
             idleMs: Number(process.env.COLANAS_HLS_STALL_MS) || 120000,
+            // 首片落盘时写 <dir>/.session.json，供上层回显「实际用上的编码」
+            meta: {
+              codec,
+              container: fmp4 ? 'fmp4' : 'mpegts',
+              encoder: vc.encoder,
+              decoder: plan.decoder,
+              pipeline: plan.pipeline,
+            },
           },
         }),
       );

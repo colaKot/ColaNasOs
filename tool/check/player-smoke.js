@@ -321,6 +321,11 @@ process.chdir(root);
         'status=' + early.statusCode + ' ' + String(early.body).slice(0, 80),
       );
       let job;
+      // sidecar 在首片落盘 / 正常退出时会写 <hls>/<id>/.session.json（这一轮真正
+      // 用上的编码 + 编码器）。用户选了 AV1 但编码器起不来时会被静默降级成
+      // H.264，会话接口必须把这个文件读出来回显，否则界面一直显示 AV1。
+      const metaFile = path.join(dataDir, 'hls', id, '.session.json');
+      const echoes = [];
       const t0 = Date.now();
       for (;;) {
         const s = await inject(
@@ -329,6 +334,12 @@ process.chdir(root);
           admin,
         );
         job = s.json();
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+          echoes.push({ file: String(meta.codec || ''), api: String(job.codec || '') });
+        } catch {
+          /* 还没写（或正在写）*/
+        }
         if (job.status === 'done' || job.status === 'failed') break;
         if (Date.now() - t0 > 120_000) break;
         await new Promise((res) => setTimeout(res, 300));
@@ -337,6 +348,13 @@ process.chdir(root);
         'session_done',
         job && job.status === 'done',
         `status=${job && job.status} err=${job && job.error}`,
+      );
+      check(
+        'session_actual_codec',
+        echoes.length > 0 && echoes.every((x) => x.file === x.api),
+        echoes.length
+          ? `sidecar=${echoes[0].file} api=${echoes[0].api} n=${echoes.length}`
+          : 'no .session.json',
       );
       if (job && job.status === 'done') {
         check('session_segments', job.segments >= 1, 'segments=' + job.segments);

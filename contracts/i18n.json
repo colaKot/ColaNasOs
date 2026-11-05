@@ -1685,6 +1685,11 @@
     "player.audioNormalize": {},
     "player.audioTrack": {},
     "player.back": {},
+    "player.bitrate": {},
+    "player.codecFallback": {
+      "want": {},
+      "actual": {}
+    },
     "player.compatOn": {},
     "player.dolbyVision": {},
     "player.fit": {},
@@ -1714,6 +1719,7 @@
     "player.off": {},
     "player.on": {},
     "player.original": {},
+    "player.outputCodec": {},
     "player.pause": {},
     "player.play": {},
     "player.playFailed": {},
@@ -1726,6 +1732,10 @@
     "player.quality": {},
     "player.qualityHint": {
       "preset": {}
+    },
+    "player.rateTo": {
+      "from": {},
+      "to": {}
     },
     "player.reason.10bit": {},
     "player.reason.atmos": {},
@@ -1750,6 +1760,10 @@
       "error": {}
     },
     "player.switching": {},
+    "player.transcodeState": {},
+    "player.transcodeDone": {},
+    "player.transcodePending": {},
+    "player.transcoding": {},
     "player.tryOriginal": {},
     "player.unlock": {},
     "player.videoCodec": {},
@@ -2714,6 +2728,7 @@
     },
     "video.client.codec": {},
     "video.client.codecHint": {},
+    "video.client.codecWebForced": {},
     "video.client.copyNoTranscode": {},
     "video.client.downmix": {},
     "video.client.downmixHint": {},
