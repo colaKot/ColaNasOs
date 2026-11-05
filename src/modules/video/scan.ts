@@ -74,6 +74,8 @@ interface ExistingRow {
   nfo_source?: string | null;
   /** 我们上次把 nfo 写进库的时间；用于判断磁盘上的 nfo 是否被用户改过 */
   nfo_updated_at?: number | null;
+  /** 落库时用的 HDR 解析口径版本；小于 HDR_META_VERSION 就要重探一次 */
+  hdr_meta_v?: number | null;
 }
 
 export interface VideoScanResult {
@@ -97,6 +99,13 @@ export interface VideoScanResult {
 
 const UPSERT_BATCH = 100;
 const PROBE_CONCURRENCY = 4;
+/**
+ * HDR / DV 标记的解析口径版本（写进 `video_items.hdr_meta_v`）。
+ *
+ * 1 = 修好 `Side data:` 缩进子行解析之后的口径（见 `probeVideo`）。
+ * 老行这里是 0，扫描时会被重探一次；口径以后再变就把它 +1，全库自然会再刷一遍。
+ */
+const HDR_META_VERSION = 1;
 
 interface Candidate {
   rel: string;
@@ -369,7 +378,7 @@ async function scanOneSource(
   const videoExisting = new Map<string, ExistingRow>();
   if (libTypeWantsVideo) {
     const rows = await sql<ExistingRow>`
-      select id, rel_path, size, mtime, nfo_source, nfo_updated_at from video_items
+      select id, rel_path, size, mtime, nfo_source, nfo_updated_at, hdr_meta_v from video_items
        where library_id = ${lib.id}
          and substr(rel_path, 1, ${relPrefix.length}) = ${relPrefix}
     `.execute(db);
@@ -398,6 +407,11 @@ async function scanOneSource(
     existing: Map<string, ExistingRow>,
     seen: Set<string>,
     backfill?: Candidate[],
+    /**
+     * 文件没变、但行里的元数据是旧口径算出来的，返回 true 就重探一次。
+     * 只有视频趟会传（图片没有 HDR 标记），传 null 时走原来的「文件没变就跳过」。
+     */
+    staleMeta?: ((prev: ExistingRow) => boolean) | null,
   ): Promise<Candidate[]> => {
     const files = await walkFiles(baseAbs, Math.max(1, Math.min(limit, 200000)), predicate);
     const needs: Candidate[] = [];
@@ -421,7 +435,11 @@ async function scanOneSource(
       const fullRel = `${rootKey}/${rel}`.replace(/^\/+/, '');
       seen.add(fullRel);
       const prev = existing.get(fullRel);
-      if (prev && prev.size === st.size && prev.mtime === mtime) {
+      const sameFile = prev != null && prev.size === st.size && prev.mtime === mtime;
+      // 文件没变、但 HDR 标记是旧解析口径算出来的 → 值得重新 ffprobe 一次
+      // （早期版本把 `Side data:` 的缩进子行整块丢了，DV/HDR 全落成 0）。
+      const staleMetaRow = sameFile && prev != null && staleMeta ? staleMeta(prev) === true : false;
+      if (sameFile && prev && !staleMetaRow) {
         // 文件没变，但元数据可能变了，两种要补：
         //   ① 老库（nfo_source 为 null）——本功能上线前入库的，补一次
         //   ② 之前没读到 nfo，现在同目录多了 .nfo / 海报 —— 用户事后补的，最常见
@@ -439,8 +457,10 @@ async function scanOneSource(
         result.skipped += 1;
         continue;
       }
-      if (prev) result.updated += 1;
-      else result.added += 1;
+      if (!prev) result.added += 1;
+      // 只为「文件变了」记更新；口径升级导致的重探不算用户视角的"更新"，
+      // 数量体现在 result.probed 里
+      else if (!sameFile) result.updated += 1;
       needs.push({ rel, fullRel, abs, size: st.size, mtime, existingId: prev?.id });
     }
     fileDone = base + files.length;
@@ -452,7 +472,9 @@ async function scanOneSource(
 
   if (libTypeWantsVideo) {
     const backfill: Candidate[] = [];
-    const needs = await collect(isVideoFile, videoExisting, seenVideo, backfill);
+    const needs = await collect(isVideoFile, videoExisting, seenVideo, backfill, (p) =>
+      Number(p.hdr_meta_v || 0) < HDR_META_VERSION,
+    );
     result.videos = needs.length + videoExisting.size;
     const isJp = libType === 'jp_movie';
 
@@ -481,7 +503,7 @@ async function scanOneSource(
               (id, library_id, rel_path, title, duration, width, height, video_codec,
                audio_codec, container, has_subtitle, size, mtime, created_at,
                series, season, episode, media_type, code, uncensored, chinese_sub,
-               is_4k, hdr10, hdr10plus, hlg, dolby_vision, dolby_atmos)
+               is_4k, hdr10, hdr10plus, hlg, dolby_vision, dolby_atmos, hdr_meta_v)
             values
               (${p.id}, ${lib.id}, ${p.fullRel}, ${titleOf(p.rel)}, ${m.durationMs},
                ${m.width}, ${m.height}, ${m.videoCodec}, ${m.audioCodec},
@@ -489,7 +511,8 @@ async function scanOneSource(
                ${ep.series}, ${ep.season}, ${ep.episode}, ${'video'},
                ${isJp ? jp.code : null}, ${isJp ? jp.uncensored : 0}, ${isJp ? jp.chineseSub : 0},
                ${m.is4k ? 1 : 0}, ${m.hdr10 ? 1 : 0}, ${m.hdr10plus ? 1 : 0},
-               ${m.hlg ? 1 : 0}, ${m.dolbyVision ? 1 : 0}, ${m.dolbyAtmos ? 1 : 0})
+               ${m.hlg ? 1 : 0}, ${m.dolbyVision ? 1 : 0}, ${m.dolbyAtmos ? 1 : 0},
+               ${HDR_META_VERSION})
             on conflict(library_id, rel_path) do update set
               title = excluded.title,
               duration = excluded.duration,
@@ -513,7 +536,8 @@ async function scanOneSource(
               hdr10plus = excluded.hdr10plus,
               hlg = excluded.hlg,
               dolby_vision = excluded.dolby_vision,
-              dolby_atmos = excluded.dolby_atmos
+              dolby_atmos = excluded.dolby_atmos,
+              hdr_meta_v = excluded.hdr_meta_v
           `.execute(trx);
           await applyNfo(trx, p.existingId ?? p.id, p.nfo, nowSec, Math.floor((p.nfo.mtimeMs || 0) / 1000));
         }

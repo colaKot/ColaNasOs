@@ -32,11 +32,19 @@ class PlayerPage extends StatefulWidget {
     this.itemId,
     this.compat,
     this.initialPreset,
+    this.durationMs,
   });
 
   /// 带短期令牌的原画直链（`/api/v1/video/stream-url` 签发）
   final String url;
   final String? title;
+
+  /// 片源总时长（库里的元数据）。
+  ///
+  /// 边转边播的 HLS 是 EVENT 播放列表，`#EXT-X-ENDLIST` 写完之前 `<video>.duration`
+  /// 是 `Infinity`，media_kit 会折成 `-9007199254740990` 毫秒。进度条不能拿这个
+  /// 当总长，所以这里带一份片源时长兜底。
+  final int? durationMs;
 
   /// 影片 id：用于拉外挂字幕 / 建转码会话；为空则只当纯 URL 播放器
   final String? itemId;
@@ -86,6 +94,9 @@ class _PlayerPageState extends State<PlayerPage> {
   bool _locked = false;
   bool _immersive = false;
   Timer? _hideTimer;
+
+  /// 上次刷新隐藏定时器的时间，用来给 `onHover` 做节流。
+  DateTime _lastPoke = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// 本次播放内不再缓存会话地址：服务端建会话时会把同一部片还在跑的旧会话
   /// 取消掉（换档），本地缓存拿到的可能是已取消的半个播放列表。
@@ -446,7 +457,12 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   void _poke() {
-    if (!_controls) setState(() => _controls = true);
+    final show = !_controls;
+    if (show) setState(() => _controls = true);
+    // 鼠标在画面上移动时 onHover 每秒能来几十次，没必要每次都重排定时器。
+    final now = DateTime.now();
+    if (!show && now.difference(_lastPoke).inMilliseconds < 400) return;
+    _lastPoke = now;
     _resetHideTimer();
   }
 
@@ -480,7 +496,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   Future<void> _seekBy(int seconds) async {
     final p = _player.state.position;
-    final d = _player.state.duration;
+    final d = _timelineDuration(_player.state.duration);
     var target = p + Duration(seconds: seconds);
     if (target < Duration.zero) target = Duration.zero;
     if (d > Duration.zero && target > d) target = d;
@@ -528,11 +544,23 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   String _fmt(Duration d) {
+    // 拿不到总长时 media_kit 会给一个负的哨兵值，别把它格式化成 -106751991167:00:54
+    if (d < Duration.zero) return '--:--';
     final h = d.inHours;
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
+
+  /// 片源时长：转码还没跑完时用来兜底。
+  Duration get _sourceDuration {
+    final ms = widget.durationMs ?? 0;
+    return ms > 0 ? Duration(milliseconds: ms) : Duration.zero;
+  }
+
+  /// 画进度条用的总长：播放器报的有限值优先，否则回落到片源时长。
+  Duration _timelineDuration(Duration raw) =>
+      raw > Duration.zero ? raw : _sourceDuration;
 
   // -------------------------------------------------------------------- 控件
 
@@ -937,6 +965,7 @@ class _PlayerPageState extends State<PlayerPage> {
             title: it.title,
             itemId: it.id,
             compat: res.compat,
+            durationMs: it.durationMs,
           ),
         ),
       );
@@ -1004,7 +1033,7 @@ class _PlayerPageState extends State<PlayerPage> {
           stream: _player.stream.duration,
           builder: (_, dur) {
             final p = pos.data ?? Duration.zero;
-            final d = dur.data ?? Duration.zero;
+            final d = _timelineDuration(dur.data ?? Duration.zero);
             final max = d.inMilliseconds;
             return Row(
               children: [
@@ -1337,6 +1366,19 @@ class _PlayerPageState extends State<PlayerPage> {
     return const SizedBox.shrink();
   }
 
+  /// 画面本体。
+  ///
+  /// 注意别在上层再套一层默认 `StackFit.loose` 的 Stack：Web 上平台视图
+  /// 在零尺寸盒子里拿不到 slot，表现是黑屏但声音正常。
+  Widget _videoSurface() {
+    return Video(
+      controller: _controller,
+      controls: null,
+      fit: _fit,
+      fill: Colors.black,
+    );
+  }
+
   Widget _errorLayer() => Center(
         child: Padding(
           padding: const EdgeInsets.all(NasTokens.spaceLg),
@@ -1387,30 +1429,35 @@ class _PlayerPageState extends State<PlayerPage> {
       child: Scaffold(
         backgroundColor: Colors.black,
         body: Stack(
+          // 必须 expand：字幕层 / 状态层在没内容时返回 SizedBox.shrink()，
+          // 它们是「非定位子节点」，默认的 StackFit.loose 会据此把整个 Stack
+          // 算成 0×0 —— 画面、进度条、工具栏全部落在一个零尺寸盒子里，
+          // 表现就是黑屏 + 只有声音（平台视图也拿不到有效尺寸，不生成 slot）。
+          fit: StackFit.expand,
           children: [
             Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _poke,
-                onDoubleTap: () {
-                  _player.playOrPause();
-                  _poke();
-                },
-                onLongPressStart: (_) {
-                  _boosting = true;
-                  _player.setRate(2.0);
-                  setState(() {});
-                },
-                onLongPressEnd: (_) {
-                  _boosting = false;
-                  _player.setRate(_rate);
-                  setState(() {});
-                },
-                child: Video(
-                  controller: _controller,
-                  controls: null,
-                  fit: _fit,
-                  fill: Colors.black,
+              child: MouseRegion(
+                // 桌面端鼠标一动就把控件唤回来：只靠 onTap 的话控件隐藏后
+                // 用户得先点一下才看得到进度条，Web 上尤其反直觉。
+                onHover: (_) => _poke(),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: _poke,
+                  onDoubleTap: () {
+                    _player.playOrPause();
+                    _poke();
+                  },
+                  onLongPressStart: (_) {
+                    _boosting = true;
+                    _player.setRate(2.0);
+                    setState(() {});
+                  },
+                  onLongPressEnd: (_) {
+                    _boosting = false;
+                    _player.setRate(_rate);
+                    setState(() {});
+                  },
+                  child: _videoSurface(),
                 ),
               ),
             ),

@@ -155,6 +155,8 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '132_files_fts',
   // 照片识别失败记账（避免坏图每轮被重新挑中，形成热循环）
   '133_photo_ai_skip',
+  // HDR/DV 标记的解析口径版本（老行重探一次，修 DV P5 偏色的历史脏数据）
+  '134_video_hdr_meta_version',
 ]);
 
 export interface OrderCheck {

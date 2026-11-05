@@ -208,6 +208,21 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
       // 「原画」能否直接 copy 取决于片源：AV1/HEVC 复制进 TS 解不出来
       srcVideoCodec: media?.video_codec ?? undefined,
     });
+    k.log.info(
+      {
+        session: job.id,
+        encoder: res.encoder,
+        decoder: res.decoder,
+        pipeline: res.pipeline,
+        vendor: res.vendor,
+        dvProfile: res.source?.dvProfile ?? 0,
+        hdrKind: res.source?.hdrKind ?? 'none',
+        hi10p: res.source?.hi10p ?? false,
+        codec: res.codec,
+        ms: res.ms,
+      },
+      'player hls done',
+    );
     await sql`
       update player_sessions
       set status = 'done', segments = ${res.segments},

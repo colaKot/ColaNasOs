@@ -2467,7 +2467,7 @@
     "video.transcode.hwaccel": "硬件加速",
     "video.transcode.hwaccelAuto": "自动",
     "video.transcode.hwaccelCpu": "仅 CPU",
-    "video.transcode.hwaccelHint": "自动会优先用 GPU，失败回落 CPU",
+    "video.transcode.hwaccelHint": "自动按显卡选择全 GPU 链路（AMD / Intel / NVIDIA），硬解、缩放与 HDR 转换都在显存内完成，失败逐级回落",
     "video.transcode.none": "不烧录字幕",
     "video.transcode.preset": "画质",
     "video.transcode.start": "开始转码",

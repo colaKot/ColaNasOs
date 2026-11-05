@@ -75,21 +75,31 @@ function streamLine(stderr: string, kind: string): string | null {
  * `ffmpeg -i <file>` 没有输出文件时退出码为 1，但 stderr 已含完整元数据，
  * 因此这里不把退出码当失败判据。
  */
-export async function probeVideo(abs: string, timeoutMs = 10_000): Promise<VideoMeta> {
-  const { stderr } = await runFfmpeg(['-hide_banner', '-i', abs], timeoutMs);
-
+/**
+ * 纯函数：`ffmpeg -i` 的 stderr → 元数据。抽出来是为了能直接拿一段文本单测，
+ * 不必为了验「DV 标签有没有被认出来」去起一个 ffmpeg 进程。
+ */
+export function parseProbeStderr(stderr: string): VideoMeta {
   const video = streamLine(stderr, 'Video');
   const audio = streamLine(stderr, 'Audio');
   const size = video ? /\b(\d{2,5})x(\d{2,5})\b/.exec(video) : null;
   const width = size ? Number(size[1]) : null;
   const height = size ? Number(size[2]) : null;
 
-  // HDR 标记：ffmpeg 会在 Video 行尾输出 `(..., smpte2084, ...)` 或
-  // `Side data: Mastering display metadata / DOVI configuration record`。
-  // 判据收窄到 stderr 的 Video/Stream 段落，避免文件名里带 "HDR" 误判。
+  // HDR 标记：ffmpeg 会在 Video 行尾输出 `(..., smpte2084, ...)`，更准确的
+  // 信息在紧随其后的缩进子行里：
+  //     Side data:
+  //       DOVI configuration record: version: 1.0, profile: 5, ...
+  //       Mastering display metadata: ...
+  // 这些子行**既不含 `Stream #` 也不含 `Side data:`**。早前只保留含这两个
+  // 关键字的行，等于把整块 Side data 的内容丢掉 → 所有 DV / HDR10 片源都被
+  // 标成 SDR（`dolby_vision=0`），播放时 `hdrToSdr=false`、tonemap 整条不启用，
+  // DV P5 的 IPTPQc2 就当普通 BT.2020 直出，画面偏绿偏紫。
+  // 现在只剔除 `Input #0, ..., from '<路径>'` 这一行：文件名里常带 HDR / DV 字样，
+  // 留着会误判；Duration / Stream / Metadata / Side data 全部参与匹配。
   const videoSection = stderr
     .split('\n')
-    .filter((line) => line.includes('Stream #') || line.includes('Side data:'))
+    .filter((line) => !/^\s*Input #\d/.test(line))
     .join('\n');
   const dolbyVision = /DOVI configuration record|dv_profile|Dolby Vision/i.test(videoSection);
   const hdr10plus = /HDR10\+|SMPTE ST 2094|hdr10plus/i.test(videoSection);
@@ -110,6 +120,15 @@ export async function probeVideo(abs: string, timeoutMs = 10_000): Promise<Video
     dolbyVision,
     dolbyAtmos: /Atmos/i.test(audio ?? ''),
   };
+}
+
+/**
+ * `ffmpeg -i <file>` 没有输出文件时退出码为 1，但 stderr 已含完整元数据，
+ * 因此这里不把退出码当失败判据。
+ */
+export async function probeVideo(abs: string, timeoutMs = 10_000): Promise<VideoMeta> {
+  const { stderr } = await runFfmpeg(['-hide_banner', '-i', abs], timeoutMs);
+  return parseProbeStderr(stderr);
 }
 
 /** 海报生成并发上限：不抢占转码 / 扫描的 CPU */

@@ -91,6 +91,37 @@
       true,
     );
   </script>
+  <!--
+    强制 m3u8 交给 hls.js，别让 Chromium 自己接。
+
+    播放器内核是 media_kit，它 Web 端选播放方式的判定（`_isHLS`）第一句是
+    「只要 `canPlayType('application/vnd.apple.mpegurl')` 非空就认为浏览器原生
+    能解 HLS，直接 return false」。Chrome 早期对 mpegurl 返回空串，所以以前一直
+    走 hls.js；Chromium 156 起改成返回 `maybe`（实测
+    `HeadlessChrome/156.0.0.0` → `maybe`），于是 hls.js 再也不挂上去，
+    `element.src` 直接指向 `index.m3u8`，落到 Chromium 自己的 HLS 实现上。
+
+    后果是转码出来的 EVENT 播放列表被当成直播：`video.duration` 变成 `Infinity`、
+    进度条拖不动；换个片源/分段稍有不同就报
+    `PipelineStatus::DEMUXER_ERROR_COULD_NOT_PARSE`。同一地址交给 hls.js 则是
+    `MANIFEST_PARSED / LEVEL_LOADED / FRAG_LOADED` 全部正常、时长可读。
+
+    所以在 Chromium 系（Chrome / Edge / Electron）把 mpegurl 这一项抹成空串，
+    让 media_kit 的判定回到「走 hls.js」。Safari / iOS 的原生 HLS 是真的能用，
+    不动（UA 里没有 Chrome/）。
+  -->
+  <script>
+    (function () {
+      if (!/Chrome\/|Chromium\/|Edg\//.test(navigator.userAgent)) return;
+      var proto = window.HTMLMediaElement && window.HTMLMediaElement.prototype;
+      if (!proto || !proto.canPlayType) return;
+      var original = proto.canPlayType;
+      proto.canPlayType = function (type) {
+        if (String(type || '').toLowerCase().indexOf('mpegurl') >= 0) return '';
+        return original.call(this, type);
+      };
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

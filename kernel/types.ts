@@ -92,7 +92,27 @@ export interface KernelApi {
         srcVideoCodec?: string;
         timeoutMs?: number;
       },
-    ): Promise<{ segments: number; ms: number; codec?: string; container?: string }>;
+    ): Promise<{
+      segments: number;
+      ms: number;
+      codec?: string;
+      container?: string;
+      /** 实际用的编码器 / 解码链路（排障日志） */
+      encoder?: string;
+      decoder?: string;
+      pipeline?: string;
+      /** 硬件链路所属厂商：amd / nvidia / intel / cpu */
+      vendor?: string;
+      /** 探测到的片源能力，用于确认 DV / Hi10P 是否走了正确链路 */
+      source?: {
+        codec?: string;
+        pixFmt?: string;
+        dvProfile?: number;
+        hi10p?: boolean;
+        hdrKind?: string;
+        hasHdrMeta?: boolean;
+      };
+    }>;
     /** 取消某个目录下正在跑的 HLS 转码（新会话抢占旧会话时用）；未在跑返回 false */
     cancel(dir: string): Promise<boolean>;
     /** 列出容器内字幕轨（文本 / 图形都返回，`text` 标记能否转字幕文件） */

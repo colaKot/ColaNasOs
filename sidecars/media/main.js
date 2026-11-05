@@ -20,6 +20,9 @@ const { cpus } = require('node:os');
 
 /** 画质档位表（由 tool/gen-play-quality.js 从 contracts/play-quality.json 生成） */
 const PLAY_QUALITY = require('./play-quality.generated.json');
+/** 硬件转码链路决策 + 片源能力解析（独立纯函数，便于 smoke 断言） */
+const gpu = require('./gpu-pipeline');
+const { detectHwaccels, decodePlans, CPU_PLAN, parseSource } = gpu;
 
 process.stdin.setEncoding('utf8');
 process.stdout.on('error', () => {
@@ -175,6 +178,21 @@ function createLimiter(n) {
 }
 
 const limit = createLimiter(CONCURRENCY);
+
+/**
+ * GPU 零拷贝链路串行门：两路 AMF 并发会把编码器卡死（见 cancel() 的实测记录），
+ * D3D11 设备 / 显存也不该让多路同时抢。CPU 软解链路不排队，照旧走 limit()。
+ * 排队时不占 limit 槽，缩略图之类的 CPU 任务不会被饿死。
+ */
+let gpuTail = Promise.resolve();
+function withGpuGate(fn) {
+  const run = gpuTail.then(fn, fn);
+  gpuTail = run.then(
+    () => {},
+    () => {},
+  );
+  return run;
+}
 
 /**
  * 抓取 ffmpeg 输出（不因退出码非 0 抛错）。
@@ -575,24 +593,26 @@ function videoCodecArgs(codec, allowHw, prefer = 'auto', hw = null) {
   return { args: ['libx264', '-preset', 'veryfast', '-crf', '23'], encoder: 'libx264' };
 }
 
-/** HDR→SDR tonemap 链依赖 zscale + tonemap，进程内探测一次并缓存。
- *  缺任一个就退化成 format=yuv420p + 色彩标记，绝不让滤镜缺失拖垮整片转码。 */
-let tonemapChainReady = null;
-function hasTonemapChain() {
-  if (tonemapChainReady !== null) return tonemapChainReady;
-  let listing;
+/**
+ * 片源能力探测：只用 `ffmpeg -i` 的 stderr（本机没有 ffprobe），按 (路径, mtime, size)
+ * 缓存，同一部片换档位不会重复起进程。探测失败返回空对象，链路会保守退回 CPU。
+ */
+const sourceCache = new Map();
+async function probeSourceInfo(src) {
+  let stat;
   try {
-    const r = require('node:child_process').spawnSync(
-      findFfmpeg(),
-      ['-hide_banner', '-filters'],
-      { encoding: 'utf8', timeout: 15000 },
-    );
-    listing = String(r.stdout || '');
+    stat = fs.statSync(src);
   } catch {
-    listing = '';
+    return gpu.EMPTY_SOURCE;
   }
-  tonemapChainReady = /\bzscale\b/.test(listing) && /\btonemap\b/.test(listing);
-  return tonemapChainReady;
+  const key = `${stat.mtimeMs}|${stat.size}`;
+  const hit = sourceCache.get(src);
+  if (hit && hit.key === key) return hit.info;
+  const r = await runCapture(['-hide_banner', '-loglevel', 'info', '-i', src], 20_000);
+  const info = parseSource(r.stderr);
+  sourceCache.set(src, { key, info });
+  if (sourceCache.size > 256) sourceCache.delete(sourceCache.keys().next().value);
+  return info;
 }
 
 async function hls(params) {
@@ -610,7 +630,22 @@ async function hls(params) {
     PLAY_QUALITY.presets.find((p) => p.key === PLAY_QUALITY.defaultPreset) ||
     PLAY_QUALITY.presets[0];
   const height = Number(presetRow.height) || 0;
-  const hdrToSdr = params.hdrToSdr === true;
+  // 片源真实能力：比库里的 hdr 标记可信。
+  //
+  // 库里的 dolby_vision / hdr10 是扫描期写进去的，老库可能整批是 0（早期解析把
+  // `Side data:` 的缩进子行丢掉了，见 src/modules/video/ffmpeg.ts）。一旦按
+  // 「不需要 HDR→SDR」转码，DV Profile 5 的 IPTPQc2 就被当成普通 BT.2020 直出，
+  // 浏览器里是一整片偏绿/偏紫 —— 这不是用户选项，是坏画面。
+  // 所以每次起转码都自己 `ffmpeg -i` 读一遍（带 mtime/size 缓存），片源说了算。
+  const source = await probeSourceInfo(src);
+  const sourceNeedsTonemap = Number(source.dvProfile) > 0 || Boolean(source.hasHdrMeta);
+  const hdrToSdr = params.hdrToSdr === true || sourceNeedsTonemap;
+  if (sourceNeedsTonemap && params.hdrToSdr !== true) {
+    console.error(
+      `[media] hls 片源是 ${source.hdrKind}${source.dvProfile ? ` P${source.dvProfile}` : ''}，` +
+        '库标记缺失，按片源自动启用 HDR→SDR',
+    );
+  }
   // 片源视频编码：由上层从 video_items.video_codec 带下来。
   // 「原画（copy）」只有在片源本身就是 H.264 时才成立 —— 把 AV1 / HEVC 原样复制进
   // MPEG-TS 播放器根本解不出来（实测 hls.js 反复拉 init.mp4 后黑屏），
@@ -624,22 +659,18 @@ async function hls(params) {
     : Number((presetRow.bitrates || {})[params.codec] || presetRow.videoBitrateKbps || 0);
   // original 档 height=0：scale=-2:0 非法，改成保持原分辨率的合法滤镜
   const scale = height > 0 ? `scale=-2:${height}` : 'scale=iw:-2';
-  // 非 copy 统一输出 8-bit yuv420p + BT.709 标记，避免 10-bit / 未标记色彩在浏览器发灰
-  const tail = [scale];
-  if (params.subtitle) tail.push("subtitles='" + escapeFilterPath(params.subtitle) + "'");
-  if (!copyVideo) tail.push('format=yuv420p');
-  const vfSdr = tail.join(',');
-  // HDR→SDR：有 zscale/tonemap 才走完整 tonemap 链；片源无 HDR 元数据时链会报
-  //「no path between colorspaces」，此时下面会退化成 vfSdr 重试，不让整片转码归零。
-  const usedTonemap = hdrToSdr && !copyVideo && hasTonemapChain();
-  const tonemapChain = [
-    'zscale=t=linear:npl=100',
-    'format=gbrpf32le',
-    'tonemap=tonemap=hable:desat=0',
-    'zscale=p=bt709:t=bt709:m=bt709:r=tv',
-    'format=yuv420p',
-  ];
-  let vf = usedTonemap ? [...tonemapChain, ...tail].join(',') : vfSdr;
+  const subtitleFilter = params.subtitle
+    ? "subtitles='" + escapeFilterPath(params.subtitle) + "'"
+    : '';
+  // 非 copy 统一输出 8-bit + BT.709 标记，避免 10-bit / 未标记色彩在浏览器发灰
+  const tailParts = [scale];
+  if (subtitleFilter) tailParts.push(subtitleFilter);
+  if (!copyVideo) tailParts.push('format=yuv420p');
+  // 片源能力决定 tonemap 链：DV P5 / 无标记 10-bit 的 `zscale=t=linear` 实测直接
+  // `-22 Invalid argument`；现在软件帧链自动切到 libplacebo/Vulkan，
+  // 硬件帧链用滤镜自带的 apply_dovi（d3d11 / cuda 默认开启）。
+  let pipelineCtx = null;
+  const cpuFilter = (tonemapOn) => gpu.cpuFilter(pipelineCtx, tonemapOn);
   const wantCodec = PLAY_QUALITY.codecs.some((c) => c.key === params.codec)
     ? params.codec
     : PLAY_QUALITY.defaultCodec;
@@ -654,8 +685,29 @@ async function hls(params) {
   const audioIndex = Number.isInteger(an) && an >= 0 ? an : 0;
   // 硬件编码器探测（异步 + 缓存）：不阻塞心跳，结果供所有 attempt 复用
   const hw = await detectHwAll();
+  // 原画复制只可能是 H.264 in MPEG-TS：容器/编码标签必须跟着实际输出走，
+  // 否则会出现「界面显示 AV1、实际拷的是 H.264 却塞进 fMP4」的错位。
+  const outputCodec = copyVideo ? 'h264' : wantCodec;
+  // 解码方案按编码器所属厂商分派：AMD→D3D11、NVIDIA→CUDA、Intel→QSV；
+  // 三家都用「硬解 → 显存内 tonemap/scale → 硬编」零拷贝，失败逐级回退。
+  const primaryEncoder = videoCodecArgs(outputCodec, true, prefer, hw).encoder;
+  pipelineCtx = {
+    platform: process.platform,
+    hwaccels: detectHwaccels(FFMPEG),
+    filters: gpu.detectFilters(FFMPEG),
+    encoder: primaryEncoder,
+    prefer,
+    copyVideo,
+    subtitle: params.subtitle,
+    subtitleFilter,
+    hdrToSdr,
+    height,
+    source,
+    tailParts,
+  };
+  const plans = decodePlans(pipelineCtx);
 
-  const attempt = async (codec, allowHw = true) => {
+  const attempt = async (codec, allowHw = true, plan = CPU_PLAN, tonemapOn = true) => {
     // 被抢占（换档 / 新会话）时立即收手：旧会话的重试链不能再起新 ffmpeg
     if (canceledHls.has(dir)) {
       throw Object.assign(new Error('ffmpeg canceled'), { code: 'E_CANCELED' });
@@ -667,6 +719,8 @@ async function hls(params) {
     // 硬件编码能探测到就用（参数见 videoCodecArgs），否则原样走 CPU
     const vc = videoCodecArgs(codec, allowHw, prefer, hw);
     const vCodec = vc.args;
+    // 硬件计划自带显存内滤镜；其余计划走软件帧滤镜（含 libplacebo 回退）。
+    const vf = plan.filter ? plan.filter(tonemapOn) : cpuFilter(tonemapOn);
 
     // 清掉上一次尝试的产物，避免残留 index.m3u8 让「降级」误判成功
     for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
@@ -682,6 +736,8 @@ async function hls(params) {
       '-loglevel',
       'error',
       '-y',
+      // `-hwaccel*` 是输入选项，必须在 `-i` 之前；零拷贝时多带一个 output_format
+      ...plan.inputArgs,
       '-i',
       src,
       // 显式选流：视频第 0 条、指定音轨（`?` 让越界时不选音轨而非整片失败）
@@ -742,17 +798,20 @@ async function hls(params) {
     args.push(nodePath.join(dir, 'index.m3u8'));
 
     const started = process.hrtime.bigint();
-    await limit(() =>
-      runFfmpeg(args, timeoutMs, {
-        cwd: dir,
-        hlsKey: dir,
-        watch: {
-          dir,
-          firstMs: Number(process.env.COLANAS_HLS_FIRST_SEGMENT_MS) || 90000,
-          idleMs: Number(process.env.COLANAS_HLS_STALL_MS) || 120000,
-        },
-      }),
-    );
+    const exec = () =>
+      limit(() =>
+        runFfmpeg(args, timeoutMs, {
+          cwd: dir,
+          hlsKey: dir,
+          watch: {
+            dir,
+            firstMs: Number(process.env.COLANAS_HLS_FIRST_SEGMENT_MS) || 90000,
+            idleMs: Number(process.env.COLANAS_HLS_STALL_MS) || 120000,
+          },
+        }),
+      );
+    // GPU 零拷贝串行；CPU 链路直接跑
+    await (plan.gpu ? withGpuGate(exec) : exec());
 
     const playlist = nodePath.join(dir, 'index.m3u8');
     if (!fs.existsSync(playlist))
@@ -768,60 +827,66 @@ async function hls(params) {
       codec,
       container: fmp4 ? 'fmp4' : 'mpegts',
       playlist,
-      // 实际用的编码器：排障时能一眼看出「到底硬件跑了没有」
+      // 实际用的编码 / 解码链路：排障时能一眼看出「到底 GPU 跑了没有」
       encoder: vc.encoder,
+      decoder: plan.decoder,
+      pipeline: plan.pipeline,
+      vendor: plan.vendor || 'cpu',
+      source: {
+        codec: source.codec,
+        pixFmt: source.pixFmt,
+        dvProfile: source.dvProfile,
+        hi10p: source.hi10p,
+        hdrKind: source.hdrKind,
+        hasHdrMeta: source.hasHdrMeta,
+      },
     };
   };
 
   let result;
-  // 原画复制只可能是 H.264 in MPEG-TS：容器/编码标签必须跟着实际输出走，
-  // 否则会出现「界面显示 AV1、实际拷的是 H.264 却塞进 fMP4」的错位。
-  const outputCodec = copyVideo ? 'h264' : wantCodec;
-  const hwKind = outputCodec === 'h265' ? 'h265' : outputCodec === 'av1' ? 'av1' : 'h264';
-  const wantHw = hw[hwKind][0] || null;
-  const runAll = async () => {
-    try {
-      return await attempt(outputCodec, true);
-    } catch (err) {
-      // 主动取消（新会话抢占旧会话）不是故障：直接冒泡，别浪费时间换编码器重试。
-      if (err && err.code === 'E_CANCELED') throw err;
-      // 探测到了硬件、但这次真的编不动（驱动版本、显存、参数组合）→ 同一 codec 回退 CPU。
-      // 不能直接跳到 h264：那会牺牲画质来换「硬件」，而用户要的是「别卡」。
-      if (wantHw) {
-        console.error(
-          `[media] hls ${outputCodec} failed on ${wantHw}, retry on CPU: ${String((err && err.message) || err)}`,
-        );
-        try {
-          return await attempt(outputCodec, false);
-        } catch (cpuErr) {
-          if (cpuErr && cpuErr.code === 'E_CANCELED') throw cpuErr;
-          if (outputCodec === 'h264') throw cpuErr;
+  // 候选链：GPU 零拷贝 → 普通硬解 → CPU 软解（同 codec + 硬编）→ 同 codec CPU 编码 → h264 CPU。
+  // 顺序即「画质优先、可用性兜底」：任何一步失败都往下走，绝不让用户对着黑屏等超时。
+  const candidates = [];
+  for (const plan of plans) candidates.push({ codec: outputCodec, allowHw: true, plan });
+  candidates.push({ codec: outputCodec, allowHw: false, plan: CPU_PLAN });
+  if (outputCodec !== 'h264') candidates.push({ codec: 'h264', allowHw: false, plan: CPU_PLAN });
+
+  const runAll = async (tonemapOn) => {
+    let last = null;
+    for (let i = 0; i < candidates.length; i += 1) {
+      // 原画直通不涉及编码 / 解码，失败重试没有意义
+      if (copyVideo && i > 0) break;
+      const c = candidates[i];
+      try {
+        return await attempt(c.codec, c.allowHw, c.plan, tonemapOn);
+      } catch (err) {
+        // 主动取消（新会话抢占旧会话）不是故障：直接冒泡，别浪费时间换编码器重试。
+        if (err && err.code === 'E_CANCELED') throw err;
+        last = err;
+        if (i + 1 < candidates.length) {
           console.error(
-            `[media] hls ${outputCodec} failed on CPU, fallback to h264: ${String((cpuErr && cpuErr.message) || cpuErr)}`,
+            `[media] hls ${c.codec}/${c.plan.pipeline}/${c.allowHw ? 'hw' : 'cpu'} failed, fallback: ${String((err && err.message) || err)}`,
           );
-          return await attempt('h264', false);
         }
-      } else {
-        if (outputCodec === 'h264') throw err;
-        console.error(
-          `[media] hls ${outputCodec} failed, fallback to h264: ${String((err && err.message) || err)}`,
-        );
-        return await attempt('h264', false);
       }
     }
+    throw last || Object.assign(new Error('hls failed'), { code: 'E_FFMPEG' });
   };
   try {
-    result = await runAll();
+    result = await runAll(true);
   } catch (err) {
     if (err && err.code === 'E_CANCELED') throw err;
-    // tonemap 链在片源上跑不通（无 HDR 元数据 / 色彩路径不通）→ 退化成纯 SDR 转换重试，
-    // 绝不让滤镜失败拖垮整片转码。
-    if (usedTonemap) {
+    // tonemap 链在片源上跑不通 → 关掉 tonemap 再跑一遍。
+    // GPU 链只去掉 tonemap_d3d11、仍保留 scale_d3d11，CPU 链退化成纯 SDR 转换。
+    //
+    // 但**片源本身就是 DV/HDR 时不能这么退**：关掉 tonemap 得到的是一整片偏绿/偏紫的
+    // 错色画面，用户看到的比报错更糟（还会以为是自己设备坏了）。这种情况如实报错，
+    // 让前端提示「该片源转码失败」，而不是静默给一张坏画面。
+    if (hdrToSdr && !copyVideo && !sourceNeedsTonemap) {
       console.error(
-        `[media] hls tonemap chain failed, fallback to SDR: ${String((err && err.message) || err)}`,
+        `[media] hls tonemap failed, retry without tonemap: ${String((err && err.message) || err)}`,
       );
-      vf = vfSdr;
-      result = await runAll();
+      result = await runAll(false);
     } else {
       throw err;
     }
@@ -896,6 +961,23 @@ async function handle(msg) {
       ffmpeg: FFMPEG,
       concurrency: CONCURRENCY,
       cpus: cpus().length,
+      // 排障用：这台机器有哪些硬解方式与硬件滤镜，决定转码会不会走全 GPU 链
+      gpuDecode: {
+        platform: process.platform,
+        d3d11va: detectHwaccels(FFMPEG).includes('d3d11va'),
+        cuda: detectHwaccels(FFMPEG).includes('cuda'),
+        qsv: detectHwaccels(FFMPEG).includes('qsv'),
+        filters: {
+          scale_d3d11: gpu.detectFilters(FFMPEG).includes('scale_d3d11'),
+          tonemap_d3d11: gpu.detectFilters(FFMPEG).includes('tonemap_d3d11'),
+          scale_cuda: gpu.detectFilters(FFMPEG).includes('scale_cuda'),
+          tonemap_cuda: gpu.detectFilters(FFMPEG).includes('tonemap_cuda'),
+          scale_qsv: gpu.detectFilters(FFMPEG).includes('scale_qsv'),
+          vpp_qsv: gpu.detectFilters(FFMPEG).includes('vpp_qsv'),
+          libplacebo: gpu.detectFilters(FFMPEG).includes('libplacebo'),
+        },
+        sourceCache: sourceCache.size,
+      },
     }),
   };
   const fn = handlers[msg.method];

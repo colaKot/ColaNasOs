@@ -208,6 +208,8 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             itemId: _item.id,
             // 兼容判定（DV / HDR / HEVC / EAC3）交给播放器决定要不要自动转码
             compat: res.compat,
+            // 转码是边转边播，播放器拿不到总长，用片源时长兜进度条
+            durationMs: _item.durationMs,
           ),
         ),
       );
@@ -372,6 +374,7 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             itemId: _item.id,
             // 这个地址已经是选定档位的 HLS 会话，别让播放器再按直链处理
             initialPreset: preset,
+            durationMs: _item.durationMs,
           ),
         ),
       );

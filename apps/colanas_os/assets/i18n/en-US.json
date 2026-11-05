@@ -2467,7 +2467,7 @@
     "video.transcode.hwaccel": "Hardware acceleration",
     "video.transcode.hwaccelAuto": "Auto",
     "video.transcode.hwaccelCpu": "CPU only",
-    "video.transcode.hwaccelHint": "Auto prefers the GPU and falls back to the CPU",
+    "video.transcode.hwaccelHint": "Automatically picks the full GPU pipeline for AMD / Intel / NVIDIA; decode, scale and HDR tonemap stay in video memory, with step-by-step fallback",
     "video.transcode.none": "Do not burn in subtitles",
     "video.transcode.preset": "Quality",
     "video.transcode.start": "Start transcoding",

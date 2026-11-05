@@ -677,4 +677,29 @@ export const VIDEO_MIGRATIONS: Migration[] = [
         await sql`insert into video_items_fts(video_items_fts) values('rebuild')`.execute(db);
       },
     },
+    {
+      // HDR / DV 标记的「解析口径版本」。
+      //
+      // 早期 `probeVideo` 只保留含 `Stream #` / `Side data:` 的行，而真正的内容写
+      // 在这两行下面的缩进子行里（`DOVI configuration record: ... profile: 5`、
+      // `Mastering display metadata: ...`），于是整块 Side data 被丢掉 —— 所有
+      // DV / HDR10 片源都落库成 0。后果不只是徽章缺失：播放时 `hdrToSdr=false`，
+      // HDR→SDR 链路整条不启用，DV P5 的 IPTPQc2 当普通 BT.2020 直出，画面偏绿偏紫。
+      //
+      // 解析已修（见 ffmpeg.ts），但老行因为 size/mtime 没变会被增量扫描直接跳过，
+      // 永远带着错值。留一个版本列做「一次性重探」的口子：扫描时发现
+      // `hdr_meta_v != HDR_META_VERSION` 就重新 ffprobe 一次并写回。
+      id: '134_video_hdr_meta_version',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(video_items)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        if (!cols.includes('hdr_meta_v')) {
+          // 默认 0 = 从没按新口径探过；扫描写回时置为 1
+          await sql
+            .raw('alter table video_items add column hdr_meta_v integer not null default 0')
+            .execute(db);
+        }
+      },
+    },
 ];

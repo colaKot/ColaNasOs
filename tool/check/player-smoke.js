@@ -93,6 +93,164 @@ process.chdir(root);
   const results = [];
   const check = (name, ok, detail) => results.push({ name, ok, detail: detail || '' });
 
+  // ---- 片源能力解析 + 三家硬件转码链路：决策纯函数（模拟 ctx，跨平台可测） ----
+  const gpu = require(path.join(root, 'sidecars', 'media', 'gpu-pipeline.js'));
+  const CAPS = 'cuda dxva2 qsv d3d11va opencl vulkan d3d12va amf';
+  const FILTERS =
+    'scale_d3d11 tonemap_d3d11 scale_cuda tonemap_cuda scale_qsv vpp_qsv ' +
+    'libplacebo zscale tonemap hwdownload hwupload';
+  const gpuCtx = (over = {}) => ({
+    platform: 'win32',
+    hwaccels: CAPS,
+    filters: FILTERS,
+    encoder: 'h264_amf',
+    prefer: 'auto',
+    copyVideo: false,
+    subtitle: undefined,
+    subtitleFilter: undefined,
+    hdrToSdr: true,
+    height: 1080,
+    source: gpu.EMPTY_SOURCE,
+    tailParts: ['scale=-2:1080', 'format=yuv420p'],
+    ...over,
+  });
+  const gp = gpu.decodePlans(gpuCtx());
+  check('gpu_plan_preferred', gp[0].pipeline === 'gpu-zero-copy', gp[0].pipeline);
+  check(
+    'gpu_plan_hwaccel',
+    gp[0].inputArgs.includes('d3d11va') && gp[0].inputArgs.includes('-hwaccel_output_format'),
+    gp[0].inputArgs.join(' '),
+  );
+  check('gpu_plan_tonemap', gp[0].filter(true).includes('tonemap_d3d11'), gp[0].filter(true));
+  check(
+    'gpu_plan_scale_nv12',
+    gp[0].filter(false).includes('scale_d3d11=w=-2:h=1080:format=nv12'),
+    gp[0].filter(false),
+  );
+  check('gpu_plan_tonemap_off', !gp[0].filter(false).includes('tonemap_d3d11'), gp[0].filter(false));
+  // 实测：手动指定 PQ/BT2020 输入色彩会破坏 apply_dovi，画面压到全黑，绝不能加。
+  check(
+    'gpu_plan_no_manual_pq',
+    !/smpte2084|matrix=bt2020|primaries=bt2020/.test(gp[0].filter(true)),
+    gp[0].filter(true),
+  );
+  check(
+    'gpu_plan_original',
+    gpu.decodePlans(gpuCtx({ height: 0 }))[0].filter(false).includes('h=ih'),
+    'height=0',
+  );
+  check('gpu_off_copy', gpu.decodePlans(gpuCtx({ copyVideo: true }))[0].pipeline === 'cpu', 'copy');
+  check('gpu_off_cpu_only', gpu.decodePlans(gpuCtx({ prefer: 'cpu' }))[0].pipeline === 'cpu', 'cpu');
+  check('gpu_off_platform', gpu.decodePlans(gpuCtx({ platform: 'linux' }))[0].pipeline === 'cpu', 'linux');
+  check(
+    'gpu_off_no_d3d11va',
+    gpu.decodePlans(gpuCtx({ hwaccels: 'cuda\nqsv\n' }))[0].pipeline === 'cpu',
+    'caps',
+  );
+  check(
+    'gpu_hwdecode_cpu_enc',
+    gpu.decodePlans(gpuCtx({ encoder: 'libx264' }))[0].pipeline === 'hw-decode',
+    'libx264',
+  );
+  check('gpu_cpu_fallback', gp[gp.length - 1].pipeline === 'cpu', 'fallback always present');
+
+  // 字幕烧录不再整条退回 CPU：硬件 tonemap/scale 后只 hwdownload 一次给 libass。
+  const burn = gpu.decodePlans(gpuCtx({ subtitle: 'a.srt', subtitleFilter: "subtitles='a.srt'" }))[0];
+  check('gpu_hybrid_subtitle', burn.pipeline === 'gpu-hybrid', burn.pipeline);
+  check(
+    'gpu_hybrid_download_once',
+    burn.filter(true).includes('hwdownload') && burn.filter(true).includes("subtitles='a.srt'") &&
+      burn.filter(true).includes('tonemap_d3d11'),
+    burn.filter(true),
+  );
+
+  // 三家厂商：编码器后缀决定硬解方式与显存内滤镜名。
+  check(
+    'gpu_vendor_detect',
+    gpu.vendorOf('h264_amf') === 'amd' && gpu.vendorOf('h264_nvenc') === 'nvidia' &&
+      gpu.vendorOf('h264_qsv') === 'intel' && gpu.vendorOf('libx264') === 'cpu',
+    'amf/nvenc/qsv/cpu',
+  );
+  const nv = gpu.decodePlans(gpuCtx({ encoder: 'h264_nvenc' }))[0];
+  check('gpu_vendor_nvidia', nv.decoder === 'cuda' && nv.pipeline === 'gpu-zero-copy', nv.decoder + '/' + nv.pipeline);
+  check(
+    'gpu_nvidia_filters',
+    nv.filter(true).includes('tonemap_cuda') && nv.filter(true).includes('scale_cuda'),
+    nv.filter(true),
+  );
+  const qsv = gpu.decodePlans(gpuCtx({ encoder: 'h264_qsv' }))[0];
+  check('gpu_vendor_intel', qsv.decoder === 'qsv' && qsv.pipeline === 'gpu-zero-copy', qsv.decoder + '/' + qsv.pipeline);
+  check(
+    'gpu_intel_filters',
+    qsv.filter(true).includes('vpp_qsv=tonemap=1') && qsv.filter(false).includes('scale_qsv'),
+    qsv.filter(true),
+  );
+
+  // 片源解析：DV P5 / Hi10P / HDR10 的三种典型 `ffmpeg -i` 输出。
+  const DV5 = [
+    "Input #0, matroska,webm,from 'x.mkv':",
+    '  Stream #0:0: Video: hevc (Main 10), yuv420p10le(pc, progressive), 3840x2080, 24 fps',
+    '      DOVI configuration record: version: 1.0, profile: 5, level: 6, rpu flag: 1',
+  ].join('\n');
+  const HI10P =
+    '  Stream #0:0: Video: h264 (High 10), yuv420p10le(tv, progressive), 1920x1080, 24 fps';
+  const HDR10 =
+    '  Stream #0:0: Video: hevc (Main 10), yuv420p10le(tv, bt2020nc/bt2020/smpte2084, progressive), 3840x2160';
+  const dvSrc = gpu.parseSource(DV5);
+  const hiSrc = gpu.parseSource(HI10P);
+  const hdrSrc = gpu.parseSource(HDR10);
+  check(
+    'source_parse_dv5',
+    dvSrc.dvProfile === 5 && dvSrc.hdrKind === 'dv' && !dvSrc.hasHdrMeta && dvSrc.tenBit,
+    JSON.stringify(dvSrc),
+  );
+  check('source_parse_hi10p', hiSrc.hi10p === true && hiSrc.codec === 'h264', JSON.stringify(hiSrc));
+  check(
+    'source_parse_hdr10',
+    hdrSrc.hdrKind === 'hdr10' && hdrSrc.hasHdrMeta && !hdrSrc.hi10p,
+    JSON.stringify(hdrSrc),
+  );
+  check(
+    'gpu_off_hi10p',
+    gpu.decodePlans(gpuCtx({ source: hiSrc }))[0].pipeline === 'cpu',
+    'Hi10P has no hardware decoder',
+  );
+  check(
+    'gpu_dv5_still_zero_copy',
+    gpu.decodePlans(gpuCtx({ source: dvSrc }))[0].pipeline === 'gpu-zero-copy',
+    'apply_dovi handles DV P5',
+  );
+  // Intel 是例外：`vpp_qsv=tonemap=1` 只认 HDR10 元数据，**不吃 DV RPU**，
+  // 让它上零拷贝就是一片偏绿偏紫。DV 只能退回软件帧链（libplacebo），
+  // 宁可慢也不能给错色 —— 硬编解码器下没有「硬解 + 软件滤镜」这一档，
+  // 所以整条落到 CPU 保底项。真机上的 Intel 混合链还没验证过，不写死在里面。
+  const intelDv = gpu.decodePlans(gpuCtx({ encoder: 'h264_qsv', source: dvSrc }))[0];
+  check('gpu_intel_dv_no_zero_copy', intelDv.pipeline !== 'gpu-zero-copy', intelDv.pipeline);
+  check(
+    'gpu_intel_dv_placebo',
+    gpu.cpuFilter(gpuCtx({ encoder: 'h264_qsv', source: dvSrc }), true).includes('libplacebo'),
+    'intel DV -> libplacebo',
+  );
+
+  // CPU / 普通硬解回退链：DV 片源不能用会 -22 失败的 zscale，必须换 libplacebo。
+  const dvCtx = gpuCtx({ source: dvSrc });
+  const dvCpu = gpu.cpuFilter(dvCtx, true);
+  check('cpu_tonemap_dv_placebo', dvCpu.includes('libplacebo') && !dvCpu.includes('zscale=t=linear'), dvCpu.slice(0, 120));
+  check('cpu_tonemap_usable_dv', gpu.cpuTonemapUsable(dvCtx) === false, 'dv');
+  const hdrCpu = gpu.cpuFilter(gpuCtx({ source: hdrSrc }), true);
+  check('cpu_tonemap_hdr10_zscale', hdrCpu.includes('zscale=t=linear:npl=100'), hdrCpu.slice(0, 120));
+  check('cpu_tonemap_usable_hdr10', gpu.cpuTonemapUsable(gpuCtx({ source: hdrSrc })) === true, 'hdr10');
+  check(
+    'cpu_filter_sdr',
+    gpu.cpuFilter(gpuCtx({ hdrToSdr: false }), true) === 'scale=-2:1080,format=yuv420p',
+    'sdr passthrough',
+  );
+  check(
+    'placebo_no_manual_scale',
+    gpu.placeboFilter(dvCtx, true).includes('libplacebo=w=-2:h=1080'),
+    'vulkan scale',
+  );
+
   const inject = (method, url, token, payload) =>
     app.inject({
       method,
