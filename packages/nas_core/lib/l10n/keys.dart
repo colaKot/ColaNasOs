@@ -2116,7 +2116,7 @@ class I18nKeys {
   static const videoClientBitrateNow = 'video.client.bitrateNow';
   static const videoClientCodec = 'video.client.codec';
   static const videoClientCodecHint = 'video.client.codecHint';
-  static const videoClientCodecWebForced = 'video.client.codecWebForced';
+  static const videoClientCodecUnavailable = 'video.client.codecUnavailable';
   static const videoClientCopyNoTranscode = 'video.client.copyNoTranscode';
   static const videoClientDownmix = 'video.client.downmix';
   static const videoClientDownmixHint = 'video.client.downmixHint';

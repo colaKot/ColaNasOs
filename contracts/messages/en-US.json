@@ -2077,7 +2077,7 @@
     "video.client.bitrateNow": "Current bitrate {rate}",
     "video.client.codec": "Codec",
     "video.client.codecHint": "Video codec used for server-side transcoding",
-    "video.client.codecWebForced": "Browsers can only use H.264 (hls.js cannot demux AV1 / HEVC fMP4); this setting applies to desktop clients",
+    "video.client.codecUnavailable": "Only codecs this device can decode are listed (the browser reports its own capability); anything else falls back to H.264",
     "video.client.copyNoTranscode": "Pass-through (no transcoding)",
     "video.client.downmix": "Downmix to stereo",
     "video.client.downmixHint": "Mix 5.1 / 7.1 down to stereo for phones and headphones",

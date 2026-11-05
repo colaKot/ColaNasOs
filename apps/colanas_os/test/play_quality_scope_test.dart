@@ -99,13 +99,33 @@ void main() {
       expect(clampPresetForSource('original', 480), 'original');
     });
 
-    test('1080p 偏好落到 720p 片源：留在同一流量档（AV1 仍是 0.9M）', () {
-      expect(clampPresetForSource('1080p_2m', 720, codec: 'av1'), '720p_2m');
+    test('1080p 偏好落到 720p 片源：按流量名次贴到 720P 自己的码率', () {
+      // 1080P 组（8m/5m/3m/2m）里 1080p_2m 是第 4 档；
+      // 720P 组只有 3 档（3m/2m/1m），名次越界 → 取最低档 720p_1m。
+      expect(clampPresetForSource('1080p_2m', 720, codec: 'av1'), '720p_1m');
       expect(
         playQualityPresetOf(clampPresetForSource('1080p_2m', 720, codec: 'av1'))!
             .labelFor('av1'),
-        '720P 0.9Mbps',
+        '720P 0.5Mbps',
       );
+    });
+
+    test('名次越上贴：1080P 最高档落到 720p 片源 → 720P 最高档', () {
+      final key = clampPresetForSource('1080p_8m', 720, codec: 'av1');
+      expect(key, '720p_3m');
+      expect(playQualityPresetOf(key)!.labelFor('av1'), '720P 1.4Mbps');
+    });
+
+    test('同一名次在不同分辨率组里对应同一「档位序号」', () {
+      // 2K 组第 4 档（1440p_3m）→ 1080P 组第 4 档（1080p_2m）
+      expect(clampPresetForSource('1440p_3m', 1080, codec: 'av1'), '1080p_2m');
+      // 1080P 组第 3 档（1080p_3m）→ 720P 组第 3 档 = 该组最低（720p_1m）
+      expect(clampPresetForSource('1080p_3m', 720, codec: 'av1'), '720p_1m');
+    });
+
+    test('换编码只改码率不改名次（H.264 组内排序相同）', () {
+      expect(clampPresetForSource('1080p_2m', 720, codec: 'h264'), '720p_1m');
+      expect(clampPresetForSource('1080p_8m', 720, codec: 'h264'), '720p_3m');
     });
 
     test('4K 偏好落到 1080p 片源：取 1080P 里最接近的档，不越界', () {

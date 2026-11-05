@@ -2077,7 +2077,7 @@
     "video.client.bitrateNow": "当前码率 {rate}",
     "video.client.codec": "编码",
     "video.client.codecHint": "服务端转码时用的视频编码",
-    "video.client.codecWebForced": "浏览器端只能用 H.264（AV1 / HEVC 的 fMP4 在 hls.js 里解不出来），这项只在桌面客户端生效",
+    "video.client.codecUnavailable": "这里只列当前设备解得了的编码（浏览器会自己报能力）；选不到的会被自动回落到 H.264",
     "video.client.copyNoTranscode": "原样输出（不转码）",
     "video.client.downmix": "混为立体声",
     "video.client.downmixHint": "把 5.1 / 7.1 混成两声道，手机和耳机更稳",

@@ -1,7 +1,7 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/codec_support.dart';
 import '../../core/play_quality.dart';
 import '../../core/play_preferences.dart';
 
@@ -14,10 +14,11 @@ import '../../core/play_preferences.dart';
 /// 音频两项是「覆盖」语义：关 = 不传参数 = 跟随库级 `audio_normalize` 开关，
 /// 打开才在本次会话强制生效。默认值与改动前完全一致。
 ///
-/// 编码一项在浏览器里只有 H.264 可选：hls.js 建不出 AV1 / HEVC 的 fMP4
-/// SourceBuffer（实测反复拉 init.mp4 后黑屏），播放器与转码接口都会强制改回
-/// H.264。以前这里照样列出 AV1 / H.265，用户选完发现「设了 AV1 还是跑 264」，
-/// 现在按平台过滤 + 明写原因；**不改写已存的值**，桌面客户端仍用用户选的编码。
+/// 编码一项只列出**当前设备真能解**的编码。以前是按平台一刀切
+/// （浏览器一律只剩 H.264），理由是「hls.js 建不出 AV1 / HEVC 的 SourceBuffer」——
+/// 2026-11-05 用真 Chrome + hls.js 1.4.10 复测推翻了这个前提，改成问
+/// `MediaSource.isTypeSupported`：浏览器说能解就给选，说不能解就不列。
+/// 已存的偏好若在本机解不了，**只影响显示**（回落成 H.264），不改写用户存的值。
 class VideoClientSettingsPage extends StatefulWidget {
   const VideoClientSettingsPage({super.key});
 
@@ -27,11 +28,18 @@ class VideoClientSettingsPage extends StatefulWidget {
 
 class _VideoClientSettingsPageState extends State<VideoClientSettingsPage> {
   late String _preset = PlayPreferences.preset;
-  /// 浏览器端显示成 H.264：播放器和转码接口都会强制改回它，这里显示 AV1 只会
-  /// 让用户以为设置生效了。**只影响显示**，本地存的值不动。
-  late String _codec = kIsWeb ? 'h264' : PlayPreferences.codec;
+
+  /// 存的值在本机解不出来时显示成 H.264，避免下拉框的 value 不在 items 里。
+  late String _codec = _playableOrDefault(PlayPreferences.codec);
+
+  static String _playableOrDefault(String codec) =>
+      codecPlayable(codec) ? codec : 'h264';
+
   late bool _normalize = PlayPreferences.audioNormalize;
   late bool _downmix = PlayPreferences.audioDownmix;
+
+  /// 本机有编码被砍掉时才提示原因，全都支持就别啰嗦。
+  bool get _hasUnplayableCodec => playableCodecs().length < playCodecs.length;
 
   /// 当前档位规格（height / 各编码码率 / 是否原画）
   PlayQualityPreset get _presetSpec =>
@@ -91,16 +99,16 @@ class _VideoClientSettingsPageState extends State<VideoClientSettingsPage> {
         ),
         _setting(
           title: tr('video.client.codec'),
-          hint: kIsWeb
-              ? tr('video.client.codecWebForced')
+          hint: _hasUnplayableCodec
+              ? tr('video.client.codecUnavailable')
               : tr('video.client.codecHint'),
           trailing: NasDropdown<String>(
             value: _codec,
             isDense: true,
             underline: const SizedBox.shrink(),
             items: [
-              // 与详情页 / 播放器的编码菜单同一条规则：浏览器只留 H.264
-              for (final c in playCodecs.where((c) => !kIsWeb || c.key == 'h264'))
+              // 与详情页 / 播放器的编码菜单同一条规则：只列本机解得出来的
+              for (final c in playableCodecs())
                 DropdownMenuItem<String>(value: c.key, child: Text(c.label)),
             ],
             onChanged: (v) async {

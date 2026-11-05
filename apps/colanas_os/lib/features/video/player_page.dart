@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/codec_support.dart';
 import '../../core/play_preferences.dart';
 import '../../core/play_quality.dart';
 import '../../core/play_quality_scope.dart';
@@ -99,7 +100,10 @@ class _PlayerPageState extends State<PlayerPage> {
   List<VideoSubtitleCue> _cues = const [];
 
   late String _preset;
-  String _codec = kIsWeb ? 'h264' : PlayPreferences.codec;
+  /// 当前编码：用用户偏好，但本机解不出来时回落 H.264。
+  String _codec = codecPlayable(PlayPreferences.codec)
+      ? PlayPreferences.codec
+      : 'h264';
   int _audioIndex = 0;
   double _rate = 1.0;
   double _volume = 100.0;
@@ -295,10 +299,9 @@ class _PlayerPageState extends State<PlayerPage> {
   /// 已转完的同参会话由服务端 `dupe` 直接复用，不在客户端缓存地址。
   Future<String> _ensureTranscode(String preset, String codec) async {
     final id = widget.itemId!;
-    // Web 只能靠 <video> + hls.js：AV1 / HEVC 的 fMP4 播放列表没有 CODECS 属性，
-    // hls.js 建不出 SourceBuffer（实测 init.mp4 被反复拉取后黑屏），
-    // 所以浏览器端一律走 H.264 + MPEG-TS，哪怕用户之前选过 AV1。
-    final outCodec = kIsWeb ? 'h264' : codec;
+    // 请求的编码在本机解不出来时回落 H.264（桌面端一律解得出来，浏览器由
+    // `MediaSource.isTypeSupported` 说了算 —— 真 Chrome 上 AV1 / HEVC 都是支持的）。
+    final outCodec = codecPlayable(codec) ? codec : 'h264';
     final created = await ApiSession.instance.client.playerSessionCreate(
       body: PlayerSessionCreateBody(
         id: id,
@@ -738,8 +741,8 @@ class _PlayerPageState extends State<PlayerPage> {
             child: _checked(p.labelFor(_codec), _preset == p.key),
           ),
         const PopupMenuDivider(),
-        // Web 端只保留 H.264：AV1 / HEVC 的 fMP4 在 hls.js 里解不出来
-        for (final c in playCodecs.where((c) => !kIsWeb || c.key == 'h264'))
+        // 只列本机能解的编码：列了点了却黑屏，比不列更糟
+        for (final c in playableCodecs())
           PopupMenuItem<String>(
             value: 'codec:${c.key}',
             child: _checked(c.label, _codec == c.key),

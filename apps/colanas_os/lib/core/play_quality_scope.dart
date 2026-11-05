@@ -66,10 +66,17 @@ int sourceKbpsOf(int bytes, int durationMs) {
 /// 把「用户偏好档位」贴到这部片实际能做到的档位上。
 ///
 /// - 片源高度未知、或偏好档位本来就不超过片源 → 原样返回（尊重用户，不多花流量）；
-/// - 偏好档位高于片源 → 收敛到片源能到达的最高分辨率，并在该分辨率下挑一个
-///   **目标码率最接近**的档位。用户选档位时真正的约束是流量（0.9M 就是 0.9M），
-///   分辨率只是片源给的天花板，所以宁可降分辨率也不要把码率悄悄抬上去。
-///   例：偏好 `1080p_2m`（AV1 0.9M）落到 720p 片源 → `720p_2m`（AV1 仍是 0.9M）。
+/// - 偏好档位高于片源 → 收敛到片源能到达的最高分辨率，并在该分辨率下挑
+///   **同一流量名次**的档位。
+///
+/// 「同一流量名次」而不是「最接近的绝对码率」（2026-11-05 用户确认）：
+/// 每档分辨率给的是它自己的一组码率，`1080P` 的 0.9M 不该原封不动搬到 720P ——
+/// 720P 用 0.9M 是画质过剩，用户要的是「720P 按 AV1 实际该多大就多大」。
+/// 所以取偏好档位在它那组里的名次（码率从高到低第几档），落到目标分辨率组的同名次；
+/// 名次越界（目标组档位更少）就取该组最低档。
+///
+/// 例：偏好 `1080p_2m`（1080P 组第 4 档，AV1 0.9M）落到 720p 片源
+/// → 720P 组只有 3 档，取最低档 `720p_1m`（AV1 0.48M ≈ 0.5M）。
 String clampPresetForSource(
   String presetKey,
   int sourceHeight, {
@@ -81,22 +88,25 @@ String clampPresetForSource(
 
   final cap = maxPresetHeightForSource(sourceHeight);
   if (cap <= 0) return want.key;
-  final candidates = presetsForSource(sourceHeight)
-      .where((p) => !p.copy && p.height == cap)
-      .toList();
-  if (candidates.isEmpty) return want.key;
+  final group = _groupByBitrateDesc(
+    presetsForSource(sourceHeight).where((p) => !p.copy && p.height == cap),
+    codec,
+  );
+  if (group.isEmpty) return want.key;
 
-  final target = want.bitrateFor(codec);
-  var best = candidates.first;
-  var bestDiff = (best.bitrateFor(codec) - target).abs();
-  for (final p in candidates.skip(1)) {
-    final diff = (p.bitrateFor(codec) - target).abs();
-    // 打平时取更低的那一档：少花流量比多花流量安全
-    if (diff < bestDiff ||
-        (diff == bestDiff && p.bitrateFor(codec) < best.bitrateFor(codec))) {
-      best = p;
-      bestDiff = diff;
-    }
-  }
-  return best.key;
+  final wantGroup = _groupByBitrateDesc(
+    playQualityPresets.where((p) => !p.copy && p.height == want.height),
+    codec,
+  );
+  final rank = wantGroup.indexWhere((p) => p.key == want.key);
+  if (rank < 0) return want.key;
+  return group[rank < group.length ? rank : group.length - 1].key;
 }
+
+/// 同一分辨率的档位按码率从高到低排（名次 0 = 该分辨率里码率最高的一档）。
+List<PlayQualityPreset> _groupByBitrateDesc(
+  Iterable<PlayQualityPreset> presets,
+  String codec,
+) =>
+    presets.toList()
+      ..sort((a, b) => b.bitrateFor(codec).compareTo(a.bitrateFor(codec)));

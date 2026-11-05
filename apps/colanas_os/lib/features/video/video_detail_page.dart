@@ -1,13 +1,12 @@
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/codec_support.dart';
 import '../../core/play_preferences.dart';
-import '../../core/play_quality.dart';
 import '../../core/play_quality_scope.dart';
 import '../../core/session.dart';
 import 'player_page.dart';
@@ -256,8 +255,10 @@ class VideoDetailPageState extends State<VideoDetailPage> {
     }
     if (!mounted) return;
 
-    // Web 端只能播 H.264（hls.js 对 AV1 / HEVC 的 fMP4 没有 CODECS 会黑屏）
-    var codec = kIsWeb ? 'h264' : PlayPreferences.codec;
+    // 编码按**当前端的真实解码能力**回落，不按平台一刀切：
+    // 浏览器只要 MSE 认这个 codec（Chrome 早就认 AV1 / HEVC），就该让它转这个编码。
+    var codec = PlayPreferences.codec;
+    if (!codecPlayable(codec)) codec = 'h264';
     // 档位按片源收敛：片源只有 720p 时，4K / 2K / 1080P 这些档根本转不出来，
     // 列在菜单里既选不动也误导（选 1080P 只是把 720p 放大再压一遍，纯浪费 CPU）。
     final sourceHeight = _item.height ?? 0;
@@ -296,7 +297,7 @@ class VideoDetailPageState extends State<VideoDetailPage> {
                   labelText: tr('video.transcode.codec'),
                 ),
                 items: [
-                  for (final c in playCodecs.where((c) => !kIsWeb || c.key == 'h264'))
+                  for (final c in playableCodecs())
                     DropdownMenuItem(value: c.key, child: Text(c.label)),
                 ],
                 onChanged: (v) => setLocal(() => codec = v ?? codec),
