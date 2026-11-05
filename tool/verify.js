@@ -219,7 +219,18 @@ function changedFiles() {
     if (line.trim()) out.add(line.trim());
   }
   for (const line of run(['ls-files', '--others', '--exclude-standard']).split('\n')) {
-    if (line.trim()) out.add(line.trim());
+    const p = line.trim().replace(/\\/g, '/');
+    if (!p) continue;
+    // 只把工程源码目录下的新文件算成改动。工作区里常有旁支草稿
+    // （AI 博客脚本、音频、临时稿），它们不会被任何门禁步骤消费，
+    // 却会因为落在 `tool/` 下命中 FULL_TRIGGERS，把 --fast 推成 80 步全量。
+    if (
+      !/^(src|contracts|apps|packages|sdk|test|sidecars|web|resources|electron|kernel|tool\/check|tool\/smoke|tool\/gen)/.test(
+        p,
+      )
+    )
+      continue;
+    out.add(p);
   }
   return [...out];
 }
@@ -242,6 +253,10 @@ function selectSteps(files) {
       full = true;
       break;
     }
+    // `test/` 下的单测由基础 `test` 步骤（`node --test test/*.test.ts`）全量执行，
+    // 新增 / 改一个单测不该让整条门禁退回全量。以前没这条规则，
+    // 加一个 test/video-xxx.test.ts 就会触发「未识别路径 → full」跑满 80 步。
+    if (/^test\//.test(p)) continue;
     const mod = /^src\/modules\/([^/]+)\//.exec(p);
     if (mod) {
       const rule = MODULE_RULES.find((r) => r.dir === mod[1]);
