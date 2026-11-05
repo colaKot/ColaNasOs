@@ -1567,6 +1567,10 @@ class ColanasClient:
         """刮削海报 / 剧照（本地文件读流，远端 URL 302 跳转）"""
         return self._request("GET", "/api/v1/video/art", params, "query")
 
+    def video_audio_tracks(self, **params):
+        """源文件的音轨清单（语言 / 音轨名 / 声道），供播放器音轨菜单使用"""
+        return self._request("GET", "/api/v1/video/audio-tracks", params, "query")
+
     def video_auto_subtitle(self, **params):
         """开关日本片自动字幕（打开时异步补一轮，不等下次扫描）"""
         return self._request("POST", "/api/v1/video/library/auto_subtitle", params, "body")

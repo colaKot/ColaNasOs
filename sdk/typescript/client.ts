@@ -1947,6 +1947,11 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/video/art', params, 'query');
   }
 
+  /** 源文件的音轨清单（语言 / 音轨名 / 声道），供播放器音轨菜单使用 */
+  async videoAudioTracks(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/video/audio-tracks', params, 'query');
+  }
+
   /** 开关日本片自动字幕（打开时异步补一轮，不等下次扫描） */
   async videoAutoSubtitle(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/video/library/auto_subtitle', params, 'body');

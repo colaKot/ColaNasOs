@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
-import { createLimiter, runFfmpeg } from '../media/ffmpeg-run';
+import { createLimiter, runFfmpeg, runFfprobe } from '../media/ffmpeg-run';
 
 export { resolvedFfmpeg } from '../media/ffmpeg-run';
 
@@ -129,6 +129,83 @@ export function parseProbeStderr(stderr: string): VideoMeta {
 export async function probeVideo(abs: string, timeoutMs = 10_000): Promise<VideoMeta> {
   const { stderr } = await runFfmpeg(['-hide_banner', '-i', abs], timeoutMs);
   return parseProbeStderr(stderr);
+}
+
+/** 源文件里的一条音轨。`index` 是**音频轨的序号**（0 起），与转码的 `-map 0:a:N` 对齐。 */
+export interface SourceAudioTrack {
+  index: number;
+  codec: string | null;
+  language: string | null;
+  title: string | null;
+  channels: number | null;
+  channelLayout: string | null;
+  isDefault: boolean;
+}
+
+/**
+ * `ffprobe -of json` → 音轨清单。纯函数，便于单测（不必起进程）。
+ *
+ * 为什么不用 `ffmpeg -i` 的 stderr：多轨时每条 Audio 后面的
+ * `    Metadata:` / `      title : …` 缩进块是顺序挂靠的，解析容易串行；
+ * ffprobe 的 JSON 里 language / title 直接挂在各自 stream 下。
+ */
+export function parseAudioTracks(json: string): SourceAudioTrack[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return [];
+  }
+  const streams = (parsed as { streams?: unknown }).streams;
+  if (!Array.isArray(streams)) return [];
+  const out: SourceAudioTrack[] = [];
+  for (const s of streams) {
+    const st = (s || {}) as Record<string, unknown>;
+    const tags = (st.tags || {}) as Record<string, unknown>;
+    const disp = (st.disposition || {}) as Record<string, unknown>;
+    const str = (v: unknown): string | null => {
+      const t = v == null ? '' : String(v).trim();
+      return t === '' ? null : t;
+    };
+    const num = (v: unknown): number | null => {
+      const n = Number(v);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    };
+    out.push({
+      // 不能用 st.index：那是全局流序号（音轨前面还有视频轨），
+      // 转码要的是「第几条音频」，就是数组下标。
+      index: out.length,
+      codec: str(st.codec_name),
+      language: str(tags.language),
+      title: str(tags.title),
+      channels: num(st.channels),
+      channelLayout: str(st.channel_layout),
+      isDefault: Number(disp.default) === 1,
+    });
+  }
+  return out;
+}
+
+/** 探源文件的所有音轨（播放器音轨菜单用）；探测失败返回空数组，不抛错。 */
+export async function probeAudioTracks(
+  abs: string,
+  timeoutMs = 10_000,
+): Promise<SourceAudioTrack[]> {
+  const { stdout } = await runFfprobe(
+    [
+      '-v',
+      'error',
+      '-select_streams',
+      'a',
+      '-show_entries',
+      'stream=codec_name,channels,channel_layout:stream_tags=language,title:stream_disposition=default',
+      '-of',
+      'json',
+      abs,
+    ],
+    timeoutMs,
+  );
+  return parseAudioTracks(stdout);
 }
 
 /** 海报生成并发上限：不抢占转码 / 扫描的 CPU */

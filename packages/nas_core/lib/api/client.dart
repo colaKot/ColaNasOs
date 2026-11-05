@@ -3148,6 +3148,16 @@ class ApiClient {
     return _asMap(_decode(res));
   }
 
+  /// 源文件的音轨清单（语言 / 音轨名 / 声道），供播放器音轨菜单使用
+  Future<VideoAudioTracksResponse> videoAudioTracks({required String id, String? token}) async {
+    final query = <String, String>{
+      'id': id,
+      if (token != null) 'token': token,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/video/audio-tracks', query), headers: await _headers());
+    return VideoAudioTracksResponse.fromJson(_asMap(_decode(res)));
+  }
+
   /// 生成带短期令牌的播放地址（可直接交给外部播放器）
   Future<VideoStreamUrlResponse> videoStreamUrl({required String id, String? token}) async {
     final query = <String, String>{

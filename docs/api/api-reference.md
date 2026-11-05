@@ -1,7 +1,7 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**425 个路径 / 454 个操作 / 23 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**426 个路径 / 455 个操作 / 23 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
@@ -27,7 +27,7 @@
 - **同步**（`sync`）· 17 个操作 · [跳转](#sync)
 - **系统监控**（`system`）· 20 个操作 · [跳转](#system)
 - **tasks**（`tasks`）· 5 个操作 · [跳转](#tasks)
-- **影视**（`video`）· 71 个操作 · [跳转](#video)
+- **影视**（`video`）· 72 个操作 · [跳转](#video)
 
 ## accounts
 
@@ -2733,6 +2733,13 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 - 参数：`id` · 查询 · string · **必填**<br>`kind` · 查询 · enum(poster, fanart) · 可选<br>`size` · 查询 · integer · 可选
 - 响应：200 -
+
+#### `GET /api/v1/video/audio-tracks`
+
+源文件的音轨清单（语言 / 音轨名 / 声道），供播放器音轨菜单使用 · `videoAudioTracks`
+
+- 参数：`id` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选
+- 响应：200 `VideoAudioTracksResponse` · 错误 404
 
 #### `GET /api/v1/video/browse`
 

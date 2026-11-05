@@ -12130,6 +12130,62 @@
           }
         }
       },
+      "VideoAudioTrack": {
+        "type": "object",
+        "required": [
+          "index",
+          "codec",
+          "language",
+          "title",
+          "channels",
+          "channelLayout",
+          "isDefault"
+        ],
+        "properties": {
+          "index": {
+            "description": "音频轨序号（0 起），与原文件 `-map 0:a:N` 的 N 一致，可直接当转码 audioIndex",
+            "type": "integer"
+          },
+          "codec": {
+            "type": "string",
+            "nullable": true
+          },
+          "language": {
+            "type": "string",
+            "nullable": true
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "channels": {
+            "type": "integer",
+            "nullable": true
+          },
+          "channelLayout": {
+            "type": "string",
+            "nullable": true
+          },
+          "isDefault": {
+            "description": "容器标注的默认音轨",
+            "type": "boolean"
+          }
+        }
+      },
+      "VideoAudioTracksResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VideoAudioTrack"
+            }
+          }
+        }
+      },
       "VideoSeriesItem": {
         "type": "object",
         "required": [
@@ -40460,6 +40516,62 @@
         "responses": {
           "200": {
             "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/api/v1/video/audio-tracks": {
+      "get": {
+        "operationId": "videoAudioTracks",
+        "summary": "源文件的音轨清单（语言 / 音轨名 / 声道），供播放器音轨菜单使用",
+        "tags": [
+          "video"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "token",
+            "required": false,
+            "description": "短期令牌（仅外部播放器使用，见 /video/stream-url）"
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoAudioTracksResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoErrorResponse"
+                }
+              }
+            }
           }
         }
       }

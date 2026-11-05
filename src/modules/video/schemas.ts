@@ -449,6 +449,29 @@ export const StreamUrlResponse = Type.Object(
   { $id: 'VideoStreamUrlResponse' },
 );
 
+/** 源文件里的一条音轨：播放器音轨菜单要显示「1 · 中文 · TrueHD 7.1」 */
+export const AudioTrack = Type.Object(
+  {
+    index: Type.Integer({
+      description: '音频轨序号（0 起），与原文件 `-map 0:a:N` 的 N 一致，可直接当转码 audioIndex',
+    }),
+    codec: NullableString,
+    // 说明卡在字段上没用（NullableString 是现成的 schema，不是工厂），注释留在源码里：
+    // language 是容器标的 ISO 639-2（chi / eng / jpn）；title 是音轨名（「国语」）
+    language: NullableString,
+    title: NullableString,
+    channels: NullableInteger,
+    channelLayout: NullableString,
+    isDefault: Type.Boolean({ description: '容器标注的默认音轨' }),
+  },
+  { $id: 'VideoAudioTrack' },
+);
+
+export const AudioTrackListResponse = Type.Object(
+  { items: Type.Array(Type.Ref(AudioTrack)) },
+  { $id: 'VideoAudioTracksResponse' },
+);
+
 export const StatsResponse = Type.Object(
   {
     libraries: Type.Integer(),
@@ -1210,6 +1233,8 @@ export const VIDEO_SCHEMAS = [
   IdQuery,
   StreamUrlResponse,
   StatsResponse,
+  AudioTrack,
+  AudioTrackListResponse,
   SeriesItem,
   SeriesListQuery,
   SeriesListResponse,

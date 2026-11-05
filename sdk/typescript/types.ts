@@ -3182,6 +3182,20 @@ export type VideoStatsResponse = {
   "durationMs": number;
 };
 
+export type VideoAudioTrack = {
+  "index": number;
+  "codec": string;
+  "language": string;
+  "title": string;
+  "channels": number;
+  "channelLayout": string;
+  "isDefault": boolean;
+};
+
+export type VideoAudioTracksResponse = {
+  "items": VideoAudioTrack[];
+};
+
 export type VideoSeriesItem = {
   "name": string;
   "seasons": number;

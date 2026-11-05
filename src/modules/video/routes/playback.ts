@@ -4,7 +4,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { secured } from '../../../../kernel/route';
 import { filesRoot, resolveAnyPath } from '../../files/fs-root';
-import { writePoster } from '../ffmpeg';
+import { probeAudioTracks, writePoster } from '../ffmpeg';
 import { isOfflinePath, offlineSmbPrefixes } from '../sources';
 import { Err } from '../../../../kernel/errors';
 import { TAG } from '../util';
@@ -167,6 +167,36 @@ export async function registerVideoPlayback(app: FastifyInstance, k: KernelApi, 
 
         reply.type('image/jpeg').header('cache-control', 'public, max-age=86400');
         return reply.send(fs.createReadStream(out));
+      },
+    );
+
+    app.get(
+      '/api/v1/video/audio-tracks',
+      secured('video:read', {
+        schema: {
+          operationId: 'videoAudioTracks',
+          tags: TAG,
+          summary: '源文件的音轨清单（语言 / 音轨名 / 声道），供播放器音轨菜单使用',
+          querystring: h.ref('VideoIdQuery'),
+          response: { 200: h.ref('VideoAudioTracksResponse'), 404: h.ref('VideoErrorResponse') },
+        },
+      }),
+      async (req, reply) => {
+        const q = (req.query || {}) as { id?: string };
+        const row = q.id ? await h.loadAnyItem(q.id) : null;
+        if (!row) return reply.code(404).send({ error: Err.notFound, message: 'item not found' });
+        if (isOfflinePath(row.rel_path, await offlineSmbPrefixes(k.db))) {
+          return reply.code(404).send({ error: Err.notFound, message: 'source offline' });
+        }
+        let abs: string;
+        try {
+          abs = resolveAnyPath(filesRoot(), row.rel_path);
+        } catch {
+          return reply.code(404).send({ error: Err.notFound, message: 'source missing' });
+        }
+        // ffprobe 只读文件头，不解码；3 秒读不出来就当没探到，别让菜单等
+        const items = await probeAudioTracks(abs, 3000);
+        return { items };
       },
     );
 

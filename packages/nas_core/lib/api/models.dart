@@ -10749,6 +10749,62 @@ class VideoStatsResponse {
       };
 }
 
+class VideoAudioTrack {
+  final int index;
+  final String? codec;
+  final String? language;
+  final String? title;
+  final int? channels;
+  final String? channelLayout;
+  final bool isDefault;
+
+  const VideoAudioTrack({
+    required this.index,
+    required this.codec,
+    required this.language,
+    required this.title,
+    required this.channels,
+    required this.channelLayout,
+    required this.isDefault,
+  });
+
+  factory VideoAudioTrack.fromJson(Map<String, dynamic> json) => VideoAudioTrack(
+        index: json['index'] as int,
+        codec: json['codec'] as String?,
+        language: json['language'] as String?,
+        title: json['title'] as String?,
+        channels: json['channels'] as int?,
+        channelLayout: json['channelLayout'] as String?,
+        isDefault: json['isDefault'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'index': index,
+        'codec': codec,
+        'language': language,
+        'title': title,
+        'channels': channels,
+        'channelLayout': channelLayout,
+        'isDefault': isDefault,
+      };
+}
+
+class VideoAudioTracksResponse {
+  final List<VideoAudioTrack> items;
+
+  const VideoAudioTracksResponse({
+    required this.items,
+  });
+
+  factory VideoAudioTracksResponse.fromJson(Map<String, dynamic> json) => VideoAudioTracksResponse(
+        items: (json['items'] as List<dynamic>).map((e) => VideoAudioTrack.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
 class VideoSeriesItem {
   final String name;
   final int seasons;

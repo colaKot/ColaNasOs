@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/audio_track_label.dart';
 import '../../core/codec_support.dart';
 import '../../core/play_preferences.dart';
 import '../../core/play_quality.dart';
@@ -106,6 +107,17 @@ class _PlayerPageState extends State<PlayerPage> {
       ? PlayPreferences.codec
       : 'h264';
   int _audioIndex = 0;
+
+  /// 源文件的音轨清单（语言 / 音轨名 / 声道），菜单里显示成「1 · 中文 · TrueHD 7.1」。
+  /// 空表示还没探到或探失败，此时退回 media_kit 的轨道列表。
+  List<VideoAudioTrack> _audioTracks = const [];
+
+  /// 音量浮窗的锚点：浮窗要贴在音量按钮正上方弹出来。
+  final GlobalKey _volumeAnchor = GlobalKey();
+
+  /// 音量图标跟着滑块实时变（静音 / 低音量 / 正常），但不能用 setState ——
+  /// 拖滑块是每帧一次，整个播放页重排会明显掉帧。
+  final ValueNotifier<double> _volumeVN = ValueNotifier<double>(100);
   double _rate = 1.0;
   double _volume = 100.0;
 
@@ -225,8 +237,26 @@ class _PlayerPageState extends State<PlayerPage> {
         _openUrl(_url);
       }
       _loadSubtitles();
+      _loadAudioTracks();
       _resetHideTimer();
     });
+  }
+
+  /// 拉源文件的音轨清单。
+  ///
+  /// 转码流的 `_player.state.tracks.audio` 永远只有一条（就是转出来的那条），
+  /// 菜单里拿它列音轨，用户看到的只是「音轨 1 / 2 / 3」，分不出哪条是国语、
+  /// 哪条是英语。语言 / 音轨名只有源文件的容器里有，所以单独问一次服务端。
+  Future<void> _loadAudioTracks() async {
+    final id = widget.itemId;
+    if (id == null || id.isEmpty) return;
+    try {
+      final res = await ApiSession.instance.client.videoAudioTracks(id: id);
+      if (!mounted || res.items.isEmpty) return;
+      setState(() => _audioTracks = res.items);
+    } catch (_) {
+      // 探不到就退回「音轨 N」的旧样式，不影响播放
+    }
   }
 
   void _loadUiPrefs() {
@@ -235,6 +265,7 @@ class _PlayerPageState extends State<PlayerPage> {
     if (rate != null && rate > 0) _rate = rate;
     final vol = double.tryParse(store.getString('player.volume') ?? '');
     if (vol != null && vol >= 0 && vol <= 100) _volume = vol;
+    _volumeVN.value = _volume;
     // `player.fitCover` 不再读：铺满按钮已去掉，老用户存过的 cover 值不该继续生效，
     // 否则画面永远是裁切过的，而且界面上已经没有办法改回来。
   }
@@ -248,6 +279,7 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   void dispose() {
     _hideTimer?.cancel();
+    _volumeVN.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _player.dispose();
     super.dispose();
@@ -565,6 +597,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   Future<void> _setVolume(double v) async {
     _volume = v;
+    _volumeVN.value = v;
     await _player.setVolume(v);
     await _saveUiPrefs();
     if (mounted) setState(() {});
@@ -820,41 +853,68 @@ class _PlayerPageState extends State<PlayerPage> {
         ],
       );
 
+  /// 一条音轨的菜单文案：`1 · 上海领声国语 · AC3 5.1`。
+  /// 规则和语言表见 `core/audio_track_label.dart`（纯函数，有单测）。
+  String _audioTrackLabel(VideoAudioTrack t, int ordinal) => audioTrackLabel(
+        ordinal: ordinal,
+        language: t.language,
+        title: t.title,
+        codec: t.codec,
+        channelLayout: t.channelLayout,
+        channels: t.channels,
+      );
+
   Widget _audioButton() {
     final tracks = _player.state.tracks.audio;
+    // 源文件音轨优先：转码流的 tracks.audio 只有一条，看不出内容
+    final source = _audioTracks;
     return PopupMenuButton<int>(
       tooltip: tr('player.audioTrack'),
       color: const Color(0xFF222222),
       icon: const Icon(Icons.audiotrack_outlined, color: Colors.white, size: 20),
       onSelected: (i) async {
-        if (i >= 0 && i < tracks.length) {
-          await _player.setAudioTrack(tracks[i]);
-        } else if (widget.itemId != null) {
-          // 转码流只有一条音轨：切源里的第 N 条需要重建会话
-          _audioIndex = i - tracks.length;
-          final u = await _ensureTranscode(_preset, _codec);
-          await _openUrl(u, seekTo: _player.state.position);
+        if (source.isEmpty) {
+          if (i >= 0 && i < tracks.length) {
+            await _player.setAudioTrack(tracks[i]);
+          }
+          _poke();
+          return;
         }
+        if (i == _audioIndex) {
+          _poke();
+          return;
+        }
+        // 转码流只有一条音轨：切源里的第 N 条要重建会话，并从当前位置接着播
+        final pos = _player.state.position;
+        _audioIndex = i;
+        final u = await _ensureTranscode(_preset, _codec);
+        await _openUrl(u, seekTo: pos);
         _poke();
       },
       itemBuilder: (_) => [
-        for (var i = 0; i < tracks.length; i++)
-          PopupMenuItem<int>(
-            value: i,
-            child: Text(
-              tracks[i].title ?? tracks[i].language ?? '${i + 1}',
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        if (_isTranscode && widget.itemId != null) ...[
-          const PopupMenuDivider(),
-          for (var i = 1; i <= 3; i++)
+        if (source.isNotEmpty)
+          for (final t in source)
             PopupMenuItem<int>(
-              value: tracks.length + i,
-              child: Text('${tr('player.audioTrack')} ${i + 1}'),
+              value: t.index,
+              child: _checked(_audioTrackLabel(t, t.index), _audioIndex == t.index),
+            )
+        else ...[
+          for (var i = 0; i < tracks.length; i++)
+            PopupMenuItem<int>(
+              value: i,
+              child: Text(
+                tracks[i].title ?? tracks[i].language ?? '${i + 1}',
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
+          if (_isTranscode && widget.itemId != null)
+            for (var i = 1; i <= 3; i++)
+              PopupMenuItem<int>(
+                value: tracks.length + i,
+                child: Text('${tr('player.audioTrack')} ${i + 1}'),
+              ),
         ],
-        if (tracks.isEmpty)
+        if (source.isEmpty && tracks.isEmpty)
           PopupMenuItem<int>(
             enabled: false,
             child: Text(tr('player.noAudioTracks')),
@@ -863,48 +923,54 @@ class _PlayerPageState extends State<PlayerPage> {
     );
   }
 
+  /// 音量：**浮在音量按钮正上方的小窗**，竖着的滑块，往上推是满音量。
+  ///
+  /// 以前弹的是 AlertDialog：一个改音量的动作占用整块屏幕、还要点「返回」关掉，
+  /// 播放时很打断。现在跟音轨 / 倍速一样是浮层，点外面就收。
   void _showVolume() {
-    showDialog<void>(
+    final anchor = _volumeAnchor.currentContext?.findRenderObject() as RenderBox?;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (anchor == null || overlay == null) return;
+    const w = 76.0;
+    const h = 224.0;
+    final origin = anchor.localToGlobal(Offset.zero, ancestor: overlay);
+    var left = origin.dx + anchor.size.width / 2 - w / 2;
+    var top = origin.dy - h - 10;
+    // 贴边时别把浮窗推出屏幕
+    if (left < 8) left = 8;
+    if (left + w > overlay.size.width - 8) left = overlay.size.width - w - 8;
+    if (top < 8) top = 8;
+    showMenu<void>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          backgroundColor: const Color(0xFF222222),
-          title: Text(
-            tr('player.volume'),
-            style: const TextStyle(color: Colors.white),
-          ),
-          content: SizedBox(
-            width: 320,
-            child: Row(
-              children: [
-                const Icon(Icons.volume_down, color: Colors.white70),
-                Expanded(
-                  child: Slider(
-                    value: _volume,
-                    min: 0,
-                    max: 100,
-                    onChanged: (v) {
-                      setLocal(() => _volume = v);
-                      _player.setVolume(v);
-                    },
-                    onChangeEnd: (_) => _saveUiPrefs(),
-                  ),
-                ),
-                Text(
-                  '${_volume.round()}%',
-                  style: const TextStyle(color: Colors.white70),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(tr('player.back')),
-            ),
-          ],
-        ),
+      color: const Color(0xFF1E1E1E),
+      elevation: 12,
+      position: RelativeRect.fromLTRB(
+        left,
+        top,
+        overlay.size.width - left - w,
+        overlay.size.height - top - h,
       ),
+      items: [
+        PopupMenuItem<void>(
+          // 不可选中：点滑块时不希望菜单先关掉
+          enabled: false,
+          padding: EdgeInsets.zero,
+          height: h,
+          child: SizedBox(
+            width: w,
+            height: h,
+            child: _VolumePanel(
+              value: _volume,
+              onChanged: (v) {
+                _volume = v;
+                _volumeVN.value = v;
+                _player.setVolume(v);
+              },
+              onCommit: _saveUiPrefs,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1166,7 +1232,22 @@ class _PlayerPageState extends State<PlayerPage> {
       _qualityButton(),
       _subtitleButton(),
       _audioButton(),
-      _btn(Icons.volume_up, tr('player.volume'), _showVolume),
+      // 包一层 KeyedSubtree：音量浮窗要贴着这个按钮弹出来（见 _showVolume）
+      KeyedSubtree(
+        key: _volumeAnchor,
+        child: ValueListenableBuilder<double>(
+          valueListenable: _volumeVN,
+          builder: (_, vol, _) => _btn(
+            vol <= 0
+                ? Icons.volume_off
+                : vol < 50
+                    ? Icons.volume_down
+                    : Icons.volume_up,
+            tr('player.volume'),
+            _showVolume,
+          ),
+        ),
+      ),
       _btn(Icons.playlist_play, tr('player.playlist'), _showPlaylist),
       _btn(Icons.info_outline, tr('player.info'), _showInfo),
       _btn(Icons.settings_outlined, tr('player.settings'), _showSettings),
@@ -1698,6 +1779,85 @@ class _PlayerPageState extends State<PlayerPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 音量浮窗的内容：竖着的滑块 + 百分比 + 静音开关。
+///
+/// 竖向靠 `RotatedBox(quarterTurns: 3)` 把横向 Slider 转 270°，这样
+/// 「往上 = 变大」是自然的；反过来用 `quarterTurns: 1` 会变成往下拖才变大。
+class _VolumePanel extends StatefulWidget {
+  const _VolumePanel({
+    required this.value,
+    required this.onChanged,
+    required this.onCommit,
+  });
+
+  final double value;
+  final ValueChanged<double> onChanged;
+  final VoidCallback onCommit;
+
+  @override
+  State<_VolumePanel> createState() => _VolumePanelState();
+}
+
+class _VolumePanelState extends State<_VolumePanel> {
+  late double _v = widget.value;
+  late double _lastNonZero = widget.value > 0 ? widget.value : 100;
+
+  void _set(double v) {
+    final clamped = v.clamp(0.0, 100.0).toDouble();
+    setState(() => _v = clamped);
+    if (clamped > 0) _lastNonZero = clamped;
+    widget.onChanged(clamped);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '${_v.round()}%',
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+        ),
+        const SizedBox(height: 4),
+        Expanded(
+          child: RotatedBox(
+            quarterTurns: 3,
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 4,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+              ),
+              child: Slider(
+                value: _v,
+                min: 0,
+                max: 100,
+                onChanged: _set,
+                onChangeEnd: (_) => widget.onCommit(),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        IconButton(
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          icon: Icon(
+            _v <= 0 ? Icons.volume_off : Icons.volume_up,
+            size: 18,
+            color: Colors.white70,
+          ),
+          // 点一下在「静音 / 上次的音量」之间切换
+          onPressed: () {
+            _set(_v > 0 ? 0 : _lastNonZero);
+            widget.onCommit();
+          },
+        ),
+      ],
     );
   }
 }
