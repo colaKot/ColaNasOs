@@ -12,6 +12,7 @@ import '../../core/codec_support.dart';
 import '../../core/play_preferences.dart';
 import '../../core/play_quality.dart';
 import '../../core/play_quality_scope.dart';
+import '../../core/play_timeline.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import '../../core/video_subtitle_prefs.dart';
@@ -591,10 +592,10 @@ class _PlayerPageState extends State<PlayerPage> {
 
   Future<void> _seekBy(int seconds) async {
     final p = _player.state.position;
-    final d = _timelineDuration(_player.state.duration);
+    final limit = _seekLimit(_player.state.duration);
     var target = p + Duration(seconds: seconds);
     if (target < Duration.zero) target = Duration.zero;
-    if (d > Duration.zero && target > d) target = d;
+    if (limit > Duration.zero && target > limit) target = limit;
     await _player.seek(target);
     _poke();
   }
@@ -653,9 +654,21 @@ class _PlayerPageState extends State<PlayerPage> {
     return ms > 0 ? Duration(milliseconds: ms) : Duration.zero;
   }
 
-  /// 画进度条用的总长：播放器报的有限值优先，否则回落到片源时长。
+  /// 画进度条用的总长：**片源时长优先**（恒定），播放器报的值只兜底。
+  ///
+  /// 以前反着来（"播放器报的有限值优先"），转码播放就会抽搐：EVENT 播放列表的
+  /// `duration` 只等于已转出的那一段，hls.js 刷新时又会短暂归零 → 进度条在
+  /// 「已转出长度」和「整片长度」之间反复横跳（1:40 ↔ 1:57:45）。规则见
+  /// `core/play_timeline.dart`。
   Duration _timelineDuration(Duration raw) =>
-      raw > Duration.zero ? raw : _sourceDuration;
+      timelineDuration(reported: raw, source: _sourceDuration);
+
+  /// 能跳到哪儿：转码流只能跳到已经转出来的位置，否则 hls.js 拿不到分片干转圈。
+  Duration _seekLimit(Duration raw) => seekLimit(
+        reported: raw,
+        source: _sourceDuration,
+        isTranscode: _isTranscode,
+      );
 
   // -------------------------------------------------------------------- 控件
 
@@ -1220,10 +1233,18 @@ class _PlayerPageState extends State<PlayerPage> {
                       value: max > 0
                           ? (p.inMilliseconds / max).clamp(0.0, 1.0)
                           : 0.0,
+                      // 拖到还没转出来的位置就停在转码进度上，别让 hls.js 干等分片
                       onChanged: max > 0
-                          ? (v) => _player.seek(
-                                Duration(milliseconds: (max * v).round()),
-                              )
+                          ? (v) {
+                              final limit =
+                                  _seekLimit(dur.data ?? Duration.zero);
+                              var target =
+                                  Duration(milliseconds: (max * v).round());
+                              if (limit > Duration.zero && target > limit) {
+                                target = limit;
+                              }
+                              _player.seek(target);
+                            }
                           : null,
                     ),
                   ),
