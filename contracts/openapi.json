@@ -13,6 +13,725 @@
       }
     },
     "schemas": {
+      "BlogCounts": {
+        "type": "object",
+        "required": [
+          "domesticGeneral",
+          "worldGeneral",
+          "domesticTech",
+          "worldTech",
+          "domesticAi",
+          "worldAi",
+          "domesticFinance",
+          "worldFinance"
+        ],
+        "properties": {
+          "domesticGeneral": {
+            "minimum": 0,
+            "maximum": 10,
+            "description": "国内综合",
+            "type": "integer"
+          },
+          "worldGeneral": {
+            "minimum": 0,
+            "maximum": 10,
+            "description": "国际综合",
+            "type": "integer"
+          },
+          "domesticTech": {
+            "minimum": 0,
+            "maximum": 10,
+            "description": "国内科技",
+            "type": "integer"
+          },
+          "worldTech": {
+            "minimum": 0,
+            "maximum": 10,
+            "description": "国外科技",
+            "type": "integer"
+          },
+          "domesticAi": {
+            "minimum": 0,
+            "maximum": 10,
+            "description": "国内 AI",
+            "type": "integer"
+          },
+          "worldAi": {
+            "minimum": 0,
+            "maximum": 10,
+            "description": "国际 AI",
+            "type": "integer"
+          },
+          "domesticFinance": {
+            "minimum": 0,
+            "maximum": 10,
+            "description": "国内财经",
+            "type": "integer"
+          },
+          "worldFinance": {
+            "minimum": 0,
+            "maximum": 10,
+            "description": "国外财经",
+            "type": "integer"
+          }
+        }
+      },
+      "BlogSettingsResponse": {
+        "type": "object",
+        "required": [
+          "voice",
+          "speed",
+          "counts",
+          "planHour",
+          "planMinute",
+          "planEnabled",
+          "apiProvider",
+          "apiKey",
+          "apiBase",
+          "apiModel",
+          "llmEnabled",
+          "webSearch",
+          "llmReady",
+          "secondsPerItem",
+          "lastPlanDate",
+          "ttsAvailable",
+          "ttsReason"
+        ],
+        "properties": {
+          "voice": {
+            "description": "参考音色 id（内置 default/warm/deep 或用户上传）",
+            "type": "string"
+          },
+          "speed": {
+            "minimum": 0.5,
+            "maximum": 2,
+            "description": "朗读倍速，1 = 原速",
+            "type": "number"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/BlogCounts"
+          },
+          "planHour": {
+            "minimum": 0,
+            "maximum": 23,
+            "type": "integer"
+          },
+          "planMinute": {
+            "minimum": 0,
+            "maximum": 59,
+            "type": "integer"
+          },
+          "planEnabled": {
+            "description": "是否启用每日定时生成",
+            "type": "boolean"
+          },
+          "apiProvider": {
+            "description": "deepseek / openai / 自定义（仅展示）",
+            "type": "string"
+          },
+          "apiKey": {
+            "description": "明文（用户要求可复制、可查看）",
+            "type": "string"
+          },
+          "apiBase": {
+            "description": "OpenAI 兼容 base，如 https://api.deepseek.com",
+            "type": "string"
+          },
+          "apiModel": {
+            "type": "string"
+          },
+          "llmEnabled": {
+            "description": "大模型改写开关（与系统设置共用同一份配置）",
+            "type": "boolean"
+          },
+          "webSearch": {
+            "description": "联网搜索（阿里百炼搜索插件）",
+            "type": "boolean"
+          },
+          "llmReady": {
+            "description": "是否已配好 Key（没配就只用素材拼接）",
+            "type": "boolean"
+          },
+          "secondsPerItem": {
+            "type": "integer"
+          },
+          "lastPlanDate": {
+            "type": "string",
+            "nullable": true
+          },
+          "ttsAvailable": {
+            "description": "本机语音合成是否可用（二进制 + 模型齐备）",
+            "type": "boolean"
+          },
+          "ttsReason": {
+            "description": "不可用时的原因（缺什么、该跑哪条命令）",
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "BlogSettingsBody": {
+        "type": "object",
+        "properties": {
+          "voice": {
+            "minLength": 1,
+            "maxLength": 40,
+            "type": "string"
+          },
+          "speed": {
+            "minimum": 0.5,
+            "maximum": 2,
+            "type": "number"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/BlogCounts"
+          },
+          "planHour": {
+            "minimum": 0,
+            "maximum": 23,
+            "type": "integer"
+          },
+          "planMinute": {
+            "minimum": 0,
+            "maximum": 59,
+            "type": "integer"
+          },
+          "planEnabled": {
+            "type": "boolean"
+          },
+          "apiProvider": {
+            "maxLength": 40,
+            "type": "string"
+          },
+          "apiKey": {
+            "maxLength": 400,
+            "type": "string"
+          },
+          "apiBase": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "apiModel": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "llmEnabled": {
+            "type": "boolean"
+          },
+          "webSearch": {
+            "type": "boolean"
+          }
+        }
+      },
+      "BlogVoiceItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "gender",
+          "builtin",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "gender": {
+            "description": "female / male / unknown",
+            "type": "string"
+          },
+          "builtin": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      },
+      "BlogVoiceListResponse": {
+        "type": "object",
+        "required": [
+          "items",
+          "defaultVoice"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlogVoiceItem"
+            }
+          },
+          "defaultVoice": {
+            "type": "string"
+          }
+        }
+      },
+      "BlogVoiceUploadBody": {
+        "type": "object",
+        "required": [
+          "name",
+          "data"
+        ],
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "音色名（做文件名）",
+            "type": "string"
+          },
+          "data": {
+            "description": "base64（可带 data:audio/wav;base64, 前缀）",
+            "type": "string"
+          }
+        }
+      },
+      "BlogVoiceUploadResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "voice"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "voice": {
+            "$ref": "#/components/schemas/BlogVoiceItem"
+          }
+        }
+      },
+      "BlogVoiceRemoveBody": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "BlogEpisodeItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "voice",
+          "speed",
+          "durationSec",
+          "sizeBytes",
+          "itemCount",
+          "status",
+          "error",
+          "parts",
+          "doneParts",
+          "sections",
+          "headlines",
+          "createdAt",
+          "finishedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "voice": {
+            "type": "string"
+          },
+          "speed": {
+            "type": "number"
+          },
+          "durationSec": {
+            "type": "number"
+          },
+          "sizeBytes": {
+            "type": "integer"
+          },
+          "itemCount": {
+            "type": "integer"
+          },
+          "status": {
+            "description": "pending / running / done / failed",
+            "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "parts": {
+            "description": "合成分段总数",
+            "type": "integer"
+          },
+          "doneParts": {
+            "description": "已完成分段（进度）",
+            "type": "integer"
+          },
+          "sections": {
+            "description": "本期涉及的新闻类别标签",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "headlines": {
+            "description": "本期新闻标题（前若干条）",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "finishedAt": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "BlogEpisodeListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlogEpisodeItem"
+            }
+          }
+        }
+      },
+      "BlogQuery": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "minimum": 1,
+            "maximum": 200,
+            "type": "integer"
+          }
+        }
+      },
+      "BlogGenerateBody": {
+        "type": "object",
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/BlogCounts"
+          },
+          "voice": {
+            "maxLength": 40,
+            "type": "string"
+          },
+          "speed": {
+            "minimum": 0.5,
+            "maximum": 2,
+            "type": "number"
+          }
+        }
+      },
+      "BlogGenerateResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "BlogResynthBody": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "maxLength": 64,
+            "type": "string"
+          }
+        }
+      },
+      "BlogResynthResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "BlogStatusResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "parts",
+          "doneParts",
+          "error",
+          "message"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "parts": {
+            "type": "integer"
+          },
+          "doneParts": {
+            "type": "integer"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "BlogPreviewBody": {
+        "type": "object",
+        "properties": {
+          "voice": {
+            "maxLength": 40,
+            "type": "string"
+          }
+        }
+      },
+      "BlogWarmupResponse": {
+        "type": "object",
+        "required": [
+          "ready",
+          "available"
+        ],
+        "properties": {
+          "ready": {
+            "type": "boolean"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "BlogTtsModelResponse": {
+        "type": "object",
+        "required": [
+          "installed",
+          "downloading",
+          "percent",
+          "phase",
+          "task",
+          "error",
+          "binReady",
+          "modelReady",
+          "modelDir"
+        ],
+        "properties": {
+          "installed": {
+            "type": "boolean"
+          },
+          "downloading": {
+            "type": "boolean"
+          },
+          "percent": {
+            "type": "number"
+          },
+          "phase": {
+            "description": "当前阶段的人话描述（排障用，UI 不直接展示）",
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "binReady": {
+            "type": "boolean"
+          },
+          "modelReady": {
+            "type": "boolean"
+          },
+          "modelDir": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "BlogPreviewResponse": {
+        "type": "object",
+        "required": [
+          "url",
+          "expiresInSec",
+          "cached"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "expiresInSec": {
+            "type": "integer"
+          },
+          "cached": {
+            "type": "boolean"
+          }
+        }
+      },
+      "BlogAudioUrlResponse": {
+        "type": "object",
+        "required": [
+          "url",
+          "expiresInSec"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "expiresInSec": {
+            "type": "integer"
+          }
+        }
+      },
+      "BlogIdQuery": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "BlogVoiceQuery": {
+        "type": "object",
+        "required": [
+          "voice"
+        ],
+        "properties": {
+          "voice": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "BlogRemoveBody": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "BlogOkResponse": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
+      "BlogNewsItem": {
+        "type": "object",
+        "required": [
+          "category",
+          "title",
+          "summary",
+          "link",
+          "source",
+          "published"
+        ],
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "link": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "published": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "BlogNewsResponse": {
+        "type": "object",
+        "required": [
+          "items",
+          "failed"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlogNewsItem"
+            }
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "BlogErrorResponse": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
       "BookLibraryItem": {
         "type": "object",
         "required": [
@@ -7159,6 +7878,198 @@
           }
         }
       },
+      "PhotoModelApi": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "provider",
+          "baseUrl",
+          "model",
+          "webSearch",
+          "hasKey",
+          "keyTail"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "baseUrl": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "webSearch": {
+            "type": "boolean"
+          },
+          "hasKey": {
+            "type": "boolean"
+          },
+          "keyTail": {
+            "description": "已保存密钥的尾 4 位",
+            "type": "string"
+          }
+        }
+      },
+      "PhotoModelApiBody": {
+        "type": "object",
+        "properties": {
+          "baseUrl": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "apiKey": {
+            "maxLength": 400,
+            "description": "留空 = 保留已保存的密钥",
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PhotoModelApiTestBody": {
+        "type": "object",
+        "properties": {
+          "baseUrl": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "apiKey": {
+            "maxLength": 400,
+            "description": "留空 = 用已保存的密钥",
+            "type": "string"
+          }
+        }
+      },
+      "PhotoModelApiTestResult": {
+        "type": "object",
+        "required": [
+          "ok",
+          "latencyMs",
+          "models",
+          "modelExists",
+          "message"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "latencyMs": {
+            "type": "integer"
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "modelExists": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "PhotoAskBody": {
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "properties": {
+          "question": {
+            "minLength": 1,
+            "maxLength": 400,
+            "type": "string"
+          }
+        }
+      },
+      "PhotoAskResponse": {
+        "type": "object",
+        "required": [
+          "mode",
+          "answer",
+          "reason"
+        ],
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "llm"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "rule"
+                ]
+              }
+            ]
+          },
+          "answer": {
+            "type": "string"
+          },
+          "reason": {
+            "description": "no_model / 模型报错原因；空 = 正常",
+            "type": "string"
+          }
+        }
+      },
+      "PhotoSearchHotBody": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "minimum": 1,
+            "maximum": 20,
+            "default": 6,
+            "type": "integer"
+          }
+        }
+      },
+      "PhotoSearchHotResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "kind",
+                "value",
+                "count"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
       "PhotoAiScanBody": {
         "type": "object",
         "properties": {
@@ -9985,6 +10896,71 @@
           }
         }
       },
+      "SystemLlm": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "provider",
+          "baseUrl",
+          "model",
+          "apiKey",
+          "webSearch"
+        ],
+        "properties": {
+          "enabled": {
+            "description": "关闭后只用素材拼接，不调模型",
+            "type": "boolean"
+          },
+          "provider": {
+            "maxLength": 40,
+            "type": "string"
+          },
+          "baseUrl": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "apiKey": {
+            "maxLength": 400,
+            "description": "明文（用户要求可查看、可复制）",
+            "type": "string"
+          },
+          "webSearch": {
+            "description": "联网搜索（阿里百炼的搜索插件）",
+            "type": "boolean"
+          }
+        }
+      },
+      "SystemLlmPatch": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "provider": {
+            "maxLength": 40,
+            "type": "string"
+          },
+          "baseUrl": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "apiKey": {
+            "maxLength": 400,
+            "type": "string"
+          },
+          "webSearch": {
+            "type": "boolean"
+          }
+        }
+      },
       "SystemSettings": {
         "type": "object",
         "required": [
@@ -9995,7 +10971,8 @@
           "hostname",
           "welcome",
           "proxy",
-          "javFallback"
+          "javFallback",
+          "llm"
         ],
         "properties": {
           "httpPort": {
@@ -10030,6 +11007,9 @@
           },
           "javFallback": {
             "type": "boolean"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/SystemLlm"
           }
         }
       },
@@ -10068,6 +11048,9 @@
           },
           "javFallback": {
             "type": "boolean"
+          },
+          "llm": {
+            "$ref": "#/components/schemas/SystemLlmPatch"
           }
         }
       },
@@ -13567,6 +14550,11 @@
             "default": 3,
             "description": "提前转码时长（分钟），不传 = 3 分钟；0 = 整片一次转完",
             "type": "integer"
+          },
+          "startMs": {
+            "minimum": 0,
+            "description": "从片源第 startMs 毫秒起转（0 = 片头），与 leadMinutes 正交",
+            "type": "integer"
           }
         }
       },
@@ -13582,6 +14570,9 @@
           },
           "url": {
             "type": "string"
+          },
+          "startedMs": {
+            "type": "integer"
           }
         }
       },
@@ -13668,6 +14659,9 @@
             "type": "integer"
           },
           "leadMs": {
+            "type": "integer"
+          },
+          "startedMs": {
             "type": "integer"
           },
           "error": {
@@ -16136,6 +17130,734 @@
                       "type": "boolean"
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/tts/model": {
+      "get": {
+        "operationId": "blogTtsModel",
+        "summary": "语音模型下载状态（实时探测磁盘）",
+        "tags": [
+          "blog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogTtsModelResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/tts/model/download": {
+      "post": {
+        "operationId": "blogTtsModelDownload",
+        "summary": "一键下载语音模型（后台执行，前端轮询进度）",
+        "tags": [
+          "blog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogTtsModelResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/tts/model/cancel": {
+      "post": {
+        "operationId": "blogTtsModelCancel",
+        "summary": "取消下载（已下部分保留，下次续传）",
+        "tags": [
+          "blog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogTtsModelResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/settings": {
+      "get": {
+        "operationId": "blogSettings",
+        "summary": "AI 新闻设置",
+        "tags": [
+          "blog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogSettingsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "blogSaveSettings",
+        "summary": "保存 AI 新闻设置（counts 整体提交；其余字段未传则保持不变）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogSettingsBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/voices": {
+      "get": {
+        "operationId": "blogVoices",
+        "summary": "参考音色清单（内置 3 段 + 用户上传）",
+        "tags": [
+          "blog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogVoiceListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/voices/upload": {
+      "post": {
+        "operationId": "blogVoiceUpload",
+        "summary": "上传参考音色（base64 wav/mp3，自动转 24kHz 单声道）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogVoiceUploadBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogVoiceUploadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/voices/remove": {
+      "post": {
+        "operationId": "blogVoiceRemove",
+        "summary": "删除用户上传的音色（内置音色不可删）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogVoiceRemoveBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/warmup": {
+      "post": {
+        "operationId": "blogWarmup",
+        "summary": "预热语音模型（进页面时调用，点试听才不用等 30 秒）",
+        "tags": [
+          "blog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogWarmupResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/preview": {
+      "post": {
+        "operationId": "blogPreview",
+        "summary": "合成试听句（同一音色只合成一次，之后读缓存）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogPreviewBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogPreviewResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/preview/audio": {
+      "get": {
+        "operationId": "blogPreviewAudio",
+        "summary": "试听音频（inline，支持 Range）",
+        "tags": [
+          "blog"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "voice",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/generate": {
+      "post": {
+        "operationId": "blogGenerate",
+        "summary": "立即生成一期（后台执行）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogGenerateBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogGenerateResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/resynth": {
+      "post": {
+        "operationId": "blogResynth",
+        "summary": "从已有稿件重跑语音合成（不抓新闻、不调云端模型、不消耗 token）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogResynthBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogResynthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/status": {
+      "get": {
+        "operationId": "blogStatus",
+        "summary": "生成进度",
+        "tags": [
+          "blog"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/episodes": {
+      "get": {
+        "operationId": "blogEpisodes",
+        "summary": "已生成的节目（新的在前）",
+        "tags": [
+          "blog"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogEpisodeListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/audio-url": {
+      "get": {
+        "operationId": "blogAudioUrl",
+        "summary": "带短期令牌的播放地址",
+        "tags": [
+          "blog"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogAudioUrlResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/audio": {
+      "get": {
+        "operationId": "blogAudio",
+        "summary": "播放 / 下载（mp3，退化时给 wav；支持 Range）",
+        "tags": [
+          "blog"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/remove": {
+      "post": {
+        "operationId": "blogRemove",
+        "summary": "删除一期（连同音频文件）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogRemoveBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/news": {
+      "get": {
+        "operationId": "blogNews",
+        "summary": "预览当前设置会抓到的新闻（不生成音频）",
+        "tags": [
+          "blog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogNewsResponse"
                 }
               }
             }
@@ -25967,6 +27689,174 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PhotoMcpTokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/ai/model-api": {
+      "get": {
+        "operationId": "photoAiModelApi",
+        "summary": "模型 API 配置（只读掩码视图，与全局 AI 服务共用一份）",
+        "tags": [
+          "photo"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoModelApi"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "photoAiModelApiSet",
+        "summary": "保存模型 API（apiKey 留空 = 保留已保存的密钥）",
+        "tags": [
+          "photo"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoModelApiBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoModelApi"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/ai/model-api/test": {
+      "post": {
+        "operationId": "photoAiModelApiTest",
+        "summary": "测试模型 API 连通性（先 /models，失败再兜底最小 chat 请求）",
+        "tags": [
+          "photo"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoModelApiTestBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoModelApiTestResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/ai/ask": {
+      "post": {
+        "operationId": "photoAiAsk",
+        "summary": "相册助手问答（配了模型走模型，没配走本地统计规则）",
+        "tags": [
+          "photo"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoAskBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoAskResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/search/hot": {
+      "post": {
+        "operationId": "photoSearchHot",
+        "summary": "热门推荐（人物 / 场景 / 活动 / 年份，给「随便看看」用）",
+        "tags": [
+          "photo"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoSearchHotBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoSearchHotResponse"
                 }
               }
             }
@@ -37173,7 +39063,7 @@
     "/api/v1/system/settings": {
       "get": {
         "operationId": "systemSettingsGet",
-        "summary": "全局设置（端口 / 并发 / 主机名 / 欢迎语 / 代理 / 日系兜底）",
+        "summary": "全局设置（端口 / 并发 / 主机名 / 欢迎语 / 代理 / 日系兜底 / 大模型）",
         "tags": [
           "system"
         ],

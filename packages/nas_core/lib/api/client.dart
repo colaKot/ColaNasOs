@@ -257,6 +257,135 @@ class ApiClient {
     return _asMap(_decode(res));
   }
 
+  /// 语音模型下载状态（实时探测磁盘）
+  Future<BlogTtsModelResponse> blogTtsModel() async {
+    final res = await transport.send('GET', _uri('/api/v1/blog/tts/model'), headers: await _headers());
+    return BlogTtsModelResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 一键下载语音模型（后台执行，前端轮询进度）
+  Future<BlogTtsModelResponse> blogTtsModelDownload() async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/tts/model/download'), headers: await _headers());
+    return BlogTtsModelResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 取消下载（已下部分保留，下次续传）
+  Future<BlogTtsModelResponse> blogTtsModelCancel() async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/tts/model/cancel'), headers: await _headers());
+    return BlogTtsModelResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// AI 新闻设置
+  Future<BlogSettingsResponse> blogSettings() async {
+    final res = await transport.send('GET', _uri('/api/v1/blog/settings'), headers: await _headers());
+    return BlogSettingsResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 保存 AI 新闻设置（counts 整体提交；其余字段未传则保持不变）
+  Future<BlogSettingsResponse> blogSaveSettings({required BlogSettingsBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/settings'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogSettingsResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 参考音色清单（内置 3 段 + 用户上传）
+  Future<BlogVoiceListResponse> blogVoices() async {
+    final res = await transport.send('GET', _uri('/api/v1/blog/voices'), headers: await _headers());
+    return BlogVoiceListResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 上传参考音色（base64 wav/mp3，自动转 24kHz 单声道）
+  Future<BlogVoiceUploadResponse> blogVoiceUpload({required BlogVoiceUploadBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/voices/upload'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogVoiceUploadResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 删除用户上传的音色（内置音色不可删）
+  Future<BlogOkResponse> blogVoiceRemove({required BlogVoiceRemoveBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/voices/remove'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogOkResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 预热语音模型（进页面时调用，点试听才不用等 30 秒）
+  Future<BlogWarmupResponse> blogWarmup() async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/warmup'), headers: await _headers());
+    return BlogWarmupResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 合成试听句（同一音色只合成一次，之后读缓存）
+  Future<BlogPreviewResponse> blogPreview({required BlogPreviewBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/preview'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogPreviewResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 试听音频（inline，支持 Range）
+  Future<Map<String, dynamic>> blogPreviewAudio({required String voice}) async {
+    final query = <String, String>{
+      'voice': voice,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/blog/preview/audio', query), headers: await _headers());
+    return _asMap(_decode(res));
+  }
+
+  /// 立即生成一期（后台执行）
+  Future<BlogGenerateResponse> blogGenerate({required BlogGenerateBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/generate'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogGenerateResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 从已有稿件重跑语音合成（不抓新闻、不调云端模型、不消耗 token）
+  Future<BlogResynthResponse> blogResynth({required BlogResynthBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/resynth'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogResynthResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 生成进度
+  Future<BlogStatusResponse> blogStatus({required String id}) async {
+    final query = <String, String>{
+      'id': id,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/blog/status', query), headers: await _headers());
+    return BlogStatusResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 已生成的节目（新的在前）
+  Future<BlogEpisodeListResponse> blogEpisodes({int? limit}) async {
+    final query = <String, String>{
+      if (limit != null) 'limit': '$limit',
+    };
+    final res = await transport.send('GET', _uri('/api/v1/blog/episodes', query), headers: await _headers());
+    return BlogEpisodeListResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 带短期令牌的播放地址
+  Future<BlogAudioUrlResponse> blogAudioUrl({required String id}) async {
+    final query = <String, String>{
+      'id': id,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/blog/audio-url', query), headers: await _headers());
+    return BlogAudioUrlResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 播放 / 下载（mp3，退化时给 wav；支持 Range）
+  Future<Map<String, dynamic>> blogAudio({required String id}) async {
+    final query = <String, String>{
+      'id': id,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/blog/audio', query), headers: await _headers());
+    return _asMap(_decode(res));
+  }
+
+  /// 删除一期（连同音频文件）
+  Future<BlogOkResponse> blogRemove({required BlogRemoveBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/remove'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogOkResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 预览当前设置会抓到的新闻（不生成音频）
+  Future<BlogNewsResponse> blogNews() async {
+    final res = await transport.send('GET', _uri('/api/v1/blog/news'), headers: await _headers());
+    return BlogNewsResponse.fromJson(_asMap(_decode(res)));
+  }
+
   /// 重建全文索引（书名 / 作者 + txt 正文）
   Future<BookFulltextReindexResponse> bookFulltextReindex({required BookFulltextReindexBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/book/search/reindex'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
@@ -1659,6 +1788,36 @@ class ApiClient {
     return PhotoMcpTokenResponse.fromJson(_asMap(_decode(res)));
   }
 
+  /// 模型 API 配置（只读掩码视图，与全局 AI 服务共用一份）
+  Future<PhotoModelApi> photoAiModelApi() async {
+    final res = await transport.send('GET', _uri('/api/v1/photo/ai/model-api'), headers: await _headers());
+    return PhotoModelApi.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 保存模型 API（apiKey 留空 = 保留已保存的密钥）
+  Future<PhotoModelApi> photoAiModelApiSet({required PhotoModelApiBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/photo/ai/model-api'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return PhotoModelApi.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 测试模型 API 连通性（先 /models，失败再兜底最小 chat 请求）
+  Future<PhotoModelApiTestResult> photoAiModelApiTest({required PhotoModelApiTestBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/photo/ai/model-api/test'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return PhotoModelApiTestResult.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 相册助手问答（配了模型走模型，没配走本地统计规则）
+  Future<PhotoAskResponse> photoAiAsk({required PhotoAskBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/photo/ai/ask'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return PhotoAskResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 热门推荐（人物 / 场景 / 活动 / 年份，给「随便看看」用）
+  Future<PhotoSearchHotResponse> photoSearchHot({required PhotoSearchHotBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/photo/search/hot'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return PhotoSearchHotResponse.fromJson(_asMap(_decode(res)));
+  }
+
   /// 可视范围内的 geohash 格代表点（客户端按世界像素聚簇）
   Future<PhotoMapBoundsResponse> photoMapBounds({required double minLat, required double minLng, required double maxLat, required double maxLng, double? zoom, int? limit, String? libraryId}) async {
     final query = <String, String>{
@@ -2738,7 +2897,7 @@ class ApiClient {
     return _asMap(_decode(res));
   }
 
-  /// 全局设置（端口 / 并发 / 主机名 / 欢迎语 / 代理 / 日系兜底）
+  /// 全局设置（端口 / 并发 / 主机名 / 欢迎语 / 代理 / 日系兜底 / 大模型）
   Future<SystemSettingsResponse> systemSettingsGet() async {
     final res = await transport.send('GET', _uri('/api/v1/system/settings'), headers: await _headers());
     return SystemSettingsResponse.fromJson(_asMap(_decode(res)));

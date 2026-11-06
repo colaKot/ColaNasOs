@@ -523,6 +523,48 @@ process.chdir(root);
       check('session_default_lead_part_dir', true, 'skipped: create failed');
       check('session_default_lead_playlist_part', true, 'skipped: create failed');
     }
+
+    // ---- 起转偏移（startMs）：进度条跳到「还没转出来」的位置时建的中途会话 ----
+    // 期望：只转 [startMs, 片尾]，产物落在 p0/；`transcodedMs` 必须是**片源绝对
+    // 位置**（startMs + 这一段时长），客户端拿它画进度条上「已加载」的那一段。
+    r = await inject('POST', '/api/v1/player/sessions', admin, {
+      id: itemId,
+      startMs: 600,
+    });
+    if (r.statusCode === 200) {
+      const idJump = r.json().id;
+      check(
+        'session_start_offset_echo',
+        r.json().startedMs === 600,
+        'startedMs=' + r.json().startedMs,
+      );
+      let jobJump = null;
+      for (let i = 0; i < 120; i += 1) {
+        const q = await inject(
+          'GET',
+          `/api/v1/player/sessions?id=${encodeURIComponent(idJump)}`,
+          admin,
+        );
+        jobJump = q.json();
+        if (['done', 'paused', 'failed'].includes(jobJump.status)) break;
+        await new Promise((res) => setTimeout(res, 300));
+      }
+      check(
+        'session_start_offset_get',
+        Boolean(jobJump) && jobJump.startedMs === 600,
+        `startedMs=${jobJump && jobJump.startedMs} status=${jobJump && jobJump.status}`,
+      );
+      // 2 s 的片从 0.6 s 起转：已转出 ≈ 2 s（绝对位置），一定大于 600
+      check(
+        'session_start_offset_transcoded',
+        Boolean(jobJump) && Number(jobJump.transcodedMs) > 600,
+        `transcodedMs=${jobJump && jobJump.transcodedMs}`,
+      );
+    } else {
+      check('session_start_offset_echo', true, 'skipped: create failed');
+      check('session_start_offset_get', true, 'skipped: create failed');
+      check('session_start_offset_transcoded', true, 'skipped: create failed');
+    }
   }
 
   // 未知会话 / 未就绪会话

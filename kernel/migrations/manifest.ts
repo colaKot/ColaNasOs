@@ -159,6 +159,20 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '134_video_hdr_meta_version',
   // 转码会话的提前转码时长（lead_ms；老行 0 = 整片，新会话默认 3 分钟）
   '135_player_lead',
+  // 转码会话的起转偏移（start_ms；>0 = 进度条跳到未转码位置后另起的会话）
+  '141_player_start',
+  // AI 播客（每期节目 / 设置 / 定时计划）
+  '142_blog',
+  // AI 播客的合成引擎（本地 Kokoro / 在线 Edge）
+  '143_blog_tts_engine',
+  // 英文素材的本地翻译缓存（AI 新闻英转中）
+  '144_blog_translations',
+  // 每期节目的云端模型 token 用量（对账用）
+  '145_blog_llm_usage',
+  // 照片识别完成标记（位：基础/OCR/活动）；老库按已有结果回填
+  '146_photo_ai_done_mask',
+  // 人脸认领护栏元数据（quality / pose），老库按 score 回填
+  '147_photo_faces_claim_guard',
 ]);
 
 export interface OrderCheck {

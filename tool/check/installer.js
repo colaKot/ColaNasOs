@@ -88,6 +88,51 @@ check(
 );
 const liteExtra = liteCfg.extraResources || [];
 check('models_lite', !findEntry(liteExtra, 'models'), '精简包不应包含 models');
+
+// 本地语音合成（Qwen3-TTS + llama.cpp）：二进制 + 内置音色 + ffmpeg 随包；
+// 1.4GB 权重**不进包**（用户自己下）。少任何一项，装机版就是「点试听没反应」。
+const llamaEntry = findEntry(extra, 'llama');
+check(
+  'tts_llama_bin',
+  Boolean(llamaEntry) && llamaEntry.from === 'vendor/llama',
+  llamaEntry ? `from=${llamaEntry.from}` : '完整包缺少 llama 二进制（语音合成会不可用）',
+);
+check(
+  'tts_llama_lite',
+  !findEntry(liteExtra, 'llama'),
+  '精简包不含语音模型，二进制也不必带',
+);
+check(
+  'tts_voices',
+  Boolean(findEntry(extra, 'voices')) && findEntry(extra, 'voices').from === 'vendor/voices',
+  '完整包缺少内置参考音色（开箱没有可用音色）',
+);
+check(
+  'tts_ffmpeg',
+  Boolean(findEntry(extra, 'ffmpeg')) && findEntry(extra, 'ffmpeg').from === 'vendor/ffmpeg',
+  '完整包缺少 ffmpeg（wav → mp3 会失败，只能落 wav）',
+);
+const modelFilter = String((fullModels && fullModels.filter || []).join(','));
+check(
+  'tts_model_filter',
+  !fullModels || modelFilter.includes('!qwen3-tts/**'),
+  '1.4GB 的 Qwen3-TTS 权重不应进安装包（应由用户 npm run tts:model 下载）',
+);
+check(
+  'tts_no_python',
+  !findEntry(extra, 'python-runtime'),
+  '不再需要 python 运行时（旧 Kokoro 方案已移除）',
+);
+// 一键下载：脚本不在 asar 里（files 排除 tool/**），必须由 extraResources 送到
+// resources/tool/tts-model.js，否则装机版点「下载」只会报「找不到下载脚本」。
+const toolEntry = findEntry(extra, 'tool');
+check(
+  'tts_model_script',
+  Boolean(toolEntry) &&
+    toolEntry.from === 'tool' &&
+    (toolEntry.filter || []).includes('tts-model.js'),
+  toolEntry ? `from=${toolEntry.from} filter=${(toolEntry.filter || []).join(',')}` : '缺少一键下载脚本',
+);
 check(
   'lite_artifact_name',
   String((liteCfg.win || {}).artifactName || '').includes('-lite-'),

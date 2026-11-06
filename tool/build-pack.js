@@ -63,6 +63,30 @@ if (!betterSqliteAbiOk()) {
   console.log('[build-pack] better-sqlite3 ABI 已匹配，跳过 rebuild');
 }
 
+// 便携 python 运行时（AI 新闻播客的本地语音合成）：缺了就现做一份。
+// 失败不阻断打包：只影响语音合成，其余功能照常。
+if (!lite) {
+  const pyExe = path.join(
+    root,
+    'vendor',
+    'python-runtime',
+    process.platform === 'win32' ? 'python.exe' : path.join('bin', 'python3'),
+  );
+  if (fs.existsSync(pyExe)) {
+    console.log('[build-pack] 便携 python 运行时已就绪');
+  } else {
+    console.log('[build-pack] 缺少便携 python 运行时，尝试生成 …');
+    const r = spawnSync(process.execPath, [path.join(__dirname, 'bundle-python.js')], {
+      cwd: root,
+      stdio: 'inherit',
+    });
+    if (r.status !== 0) {
+      console.warn('[build-pack] [!] 未生成 python 运行时：装机版的 AI 语音合成会不可用。');
+      console.warn('            pip install kokoro-onnx "misaki-fork[zh]" 后重跑 npm run python:bundle');
+    }
+  }
+}
+
 const cliArgs = [
   path.join(root, 'node_modules', 'electron-builder', 'cli.js'),
   '--publish',

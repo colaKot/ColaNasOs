@@ -29,6 +29,15 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
   int _minVotes = 2;
   int _threads = 3;
 
+  // 模型 API（Agent 用）：与全局 system.settings#llm 共用一份，明文 Key 不回前端
+  final _modelBaseCtrl = TextEditingController();
+  final _modelNameCtrl = TextEditingController();
+  final _modelKeyCtrl = TextEditingController();
+  PhotoModelApi? _modelApi;
+  bool _modelEnabled = true;
+  bool _modelKeyVisible = false;
+  bool _modelBusy = false;
+
   Timer? _timer;
   bool _busy = false;
 
@@ -47,6 +56,9 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
   @override
   void dispose() {
     _timer?.cancel();
+    _modelBaseCtrl.dispose();
+    _modelNameCtrl.dispose();
+    _modelKeyCtrl.dispose();
     super.dispose();
   }
 
@@ -81,6 +93,7 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
         _threads = settings.config.tuning.threads;
         _loading = false;
       });
+      await _loadModelApi();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -199,6 +212,149 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
     }
   }
 
+  /// 掩码视图：服务端只回 hasKey / 尾 4 位，密钥输入框永远是空的
+  Future<void> _loadModelApi() async {
+    try {
+      final api = await _client.photoAiModelApi();
+      if (!mounted) return;
+      setState(() {
+        _modelApi = api;
+        _modelBaseCtrl.text = api.baseUrl;
+        _modelNameCtrl.text = api.model;
+        _modelEnabled = api.enabled;
+      });
+    } catch (_) {
+      // 没有读权限时不挡其它设置项
+    }
+  }
+
+  Future<void> _saveModelApi() async {
+    if (_modelBusy) return;
+    setState(() => _modelBusy = true);
+    try {
+      final key = _modelKeyCtrl.text.trim();
+      await _client.photoAiModelApiSet(
+        body: PhotoModelApiBody(
+          baseUrl: _modelBaseCtrl.text.trim(),
+          model: _modelNameCtrl.text.trim(),
+          enabled: _modelEnabled,
+          apiKey: key.isEmpty ? null : key,
+        ),
+      );
+      _modelKeyCtrl.clear();
+      await _loadModelApi();
+      if (mounted) NasSnack.show(context, tr('photo.ai.saved'));
+    } catch (e) {
+      if (mounted) NasSnack.show(context, '$e');
+    } finally {
+      if (mounted) setState(() => _modelBusy = false);
+    }
+  }
+
+  /// 测试用输入框里的值，没保存也能测；密钥留空则用已保存的那把
+  Future<void> _testModelApi() async {
+    if (_modelBusy) return;
+    setState(() => _modelBusy = true);
+    try {
+      final key = _modelKeyCtrl.text.trim();
+      final res = await _client.photoAiModelApiTest(
+        body: PhotoModelApiTestBody(
+          baseUrl: _modelBaseCtrl.text.trim(),
+          model: _modelNameCtrl.text.trim(),
+          apiKey: key.isEmpty ? null : key,
+        ),
+      );
+      if (!mounted) return;
+      final head = res.ok ? tr('photo.modelApi.ok') : tr('photo.modelApi.fail');
+      final extra = res.ok
+          ? ' · ${res.latencyMs}ms'
+              '${res.models.isEmpty ? '' : ' · ${tr('photo.modelApi.models')} ${res.models.length}'}'
+          : ' · ${res.message}';
+      NasSnack.show(context, '$head$extra');
+    } catch (e) {
+      if (mounted) NasSnack.show(context, '${tr('photo.modelApi.fail')}: $e');
+    } finally {
+      if (mounted) setState(() => _modelBusy = false);
+    }
+  }
+
+  Widget _modelApiCard() {
+    final api = _modelApi;
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _titleRow(
+            title: tr('photo.modelApi.title'),
+            subtitle: tr('photo.modelApi.hint'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _modelBaseCtrl,
+            decoration: InputDecoration(
+              labelText: tr('photo.modelApi.base'),
+              isDense: true,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _modelNameCtrl,
+            decoration: InputDecoration(
+              labelText: tr('photo.modelApi.model'),
+              isDense: true,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _modelKeyCtrl,
+            obscureText: !_modelKeyVisible,
+            decoration: InputDecoration(
+              labelText: tr('photo.modelApi.key'),
+              helperText: api?.hasKey == true
+                  ? '${tr('photo.modelApi.keyKept')} ····${api!.keyTail}'
+                  : tr('photo.modelApi.noKey'),
+              isDense: true,
+              border: const OutlineInputBorder(),
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _modelKeyVisible ? Icons.visibility_off : Icons.visibility,
+                  size: 18,
+                ),
+                onPressed: () => setState(() => _modelKeyVisible = !_modelKeyVisible),
+              ),
+            ),
+          ),
+          SwitchListTile(
+            value: _modelEnabled,
+            onChanged: (v) => setState(() => _modelEnabled = v),
+            title: Text(tr('settings.llm.enable')),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            children: [
+              FilledButton(
+                onPressed: _modelBusy ? null : _saveModelApi,
+                child: Text(tr('photo.modelApi.save')),
+              ),
+              OutlinedButton(
+                onPressed: _modelBusy ? null : _testModelApi,
+                child: Text(
+                  _modelBusy ? tr('photo.modelApi.testing') : tr('photo.modelApi.test'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const NasLoading();
@@ -216,6 +372,8 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
         ),
         const SizedBox(height: 14),
         _queueCard(s),
+        const SizedBox(height: 14),
+        _modelApiCard(),
         const SizedBox(height: 14),
         _mcpCard(),
         const SizedBox(height: 14),

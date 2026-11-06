@@ -107,6 +107,16 @@ class AppRegistry {
       available: true,
     ),
     AppDescriptor(
+      id: 'blog',
+      nameKey: 'app.blog',
+      route: '/blog',
+      icon: 'podcast',
+      group: AppGroup.media,
+      accent: <int>[0xFF8B5CF6, 0xFFEC4899],
+      endpoints: <ClientEndpoint>{ClientEndpoint.desktop, ClientEndpoint.tablet, ClientEndpoint.mobile, ClientEndpoint.web},
+      available: true,
+    ),
+    AppDescriptor(
       id: 'book',
       nameKey: 'app.book',
       route: '/book',

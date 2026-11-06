@@ -47,6 +47,15 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _savingServer = false;
   bool _proxyEnabled = false;
   bool _httpsEnabled = false;
+
+  // AI 服务（与博客页共用同一份配置：这里改了，博客页刷新就是新值）
+  final _llmKeyCtrl = TextEditingController();
+  final _llmBaseCtrl = TextEditingController();
+  final _llmModelCtrl = TextEditingController();
+  bool _llmEnabled = true;
+  bool _llmWebSearch = false;
+  String _llmProvider = 'deepseek';
+  bool _llmKeyVisible = false;
   SystemTlsInfoResponse? _tls;
 
   SystemCacheInfoResponse? _cache;
@@ -142,6 +151,17 @@ class _SettingsPageState extends State<SettingsPage> {
         _proxyEnabled = s.proxy.isNotEmpty;
         _httpsEnabled = s.httpsEnabled;
         _httpsPortCtrl.text = '${s.httpsPort}';
+        _llmEnabled = s.llm.enabled;
+        _llmProvider = switch (s.llm.provider) {
+          'openai' => 'openai',
+          'deepseek' => 'deepseek',
+          'bailian' => 'bailian',
+          _ => 'custom',
+        };
+        _llmWebSearch = s.llm.webSearch;
+        _llmKeyCtrl.text = s.llm.apiKey;
+        _llmBaseCtrl.text = s.llm.baseUrl;
+        _llmModelCtrl.text = s.llm.model;
         _loadingServer = false;
       });
       // 证书状态单独取（老服务端没有该接口时不阻断设置页）
@@ -175,6 +195,14 @@ class _SettingsPageState extends State<SettingsPage> {
           hostname: _hostnameCtrl.text.trim(),
           welcome: _welcomeCtrl.text.trim(),
           proxy: _proxyEnabled ? _proxyCtrl.text.trim() : '',
+          llm: SystemLlmPatch(
+            enabled: _llmEnabled,
+            provider: _llmProvider,
+            apiKey: _llmKeyCtrl.text.trim(),
+            baseUrl: _llmBaseCtrl.text.trim(),
+            model: _llmModelCtrl.text.trim(),
+            webSearch: _llmWebSearch,
+          ),
         ),
       );
       if (!mounted) return;
@@ -475,6 +503,115 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
+  }
+
+  /// AI 服务：与「博客 → AI 新闻」页共用同一份 llm 配置（服务端 system.settings#llm）
+  Widget _llmSection() {
+    return _section(tr('settings.llm.title'), [
+      Text(
+        tr('settings.llm.hint'),
+        style: TextStyle(
+          fontSize: NasTokens.fontCaption,
+          color: context.nasTextSecondary,
+        ),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: _llmEnabled,
+        onChanged: (v) => setState(() => _llmEnabled = v),
+        title: Text(tr('settings.llm.enable')),
+      ),
+      Row(
+        children: [
+          SizedBox(
+            width: 150,
+            child: NasDropdown<String>(
+              expanded: true,
+              value: _llmProvider,
+              items: [
+                const DropdownMenuItem(value: 'deepseek', child: Text('DeepSeek')),
+                DropdownMenuItem(
+                  value: 'bailian',
+                  child: Text(tr('settings.llm.providerBailian')),
+                ),
+                const DropdownMenuItem(value: 'openai', child: Text('OpenAI')),
+                DropdownMenuItem(
+                  value: 'custom',
+                  child: Text(tr('settings.llm.custom')),
+                ),
+              ],
+              onChanged: (v) {
+                if (v == null) return;
+                setState(() => _llmProvider = v);
+                if (v == 'deepseek') {
+                  _llmBaseCtrl.text = 'https://api.deepseek.com';
+                  _llmModelCtrl.text = 'deepseek-flash';
+                  _llmWebSearch = false;
+                } else if (v == 'bailian') {
+                  _llmBaseCtrl.text = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+                  _llmModelCtrl.text = 'deepseek-v3';
+                  _llmWebSearch = true;
+                } else if (v == 'openai') {
+                  _llmBaseCtrl.text = 'https://api.openai.com/v1';
+                  _llmModelCtrl.text = 'gpt-4o-mini';
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: NasTokens.spaceSm),
+          Expanded(
+            child: TextField(
+              controller: _llmModelCtrl,
+              decoration: InputDecoration(
+                labelText: tr('settings.llm.model'),
+                isDense: true,
+              ),
+            ),
+          ),
+        ],
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: _llmWebSearch,
+        onChanged: (v) => setState(() => _llmWebSearch = v),
+        title: Text(tr('settings.llm.webSearch')),
+        subtitle: Text(
+          tr('settings.llm.webSearchHint'),
+          style: TextStyle(
+            fontSize: NasTokens.fontCaption,
+            color: context.nasTextSecondary,
+          ),
+        ),
+      ),
+      const SizedBox(height: NasTokens.spaceSm),
+      TextField(
+        controller: _llmKeyCtrl,
+        obscureText: !_llmKeyVisible,
+        decoration: InputDecoration(
+          labelText: tr('settings.llm.key'),
+          isDense: true,
+          suffixIcon: IconButton(
+            tooltip: _llmKeyVisible
+                ? tr('settings.llm.hideKey')
+                : tr('settings.llm.showKey'),
+            icon: Icon(
+              _llmKeyVisible
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+            ),
+            onPressed: () => setState(() => _llmKeyVisible = !_llmKeyVisible),
+          ),
+        ),
+      ),
+      const SizedBox(height: NasTokens.spaceSm),
+      TextField(
+        controller: _llmBaseCtrl,
+        decoration: InputDecoration(
+          labelText: tr('settings.llm.base'),
+          isDense: true,
+        ),
+      ),
+    ]);
   }
 
   Widget _serverSection() {
@@ -1254,6 +1391,7 @@ class _SettingsPageState extends State<SettingsPage> {
       default:
         return [
           _serverSection(),
+          _llmSection(),
           _connection(),
           const SizedBox(height: NasTokens.spaceLg),
         ];

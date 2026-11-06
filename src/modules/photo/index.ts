@@ -103,7 +103,11 @@ export const photo: ServerModule = {
 
     // 重启后自动接着识别：还有没识别的照片就入队一次。
     // 开关关着 / 已暂停 / 已经全部识别完 都直接跳过（判断在 enqueueScanOnce 里）。
-    void enqueueScanOnce(k).catch(() => null);
+    // 结果要落日志：以前 .catch(() => null) 把「为什么没启动」全吞了，
+    // 用户只看到任务栏空闲、排查无从下手（2026-11-06）。
+    void enqueueScanOnce(k)
+      .then((r) => k.log.info({ ...r }, 'photo.ai autostart'))
+      .catch((err) => k.log.warn({ err: String(err) }, 'photo.ai autostart failed'));
 
     // 回收站保留 30 天：启动先清一次，之后每小时一次（unref 不阻止进程退出）
     void purgeExpiredTrash(k).catch(() => null);

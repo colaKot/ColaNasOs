@@ -130,6 +130,7 @@ const STEPS = [
   { script: 'smoke:subtitles', label: '外挂字幕（发现 / srt·ass·vtt / WebVTT）', est: 4440 },
   { script: 'smoke:music', label: '音乐库 / tags / 封面 / 歌单', est: 5740 },
   { script: 'smoke:lyrics', label: '歌词（LRC / ID3 / Vorbis / MP4）', est: 5650 },
+  { script: 'smoke:blog', label: 'AI 播客（设置 / 文案 / 试听缓存降级）', est: 4200 },
   { script: 'smoke:book', label: '书库 / epub·cbz 元数据 / 封面', est: 5160 },
   { script: 'smoke:book-organize', label: '合集 / 归档 / 自定义列表', est: 5120 },
   { script: 'smoke:book-reader', label: '内置阅读器（epub/txt/cbz 分章分页）', est: 5480 },
@@ -157,6 +158,7 @@ const STEPS = [
  */
 const MODULE_RULES = [
   { dir: 'auth', steps: ['smoke:api', 'smoke:auth', 'smoke:bootstrap'], domains: ['auth'] },
+  { dir: 'blog', steps: ['smoke:blog'], domains: [] },
   { dir: 'book', steps: ['smoke:book', 'smoke:book-organize', 'smoke:book-reader', 'smoke:state'], domains: ['book'] },
   { dir: 'discover', steps: ['smoke:pt', 'smoke:catalog', 'smoke:catalog-live'], domains: [] },
   { dir: 'files', steps: ['smoke:upload', 'smoke:download', 'smoke:thumb', 'smoke:indexer', 'smoke:files-index', 'smoke:files-op', 'smoke:watch'], domains: [] },

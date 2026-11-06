@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import '../../shell/app_widgets.dart';
 
 import 'package:flutter/material.dart';
@@ -99,9 +100,14 @@ class _PhotoPageState extends State<PhotoPage> {
   NasBulkController? _bulkCtl;
   bool _bulkSyncScheduled = false;
 
-  /// 搜索联想（防抖 320ms）
+  /// 搜索联想（防抖 320ms）；空关键词时改成热门推荐
   Timer? _suggestTimer;
   List<Map<String, dynamic>> _suggestions = const [];
+  bool _suggestIsHot = false;
+
+  /// 最近搜索：本地设置里存一份，刷新页面不丢
+  static const _recentKey = 'photo.recentSearches';
+  List<String> _recentSearches = const [];
 
   /// 搜索框走「混合检索」时的状态（语义标签命中 + offset 分页）
   int? _nextOffset;
@@ -142,6 +148,8 @@ class _PhotoPageState extends State<PhotoPage> {
     });
     _scroll.addListener(_onScroll);
     _searchCtrl.addListener(_onSearchChanged);
+    _loadRecent();
+    _loadHot();
     _bootstrap();
   }
 
@@ -157,11 +165,46 @@ class _PhotoPageState extends State<PhotoPage> {
     super.dispose();
   }
 
+  /// 热门推荐：以前 suggest 的「空 q 热门」分支服务端有、客户端从不调用，
+  /// 现在空关键词（含刚进页面）就走独立的 /search/hot，同一份 SQL。
+  Future<void> _loadHot() async {
+    try {
+      final res = await ApiSession.instance.client.photoSearchHot(
+        body: const PhotoSearchHotBody(limit: 6),
+      );
+      if (!mounted || _searchCtrl.text.trim().isNotEmpty) return;
+      setState(() {
+        _suggestions = List<Map<String, dynamic>>.from(res.items);
+        _suggestIsHot = true;
+      });
+    } catch (_) {
+      // 推荐失败不影响搜索本身
+    }
+  }
+
+  void _loadRecent() {
+    final raw = SettingsStore.instance.getString(_recentKey);
+    if (raw == null) return;
+    try {
+      final list = (jsonDecode(raw) as List?)?.whereType<String>().take(6).toList() ?? [];
+      _recentSearches = list;
+    } catch (_) {
+      // 本地快照坏了就当没有
+    }
+  }
+
+  void _remember(String q) {
+    if (q.isEmpty) return;
+    final next = <String>[q, ..._recentSearches.where((e) => e != q)].take(6).toList();
+    setState(() => _recentSearches = next);
+    unawaited(SettingsStore.instance.setString(_recentKey, jsonEncode(next)));
+  }
+
   void _onSearchChanged() {
     _suggestTimer?.cancel();
     final q = _searchCtrl.text.trim();
     if (q.isEmpty) {
-      if (_suggestions.isNotEmpty) setState(() => _suggestions = const []);
+      _loadHot();
       return;
     }
     _suggestTimer = Timer(const Duration(milliseconds: 320), () async {
@@ -174,7 +217,10 @@ class _PhotoPageState extends State<PhotoPage> {
             .whereType<Map>()
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
-        setState(() => _suggestions = items);
+        setState(() {
+          _suggestions = items;
+          _suggestIsHot = false;
+        });
       } catch (_) {
         // 联想失败不影响搜索本身
       }
@@ -184,6 +230,7 @@ class _PhotoPageState extends State<PhotoPage> {
   void _applySuggestion(String value) {
     _suggestTimer?.cancel();
     _searchCtrl.text = value;
+    _remember(value);
     setState(() {
       _query = value;
       _suggestions = const [];
@@ -1517,6 +1564,7 @@ if (ok != true) return;
                     _loadTimeline();
                   },
                   onSubmitted: (v) {
+                    _remember(v.trim());
                     setState(() => _query = v.trim());
                     _loadTimeline();
                   },
@@ -1612,6 +1660,45 @@ if (ok != true) return;
         if (_query.isNotEmpty && _hybridTags.isNotEmpty) _hybridInfoBar(),
         if (_query.isNotEmpty && _hybridTags.isEmpty && _hybridUnmatched.isNotEmpty)
           _hybridInfoBar(),
+        if (_suggestions.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(NasTokens.spaceMd, 6, NasTokens.spaceMd, 2),
+            child: Text(
+              _suggestIsHot
+                  ? tr('photo.suggest.recommend')
+                  : tr('photo.suggest.suggestions'),
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: context.nasTextSecondary,
+              ),
+            ),
+          ),
+        if (_suggestIsHot && _recentSearches.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(NasTokens.spaceMd, 4, NasTokens.spaceMd, 2),
+            child: Text(
+              tr('photo.suggest.recent'),
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: context.nasTextSecondary,
+              ),
+            ),
+          ),
+          SizedBox(
+            height: 34,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: NasTokens.spaceMd),
+              itemCount: _recentSearches.length,
+              separatorBuilder: (_, _) => const SizedBox(width: NasTokens.spaceXs),
+              itemBuilder: (context, i) => ActionChip(
+                visualDensity: VisualDensity.compact,
+                label: Text(_recentSearches[i]),
+                onPressed: () => _applySuggestion(_recentSearches[i]),
+              ),
+            ),
+          ),
+        ],
         if (_suggestions.isNotEmpty)
           SizedBox(
             height: 38,

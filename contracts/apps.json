@@ -83,13 +83,23 @@
                 "labelKey": "photo.nav.tickets",
                 "icon": "confirmation_number_outlined"
               },
-              {
-                "id": "year",
-                "labelKey": "photo.nav.year",
-                "icon": "bar_chart"
-              }
-            ]
+                       {
+            "id": "year",
+            "labelKey": "photo.nav.year",
+            "icon": "bar_chart"
           },
+          {
+            "id": "timeContrast",
+            "labelKey": "photo.nav.timeContrast",
+            "icon": "history"
+          },
+          {
+            "id": "journey",
+            "labelKey": "photo.nav.journey",
+            "icon": "travel_explore_outlined"
+          }
+        ]
+      },
           {
             "id": "albums",
             "titleKey": "ui.photo.053",
@@ -112,13 +122,18 @@
             "titleKey": "photo.nav.ai",
             "icon": "auto_awesome_outlined",
             "items": [
-              {
-                "id": "photoAiCenter",
-                "labelKey": "photo.nav.aiCenter",
-                "icon": "auto_awesome_outlined"
-              },
-              {
-                "id": "faces",
+                       {
+            "id": "photoAiCenter",
+            "labelKey": "photo.nav.aiCenter",
+            "icon": "auto_awesome_outlined"
+          },
+          {
+            "id": "assistant",
+            "labelKey": "photo.nav.assistant",
+            "icon": "help_outline"
+          },
+          {
+            "id": "faces",
                 "labelKey": "ui.photo.038",
                 "icon": "face_retouching_natural_outlined"
               },
@@ -152,13 +167,23 @@
                 "labelKey": "photo.nav.gps",
                 "icon": "gps_fixed_outlined"
               },
-              {
-                "id": "cleanup",
-                "labelKey": "photo.nav.similarCleanup",
-                "icon": "cleaning_services_outlined"
-              }
-            ]
+                       {
+            "id": "cleanup",
+            "labelKey": "photo.nav.similarCleanup",
+            "icon": "cleaning_services_outlined"
           },
+          {
+            "id": "discovery",
+            "labelKey": "photo.nav.discovery",
+            "icon": "explore_outlined"
+          },
+          {
+            "id": "duplicateInsight",
+            "labelKey": "photo.nav.duplicateInsight",
+            "icon": "content_copy_outlined"
+          }
+        ]
+      },
           {
             "id": "settings",
             "titleKey": "ui.settings.017",
@@ -174,13 +199,18 @@
                 "labelKey": "photo.nav.preview",
                 "icon": "photo_size_select_large_outlined"
               },
-              {
-                "id": "aiSettings",
-                "labelKey": "photo.nav.aiSettings",
-                "icon": "tag_faces_outlined"
-              },
-              {
-                "id": "trash",
+                       {
+            "id": "aiSettings",
+            "labelKey": "photo.nav.aiSettings",
+            "icon": "tag_faces_outlined"
+          },
+          {
+            "id": "models",
+            "labelKey": "photo.nav.models",
+            "icon": "sparkles"
+          },
+          {
+            "id": "trash",
                 "labelKey": "photo.nav.trash",
                 "icon": "delete_sweep_outlined"
               },
@@ -546,6 +576,41 @@
             "songs": "music.nav.songs"
           }
         }
+      }
+    },
+    {
+      "id": "blog",
+      "nameKey": "app.blog",
+      "route": "/blog",
+      "icon": "podcast",
+      "endpoints": [
+        "desktop",
+        "tablet",
+        "mobile",
+        "web"
+      ],
+      "available": true,
+      "group": "media",
+      "accent": [
+        "#8B5CF6",
+        "#EC4899"
+      ],
+      "nav": {
+        "style": "side",
+        "sections": [
+          {
+            "id": "content",
+            "titleKey": "blog.nav.content",
+            "icon": "podcast",
+            "items": [
+              {
+                "id": "aiNews",
+                "labelKey": "blog.nav.aiNews",
+                "icon": "newspaper_outlined"
+              }
+            ]
+          }
+        ]
       }
     },
     {

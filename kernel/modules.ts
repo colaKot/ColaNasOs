@@ -14,6 +14,7 @@ import { photo } from '../src/modules/photo';
 import { video } from '../src/modules/video';
 import { music } from '../src/modules/music';
 import { book } from '../src/modules/book';
+import { blog } from '../src/modules/blog';
 import { mount } from '../src/modules/mount';
 import { mediaTool } from '../src/modules/mediaTool';
 import { videoPlayer } from '../src/modules/videoPlayer';
@@ -42,6 +43,7 @@ export function moduleList(): ServerModule[] {
     video,
     music,
     book,
+    blog,
     mount,
     mediaTool,
     videoPlayer,

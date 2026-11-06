@@ -700,4 +700,69 @@ export const PHOTO_MIGRATIONS: Migration[] = [
         `.execute(db);
       },
     },
+    {
+      // 「这张照片做过哪些识别」的位标记：1=基础（人脸/场景/embedding）、2=OCR、4=活动。
+      //
+      // 以前只用「有没有 embedding」当待办，于是 2026-11-04 在 OCR/活动开关关闭时
+      // 跑完的那批照片，后来开关打开也永远不会被补做；而面板按「有结果的照片数」
+      // 算进度，OCR / 活动永远到不了 100%，看起来就像「任务没启动」。
+      // 有结果不等于没跑过、没结果也不等于跑过，所以必须单独记账。
+      //
+      // 老库回填只认「已有结果」：有 embedding ⇒ 基础做过，有 OCR/活动记录 ⇒ 对应项做过。
+      // 没结果的照片会在下次 scan 里补做一次（且只补缺失项，不重算基础）。
+      id: '146_photo_ai_done_mask',
+      async up(db) {
+        await sql`
+          alter table photo_items add column ai_done_mask integer not null default 0
+        `.execute(db);
+        await sql`
+          update photo_items set ai_done_mask =
+            (case when exists (
+              select 1 from photo_embeddings e where e.photo_id = photo_items.id
+            ) then 1 else 0 end)
+            | (case when exists (
+                select 1 from photo_ocr o where o.photo_id = photo_items.id
+              ) then 2 else 0 end)
+            | (case when exists (
+                select 1 from photo_activities a where a.photo_id = photo_items.id
+              ) then 4 else 0 end)
+        `.execute(db);
+        await sql`
+          create index if not exists idx_photo_items_ai_mask
+            on photo_items(ai_done_mask)
+        `.execute(db);
+      },
+    },
+    {
+      // 人脸「认领护栏」需要的元数据。
+      //
+      // 以前 photo_faces 只有一个 score（检测置信度 0..1），没有质量分也没有姿态，
+      // 结果侧脸 / 低分脸和正脸一样参与 KNN 投票，滚出几百张的假人物组。
+      // - quality：0..100，= 检测置信度 × 100。老行按 score 回填；
+      //   sidecar 早已按 0.55 过滤，所以 55 以下都是历史遗留，重建时会踢出分组。
+      // - pose_*：从 faceLandMark 的 5 点 kpss 算的姿态代理量。老数据没有关键点，
+      //   留空即「放行」（与参考实现 `yaw 缺失时不判姿态门` 同一口径），不重跑模型。
+      id: '147_photo_faces_claim_guard',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(photo_faces)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        const add = async (name: string, type: string) => {
+          if (cols.includes(name)) return;
+          await sql.raw(`alter table photo_faces add column ${name} ${type}`).execute(db);
+        };
+        await add('quality', 'real');
+        await add('pose_yaw', 'real');
+        await add('pose_roll', 'real');
+        await add('pose_iod', 'real');
+        await sql`
+          update photo_faces
+             set quality = round(coalesce(score, 0) * 100)
+           where quality is null
+        `.execute(db);
+        await sql`
+          create index if not exists idx_photo_faces_quality on photo_faces(quality)
+        `.execute(db);
+      },
+    },
 ];

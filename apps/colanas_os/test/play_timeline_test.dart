@@ -91,47 +91,85 @@ void main() {
     });
   });
 
-  group('leadMarker：已转出刻度', () {
-    test('转了 10 分钟 / 整片 100 分钟 → 0.1', () {
+  group('loadedEndMs：进度条「已加载」到底画到哪', () {
+    test('服务端回报的已转出长度是绝对位置，直接用', () {
       expect(
-        leadMarker(
-          isTranscode: true,
-          transcodedMs: const Duration(minutes: 10).inMilliseconds,
-          total: const Duration(minutes: 100),
+        loadedEndMs(
+          startMs: 0,
+          playerMs: 60_000,
+          serverMs: const Duration(minutes: 3).inMilliseconds,
         ),
-        closeTo(0.1, 0.0001),
+        const Duration(minutes: 3).inMilliseconds,
       );
     });
 
-    test('直链播放不画', () {
+    test('整片一次转完（服务端不回 transcodedMs）时用播放器报的时长', () {
       expect(
-        leadMarker(isTranscode: false, transcodedMs: 600_000, total: _pinocchio),
-        isNull,
+        loadedEndMs(startMs: 0, playerMs: 90_000, serverMs: 0),
+        90_000,
       );
     });
 
-    test('整片一次转完（没有分段会话回值）不画', () {
+    test('从中途起转时，播放器的相对时长要加上起点偏移', () {
       expect(
-        leadMarker(isTranscode: true, transcodedMs: 0, total: _pinocchio),
-        isNull,
-      );
-    });
-
-    test('已经转完整片不画，别在右端留一根竖线', () {
-      expect(
-        leadMarker(
-          isTranscode: true,
-          transcodedMs: _pinocchio.inMilliseconds,
-          total: _pinocchio,
+        loadedEndMs(
+          startMs: const Duration(minutes: 30).inMilliseconds,
+          playerMs: 120_000,
+          serverMs: 0,
         ),
-        isNull,
+        const Duration(minutes: 32).inMilliseconds,
       );
     });
 
-    test('片源时长未知时不画', () {
+    test('两边都拿不到就是起点本身（还一段都没转出来）', () {
       expect(
-        leadMarker(isTranscode: true, transcodedMs: 600_000, total: Duration.zero),
-        isNull,
+        loadedEndMs(startMs: const Duration(minutes: 30).inMilliseconds, playerMs: 0, serverMs: 0),
+        const Duration(minutes: 30).inMilliseconds,
+      );
+    });
+  });
+
+  group('seekNeedsJump：跳到还没转出来的位置要重建会话', () {
+    const start = Duration(minutes: 30);
+    const loaded = Duration(minutes: 33);
+
+    test('已加载区间内直接 seek', () {
+      expect(
+        seekNeedsJump(
+          target: const Duration(minutes: 31),
+          start: start,
+          loadedEnd: loaded,
+        ),
+        isFalse,
+      );
+    });
+
+    test('超出已加载末尾 → 重建（顺序转码还没到这里）', () {
+      expect(
+        seekNeedsJump(
+          target: const Duration(minutes: 50),
+          start: start,
+          loadedEnd: loaded,
+        ),
+        isTrue,
+      );
+    });
+
+    test('回跳到会话起点之前 → 重建（时间轴没有负数）', () {
+      expect(
+        seekNeedsJump(
+          target: const Duration(minutes: 10),
+          start: start,
+          loadedEnd: loaded,
+        ),
+        isTrue,
+      );
+    });
+
+    test('刚好拖到已加载末尾不重建（留余量，别每拖一次都掐掉 ffmpeg）', () {
+      expect(
+        seekNeedsJump(target: loaded, start: start, loadedEnd: loaded),
+        isFalse,
       );
     });
   });

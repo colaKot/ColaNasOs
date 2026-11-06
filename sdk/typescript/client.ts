@@ -102,6 +102,101 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/backup/run', params, 'body');
   }
 
+  /** 播放 / 下载（mp3，退化时给 wav；支持 Range） */
+  async blogAudio(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/audio', params, 'query');
+  }
+
+  /** 带短期令牌的播放地址 */
+  async blogAudioUrl(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/audio-url', params, 'query');
+  }
+
+  /** 已生成的节目（新的在前） */
+  async blogEpisodes(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/episodes', params, 'query');
+  }
+
+  /** 立即生成一期（后台执行） */
+  async blogGenerate(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/generate', params, 'body');
+  }
+
+  /** 预览当前设置会抓到的新闻（不生成音频） */
+  async blogNews(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/news', params, 'query');
+  }
+
+  /** 合成试听句（同一音色只合成一次，之后读缓存） */
+  async blogPreview(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/preview', params, 'body');
+  }
+
+  /** 试听音频（inline，支持 Range） */
+  async blogPreviewAudio(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/preview/audio', params, 'query');
+  }
+
+  /** 删除一期（连同音频文件） */
+  async blogRemove(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/remove', params, 'body');
+  }
+
+  /** 从已有稿件重跑语音合成（不抓新闻、不调云端模型、不消耗 token） */
+  async blogResynth(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/resynth', params, 'body');
+  }
+
+  /** 保存 AI 新闻设置（counts 整体提交；其余字段未传则保持不变） */
+  async blogSaveSettings(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/settings', params, 'body');
+  }
+
+  /** AI 新闻设置 */
+  async blogSettings(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/settings', params, 'query');
+  }
+
+  /** 生成进度 */
+  async blogStatus(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/status', params, 'query');
+  }
+
+  /** 语音模型下载状态（实时探测磁盘） */
+  async blogTtsModel(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/tts/model', params, 'query');
+  }
+
+  /** 取消下载（已下部分保留，下次续传） */
+  async blogTtsModelCancel(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/tts/model/cancel', params, 'body');
+  }
+
+  /** 一键下载语音模型（后台执行，前端轮询进度） */
+  async blogTtsModelDownload(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/tts/model/download', params, 'body');
+  }
+
+  /** 删除用户上传的音色（内置音色不可删） */
+  async blogVoiceRemove(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/voices/remove', params, 'body');
+  }
+
+  /** 参考音色清单（内置 3 段 + 用户上传） */
+  async blogVoices(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/voices', params, 'query');
+  }
+
+  /** 上传参考音色（base64 wav/mp3，自动转 24kHz 单声道） */
+  async blogVoiceUpload(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/voices/upload', params, 'body');
+  }
+
+  /** 预热语音模型（进页面时调用，点试听才不用等 30 秒） */
+  async blogWarmup(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/warmup', params, 'body');
+  }
+
   /** 归档 / 取消归档（按当前用户隔离） */
   async bookArchive(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/book/archive', params, 'body');
@@ -852,6 +947,11 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/photo/ai/analyze', params, 'body');
   }
 
+  /** 相册助手问答（配了模型走模型，没配走本地统计规则） */
+  async photoAiAsk(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/photo/ai/ask', params, 'body');
+  }
+
   /** AI 设置（配置 / 进度 / 任务队列） */
   async photoAiConfig(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/photo/ai/config', params, 'query');
@@ -860,6 +960,21 @@ export class ColanasClient {
   /** 保存 AI 设置（部分字段） */
   async photoAiConfigSet(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/photo/ai/config', params, 'body');
+  }
+
+  /** 模型 API 配置（只读掩码视图，与全局 AI 服务共用一份） */
+  async photoAiModelApi(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/photo/ai/model-api', params, 'query');
+  }
+
+  /** 保存模型 API（apiKey 留空 = 保留已保存的密钥） */
+  async photoAiModelApiSet(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/photo/ai/model-api', params, 'body');
+  }
+
+  /** 测试模型 API 连通性（先 /models，失败再兜底最小 chat 请求） */
+  async photoAiModelApiTest(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/photo/ai/model-api/test', params, 'body');
   }
 
   /** 分批做文字识别（票夹与语义搜索的原料） */
@@ -1367,6 +1482,11 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/photo/search', params, 'query');
   }
 
+  /** 热门推荐（人物 / 场景 / 活动 / 年份，给「随便看看」用） */
+  async photoSearchHot(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/photo/search/hot', params, 'body');
+  }
+
   /** 混合检索：场景/活动标签 + OCR + 路径，按相关度排序（offset 分页） */
   async photoSearchHybrid(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/photo/search/hybrid', params, 'query');
@@ -1787,7 +1907,7 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/system/restart', params, 'body');
   }
 
-  /** 全局设置（端口 / 并发 / 主机名 / 欢迎语 / 代理 / 日系兜底） */
+  /** 全局设置（端口 / 并发 / 主机名 / 欢迎语 / 代理 / 日系兜底 / 大模型） */
   async systemSettingsGet(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/system/settings', params, 'query');
   }

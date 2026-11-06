@@ -2,6 +2,742 @@
 // source: contracts/openapi.json
 // regenerate: npm run gen:client
 
+class BlogCounts {
+  final int domesticGeneral;
+  final int worldGeneral;
+  final int domesticTech;
+  final int worldTech;
+  final int domesticAi;
+  final int worldAi;
+  final int domesticFinance;
+  final int worldFinance;
+
+  const BlogCounts({
+    required this.domesticGeneral,
+    required this.worldGeneral,
+    required this.domesticTech,
+    required this.worldTech,
+    required this.domesticAi,
+    required this.worldAi,
+    required this.domesticFinance,
+    required this.worldFinance,
+  });
+
+  factory BlogCounts.fromJson(Map<String, dynamic> json) => BlogCounts(
+        domesticGeneral: json['domesticGeneral'] as int,
+        worldGeneral: json['worldGeneral'] as int,
+        domesticTech: json['domesticTech'] as int,
+        worldTech: json['worldTech'] as int,
+        domesticAi: json['domesticAi'] as int,
+        worldAi: json['worldAi'] as int,
+        domesticFinance: json['domesticFinance'] as int,
+        worldFinance: json['worldFinance'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'domesticGeneral': domesticGeneral,
+        'worldGeneral': worldGeneral,
+        'domesticTech': domesticTech,
+        'worldTech': worldTech,
+        'domesticAi': domesticAi,
+        'worldAi': worldAi,
+        'domesticFinance': domesticFinance,
+        'worldFinance': worldFinance,
+      };
+}
+
+class BlogSettingsResponse {
+  final String voice;
+  final double speed;
+  final BlogCounts counts;
+  final int planHour;
+  final int planMinute;
+  final bool planEnabled;
+  final String apiProvider;
+  final String apiKey;
+  final String apiBase;
+  final String apiModel;
+  final bool llmEnabled;
+  final bool webSearch;
+  final bool llmReady;
+  final int secondsPerItem;
+  final String? lastPlanDate;
+  final bool ttsAvailable;
+  final String? ttsReason;
+
+  const BlogSettingsResponse({
+    required this.voice,
+    required this.speed,
+    required this.counts,
+    required this.planHour,
+    required this.planMinute,
+    required this.planEnabled,
+    required this.apiProvider,
+    required this.apiKey,
+    required this.apiBase,
+    required this.apiModel,
+    required this.llmEnabled,
+    required this.webSearch,
+    required this.llmReady,
+    required this.secondsPerItem,
+    required this.lastPlanDate,
+    required this.ttsAvailable,
+    required this.ttsReason,
+  });
+
+  factory BlogSettingsResponse.fromJson(Map<String, dynamic> json) => BlogSettingsResponse(
+        voice: json['voice'] as String,
+        speed: (json['speed'] as num).toDouble(),
+        counts: BlogCounts.fromJson(json['counts'] as Map<String, dynamic>),
+        planHour: json['planHour'] as int,
+        planMinute: json['planMinute'] as int,
+        planEnabled: json['planEnabled'] as bool,
+        apiProvider: json['apiProvider'] as String,
+        apiKey: json['apiKey'] as String,
+        apiBase: json['apiBase'] as String,
+        apiModel: json['apiModel'] as String,
+        llmEnabled: json['llmEnabled'] as bool,
+        webSearch: json['webSearch'] as bool,
+        llmReady: json['llmReady'] as bool,
+        secondsPerItem: json['secondsPerItem'] as int,
+        lastPlanDate: json['lastPlanDate'] as String?,
+        ttsAvailable: json['ttsAvailable'] as bool,
+        ttsReason: json['ttsReason'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'voice': voice,
+        'speed': speed,
+        'counts': counts.toJson(),
+        'planHour': planHour,
+        'planMinute': planMinute,
+        'planEnabled': planEnabled,
+        'apiProvider': apiProvider,
+        'apiKey': apiKey,
+        'apiBase': apiBase,
+        'apiModel': apiModel,
+        'llmEnabled': llmEnabled,
+        'webSearch': webSearch,
+        'llmReady': llmReady,
+        'secondsPerItem': secondsPerItem,
+        'lastPlanDate': lastPlanDate,
+        'ttsAvailable': ttsAvailable,
+        'ttsReason': ttsReason,
+      };
+}
+
+class BlogSettingsBody {
+  final String? voice;
+  final double? speed;
+  final BlogCounts? counts;
+  final int? planHour;
+  final int? planMinute;
+  final bool? planEnabled;
+  final String? apiProvider;
+  final String? apiKey;
+  final String? apiBase;
+  final String? apiModel;
+  final bool? llmEnabled;
+  final bool? webSearch;
+
+  const BlogSettingsBody({
+    this.voice,
+    this.speed,
+    this.counts,
+    this.planHour,
+    this.planMinute,
+    this.planEnabled,
+    this.apiProvider,
+    this.apiKey,
+    this.apiBase,
+    this.apiModel,
+    this.llmEnabled,
+    this.webSearch,
+  });
+
+  factory BlogSettingsBody.fromJson(Map<String, dynamic> json) => BlogSettingsBody(
+        voice: json['voice'] == null ? null : json['voice'] as String,
+        speed: json['speed'] == null ? null : (json['speed'] as num).toDouble(),
+        counts: json['counts'] == null ? null : BlogCounts.fromJson(json['counts'] as Map<String, dynamic>),
+        planHour: json['planHour'] == null ? null : json['planHour'] as int,
+        planMinute: json['planMinute'] == null ? null : json['planMinute'] as int,
+        planEnabled: json['planEnabled'] == null ? null : json['planEnabled'] as bool,
+        apiProvider: json['apiProvider'] == null ? null : json['apiProvider'] as String,
+        apiKey: json['apiKey'] == null ? null : json['apiKey'] as String,
+        apiBase: json['apiBase'] == null ? null : json['apiBase'] as String,
+        apiModel: json['apiModel'] == null ? null : json['apiModel'] as String,
+        llmEnabled: json['llmEnabled'] == null ? null : json['llmEnabled'] as bool,
+        webSearch: json['webSearch'] == null ? null : json['webSearch'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (voice != null) 'voice': voice!,
+        if (speed != null) 'speed': speed!,
+        if (counts != null) 'counts': counts!.toJson(),
+        if (planHour != null) 'planHour': planHour!,
+        if (planMinute != null) 'planMinute': planMinute!,
+        if (planEnabled != null) 'planEnabled': planEnabled!,
+        if (apiProvider != null) 'apiProvider': apiProvider!,
+        if (apiKey != null) 'apiKey': apiKey!,
+        if (apiBase != null) 'apiBase': apiBase!,
+        if (apiModel != null) 'apiModel': apiModel!,
+        if (llmEnabled != null) 'llmEnabled': llmEnabled!,
+        if (webSearch != null) 'webSearch': webSearch!,
+      };
+}
+
+class BlogVoiceItem {
+  final String id;
+  final String gender;
+  final bool builtin;
+  final String label;
+
+  const BlogVoiceItem({
+    required this.id,
+    required this.gender,
+    required this.builtin,
+    required this.label,
+  });
+
+  factory BlogVoiceItem.fromJson(Map<String, dynamic> json) => BlogVoiceItem(
+        id: json['id'] as String,
+        gender: json['gender'] as String,
+        builtin: json['builtin'] as bool,
+        label: json['label'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'gender': gender,
+        'builtin': builtin,
+        'label': label,
+      };
+}
+
+class BlogVoiceListResponse {
+  final List<BlogVoiceItem> items;
+  final String defaultVoice;
+
+  const BlogVoiceListResponse({
+    required this.items,
+    required this.defaultVoice,
+  });
+
+  factory BlogVoiceListResponse.fromJson(Map<String, dynamic> json) => BlogVoiceListResponse(
+        items: (json['items'] as List<dynamic>).map((e) => BlogVoiceItem.fromJson(e as Map<String, dynamic>)).toList(),
+        defaultVoice: json['defaultVoice'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+        'defaultVoice': defaultVoice,
+      };
+}
+
+class BlogVoiceUploadBody {
+  final String name;
+  final String data;
+
+  const BlogVoiceUploadBody({
+    required this.name,
+    required this.data,
+  });
+
+  factory BlogVoiceUploadBody.fromJson(Map<String, dynamic> json) => BlogVoiceUploadBody(
+        name: json['name'] as String,
+        data: json['data'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'name': name,
+        'data': data,
+      };
+}
+
+class BlogVoiceUploadResponse {
+  final bool ok;
+  final BlogVoiceItem voice;
+
+  const BlogVoiceUploadResponse({
+    required this.ok,
+    required this.voice,
+  });
+
+  factory BlogVoiceUploadResponse.fromJson(Map<String, dynamic> json) => BlogVoiceUploadResponse(
+        ok: json['ok'] as bool,
+        voice: BlogVoiceItem.fromJson(json['voice'] as Map<String, dynamic>),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'ok': ok,
+        'voice': voice.toJson(),
+      };
+}
+
+class BlogVoiceRemoveBody {
+  final String id;
+
+  const BlogVoiceRemoveBody({
+    required this.id,
+  });
+
+  factory BlogVoiceRemoveBody.fromJson(Map<String, dynamic> json) => BlogVoiceRemoveBody(
+        id: json['id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+      };
+}
+
+class BlogEpisodeItem {
+  final String id;
+  final String title;
+  final String voice;
+  final double speed;
+  final double durationSec;
+  final int sizeBytes;
+  final int itemCount;
+  final String status;
+  final String? error;
+  final int parts;
+  final int doneParts;
+  final List<String> sections;
+  final List<String> headlines;
+  final int createdAt;
+  final int? finishedAt;
+
+  const BlogEpisodeItem({
+    required this.id,
+    required this.title,
+    required this.voice,
+    required this.speed,
+    required this.durationSec,
+    required this.sizeBytes,
+    required this.itemCount,
+    required this.status,
+    required this.error,
+    required this.parts,
+    required this.doneParts,
+    required this.sections,
+    required this.headlines,
+    required this.createdAt,
+    required this.finishedAt,
+  });
+
+  factory BlogEpisodeItem.fromJson(Map<String, dynamic> json) => BlogEpisodeItem(
+        id: json['id'] as String,
+        title: json['title'] as String,
+        voice: json['voice'] as String,
+        speed: (json['speed'] as num).toDouble(),
+        durationSec: (json['durationSec'] as num).toDouble(),
+        sizeBytes: json['sizeBytes'] as int,
+        itemCount: json['itemCount'] as int,
+        status: json['status'] as String,
+        error: json['error'] as String?,
+        parts: json['parts'] as int,
+        doneParts: json['doneParts'] as int,
+        sections: (json['sections'] as List<dynamic>).cast<String>(),
+        headlines: (json['headlines'] as List<dynamic>).cast<String>(),
+        createdAt: json['createdAt'] as int,
+        finishedAt: json['finishedAt'] as int?,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'title': title,
+        'voice': voice,
+        'speed': speed,
+        'durationSec': durationSec,
+        'sizeBytes': sizeBytes,
+        'itemCount': itemCount,
+        'status': status,
+        'error': error,
+        'parts': parts,
+        'doneParts': doneParts,
+        'sections': sections,
+        'headlines': headlines,
+        'createdAt': createdAt,
+        'finishedAt': finishedAt,
+      };
+}
+
+class BlogEpisodeListResponse {
+  final List<BlogEpisodeItem> items;
+
+  const BlogEpisodeListResponse({
+    required this.items,
+  });
+
+  factory BlogEpisodeListResponse.fromJson(Map<String, dynamic> json) => BlogEpisodeListResponse(
+        items: (json['items'] as List<dynamic>).map((e) => BlogEpisodeItem.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class BlogGenerateBody {
+  final BlogCounts? counts;
+  final String? voice;
+  final double? speed;
+
+  const BlogGenerateBody({
+    this.counts,
+    this.voice,
+    this.speed,
+  });
+
+  factory BlogGenerateBody.fromJson(Map<String, dynamic> json) => BlogGenerateBody(
+        counts: json['counts'] == null ? null : BlogCounts.fromJson(json['counts'] as Map<String, dynamic>),
+        voice: json['voice'] == null ? null : json['voice'] as String,
+        speed: json['speed'] == null ? null : (json['speed'] as num).toDouble(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (counts != null) 'counts': counts!.toJson(),
+        if (voice != null) 'voice': voice!,
+        if (speed != null) 'speed': speed!,
+      };
+}
+
+class BlogGenerateResponse {
+  final String id;
+  final String status;
+
+  const BlogGenerateResponse({
+    required this.id,
+    required this.status,
+  });
+
+  factory BlogGenerateResponse.fromJson(Map<String, dynamic> json) => BlogGenerateResponse(
+        id: json['id'] as String,
+        status: json['status'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'status': status,
+      };
+}
+
+class BlogResynthBody {
+  final String id;
+
+  const BlogResynthBody({
+    required this.id,
+  });
+
+  factory BlogResynthBody.fromJson(Map<String, dynamic> json) => BlogResynthBody(
+        id: json['id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+      };
+}
+
+class BlogResynthResponse {
+  final String id;
+  final String status;
+
+  const BlogResynthResponse({
+    required this.id,
+    required this.status,
+  });
+
+  factory BlogResynthResponse.fromJson(Map<String, dynamic> json) => BlogResynthResponse(
+        id: json['id'] as String,
+        status: json['status'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'status': status,
+      };
+}
+
+class BlogStatusResponse {
+  final String id;
+  final String status;
+  final int parts;
+  final int doneParts;
+  final String? error;
+  final String message;
+
+  const BlogStatusResponse({
+    required this.id,
+    required this.status,
+    required this.parts,
+    required this.doneParts,
+    required this.error,
+    required this.message,
+  });
+
+  factory BlogStatusResponse.fromJson(Map<String, dynamic> json) => BlogStatusResponse(
+        id: json['id'] as String,
+        status: json['status'] as String,
+        parts: json['parts'] as int,
+        doneParts: json['doneParts'] as int,
+        error: json['error'] as String?,
+        message: json['message'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'status': status,
+        'parts': parts,
+        'doneParts': doneParts,
+        'error': error,
+        'message': message,
+      };
+}
+
+class BlogPreviewBody {
+  final String? voice;
+
+  const BlogPreviewBody({
+    this.voice,
+  });
+
+  factory BlogPreviewBody.fromJson(Map<String, dynamic> json) => BlogPreviewBody(
+        voice: json['voice'] == null ? null : json['voice'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (voice != null) 'voice': voice!,
+      };
+}
+
+class BlogWarmupResponse {
+  final bool ready;
+  final bool available;
+  final String? reason;
+
+  const BlogWarmupResponse({
+    required this.ready,
+    required this.available,
+    this.reason,
+  });
+
+  factory BlogWarmupResponse.fromJson(Map<String, dynamic> json) => BlogWarmupResponse(
+        ready: json['ready'] as bool,
+        available: json['available'] as bool,
+        reason: json['reason'] == null ? null : json['reason'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'ready': ready,
+        'available': available,
+        if (reason != null) 'reason': reason!,
+      };
+}
+
+class BlogTtsModelResponse {
+  final bool installed;
+  final bool downloading;
+  final double percent;
+  final String phase;
+  final String task;
+  final String? error;
+  final bool binReady;
+  final bool modelReady;
+  final String? modelDir;
+
+  const BlogTtsModelResponse({
+    required this.installed,
+    required this.downloading,
+    required this.percent,
+    required this.phase,
+    required this.task,
+    required this.error,
+    required this.binReady,
+    required this.modelReady,
+    required this.modelDir,
+  });
+
+  factory BlogTtsModelResponse.fromJson(Map<String, dynamic> json) => BlogTtsModelResponse(
+        installed: json['installed'] as bool,
+        downloading: json['downloading'] as bool,
+        percent: (json['percent'] as num).toDouble(),
+        phase: json['phase'] as String,
+        task: json['task'] as String,
+        error: json['error'] as String?,
+        binReady: json['binReady'] as bool,
+        modelReady: json['modelReady'] as bool,
+        modelDir: json['modelDir'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'installed': installed,
+        'downloading': downloading,
+        'percent': percent,
+        'phase': phase,
+        'task': task,
+        'error': error,
+        'binReady': binReady,
+        'modelReady': modelReady,
+        'modelDir': modelDir,
+      };
+}
+
+class BlogPreviewResponse {
+  final String url;
+  final int expiresInSec;
+  final bool cached;
+
+  const BlogPreviewResponse({
+    required this.url,
+    required this.expiresInSec,
+    required this.cached,
+  });
+
+  factory BlogPreviewResponse.fromJson(Map<String, dynamic> json) => BlogPreviewResponse(
+        url: json['url'] as String,
+        expiresInSec: json['expiresInSec'] as int,
+        cached: json['cached'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'url': url,
+        'expiresInSec': expiresInSec,
+        'cached': cached,
+      };
+}
+
+class BlogAudioUrlResponse {
+  final String url;
+  final int expiresInSec;
+
+  const BlogAudioUrlResponse({
+    required this.url,
+    required this.expiresInSec,
+  });
+
+  factory BlogAudioUrlResponse.fromJson(Map<String, dynamic> json) => BlogAudioUrlResponse(
+        url: json['url'] as String,
+        expiresInSec: json['expiresInSec'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'url': url,
+        'expiresInSec': expiresInSec,
+      };
+}
+
+class BlogRemoveBody {
+  final String id;
+
+  const BlogRemoveBody({
+    required this.id,
+  });
+
+  factory BlogRemoveBody.fromJson(Map<String, dynamic> json) => BlogRemoveBody(
+        id: json['id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+      };
+}
+
+class BlogOkResponse {
+  final bool ok;
+
+  const BlogOkResponse({
+    required this.ok,
+  });
+
+  factory BlogOkResponse.fromJson(Map<String, dynamic> json) => BlogOkResponse(
+        ok: json['ok'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'ok': ok,
+      };
+}
+
+class BlogNewsItem {
+  final String category;
+  final String title;
+  final String summary;
+  final String link;
+  final String source;
+  final int? published;
+
+  const BlogNewsItem({
+    required this.category,
+    required this.title,
+    required this.summary,
+    required this.link,
+    required this.source,
+    required this.published,
+  });
+
+  factory BlogNewsItem.fromJson(Map<String, dynamic> json) => BlogNewsItem(
+        category: json['category'] as String,
+        title: json['title'] as String,
+        summary: json['summary'] as String,
+        link: json['link'] as String,
+        source: json['source'] as String,
+        published: json['published'] as int?,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'category': category,
+        'title': title,
+        'summary': summary,
+        'link': link,
+        'source': source,
+        'published': published,
+      };
+}
+
+class BlogNewsResponse {
+  final List<BlogNewsItem> items;
+  final List<String> failed;
+
+  const BlogNewsResponse({
+    required this.items,
+    required this.failed,
+  });
+
+  factory BlogNewsResponse.fromJson(Map<String, dynamic> json) => BlogNewsResponse(
+        items: (json['items'] as List<dynamic>).map((e) => BlogNewsItem.fromJson(e as Map<String, dynamic>)).toList(),
+        failed: (json['failed'] as List<dynamic>).cast<String>(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+        'failed': failed,
+      };
+}
+
+class BlogErrorResponse {
+  final String error;
+  final String? message;
+  final String? code;
+
+  const BlogErrorResponse({
+    required this.error,
+    this.message,
+    this.code,
+  });
+
+  factory BlogErrorResponse.fromJson(Map<String, dynamic> json) => BlogErrorResponse(
+        error: json['error'] as String,
+        message: json['message'] == null ? null : json['message'] as String,
+        code: json['code'] == null ? null : json['code'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'error': error,
+        if (message != null) 'message': message!,
+        if (code != null) 'code': code!,
+      };
+}
+
 class BookLibraryItem {
   final String id;
   final String name;
@@ -6321,6 +7057,202 @@ class PhotoScanTask {
       };
 }
 
+class PhotoModelApi {
+  final bool enabled;
+  final String provider;
+  final String baseUrl;
+  final String model;
+  final bool webSearch;
+  final bool hasKey;
+  final String keyTail;
+
+  const PhotoModelApi({
+    required this.enabled,
+    required this.provider,
+    required this.baseUrl,
+    required this.model,
+    required this.webSearch,
+    required this.hasKey,
+    required this.keyTail,
+  });
+
+  factory PhotoModelApi.fromJson(Map<String, dynamic> json) => PhotoModelApi(
+        enabled: json['enabled'] as bool,
+        provider: json['provider'] as String,
+        baseUrl: json['baseUrl'] as String,
+        model: json['model'] as String,
+        webSearch: json['webSearch'] as bool,
+        hasKey: json['hasKey'] as bool,
+        keyTail: json['keyTail'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'enabled': enabled,
+        'provider': provider,
+        'baseUrl': baseUrl,
+        'model': model,
+        'webSearch': webSearch,
+        'hasKey': hasKey,
+        'keyTail': keyTail,
+      };
+}
+
+class PhotoModelApiBody {
+  final String? baseUrl;
+  final String? model;
+  final String? apiKey;
+  final bool? enabled;
+
+  const PhotoModelApiBody({
+    this.baseUrl,
+    this.model,
+    this.apiKey,
+    this.enabled,
+  });
+
+  factory PhotoModelApiBody.fromJson(Map<String, dynamic> json) => PhotoModelApiBody(
+        baseUrl: json['baseUrl'] == null ? null : json['baseUrl'] as String,
+        model: json['model'] == null ? null : json['model'] as String,
+        apiKey: json['apiKey'] == null ? null : json['apiKey'] as String,
+        enabled: json['enabled'] == null ? null : json['enabled'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (baseUrl != null) 'baseUrl': baseUrl!,
+        if (model != null) 'model': model!,
+        if (apiKey != null) 'apiKey': apiKey!,
+        if (enabled != null) 'enabled': enabled!,
+      };
+}
+
+class PhotoModelApiTestBody {
+  final String? baseUrl;
+  final String? model;
+  final String? apiKey;
+
+  const PhotoModelApiTestBody({
+    this.baseUrl,
+    this.model,
+    this.apiKey,
+  });
+
+  factory PhotoModelApiTestBody.fromJson(Map<String, dynamic> json) => PhotoModelApiTestBody(
+        baseUrl: json['baseUrl'] == null ? null : json['baseUrl'] as String,
+        model: json['model'] == null ? null : json['model'] as String,
+        apiKey: json['apiKey'] == null ? null : json['apiKey'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (baseUrl != null) 'baseUrl': baseUrl!,
+        if (model != null) 'model': model!,
+        if (apiKey != null) 'apiKey': apiKey!,
+      };
+}
+
+class PhotoModelApiTestResult {
+  final bool ok;
+  final int latencyMs;
+  final List<String> models;
+  final bool modelExists;
+  final String message;
+
+  const PhotoModelApiTestResult({
+    required this.ok,
+    required this.latencyMs,
+    required this.models,
+    required this.modelExists,
+    required this.message,
+  });
+
+  factory PhotoModelApiTestResult.fromJson(Map<String, dynamic> json) => PhotoModelApiTestResult(
+        ok: json['ok'] as bool,
+        latencyMs: json['latencyMs'] as int,
+        models: (json['models'] as List<dynamic>).cast<String>(),
+        modelExists: json['modelExists'] as bool,
+        message: json['message'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'ok': ok,
+        'latencyMs': latencyMs,
+        'models': models,
+        'modelExists': modelExists,
+        'message': message,
+      };
+}
+
+class PhotoAskBody {
+  final String question;
+
+  const PhotoAskBody({
+    required this.question,
+  });
+
+  factory PhotoAskBody.fromJson(Map<String, dynamic> json) => PhotoAskBody(
+        question: json['question'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'question': question,
+      };
+}
+
+class PhotoAskResponse {
+  final dynamic mode;
+  final String answer;
+  final String reason;
+
+  const PhotoAskResponse({
+    required this.mode,
+    required this.answer,
+    required this.reason,
+  });
+
+  factory PhotoAskResponse.fromJson(Map<String, dynamic> json) => PhotoAskResponse(
+        mode: (json['mode'] as dynamic),
+        answer: json['answer'] as String,
+        reason: json['reason'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'mode': mode,
+        'answer': answer,
+        'reason': reason,
+      };
+}
+
+class PhotoSearchHotBody {
+  final int? limit;
+
+  const PhotoSearchHotBody({
+    this.limit,
+  });
+
+  factory PhotoSearchHotBody.fromJson(Map<String, dynamic> json) => PhotoSearchHotBody(
+        limit: json['limit'] == null ? null : json['limit'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (limit != null) 'limit': limit!,
+      };
+}
+
+class PhotoSearchHotResponse {
+  final List<Map<String, dynamic>> items;
+
+  const PhotoSearchHotResponse({
+    required this.items,
+  });
+
+  factory PhotoSearchHotResponse.fromJson(Map<String, dynamic> json) => PhotoSearchHotResponse(
+        items: (json['items'] as List<dynamic>).cast<Map<String, dynamic>>(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items,
+      };
+}
+
 class PhotoAiScanBody {
   final bool? force;
   final bool? ocr;
@@ -8993,6 +9925,78 @@ class ErrorResponse {
       };
 }
 
+class SystemLlm {
+  final bool enabled;
+  final String provider;
+  final String baseUrl;
+  final String model;
+  final String apiKey;
+  final bool webSearch;
+
+  const SystemLlm({
+    required this.enabled,
+    required this.provider,
+    required this.baseUrl,
+    required this.model,
+    required this.apiKey,
+    required this.webSearch,
+  });
+
+  factory SystemLlm.fromJson(Map<String, dynamic> json) => SystemLlm(
+        enabled: json['enabled'] as bool,
+        provider: json['provider'] as String,
+        baseUrl: json['baseUrl'] as String,
+        model: json['model'] as String,
+        apiKey: json['apiKey'] as String,
+        webSearch: json['webSearch'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'enabled': enabled,
+        'provider': provider,
+        'baseUrl': baseUrl,
+        'model': model,
+        'apiKey': apiKey,
+        'webSearch': webSearch,
+      };
+}
+
+class SystemLlmPatch {
+  final bool? enabled;
+  final String? provider;
+  final String? baseUrl;
+  final String? model;
+  final String? apiKey;
+  final bool? webSearch;
+
+  const SystemLlmPatch({
+    this.enabled,
+    this.provider,
+    this.baseUrl,
+    this.model,
+    this.apiKey,
+    this.webSearch,
+  });
+
+  factory SystemLlmPatch.fromJson(Map<String, dynamic> json) => SystemLlmPatch(
+        enabled: json['enabled'] == null ? null : json['enabled'] as bool,
+        provider: json['provider'] == null ? null : json['provider'] as String,
+        baseUrl: json['baseUrl'] == null ? null : json['baseUrl'] as String,
+        model: json['model'] == null ? null : json['model'] as String,
+        apiKey: json['apiKey'] == null ? null : json['apiKey'] as String,
+        webSearch: json['webSearch'] == null ? null : json['webSearch'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        if (enabled != null) 'enabled': enabled!,
+        if (provider != null) 'provider': provider!,
+        if (baseUrl != null) 'baseUrl': baseUrl!,
+        if (model != null) 'model': model!,
+        if (apiKey != null) 'apiKey': apiKey!,
+        if (webSearch != null) 'webSearch': webSearch!,
+      };
+}
+
 class SystemSettings {
   final int httpPort;
   final int httpsPort;
@@ -9002,6 +10006,7 @@ class SystemSettings {
   final String welcome;
   final String proxy;
   final bool javFallback;
+  final SystemLlm llm;
 
   const SystemSettings({
     required this.httpPort,
@@ -9012,6 +10017,7 @@ class SystemSettings {
     required this.welcome,
     required this.proxy,
     required this.javFallback,
+    required this.llm,
   });
 
   factory SystemSettings.fromJson(Map<String, dynamic> json) => SystemSettings(
@@ -9023,6 +10029,7 @@ class SystemSettings {
         welcome: json['welcome'] as String,
         proxy: json['proxy'] as String,
         javFallback: json['javFallback'] as bool,
+        llm: SystemLlm.fromJson(json['llm'] as Map<String, dynamic>),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -9034,6 +10041,7 @@ class SystemSettings {
         'welcome': welcome,
         'proxy': proxy,
         'javFallback': javFallback,
+        'llm': llm.toJson(),
       };
 }
 
@@ -9046,6 +10054,7 @@ class SystemSettingsBody {
   final String? welcome;
   final String? proxy;
   final bool? javFallback;
+  final SystemLlmPatch? llm;
 
   const SystemSettingsBody({
     this.httpPort,
@@ -9056,6 +10065,7 @@ class SystemSettingsBody {
     this.welcome,
     this.proxy,
     this.javFallback,
+    this.llm,
   });
 
   factory SystemSettingsBody.fromJson(Map<String, dynamic> json) => SystemSettingsBody(
@@ -9067,6 +10077,7 @@ class SystemSettingsBody {
         welcome: json['welcome'] == null ? null : json['welcome'] as String,
         proxy: json['proxy'] == null ? null : json['proxy'] as String,
         javFallback: json['javFallback'] == null ? null : json['javFallback'] as bool,
+        llm: json['llm'] == null ? null : SystemLlmPatch.fromJson(json['llm'] as Map<String, dynamic>),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -9078,6 +10089,7 @@ class SystemSettingsBody {
         if (welcome != null) 'welcome': welcome!,
         if (proxy != null) 'proxy': proxy!,
         if (javFallback != null) 'javFallback': javFallback!,
+        if (llm != null) 'llm': llm!.toJson(),
       };
 }
 
@@ -11811,6 +12823,7 @@ class PlayerSessionCreateBody {
   final int? audioIndex;
   final bool? forceSdr;
   final int? leadMinutes;
+  final int? startMs;
 
   const PlayerSessionCreateBody({
     required this.id,
@@ -11822,6 +12835,7 @@ class PlayerSessionCreateBody {
     this.audioIndex,
     this.forceSdr,
     this.leadMinutes,
+    this.startMs,
   });
 
   factory PlayerSessionCreateBody.fromJson(Map<String, dynamic> json) => PlayerSessionCreateBody(
@@ -11834,6 +12848,7 @@ class PlayerSessionCreateBody {
         audioIndex: json['audioIndex'] == null ? null : json['audioIndex'] as int,
         forceSdr: json['forceSdr'] == null ? null : json['forceSdr'] as bool,
         leadMinutes: json['leadMinutes'] == null ? null : json['leadMinutes'] as int,
+        startMs: json['startMs'] == null ? null : json['startMs'] as int,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -11846,26 +12861,31 @@ class PlayerSessionCreateBody {
         if (audioIndex != null) 'audioIndex': audioIndex!,
         if (forceSdr != null) 'forceSdr': forceSdr!,
         if (leadMinutes != null) 'leadMinutes': leadMinutes!,
+        if (startMs != null) 'startMs': startMs!,
       };
 }
 
 class PlayerSessionCreated {
   final String id;
   final String url;
+  final int? startedMs;
 
   const PlayerSessionCreated({
     required this.id,
     required this.url,
+    this.startedMs,
   });
 
   factory PlayerSessionCreated.fromJson(Map<String, dynamic> json) => PlayerSessionCreated(
         id: json['id'] as String,
         url: json['url'] as String,
+        startedMs: json['startedMs'] == null ? null : json['startedMs'] as int,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'url': url,
+        if (startedMs != null) 'startedMs': startedMs!,
       };
 }
 
@@ -11880,6 +12900,7 @@ class PlayerSessionItem {
   final int segments;
   final int? transcodedMs;
   final int? leadMs;
+  final int? startedMs;
   final String? error;
   final String url;
   final int createdAt;
@@ -11898,6 +12919,7 @@ class PlayerSessionItem {
     required this.segments,
     this.transcodedMs,
     this.leadMs,
+    this.startedMs,
     required this.error,
     required this.url,
     required this.createdAt,
@@ -11917,6 +12939,7 @@ class PlayerSessionItem {
         segments: json['segments'] as int,
         transcodedMs: json['transcodedMs'] == null ? null : json['transcodedMs'] as int,
         leadMs: json['leadMs'] == null ? null : json['leadMs'] as int,
+        startedMs: json['startedMs'] == null ? null : json['startedMs'] as int,
         error: json['error'] as String?,
         url: json['url'] as String,
         createdAt: json['createdAt'] as int,
@@ -11936,6 +12959,7 @@ class PlayerSessionItem {
         'segments': segments,
         if (transcodedMs != null) 'transcodedMs': transcodedMs!,
         if (leadMs != null) 'leadMs': leadMs!,
+        if (startedMs != null) 'startedMs': startedMs!,
         'error': error,
         'url': url,
         'createdAt': createdAt,

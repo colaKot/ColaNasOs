@@ -150,15 +150,33 @@ class _PlayerPageState extends State<PlayerPage> {
   String? _sessionId;
   String? _jobStatus;
 
-  /// 已转出的总时长（毫秒）：分段续转时进度条上画一条淡色刻度。
-  /// 0 = 没开分段 / 还没转出来。
+  /// 已转出的总时长（毫秒）：进度条上「已加载」那一段画到这里。
+  /// **片源绝对位置**（含下面的起转偏移）。0 = 还没转出来 / 没开会话。
   int _transcodedMs = 0;
+
+  /// 本会话时间轴 0 对应的片源位置（毫秒）。
+  ///
+  /// 通常 0（从片头转）。进度条被拖到还没转出来的位置时会另建一个
+  /// 「从该位置起转」的会话，这时播放器的 0 不等于片头 —— 显示、seek、
+  /// 上报播放位置全都要加这个偏移，否则时间会整整差一个跳跃点。
+  int _startMs = 0;
+
+  /// 正在按目标位置重建会话（跳到未转码区），期间忽略再次拖动。
+  bool _jumping = false;
+
+  /// 上次重建会话的时刻：刚建完就再掐一次 ffmpeg 没有意义，2 秒冷却。
+  DateTime _lastJumpAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// 服务端回传的**实际**编码（降级后以它为准）；为空表示还没出片。
   String? _actualCodec;
 
   /// 上次刷新隐藏定时器的时间，用来给 `onHover` 做节流。
   DateTime _lastPoke = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// 「play() 被 pause() 打断」这类良性错误的静默重试次数。
+  /// 浏览器换 src 时必然先 pause 旧的 play()，产生的 DOMException 长得像错误，
+  /// 但播放器随后会继续 —— 直接弹「播放失败」是误报（SMB 转码起播时高发）。
+  int _benignRetries = 0;
 
   /// 本次播放内不再缓存会话地址：服务端建会话时会把同一部片还在跑的旧会话
   /// 取消掉（换档），本地缓存拿到的可能是已取消的半个播放列表。
@@ -227,6 +245,10 @@ class _PlayerPageState extends State<PlayerPage> {
 
     _player.stream.error.listen((message) {
       if (!mounted) return;
+      if (_isBenignPlaybackError(message)) {
+        _retryAfterBenignError(message);
+        return;
+      }
       setState(() => _error = message);
       _renewIfTokenExpired(message);
     });
@@ -394,6 +416,7 @@ class _PlayerPageState extends State<PlayerPage> {
         await Future<void>.delayed(const Duration(milliseconds: 350));
         await _player.seek(seekTo);
       }
+      _benignRetries = 0;
       if (mounted) setState(() => _error = null);
     } catch (e) {
       // 边转边播的第一次打开会「打不开」：播放器拉 index.m3u8 时首片可能还没落盘
@@ -411,13 +434,44 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
-  /// 拿到某个 preset/codec 的 HLS 地址。
+  /// 浏览器换源时的良性中断：不是真的播不了，重开一次就好。
+  static bool _isBenignPlaybackError(String message) {
+    final m = message.toLowerCase();
+    return m.contains('interrupted by a call to pause') ||
+        m.contains('interrupted by a new load request') ||
+        (m.contains('play()') && m.contains('interrupt')) ||
+        m.contains('aborterror');
+  }
+
+  /// 良性中断 → 静默重开当前地址；重试两次仍没播起来才把错误显示出来。
+  void _retryAfterBenignError(String message) {
+    if (_benignRetries >= 2) {
+      setState(() => _error = message);
+      return;
+    }
+    _benignRetries += 1;
+    final target = _url;
+    if (target.isEmpty) return;
+    Future<void>.delayed(const Duration(milliseconds: 900), () {
+      if (!mounted || _player.state.playing) return;
+      _openUrl(target);
+    });
+  }
+
+  /// 拿到的某个 preset/codec 的 HLS 地址。
   ///
   /// 服务端用 EVENT 播放列表边转边播：第一个分片落盘时 index.m3u8 就可读，
   /// 所以这里创建完会话立刻返回地址起播，**不再轮询到 done**（全片转码一次
   /// 实测 254s 起，4K/AV1 更久，等完再把流丢给播放器就是长时间黑屏）。
   /// 已转完的同参会话由服务端 `dupe` 直接复用，不在客户端缓存地址。
-  Future<String> _ensureTranscode(String preset, String codec) async {
+  ///
+  /// [startMs] > 0 = 从片源该位置起转（跳到还没转出来的位置时用）。产物播放列表的
+  /// 时间轴 0 就是它，所以 `_startMs` 跟着更新，界面再加偏移。
+  Future<String> _ensureTranscode(
+    String preset,
+    String codec, {
+    int startMs = 0,
+  }) async {
     final id = widget.itemId!;
     // 请求的编码在本机解不出来时回落 H.264（桌面端一律解得出来，浏览器由
     // `MediaSource.isTypeSupported` 说了算 —— 真 Chrome 上 AV1 / HEVC 都是支持的）。
@@ -436,6 +490,8 @@ class _PlayerPageState extends State<PlayerPage> {
         audioDownmix: PlayPreferences.audioDownmix ? true : null,
         // 0 = 整片一次转完；>0 时服务端按段转，播放位置靠近末尾才续下一段
         leadMinutes: PlayPreferences.leadMinutes,
+        // 0 = 从片头转。服务端会按片源时长夹取，越界不会建出空会话。
+        startMs: startMs > 0 ? startMs : null,
       ),
     );
     final u = created.url.startsWith('http')
@@ -445,6 +501,8 @@ class _PlayerPageState extends State<PlayerPage> {
     _sessionId = created.id;
     _jobStatus = null;
     _transcodedMs = 0;
+    // 起转偏移以服务端回显为准（它可能夹取过），播放器时间轴 0 = 这个位置
+    _startMs = created.startedMs ?? startMs;
     // 实际编码换会话后必须清空，否则换了档还显示上一轮的结果
     _actualCodec = null;
     // 后台只盯失败：转码挂了要明确说出来，别让用户对着无限缓冲猜。
@@ -468,7 +526,9 @@ class _PlayerPageState extends State<PlayerPage> {
       // 换档 / 换片后旧会话的轮询要立刻停手，否则会把新会话的字段覆盖成旧值
       if (!mounted || _sessionId != id) return;
       try {
-        final pos = _player.state.position.inMilliseconds;
+        // 上报的是**片源绝对位置**：服务端据此判断要不要续转下一段，
+        // 起转偏移必须算进去，否则每次跳转后都会误判「离末尾还很远」。
+        final pos = _absPosition(_player.state.position).inMilliseconds;
         final job = await ApiSession.instance.client.playerSessionGet(
           id: id,
           pos: pos > 0 ? pos.toDouble() : 0,
@@ -541,16 +601,24 @@ class _PlayerPageState extends State<PlayerPage> {
     final effective = preset == 'original' && !toDirect
         ? clampPresetForSource(defaultPlayPreset, _srcHeight, codec: targetCodec)
         : preset;
-    final pos = _player.state.position;
+    final pos = _absPosition(_player.state.position);
     setState(() => _switching = true);
     try {
       // 服务端建新会话会取消这部片还在排队 / 正在转的旧会话，
       // 所以换档不会让上一档的转码继续占 CPU。
       final u = toDirect
           ? _directUrl
-          : await _ensureTranscode(effective, targetCodec);
-      // 换档也是新建会话，同样可能撞上「首片还没落盘」，给两次重试
-      await _openUrl(u, seekTo: pos, retries: toDirect ? 0 : 2);
+          : await _ensureTranscode(
+              effective,
+              targetCodec,
+              // 换档从当前位置接着播：新会话直接从这儿起转，不用再 seek
+              startMs: pos.inMilliseconds,
+            );
+      // 回直链：时间轴是片源时间轴，起转偏移必须清零，否则位置会凭空多一截
+      if (toDirect) _startMs = 0;
+      // 换档也是新建会话，同样可能撞上「首片还没落盘」，给两次重试。
+      // 转码会话的时间轴 0 = pos（见 _ensureTranscode 的 startMs），不能再 seekTo。
+      await _openUrl(u, seekTo: toDirect ? pos : null, retries: toDirect ? 0 : 2);
       if (!mounted) return;
       setState(() {
         _preset = effective;
@@ -732,13 +800,71 @@ class _PlayerPageState extends State<PlayerPage> {
   }
 
   Future<void> _seekBy(int seconds) async {
-    final p = _player.state.position;
-    final limit = _seekLimit(_player.state.duration);
-    var target = p + Duration(seconds: seconds);
-    if (target < Duration.zero) target = Duration.zero;
-    if (limit > Duration.zero && target > limit) target = limit;
-    await _player.seek(target);
+    final p = _absPosition(_player.state.position);
+    await _seekTo(p + Duration(seconds: seconds));
+  }
+
+  /// 跳到片源绝对位置 [target]。
+  ///
+  /// 分两路：
+  ///   - 目标落在「本会话已加载区间」里 → 直接 `player.seek`（减掉起转偏移）；
+  ///   - 落在外面（已经加载到的位置之后 / 会话起点之前）→ 另起一个从该位置
+  ///     起转的会话。顺序转码是省 CPU 的前提，服务端没法凭空造出 1:30 的分片，
+  ///     所以「跳过去」只能是重建一条从 1:30 开始的新会话。
+  ///
+  /// [allowJump] = false 用于拖动过程（`onChanged` 每帧都来）：那时只处理
+  /// 区间内的实时跟随，跳出区间的等松手（`onChangeEnd`）再建会话，
+  /// 否则一次拖动会掐掉好几轮 ffmpeg。
+  Future<void> _seekTo(Duration target, {bool allowJump = true}) async {
+    final total = _timelineDuration(_player.state.duration);
+    var t = target;
+    if (t < Duration.zero) t = Duration.zero;
+    if (total > Duration.zero && t > total) t = total;
+    if (!_isTranscode || widget.itemId == null) {
+      // 直链 / 没有条目 id（详情页指定的 HLS 地址）没法重建会话，只能按老规矩夹取
+      final limit = _seekLimit(_player.state.duration);
+      if (_isTranscode && limit > Duration.zero && t > limit) t = limit;
+      await _player.seek(t);
+      _poke();
+      return;
+    }
+    if (seekNeedsJump(
+      target: t,
+      start: _startOffset,
+      loadedEnd: _loadedEnd,
+    )) {
+      if (!allowJump) return;
+      await _jumpTo(t);
+      return;
+    }
+    await _player.seek(t - _startOffset);
     _poke();
+  }
+
+  /// 跳到还没转出来的位置：另建一条从 [target] 起转的会话。
+  Future<void> _jumpTo(Duration target) async {
+    if (_jumping) return;
+    // 刚跳过来首片还没落盘，这时候再拖一次只是把 ffmpeg 掐掉重来
+    if (DateTime.now().difference(_lastJumpAt) < const Duration(seconds: 2)) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    _lastJumpAt = DateTime.now();
+    setState(() => _jumping = true);
+    try {
+      final u = await _ensureTranscode(
+        _preset,
+        _codec,
+        startMs: target.inMilliseconds,
+      );
+      // 新播放列表的时间轴 0 就是 target，不能再 seekTo（否则会跳过 target 那一段）
+      await _openUrl(u, retries: 2);
+      _poke();
+    } catch (e) {
+      if (messenger != null && mounted) {
+        NasSnack.showOn(messenger, tr('player.seekFailed', {'error': '$e'}));
+      }
+    } finally {
+      if (mounted) setState(() => _jumping = false);
+    }
   }
 
   Future<void> _setLoop(PlaylistMode mode, {bool shuffle = false}) async {
@@ -811,12 +937,26 @@ class _PlayerPageState extends State<PlayerPage> {
         isTranscode: _isTranscode,
       );
 
-  /// 进度条上「已转出」刻度的位置（0..1）；不需要画时返回 null。
-  /// 只在分段续转（会话回报过 transcodedMs）且还没转完整片时才画。
-  double? _leadMarker(Duration total) => leadMarker(
-        isTranscode: _isTranscode,
-        transcodedMs: _transcodedMs,
-        total: total,
+  /// 本会话时间轴 0 对应的片源位置（通常 0；从中途起转时 = 起转偏移）。
+  Duration get _startOffset => Duration(milliseconds: _startMs);
+
+  /// 播放器时间 → 片源绝对时间。
+  ///
+  /// 播放器在拿不到时长时会吐负数哨兵值，这种一律按「就是起点」处理，
+  /// 不然进度条会显示成 -106751991167 小时。
+  Duration _absPosition(Duration raw) =>
+      raw <= Duration.zero ? _startOffset : _startOffset + raw;
+
+  /// 已加载（已转出）到的**片源绝对位置**：进度条粗的那一段画到这里。
+  ///
+  /// 取「服务端回报的已转出长度」和「起点 + 播放器报的时长」中大的那个：
+  /// 整片一次转完（`leadMinutes = 0`）时服务端不回报 `transcodedMs`。
+  Duration get _loadedEnd => Duration(
+        milliseconds: loadedEndMs(
+          startMs: _startMs,
+          playerMs: _player.state.duration.inMilliseconds,
+          serverMs: _transcodedMs,
+        ),
       );
 
   // -------------------------------------------------------------------- 控件
@@ -1001,10 +1141,15 @@ class _PlayerPageState extends State<PlayerPage> {
           return;
         }
         // 转码流只有一条音轨：切源里的第 N 条要重建会话，并从当前位置接着播
-        final pos = _player.state.position;
+        // （位置直接当成新会话的起转点，时间轴 0 = 这里）
+        final pos = _absPosition(_player.state.position);
         _audioIndex = i;
-        final u = await _ensureTranscode(_preset, _codec);
-        await _openUrl(u, seekTo: pos);
+        final u = await _ensureTranscode(
+          _preset,
+          _codec,
+          startMs: pos.inMilliseconds,
+        );
+        await _openUrl(u);
         _poke();
       },
       itemBuilder: (_) => [
@@ -1466,71 +1611,49 @@ class _PlayerPageState extends State<PlayerPage> {
         builder: (_, pos) => StreamBuilder<Duration>(
           stream: _player.stream.duration,
           builder: (_, dur) {
-            final p = pos.data ?? Duration.zero;
+            // 播放器时间轴 → 片源时间（从中途起转时要加偏移），时间与滑块都按它来
+            final p = _absPosition(pos.data ?? Duration.zero);
             final d = _timelineDuration(dur.data ?? Duration.zero);
             final max = d.inMilliseconds;
+            final cur = p.inMilliseconds.clamp(0, max > 0 ? max : 0);
+            // 「已加载」画到哪儿：直链 = 整片（等于没有第二段），转码 = 已转出位置。
+            // 转码时就给 Slider 的 secondaryTrackValue，轨道形状自己画粗的那一段。
+            final loadedMs = _loadedEnd.inMilliseconds;
+            final loaded = !_isTranscode || max <= 0
+                ? null
+                : loadedMs.clamp(cur, max).toDouble();
             return Row(
               children: [
                 Text(_fmt(p),
                     style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 Expanded(
-                  child: LayoutBuilder(
-                    builder: (_, box) {
-                      final marker = _leadMarker(d);
-                      // Slider 轨道左右各留了一个 thumb 半径（≈12px），
-                      // 刻度按这个有效宽度换算才不会和滑块错位。
-                      const pad = 12.0;
-                      final trackW =
-                          box.maxWidth > pad * 2 ? box.maxWidth - pad * 2 : 0.0;
-                      return Stack(
-                        children: [
-                          SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 6,
-                              ),
-                            ),
-                            child: Slider(
-                              value: max > 0
-                                  ? (p.inMilliseconds / max).clamp(0.0, 1.0)
-                                  : 0.0,
-                              // 拖到还没转出来的位置就停在转码进度上，别让 hls.js 干等分片
-                              onChanged: max > 0
-                                  ? (v) {
-                                      final limit =
-                                          _seekLimit(dur.data ?? Duration.zero);
-                                      var target =
-                                          Duration(milliseconds: (max * v).round());
-                                      if (limit > Duration.zero && target > limit) {
-                                        target = limit;
-                                      }
-                                      _player.seek(target);
-                                    }
-                                  : null,
-                            ),
-                          ),
-                          // 淡色刻度：这一刻只转到了这里，右边还是片源时长。
-                          if (marker != null)
-                            Positioned(
-                              left: pad + trackW * marker,
-                              top: 0,
-                              bottom: 0,
-                              child: IgnorePointer(
-                                child: Center(
-                                  child: Container(
-                                    width: 2,
-                                    height: 16,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0x66FFFFFF),
-                                      borderRadius: BorderRadius.circular(1),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      );
-                    },
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      thumbShape: const RoundSliderThumbShape(
+                        enabledThumbRadius: 6,
+                      ),
+                      trackHeight: _LoadedTrackShape.baseHeight,
+                      trackShape: const _LoadedTrackShape(),
+                      // 已加载段：比底轨粗一倍，一眼能看出「能跳到哪儿」
+                      inactiveTrackColor: const Color(0x3DFFFFFF),
+                      secondaryActiveTrackColor: const Color(0x8AFFFFFF),
+                    ),
+                    child: Slider(
+                      value: cur.toDouble(),
+                      max: max > 0 ? max.toDouble() : 1.0,
+                      secondaryTrackValue: loaded,
+                      // 拖动时只跟随已加载区间；松手才决定要不要为「还没转出来的位置」
+                      // 另起会话（`_seekTo` 的 allowJump）
+                      onChanged: max > 0
+                          ? (v) => _seekTo(
+                                Duration(milliseconds: v.round()),
+                                allowJump: false,
+                              )
+                          : null,
+                      onChangeEnd: max > 0
+                          ? (v) => _seekTo(Duration(milliseconds: v.round()))
+                          : null,
+                    ),
                   ),
                 ),
                 Text(_fmt(d),
@@ -1738,7 +1861,8 @@ class _PlayerPageState extends State<PlayerPage> {
           builder: (_, snap) {
             final text = activeSubtitleText(
               _cues,
-              (snap.data ?? Duration.zero).inMilliseconds,
+              // 字幕时间是片源时间，会话从中途起转时要加偏移才和画面对得上
+              _absPosition(snap.data ?? Duration.zero).inMilliseconds,
             );
             if (text.isEmpty) return const SizedBox.shrink();
             return Align(
@@ -1815,7 +1939,7 @@ class _PlayerPageState extends State<PlayerPage> {
         ),
       );
     }
-    if (_switching) {
+    if (_switching || _jumping) {
       return Positioned(
         top: 16,
         right: 16,
@@ -1832,7 +1956,7 @@ class _PlayerPageState extends State<PlayerPage> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 SizedBox(width: 8),
-                Text(tr('player.switching'),
+                Text(tr(_jumping ? 'player.seekingTarget' : 'player.switching'),
                     style: const TextStyle(color: Colors.white)),
               ],
             ),
@@ -2063,6 +2187,93 @@ class _VolumePanelState extends State<_VolumePanel> {
           },
         ),
       ],
+    );
+  }
+}
+
+/// 进度条轨道：底轨细、已加载（已转出）段粗一倍、已播段最显眼。
+///
+/// 为什么不用默认轨道 + 单独画一条竖刻度：转码时要表达的是「0 ~ 这里已经能跳」，
+/// 一段连续的粗线比一根 2px 竖线更容易看清；超出它的部分随转码推进自己变粗。
+/// `secondaryTrackValue` 由 [Slider] 换算成 `secondaryOffset` 传进来，
+/// 这里只负责按它画——拖动 / 点击的命中判定仍然由 Slider 自己算，不用另写手势。
+class _LoadedTrackShape extends SliderTrackShape with BaseSliderTrackShape {
+  const _LoadedTrackShape();
+
+  /// 底轨高度（SliderTheme.trackHeight 用；太粗会盖住画面）
+  static const double baseHeight = 4;
+  static const double _loadedHeight = 8;
+  static const double _playedHeight = 8;
+
+  @override
+  bool get isRounded => true;
+
+  @override
+  void paint(
+    PaintingContext context,
+    Offset offset, {
+    required RenderBox parentBox,
+    required SliderThemeData sliderTheme,
+    required Animation<double> enableAnimation,
+    required Offset thumbCenter,
+    Offset? secondaryOffset,
+    bool isEnabled = false,
+    bool isDiscrete = false,
+    required TextDirection textDirection,
+  }) {
+    final rect = getPreferredRect(
+      parentBox: parentBox,
+      offset: offset,
+      sliderTheme: sliderTheme,
+      isEnabled: isEnabled,
+      isDiscrete: isDiscrete,
+    );
+    if (rect.isEmpty) return;
+    final canvas = context.canvas;
+    final centerY = rect.center.dy;
+
+    // 底轨：整条，细
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset(rect.center.dx, centerY),
+          width: rect.width,
+          height: baseHeight,
+        ),
+        const Radius.circular(baseHeight / 2),
+      ),
+      Paint()..color = sliderTheme.inactiveTrackColor ?? const Color(0x3DFFFFFF),
+    );
+
+    void segment(double fromDx, double toDx, double height, Color color) {
+      final left = fromDx <= toDx ? fromDx : toDx;
+      final w = (toDx - fromDx).abs();
+      if (w <= 0) return;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(left, centerY - height / 2, w, height),
+          Radius.circular(height / 2),
+        ),
+        Paint()..color = color,
+      );
+    }
+
+    // 已加载（已转出）：从起点到 secondaryOffset
+    if (secondaryOffset != null) {
+      segment(
+        rect.left,
+        secondaryOffset.dx.clamp(rect.left, rect.right),
+        _loadedHeight,
+        sliderTheme.secondaryActiveTrackColor ?? const Color(0x8AFFFFFF),
+      );
+    }
+
+    // 已播：起点到滑块
+    segment(
+      rect.left,
+      thumbCenter.dx.clamp(rect.left, rect.right),
+      _playedHeight,
+      sliderTheme.activeTrackColor ?? Colors.white,
     );
   }
 }

@@ -24,6 +24,14 @@ const extraResources = [
     filter: ['locales.json'],
   },
   {
+    // 一键下载脚本必须随包：files 里显式排除了 tool/**，而内核用
+    // process.resourcesPath/tool/tts-model.js 以 Node 模式拉起它。
+    // 只有 14KB，精简包也带上（精简包用户同样可以按需补模型）。
+    from: 'tool',
+    to: 'tool',
+    filter: ['tts-model.js'],
+  },
+  {
     // 记忆页 / 地图的省市区与最近地名（开发态读 vendor/geo，安装态读 resources/geo）
     from: 'vendor/geo',
     to: 'geo',
@@ -46,7 +54,24 @@ const extraResources = [
 ];
 
 if (!LITE) {
-  extraResources.unshift({ from: 'vendor/models', to: 'models' });
+  // 语音模型（Qwen3-TTS，1.4GB）**不进安装包**：
+  // 大部分用户不用播客，塞进去等于给所有人加 1.4GB。装机版首次使用会提示
+  // 跑 `npm run tts:model`（源码用户）或从文档给的链接下载后放进 models/qwen3-tts。
+  extraResources.unshift({
+    from: 'vendor/models',
+    to: 'models',
+    filter: ['**/*', '!kokoro/**', '!qwen3-tts/**', '!mt/**'],
+  });
+  // 推理二进制随包带上（约 40MB，纯程序不含权重）：用户只需要再下模型
+  extraResources.push({
+    from: 'vendor/llama',
+    to: 'llama',
+    filter: ['**/*'],
+  });
+  // 内置参考音色（3 段 10 秒 wav，约 1.4MB）：不带的话开箱没有可用音色
+  extraResources.push({ from: 'vendor/voices', to: 'voices', filter: ['**/*.wav'] });
+  // 语音合成的 wav → mp3 用 ffmpeg；装机版没有它就只能落 wav（用户要的是 mp3）
+  extraResources.push({ from: 'vendor/ffmpeg', to: 'ffmpeg' });
 }
 
 module.exports = {

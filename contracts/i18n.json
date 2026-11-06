@@ -125,6 +125,7 @@
     "app.accounts": {},
     "app.ai": {},
     "app.backup": {},
+    "app.blog": {},
     "app.book": {},
     "app.discover": {},
     "app.files": {},
@@ -145,6 +146,133 @@
     "auth.logout": {},
     "auth.scopes": {},
     "auth.token": {},
+    "blog.api.base": {},
+    "blog.api.custom": {},
+    "blog.api.enable": {},
+    "blog.api.enableHint": {},
+    "blog.api.hide": {},
+    "blog.api.hint": {},
+    "blog.api.key": {},
+    "blog.api.model": {},
+    "blog.api.notConfigured": {},
+    "blog.api.provider": {},
+    "blog.api.show": {},
+    "blog.api.title": {},
+    "blog.api.webSearch": {},
+    "blog.api.webSearchHint": {},
+    "blog.cat.domesticAi": {},
+    "blog.cat.domesticFinance": {},
+    "blog.cat.domesticGeneral": {},
+    "blog.cat.domesticTech": {},
+    "blog.cat.worldAi": {},
+    "blog.cat.worldFinance": {},
+    "blog.cat.worldGeneral": {},
+    "blog.cat.worldTech": {},
+    "blog.count.unit": {
+      "count": {}
+    },
+    "blog.counts.title": {},
+    "blog.duration": {
+      "minutes": {},
+      "seconds": {}
+    },
+    "blog.episodes.delete": {},
+    "blog.episodes.deleteConfirm": {},
+    "blog.episodes.empty": {},
+    "blog.episodes.items": {
+      "count": {}
+    },
+    "blog.episodes.resynth": {},
+    "blog.episodes.status.done": {},
+    "blog.episodes.status.failed": {},
+    "blog.episodes.status.pending": {},
+    "blog.episodes.status.running": {},
+    "blog.episodes.title": {},
+    "blog.estimate": {},
+    "blog.generate.busy": {},
+    "blog.generate.eta": {
+      "minutes": {}
+    },
+    "blog.generate.failed": {
+      "error": {}
+    },
+    "blog.generate.needsVoice": {},
+    "blog.generate.now": {},
+    "blog.generate.preparing": {},
+    "blog.generate.running": {
+      "done": {},
+      "total": {}
+    },
+    "blog.generate.started": {},
+    "blog.loadFailed": {
+      "error": {}
+    },
+    "blog.loading": {},
+    "blog.nav.aiNews": {},
+    "blog.nav.content": {},
+    "blog.plan.enable": {},
+    "blog.plan.hint": {},
+    "blog.plan.time": {},
+    "blog.plan.title": {},
+    "blog.player.next": {},
+    "blog.player.pause": {},
+    "blog.player.play": {},
+    "blog.player.prev": {},
+    "blog.refresh": {},
+    "blog.retry": {},
+    "blog.save": {},
+    "blog.saveFailed": {
+      "error": {}
+    },
+    "blog.saved": {},
+    "blog.speed.title": {},
+    "blog.speed.value": {
+      "value": {}
+    },
+    "blog.subtitle": {},
+    "blog.title": {},
+    "blog.total": {
+      "count": {}
+    },
+    "blog.tts.model.cancel": {},
+    "blog.tts.model.cancelled": {},
+    "blog.tts.model.dir": {
+      "dir": {}
+    },
+    "blog.tts.model.download": {},
+    "blog.tts.model.downloading": {
+      "percent": {}
+    },
+    "blog.tts.model.failed": {
+      "error": {}
+    },
+    "blog.tts.model.hint": {},
+    "blog.tts.model.installed": {},
+    "blog.tts.model.phase.bin": {},
+    "blog.tts.model.phase.model": {},
+    "blog.tts.model.phase.vocoder": {},
+    "blog.tts.model.retry": {},
+    "blog.tts.model.title": {},
+    "blog.voice.deep": {},
+    "blog.voice.default": {},
+    "blog.voice.preview": {},
+    "blog.voice.previewFailed": {
+      "error": {}
+    },
+    "blog.voice.previewHint": {},
+    "blog.voice.previewing": {},
+    "blog.voice.title": {},
+    "blog.voice.unavailable": {
+      "reason": {}
+    },
+    "blog.voice.upload": {},
+    "blog.voice.uploadFailed": {
+      "error": {}
+    },
+    "blog.voice.uploaded": {
+      "name": {}
+    },
+    "blog.voice.warm": {},
     "book.cache.empty": {},
     "book.cache.hint": {},
     "book.cache.open": {},
@@ -590,6 +718,25 @@
     },
     "files.view.grid": {},
     "files.view.list": {},
+    "guide.body": {},
+    "guide.ok": {},
+    "guide.title": {},
+    "help.book.body": {},
+    "help.book.title": {},
+    "help.files.body": {},
+    "help.files.title": {},
+    "help.music.body": {},
+    "help.music.title": {},
+    "help.photo.body": {},
+    "help.photo.title": {},
+    "help.start.body": {},
+    "help.start.title": {},
+    "help.subtitle": {},
+    "help.title": {},
+    "help.trouble.body": {},
+    "help.trouble.title": {},
+    "help.video.body": {},
+    "help.video.title": {},
     "home.apps": {},
     "home.backup.hint": {},
     "home.backup.title": {},
@@ -837,6 +984,7 @@
     "music.removeFailed": {
       "error": {}
     },
+    "music.scanAlreadyRunning": {},
     "music.scanDone": {
       "added": {},
       "updated": {},
@@ -844,7 +992,6 @@
       "probed": {}
     },
     "music.scanQueued": {},
-    "music.scanAlreadyRunning": {},
     "music.settings.limit": {},
     "music.settings.prune": {},
     "music.settings.pruneHint": {},
@@ -903,9 +1050,12 @@
     "notes.conflict.reload": {},
     "notes.conflict.reloaded": {},
     "notes.conflict.title": {},
+    "notes.edit": {},
     "notes.pinFailed": {
       "error": {}
     },
+    "notes.preview": {},
+    "notes.previewEmpty": {},
     "notes.restoreFailed": {
       "error": {}
     },
@@ -921,9 +1071,6 @@
     "notes.versionTitle": {
       "count": {}
     },
-    "notes.preview": {},
-    "notes.edit": {},
-    "notes.previewEmpty": {},
     "photo.ai.activities": {},
     "photo.ai.allDone": {},
     "photo.ai.alreadyQueued": {},
@@ -1042,6 +1189,22 @@
       "count": {},
       "remaining": {}
     },
+    "photo.ask.answer": {},
+    "photo.ask.empty": {},
+    "photo.ask.error": {},
+    "photo.ask.fallback": {},
+    "photo.ask.hint": {},
+    "photo.ask.input": {},
+    "photo.ask.llmMode": {},
+    "photo.ask.loading": {},
+    "photo.ask.q1": {},
+    "photo.ask.q2": {},
+    "photo.ask.q3": {},
+    "photo.ask.q4": {},
+    "photo.ask.ruleMode": {},
+    "photo.ask.send": {},
+    "photo.ask.title": {},
+    "photo.ask.try": {},
     "photo.backup.done": {
       "uploaded": {},
       "skipped": {},
@@ -1127,6 +1290,37 @@
     "photo.deleteConfirm": {
       "name": {}
     },
+    "photo.discovery.activeDays": {},
+    "photo.discovery.bytes": {},
+    "photo.discovery.cities": {},
+    "photo.discovery.empty": {},
+    "photo.discovery.footprint": {},
+    "photo.discovery.hint": {},
+    "photo.discovery.library": {},
+    "photo.discovery.photos": {},
+    "photo.discovery.places": {},
+    "photo.discovery.quickEntries": {},
+    "photo.discovery.title": {},
+    "photo.discovery.todayNew": {},
+    "photo.discovery.topActivities": {},
+    "photo.discovery.topPeople": {},
+    "photo.discovery.topScenes": {},
+    "photo.discovery.travelDays": {},
+    "photo.discovery.videos": {},
+    "photo.duplicate.empty": {},
+    "photo.duplicate.goCleanup": {},
+    "photo.duplicate.groups": {},
+    "photo.duplicate.hint": {},
+    "photo.duplicate.md5Candidates": {},
+    "photo.duplicate.missingMd5": {},
+    "photo.duplicate.phashGroups": {},
+    "photo.duplicate.phashScan": {},
+    "photo.duplicate.scanIdle": {},
+    "photo.duplicate.scanRunning": {},
+    "photo.duplicate.similarGroups": {},
+    "photo.duplicate.title": {},
+    "photo.duplicate.topWasted": {},
+    "photo.duplicate.wasted": {},
     "photo.face.candidateMeta": {
       "sim": {},
       "evidence": {},
@@ -1333,6 +1527,44 @@
       "count": {}
     },
     "photo.hybrid.unmatched": {},
+    "photo.info.aperture": {},
+    "photo.info.camera": {},
+    "photo.info.dimensions": {},
+    "photo.info.exposure": {},
+    "photo.info.file": {},
+    "photo.info.focal": {},
+    "photo.info.gps": {},
+    "photo.info.iso": {},
+    "photo.info.lens": {},
+    "photo.info.loadFailed": {
+      "error": {}
+    },
+    "photo.info.orientation": {},
+    "photo.info.shutter": {},
+    "photo.info.size": {},
+    "photo.info.software": {},
+    "photo.info.takenAt": {},
+    "photo.info.title": {},
+    "photo.journey.days": {},
+    "photo.journey.distance": {},
+    "photo.journey.empty": {},
+    "photo.journey.emptyHint": {},
+    "photo.journey.hint": {},
+    "photo.journey.next": {},
+    "photo.journey.noMap": {},
+    "photo.journey.pause": {},
+    "photo.journey.play": {},
+    "photo.journey.points": {},
+    "photo.journey.prev": {},
+    "photo.journey.replay": {},
+    "photo.journey.segment": {
+      "index": {}
+    },
+    "photo.journey.segments": {},
+    "photo.journey.speed": {
+      "seconds": {}
+    },
+    "photo.journey.title": {},
     "photo.keepLabel": {
       "value": {}
     },
@@ -1428,6 +1660,19 @@
     "photo.merged": {
       "moved": {}
     },
+    "photo.modelApi.base": {},
+    "photo.modelApi.fail": {},
+    "photo.modelApi.hint": {},
+    "photo.modelApi.key": {},
+    "photo.modelApi.keyKept": {},
+    "photo.modelApi.model": {},
+    "photo.modelApi.models": {},
+    "photo.modelApi.noKey": {},
+    "photo.modelApi.ok": {},
+    "photo.modelApi.save": {},
+    "photo.modelApi.test": {},
+    "photo.modelApi.testing": {},
+    "photo.modelApi.title": {},
     "photo.models.empty": {},
     "photo.models.found": {
       "n": {}
@@ -1439,14 +1684,18 @@
     "photo.nav.ai": {},
     "photo.nav.aiCenter": {},
     "photo.nav.aiSettings": {},
+    "photo.nav.assistant": {},
     "photo.nav.backup": {},
     "photo.nav.chapter": {},
     "photo.nav.collection": {},
     "photo.nav.dayFrame": {},
+    "photo.nav.discovery": {},
+    "photo.nav.duplicateInsight": {},
     "photo.nav.favorites": {},
     "photo.nav.files": {},
     "photo.nav.gps": {},
     "photo.nav.home": {},
+    "photo.nav.journey": {},
     "photo.nav.memory": {},
     "photo.nav.models": {},
     "photo.nav.pending": {},
@@ -1457,6 +1706,7 @@
     "photo.nav.smart": {},
     "photo.nav.source": {},
     "photo.nav.tickets": {},
+    "photo.nav.timeContrast": {},
     "photo.nav.today": {},
     "photo.nav.trash": {},
     "photo.nav.year": {},
@@ -1473,24 +1723,6 @@
     "photo.placePicker.radius": {},
     "photo.placePicker.title": {},
     "photo.preview": {},
-    "photo.info.title": {},
-    "photo.info.file": {},
-    "photo.info.size": {},
-    "photo.info.dimensions": {},
-    "photo.info.takenAt": {},
-    "photo.info.camera": {},
-    "photo.info.lens": {},
-    "photo.info.exposure": {},
-    "photo.info.iso": {},
-    "photo.info.aperture": {},
-    "photo.info.shutter": {},
-    "photo.info.focal": {},
-    "photo.info.software": {},
-    "photo.info.gps": {},
-    "photo.info.orientation": {},
-    "photo.info.loadFailed": {
-      "error": {}
-    },
     "photo.preview.extent": {},
     "photo.preview.hint": {},
     "photo.preview.pageSize": {},
@@ -1618,8 +1850,25 @@
     "photo.suggest.filename": {},
     "photo.suggest.ocr": {},
     "photo.suggest.person": {},
+    "photo.suggest.recent": {},
+    "photo.suggest.recommend": {},
     "photo.suggest.scene": {},
+    "photo.suggest.suggestions": {},
     "photo.suggest.year": {},
+    "photo.timeContrast.earliest": {},
+    "photo.timeContrast.empty": {},
+    "photo.timeContrast.emptyHint": {},
+    "photo.timeContrast.gap": {
+      "count": {}
+    },
+    "photo.timeContrast.hint": {},
+    "photo.timeContrast.latest": {},
+    "photo.timeContrast.open": {},
+    "photo.timeContrast.pickDate": {},
+    "photo.timeContrast.span": {
+      "count": {}
+    },
+    "photo.timeContrast.title": {},
     "photo.timeline.addToCollection": {},
     "photo.timeline.all": {},
     "photo.timeline.batchFavorite": {},
@@ -1692,6 +1941,9 @@
     },
     "player.compatOn": {},
     "player.dolbyVision": {},
+    "player.embeddedSubtitle": {
+      "n": {}
+    },
     "player.fit": {},
     "player.fitContain": {},
     "player.fitCover": {},
@@ -1713,17 +1965,14 @@
     "player.noAudioTracks": {},
     "player.noPlaylist": {},
     "player.noSubtitles": {},
-    "player.embeddedSubtitle": {
-      "n": {}
-    },
     "player.off": {},
     "player.on": {},
     "player.original": {},
     "player.outputCodec": {},
     "player.pause": {},
     "player.play": {},
-    "player.playbackSource": {},
     "player.playFailed": {},
+    "player.playbackSource": {},
     "player.playlist": {},
     "player.preparing": {},
     "player.preparingHint": {
@@ -1751,6 +2000,10 @@
     "player.resolution": {},
     "player.retry": {},
     "player.rewind10": {},
+    "player.seekFailed": {
+      "error": {}
+    },
+    "player.seekingTarget": {},
     "player.settings": {},
     "player.sourceDirect": {},
     "player.sourceTranscode": {},
@@ -1761,9 +2014,9 @@
       "error": {}
     },
     "player.switching": {},
-    "player.transcodeState": {},
     "player.transcodeDone": {},
     "player.transcodePending": {},
+    "player.transcodeState": {},
     "player.transcoding": {},
     "player.tryOriginal": {},
     "player.unlock": {},
@@ -1815,32 +2068,8 @@
       "name": {}
     },
     "settings.appearance": {},
-    "help.title": {},
-    "help.subtitle": {},
-    "help.start.title": {},
-    "help.start.body": {},
-    "help.video.title": {},
-    "help.video.body": {},
-    "help.music.title": {},
-    "help.music.body": {},
-    "help.photo.title": {},
-    "help.photo.body": {},
-    "help.book.title": {},
-    "help.book.body": {},
-    "help.files.title": {},
-    "help.files.body": {},
-    "help.trouble.title": {},
-    "help.trouble.body": {},
-    "guide.title": {},
-    "guide.body": {},
-    "guide.ok": {},
     "settings.cache": {},
     "settings.cacheClear": {},
-    "settings.dbCompact": {},
-    "settings.dbCompactHint": {},
-    "settings.dbCompacted": {
-      "size": {}
-    },
     "settings.cacheCleared": {
       "size": {}
     },
@@ -1851,6 +2080,11 @@
     "settings.capabilityNotice": {},
     "settings.capabilityNoticeHint": {},
     "settings.concurrency": {},
+    "settings.dbCompact": {},
+    "settings.dbCompactHint": {},
+    "settings.dbCompacted": {
+      "size": {}
+    },
     "settings.deleteTitle": {
       "name": {}
     },
@@ -1875,6 +2109,19 @@
       "count": {}
     },
     "settings.librariesMoved": {},
+    "settings.llm.base": {},
+    "settings.llm.custom": {},
+    "settings.llm.enable": {},
+    "settings.llm.hideKey": {},
+    "settings.llm.hint": {},
+    "settings.llm.key": {},
+    "settings.llm.model": {},
+    "settings.llm.provider": {},
+    "settings.llm.providerBailian": {},
+    "settings.llm.showKey": {},
+    "settings.llm.title": {},
+    "settings.llm.webSearch": {},
+    "settings.llm.webSearchHint": {},
     "settings.logsAutoRefresh": {},
     "settings.logsEmpty": {},
     "settings.logsFilter": {},
@@ -2763,21 +3010,21 @@
     "video.collection.itemsCount": {
       "count": {}
     },
+    "video.collection.merge": {},
+    "video.collection.mergeBody": {
+      "source": {}
+    },
+    "video.collection.mergeNoTarget": {},
+    "video.collection.mergeTarget": {},
+    "video.collection.mergeTitle": {},
+    "video.collection.merged": {
+      "count": {}
+    },
     "video.collection.moveDown": {},
     "video.collection.moveUp": {},
     "video.collection.name": {},
     "video.collection.nameHint": {},
     "video.collection.new": {},
-    "video.collection.merge": {},
-    "video.collection.mergeTitle": {},
-    "video.collection.mergeBody": {
-      "source": {}
-    },
-    "video.collection.mergeTarget": {},
-    "video.collection.mergeNoTarget": {},
-    "video.collection.merged": {
-      "count": {}
-    },
     "video.collection.removeItem": {},
     "video.collection.rename": {},
     "video.collection.setCover": {},

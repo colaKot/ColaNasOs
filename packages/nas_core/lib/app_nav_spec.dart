@@ -135,6 +135,8 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
           NavItemSpec(id: 'dayFrame', labelKey: 'photo.nav.dayFrame', icon: 'auto_awesome_mosaic_outlined'),
           NavItemSpec(id: 'tickets', labelKey: 'photo.nav.tickets', icon: 'confirmation_number_outlined'),
           NavItemSpec(id: 'year', labelKey: 'photo.nav.year', icon: 'bar_chart'),
+          NavItemSpec(id: 'timeContrast', labelKey: 'photo.nav.timeContrast', icon: 'history'),
+          NavItemSpec(id: 'journey', labelKey: 'photo.nav.journey', icon: 'travel_explore_outlined'),
         ],
       ),
       NavSectionSpec(
@@ -152,6 +154,7 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         icon: 'auto_awesome_outlined',
         items: <NavItemSpec>[
           NavItemSpec(id: 'photoAiCenter', labelKey: 'photo.nav.aiCenter', icon: 'auto_awesome_outlined'),
+          NavItemSpec(id: 'assistant', labelKey: 'photo.nav.assistant', icon: 'help_outline'),
           NavItemSpec(id: 'faces', labelKey: 'ui.photo.038', icon: 'face_retouching_natural_outlined'),
           NavItemSpec(id: 'relations', labelKey: 'photo.relations.title', icon: 'hub_outlined'),
           NavItemSpec(id: 'scenes', labelKey: 'ui.photo.036', icon: 'landscape_outlined'),
@@ -160,6 +163,8 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
           NavItemSpec(id: 'search', labelKey: 'common.search', icon: 'search'),
           NavItemSpec(id: 'gps', labelKey: 'photo.nav.gps', icon: 'gps_fixed_outlined'),
           NavItemSpec(id: 'cleanup', labelKey: 'photo.nav.similarCleanup', icon: 'cleaning_services_outlined'),
+          NavItemSpec(id: 'discovery', labelKey: 'photo.nav.discovery', icon: 'explore_outlined'),
+          NavItemSpec(id: 'duplicateInsight', labelKey: 'photo.nav.duplicateInsight', icon: 'content_copy_outlined'),
         ],
       ),
       NavSectionSpec(
@@ -170,6 +175,7 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
           NavItemSpec(id: 'source', labelKey: 'photo.nav.source', icon: 'folder_special_outlined'),
           NavItemSpec(id: 'preview', labelKey: 'photo.nav.preview', icon: 'photo_size_select_large_outlined'),
           NavItemSpec(id: 'aiSettings', labelKey: 'photo.nav.aiSettings', icon: 'tag_faces_outlined'),
+          NavItemSpec(id: 'models', labelKey: 'photo.nav.models', icon: 'sparkles'),
           NavItemSpec(id: 'trash', labelKey: 'photo.nav.trash', icon: 'delete_sweep_outlined'),
           NavItemSpec(id: 'backup', labelKey: 'photo.nav.backup', icon: 'cloud_upload_outlined', when: 'mobileApp'),
         ],
@@ -287,6 +293,20 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
     ],
     mobileTabs: <String>['songs', 'playlists', 'favorites', 'history', '@more'],
     mobileTabLabels: <String, String>{'songs': 'music.nav.songs'},
+  ),
+  'blog': AppNavSpec(
+    appId: 'blog',
+    style: NavStyle.side,
+    sections: <NavSectionSpec>[
+      NavSectionSpec(
+        id: 'content',
+        titleKey: 'blog.nav.content',
+        icon: 'podcast',
+        items: <NavItemSpec>[
+          NavItemSpec(id: 'aiNews', labelKey: 'blog.nav.aiNews', icon: 'newspaper_outlined'),
+        ],
+      ),
+    ],
   ),
   'book': AppNavSpec(
     appId: 'book',

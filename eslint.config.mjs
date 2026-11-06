@@ -32,6 +32,8 @@ export default [
       '.codeartsdoer/**',
       // 本地临时目录（冒烟数据、实验脚本）
       '.devdata/**',
+      // 冒烟测试在 .cache/rss 等目录里生成的临时 JS（每次跑都可能出现，不该进 lint）
+      '.cache/**',
       // IDE 内置浏览器/调试器留下的临时 Chrome profile（第三方编译产物）
       '.tmp-chrome-profile/**',
       '.tmp-*/**',

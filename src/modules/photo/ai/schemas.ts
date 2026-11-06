@@ -488,7 +488,89 @@ export const ErrorResponse = Type.Object(
   { $id: 'PhotoAiError' },
 );
 
+/** 模型 API（Agent 用）：只读掩码视图，明文密钥永不回前端 */
+export const ModelApi = Type.Object(
+  {
+    enabled: Type.Boolean(),
+    provider: Type.String(),
+    baseUrl: Type.String(),
+    model: Type.String(),
+    webSearch: Type.Boolean(),
+    hasKey: Type.Boolean(),
+    keyTail: Type.String({ description: '已保存密钥的尾 4 位' }),
+  },
+  { $id: 'PhotoModelApi' },
+);
+
+export const ModelApiBody = Type.Object(
+  {
+    baseUrl: Type.Optional(Type.String({ maxLength: 300 })),
+    model: Type.Optional(Type.String({ maxLength: 120 })),
+    apiKey: Type.Optional(Type.String({ maxLength: 400, description: '留空 = 保留已保存的密钥' })),
+    enabled: Type.Optional(Type.Boolean()),
+  },
+  { $id: 'PhotoModelApiBody' },
+);
+
+export const ModelApiTestBody = Type.Object(
+  {
+    baseUrl: Type.Optional(Type.String({ maxLength: 300 })),
+    model: Type.Optional(Type.String({ maxLength: 120 })),
+    apiKey: Type.Optional(Type.String({ maxLength: 400, description: '留空 = 用已保存的密钥' })),
+  },
+  { $id: 'PhotoModelApiTestBody' },
+);
+
+export const ModelApiTestResult = Type.Object(
+  {
+    ok: Type.Boolean(),
+    latencyMs: Type.Integer(),
+    models: Type.Array(Type.String()),
+    modelExists: Type.Boolean(),
+    message: Type.String(),
+  },
+  { $id: 'PhotoModelApiTestResult' },
+);
+
+export const AskBody = Type.Object(
+  { question: Type.String({ minLength: 1, maxLength: 400 }) },
+  { $id: 'PhotoAskBody' },
+);
+
+export const AskResponse = Type.Object(
+  {
+    mode: Type.Union([Type.Literal('llm'), Type.Literal('rule')]),
+    answer: Type.String(),
+    reason: Type.String({ description: 'no_model / 模型报错原因；空 = 正常' }),
+  },
+  { $id: 'PhotoAskResponse' },
+);
+
+export const SearchHotBody = Type.Object(
+  { limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20, default: 6 })) },
+  { $id: 'PhotoSearchHotBody' },
+);
+
+const SuggestItemSchema = Type.Object({
+  kind: Type.String(),
+  value: Type.String(),
+  count: Type.Integer(),
+});
+
+export const SearchHotResponse = Type.Object(
+  { items: Type.Array(SuggestItemSchema) },
+  { $id: 'PhotoSearchHotResponse' },
+);
+
 export const PHOTO_AI_SCHEMAS = [
+  ModelApi,
+  ModelApiBody,
+  ModelApiTestBody,
+  ModelApiTestResult,
+  AskBody,
+  AskResponse,
+  SearchHotBody,
+  SearchHotResponse,
   ScanBody,
   ScanResponse,
   AnalyzeBody,

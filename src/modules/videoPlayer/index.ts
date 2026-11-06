@@ -55,6 +55,13 @@ interface SessionRow {
   hdr_to_sdr: number | null;
   /** 提前转码时长（毫秒）；0 = 用户显式选了整片一次转完（老会话默认值） */
   lead_ms: number | null;
+  /**
+   * 这个会话从片源第几毫秒起转（0 = 片头）。
+   *
+   * 进度条拖到「还没转出来」的位置时会建一个从中途起转的会话：产物播放列表的
+   * 时间轴 0 就是 start_ms，客户端自己加偏移显示成片源时间。
+   */
+  start_ms: number | null;
   status: string;
   segments: number;
   error: string | null;
@@ -156,6 +163,7 @@ const toItem = (
   segments: Number(r.segments),
   transcodedMs,
   leadMs: Number(r.lead_ms ?? 0),
+  startedMs: Number(r.start_ms ?? 0),
   error: r.error,
   url: urlOf(r.id, token),
   createdAt: Number(r.created_at),
@@ -303,8 +311,12 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
     // 分段续转：leadMs=0（用户显式选整片）时完全走原来的「一次转完整片」单目录路径；
     // >0（默认 3 分钟）时每段一个 pN 子目录，ffmpeg 只转 [已转出位置, +leadMs) 这一截。
     const leadMs = Math.max(0, Number(job.lead_ms) || 0);
+    // 起转位置：>0 表示这个会话是从片源中途开始的（进度条跳到了未转码的位置）。
+    // 每段都是「从片头算」的绝对位置，所以 seekMs 一律是 startMs + 已转出长度。
+    const startMs = Math.max(0, Number(job.start_ms) || 0);
     const parts = leadMs > 0 ? partsOf(k, job.id) : [];
     const alreadyMs = transcodedMsOf(parts);
+    const transcodedMs = startMs + alreadyMs;
     const totalMs = leadMs > 0 ? await sourceDurationMsOf(k, job.item_id) : 0;
     const outDir = leadMs > 0 ? path.join(dir, `p${parts.length}`) : dir;
     const res = await k.media.hls(src, outDir, {
@@ -317,7 +329,7 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
       hdrToSdr,
       // 「原画」能否直接 copy 取决于片源：AV1/HEVC 复制进 TS 解不出来
       srcVideoCodec: media?.video_codec ?? undefined,
-      seekMs: leadMs > 0 ? alreadyMs : undefined,
+      seekMs: leadMs > 0 || startMs > 0 ? transcodedMs : undefined,
       limitMs: leadMs > 0 ? leadMs : undefined,
     });
     k.log.info(
@@ -338,8 +350,9 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
     // 这一段转完：片源还没到头就标 paused，等播放位置靠近了再续下一段。
     // 这样用户看 10 分钟就关掉，服务端最多只多转一个 leadMs，不会再烧整片。
     const doneParts = leadMs > 0 ? partsOf(k, job.id) : [];
-    const transcodedMs = transcodedMsOf(doneParts);
-    const more = leadMs > 0 && totalMs > 0 && transcodedMs < totalMs - 1000;
+    // 已转出的是「片源里的绝对位置」：起点偏移 + 各段时长之和。
+    const doneMs = startMs + transcodedMsOf(doneParts);
+    const more = leadMs > 0 && totalMs > 0 && doneMs < totalMs - 1000; 
     const segments = leadMs > 0 ? segmentCountOf(doneParts) : res.segments;
     await sql`
       update player_sessions
@@ -520,6 +533,21 @@ export const videoPlayer: ServerModule = {
         }
       },
     },
+    {
+      id: '141_player_start',
+      async up(db) {
+        // 起转偏移（毫秒）：进度条拖到「还没转出来」的位置时，从中途另起一个会话。
+        // 默认 0 = 从片头转，老行为不变（老会话的产物时间轴本来就以片头为准）。
+        const cols = (
+          (await sql`pragma table_info(player_sessions)`.execute(db)).rows as Array<{
+            name: string;
+          }>
+        ).map((r) => r.name);
+        if (!cols.includes('start_ms')) {
+          await sql`alter table player_sessions add column start_ms integer not null default 0`.execute(db);
+        }
+      },
+    },
   ],
 
   async register(app, k) {
@@ -554,6 +582,7 @@ export const videoPlayer: ServerModule = {
           audioIndex?: number;
           forceSdr?: boolean;
           leadMinutes?: number;
+          startMs?: number;
         };
         const item = body.id ? await itemPath(k, body.id) : null;
         if (!item) return reply.code(404).send({ error: Err.notFound, message: 'video not found' });
@@ -615,6 +644,12 @@ export const videoPlayer: ServerModule = {
             ? Math.min(60, Math.round(rawLead))
             : DEFAULT_LEAD_MINUTES;
         const leadMs = leadMin * 60_000;
+        // 起转偏移：进度条跳到还没转出来位置时客户端会带上它。
+        // 夹到 [0, 片源时长 - 1s]，别让一个离谱的值建出一个空会话。
+        const srcMs = await sourceDurationMsOf(k, body.id as string);
+        const rawStart = Math.max(0, Math.round(Number(body.startMs) || 0));
+        const startMs =
+          srcMs > 0 ? Math.min(rawStart, Math.max(0, srcMs - 1000)) : rawStart;
         // 同参数会话复用：pump 是串行的，重复点播放会不断往队列里塞「全片转码」，
         // 后面所有片都得等前面跑完。done 的直接秒开，pending/running 共用同一份
         // 产物边转边播。
@@ -626,6 +661,7 @@ export const videoPlayer: ServerModule = {
                and coalesce(force_sdr, 0) = ${forceSdr}
                and coalesce(subtitle, '') = ${subtitle ?? ''}
                and coalesce(lead_ms, 0) = ${leadMs}
+               and coalesce(start_ms, 0) = ${startMs}
                and status in ('pending', 'running', 'paused', 'done')
                and created_at > ${ts - 7 * 86400}
              order by created_at desc limit 1
@@ -634,7 +670,11 @@ export const videoPlayer: ServerModule = {
         if (dupe) {
           // 内核重启可能留下 pending 会话、没有 pump 在跑，顺手补一次
           pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
-          return { id: dupe.id, url: urlOf(dupe.id, hlsToken(k, dupe.id)) };
+          return {
+            id: dupe.id,
+            url: urlOf(dupe.id, hlsToken(k, dupe.id)),
+            startedMs: Number(dupe.start_ms ?? 0),
+          };
         }
         // 换档 / 重试：同一部片还在排队或正在转的旧会话先取消，
         // 否则新会话只能排在它后面（4K 转不动的片实测能把队列堵 50 分钟）。
@@ -642,13 +682,13 @@ export const videoPlayer: ServerModule = {
         await sql`
           insert into player_sessions
             (id, item_id, preset, codec, subtitle, audio_normalize, audio_downmix,
-             audio_index, force_sdr, hdr_to_sdr, lead_ms, status, created_at, updated_at)
+             audio_index, force_sdr, hdr_to_sdr, lead_ms, start_ms, status, created_at, updated_at)
           values (${id}, ${body.id}, ${preset}, ${codec},
                   ${subtitle}, ${audioNormalize}, ${audioDownmix},
-                  ${audioIndex}, ${forceSdr}, ${forceSdr}, ${leadMs}, 'pending', ${ts}, ${ts})
+                  ${audioIndex}, ${forceSdr}, ${forceSdr}, ${leadMs}, ${startMs}, 'pending', ${ts}, ${ts})
         `.execute(k.db);
         pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
-        return { id, url: urlOf(id, hlsToken(k, id)) };
+        return { id, url: urlOf(id, hlsToken(k, id)), startedMs: startMs };
       },
     );
 
@@ -675,12 +715,15 @@ export const videoPlayer: ServerModule = {
           return reply.code(404).send({ error: Err.notFound, message: 'session not found' });
         const row = rows[0];
         const leadMs = Math.max(0, Number(row.lead_ms) || 0);
+        const startMs = Math.max(0, Number(row.start_ms) || 0);
         const parts = leadMs > 0 ? partsOf(k, row.id) : [];
-        const transcodedMs = transcodedMsOf(parts);
+        // 对内对外都按「片源绝对位置」算：起转偏移 + 各段时长之和。
+        const doneMs = transcodedMsOf(parts);
+        const transcodedMs = startMs + doneMs;
         // 分段续转的「续」：播放位置离已转出末尾不足半个提前量时，
         // 把 paused 会话放回队列再转一段。没人轮询就一直 paused，
         // ffmpeg 不会在后台空转 —— 这正是省 CPU 的关键。
-        if (leadMs > 0 && row.status === 'paused' && transcodedMs > 0) {
+        if (leadMs > 0 && row.status === 'paused' && doneMs > 0) {
           const total = await sourceDurationMsOf(k, row.item_id);
           const threshold = Math.max(30_000, Math.round(leadMs / 2));
           if (transcodedMs < total - 1000 && pos + threshold >= transcodedMs) {

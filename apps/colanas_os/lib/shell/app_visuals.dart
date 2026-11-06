@@ -72,6 +72,8 @@ class AppVisuals {
     'photo_library_outlined': Icons.photo_library_outlined,
     'photo_size_select_large_outlined': Icons.photo_size_select_large_outlined,
     'place_outlined': Icons.place_outlined,
+    'podcast': Icons.podcasts_outlined,
+    'newspaper_outlined': Icons.newspaper_outlined,
     'pulse': Icons.monitor_heart_outlined,
     'queue_music': Icons.queue_music,
     'queue_music_outlined': Icons.queue_music_outlined,

@@ -25,6 +25,7 @@ const SHELL_OF = {
   photo: 'apps/colanas_os/lib/features/photo/photo_shell.dart',
   video: 'apps/colanas_os/lib/features/video/video_shell.dart',
   music: 'apps/colanas_os/lib/features/music/music_shell.dart',
+  blog: 'apps/colanas_os/lib/features/blog/blog_shell.dart',
   discover: 'apps/colanas_os/lib/features/discover/discover_shell.dart',
   // 同步没有单独的 shell 文件：菜单与内容都在 sync_page.dart 里
   sync: 'apps/colanas_os/lib/features/sync/sync_page.dart',

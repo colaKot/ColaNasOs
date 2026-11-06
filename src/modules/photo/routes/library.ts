@@ -71,7 +71,9 @@ export async function runPhotoScan(k: KernelApi, body: PhotoScanInput, uid: stri
   }
   k.log.info(total, 'photo.scan');
   // 扫完就把新照片送去识别：开关开着就自动跑，不用人再点一次
-  void enqueueScanOnce(k).catch(() => null);
+  void enqueueScanOnce(k)
+    .then((r) => k.log.info({ ...r }, 'photo.ai scan autostart'))
+    .catch((err) => k.log.warn({ err: String(err) }, 'photo.ai scan autostart failed'));
   return total;
 }
 

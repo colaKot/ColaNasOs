@@ -14,6 +14,17 @@ import { buildUnc, normalizeScanPath, parseUnc } from '../src/modules/video/smb'
 import { parseJpTagsFromName } from '../src/modules/video/media-type';
 import { looksJunkTmdbMatch, pickExactCodeLink } from '../src/modules/video/jp-scrape';
 import type { ServerModule } from '../kernel/types';
+import type { ConfigStore } from '../kernel/config';
+import { cleanVoice, DEFAULT_VOICE } from '../src/modules/blog/settings';
+import { effectiveTempo, TEMPO_CALIBRATION } from '../kernel/tts/engine';
+import {
+  DEFAULT_SYSTEM_SETTINGS,
+  SYSTEM_SETTINGS_KEY,
+  migrateDeprecatedLlmModel,
+  migrateLlmModel,
+  normalizeSystemSettings,
+  readSystemSettings,
+} from '../kernel/system-settings';
 
 test('EventBus: 订阅、分发、退订', () => {
   const bus = new EventBus();
@@ -643,4 +654,127 @@ test('pt mteam: 专有 API 解析与下载链接', async () => {
   assert.equal(items[0].downloadUrl, 'http://mt.local/api/torrent/download/99?apiKey=KEY123');
   assert.deepEqual(m.categoryIds('movie'), ['401']);
   assert.deepEqual(m.categoryIds('all'), []);
+});
+
+function fakeConfig(initial: Record<string, unknown>) {
+  const data = new Map(Object.entries(initial));
+  let writes = 0;
+  const store: ConfigStore = {
+    get<T = unknown>(key: string): T | undefined {
+      return data.get(key) as T | undefined;
+    },
+    async set(key: string, value: unknown): Promise<void> {
+      writes++;
+      data.set(key, value);
+    },
+    all(): Record<string, unknown> {
+      return Object.fromEntries(data);
+    },
+  };
+  return { store, data, writes: () => writes };
+}
+
+test('DeepSeek 下线模型名：只迁移官方端点的废弃名', () => {
+  const flash = DEFAULT_SYSTEM_SETTINGS.llm.model;
+  assert.equal(migrateLlmModel('deepseek-chat', 'deepseek', 'https://api.deepseek.com'), flash);
+  assert.equal(migrateLlmModel('deepseek-reasoner', 'deepseek', 'https://api.deepseek.com'), flash);
+  assert.equal(migrateLlmModel(' DeepSeek-Chat ', 'deepseek', ''), flash);
+  assert.equal(migrateLlmModel('deepseek-chat', 'custom', 'https://api.deepseek.com/v1'), flash);
+  // 百炼 / 自建端点上的同名模型由部署方决定，不能动
+  assert.equal(
+    migrateLlmModel('deepseek-chat', 'bailian', 'https://llm-xxx.maas.aliyuncs.com/v1'),
+    'deepseek-chat',
+  );
+  assert.equal(
+    migrateLlmModel('deepseek-chat', 'custom', 'http://127.0.0.1:8080/v1'),
+    'deepseek-chat',
+  );
+  assert.equal(migrateLlmModel('deepseek-flash', 'deepseek', 'https://api.deepseek.com'), flash);
+  assert.equal(
+    migrateLlmModel('deepseek-v4.1-flash-1017', 'bailian', 'https://llm-xxx.maas.aliyuncs.com/v1'),
+    'deepseek-v4.1-flash-1017',
+  );
+});
+
+test('系统设置：读到旧模型名立即修正，不依赖启动迁移', () => {
+  const s = normalizeSystemSettings({
+    llm: { provider: 'deepseek', baseUrl: 'https://api.deepseek.com', model: 'deepseek-chat' },
+  });
+  assert.equal(s.llm.model, DEFAULT_SYSTEM_SETTINGS.llm.model);
+  const bailian = normalizeSystemSettings({
+    llm: {
+      provider: 'bailian',
+      baseUrl: 'https://llm-xxx.maas.aliyuncs.com/v1',
+      model: 'deepseek-v4.1-flash-1017',
+    },
+  });
+  assert.equal(bailian.llm.model, 'deepseek-v4.1-flash-1017');
+});
+
+test('系统设置：启动迁移写回数据库，只改 model 一个字段且幂等', async () => {
+  const stored = {
+    httpPort: 7788,
+    proxy: 'http://127.0.0.1:21578',
+    llm: {
+      enabled: true,
+      provider: 'deepseek',
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-chat',
+      apiKey: 'sk-test',
+      webSearch: false,
+    },
+  };
+  const { store, data, writes } = fakeConfig({
+    [SYSTEM_SETTINGS_KEY]: structuredClone(stored),
+    other: 1,
+  });
+  assert.equal(await migrateDeprecatedLlmModel(store), true);
+  assert.equal(writes(), 1);
+  const saved = data.get(SYSTEM_SETTINGS_KEY) as typeof stored;
+  assert.equal(saved.llm.model, DEFAULT_SYSTEM_SETTINGS.llm.model);
+  assert.equal(saved.llm.apiKey, 'sk-test');
+  assert.equal(saved.proxy, stored.proxy);
+  assert.equal(data.get('other'), 1);
+  assert.equal(readSystemSettings(store).llm.model, DEFAULT_SYSTEM_SETTINGS.llm.model);
+  assert.equal(await migrateDeprecatedLlmModel(store), false);
+  assert.equal(writes(), 1);
+});
+
+test('系统设置：百炼配置与空配置不触发迁移', async () => {
+  const bailian = fakeConfig({
+    [SYSTEM_SETTINGS_KEY]: {
+      llm: {
+        provider: 'bailian',
+        baseUrl: 'https://llm-xxx.maas.aliyuncs.com/v1',
+        model: 'deepseek-v4.1-flash-1017',
+      },
+    },
+  });
+  assert.equal(await migrateDeprecatedLlmModel(bailian.store), false);
+  assert.equal(bailian.writes(), 0);
+  const empty = fakeConfig({});
+  assert.equal(await migrateDeprecatedLlmModel(empty.store), false);
+  assert.equal(empty.writes(), 0);
+});
+
+test('音色：Kokoro 旧 id 回落到内置音色，用户音色不受影响', () => {
+  assert.equal(cleanVoice('zf_001'), DEFAULT_VOICE);
+  assert.equal(cleanVoice('ZF_006'), DEFAULT_VOICE);
+  assert.equal(cleanVoice('  zf_003  '), DEFAULT_VOICE);
+  assert.equal(cleanVoice('default'), 'default');
+  assert.equal(cleanVoice('my_voice_1'), 'my_voice_1');
+  assert.equal(cleanVoice(''), DEFAULT_VOICE);
+  assert.equal(cleanVoice('../evil'), DEFAULT_VOICE);
+});
+
+test('TTS 语速校准：标称 1.0 放慢到 0.8，相对倍速关系不变', () => {
+  assert.equal(TEMPO_CALIBRATION, 0.8);
+  assert.equal(effectiveTempo(1), 0.8);
+  assert.equal(effectiveTempo(NaN), 0.8);
+  // 1.2 仍比 1.0 快 20%
+  assert.ok(Math.abs(effectiveTempo(1.2) / effectiveTempo(1) - 1.2) < 1e-9);
+  assert.ok(Math.abs(effectiveTempo(2) - 1.6) < 1e-9);
+  // atempo 单滤镜下限 0.5，校准后不能低于它
+  assert.equal(effectiveTempo(0.5), 0.5);
+  assert.ok(effectiveTempo(1) < 1);
 });

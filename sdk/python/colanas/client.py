@@ -91,6 +91,82 @@ class ColanasClient:
         """备份一个目录（逐文件 sha256 清单）"""
         return self._request("POST", "/api/v1/backup/run", params, "body")
 
+    def blog_audio(self, **params):
+        """播放 / 下载（mp3，退化时给 wav；支持 Range）"""
+        return self._request("GET", "/api/v1/blog/audio", params, "query")
+
+    def blog_audio_url(self, **params):
+        """带短期令牌的播放地址"""
+        return self._request("GET", "/api/v1/blog/audio-url", params, "query")
+
+    def blog_episodes(self, **params):
+        """已生成的节目（新的在前）"""
+        return self._request("GET", "/api/v1/blog/episodes", params, "query")
+
+    def blog_generate(self, **params):
+        """立即生成一期（后台执行）"""
+        return self._request("POST", "/api/v1/blog/generate", params, "body")
+
+    def blog_news(self, **params):
+        """预览当前设置会抓到的新闻（不生成音频）"""
+        return self._request("GET", "/api/v1/blog/news", params, "query")
+
+    def blog_preview(self, **params):
+        """合成试听句（同一音色只合成一次，之后读缓存）"""
+        return self._request("POST", "/api/v1/blog/preview", params, "body")
+
+    def blog_preview_audio(self, **params):
+        """试听音频（inline，支持 Range）"""
+        return self._request("GET", "/api/v1/blog/preview/audio", params, "query")
+
+    def blog_remove(self, **params):
+        """删除一期（连同音频文件）"""
+        return self._request("POST", "/api/v1/blog/remove", params, "body")
+
+    def blog_resynth(self, **params):
+        """从已有稿件重跑语音合成（不抓新闻、不调云端模型、不消耗 token）"""
+        return self._request("POST", "/api/v1/blog/resynth", params, "body")
+
+    def blog_save_settings(self, **params):
+        """保存 AI 新闻设置（counts 整体提交；其余字段未传则保持不变）"""
+        return self._request("POST", "/api/v1/blog/settings", params, "body")
+
+    def blog_settings(self, **params):
+        """AI 新闻设置"""
+        return self._request("GET", "/api/v1/blog/settings", params, "query")
+
+    def blog_status(self, **params):
+        """生成进度"""
+        return self._request("GET", "/api/v1/blog/status", params, "query")
+
+    def blog_tts_model(self, **params):
+        """语音模型下载状态（实时探测磁盘）"""
+        return self._request("GET", "/api/v1/blog/tts/model", params, "query")
+
+    def blog_tts_model_cancel(self, **params):
+        """取消下载（已下部分保留，下次续传）"""
+        return self._request("POST", "/api/v1/blog/tts/model/cancel", params, "body")
+
+    def blog_tts_model_download(self, **params):
+        """一键下载语音模型（后台执行，前端轮询进度）"""
+        return self._request("POST", "/api/v1/blog/tts/model/download", params, "body")
+
+    def blog_voice_remove(self, **params):
+        """删除用户上传的音色（内置音色不可删）"""
+        return self._request("POST", "/api/v1/blog/voices/remove", params, "body")
+
+    def blog_voices(self, **params):
+        """参考音色清单（内置 3 段 + 用户上传）"""
+        return self._request("GET", "/api/v1/blog/voices", params, "query")
+
+    def blog_voice_upload(self, **params):
+        """上传参考音色（base64 wav/mp3，自动转 24kHz 单声道）"""
+        return self._request("POST", "/api/v1/blog/voices/upload", params, "body")
+
+    def blog_warmup(self, **params):
+        """预热语音模型（进页面时调用，点试听才不用等 30 秒）"""
+        return self._request("POST", "/api/v1/blog/warmup", params, "body")
+
     def book_archive(self, **params):
         """归档 / 取消归档（按当前用户隔离）"""
         return self._request("POST", "/api/v1/book/archive", params, "body")
@@ -691,6 +767,10 @@ class ColanasClient:
         """分批分析照片（人脸 / 场景 / embedding，可选 OCR 与活动）"""
         return self._request("POST", "/api/v1/photo/ai/analyze", params, "body")
 
+    def photo_ai_ask(self, **params):
+        """相册助手问答（配了模型走模型，没配走本地统计规则）"""
+        return self._request("POST", "/api/v1/photo/ai/ask", params, "body")
+
     def photo_ai_config(self, **params):
         """AI 设置（配置 / 进度 / 任务队列）"""
         return self._request("GET", "/api/v1/photo/ai/config", params, "query")
@@ -698,6 +778,18 @@ class ColanasClient:
     def photo_ai_config_set(self, **params):
         """保存 AI 设置（部分字段）"""
         return self._request("POST", "/api/v1/photo/ai/config", params, "body")
+
+    def photo_ai_model_api(self, **params):
+        """模型 API 配置（只读掩码视图，与全局 AI 服务共用一份）"""
+        return self._request("GET", "/api/v1/photo/ai/model-api", params, "query")
+
+    def photo_ai_model_api_set(self, **params):
+        """保存模型 API（apiKey 留空 = 保留已保存的密钥）"""
+        return self._request("POST", "/api/v1/photo/ai/model-api", params, "body")
+
+    def photo_ai_model_api_test(self, **params):
+        """测试模型 API 连通性（先 /models，失败再兜底最小 chat 请求）"""
+        return self._request("POST", "/api/v1/photo/ai/model-api/test", params, "body")
 
     def photo_ai_ocr(self, **params):
         """分批做文字识别（票夹与语义搜索的原料）"""
@@ -1103,6 +1195,10 @@ class ColanasClient:
         """按路径关键词与时间范围搜索"""
         return self._request("GET", "/api/v1/photo/search", params, "query")
 
+    def photo_search_hot(self, **params):
+        """热门推荐（人物 / 场景 / 活动 / 年份，给「随便看看」用）"""
+        return self._request("POST", "/api/v1/photo/search/hot", params, "body")
+
     def photo_search_hybrid(self, **params):
         """混合检索：场景/活动标签 + OCR + 路径，按相关度排序（offset 分页）"""
         return self._request("GET", "/api/v1/photo/search/hybrid", params, "query")
@@ -1440,7 +1536,7 @@ class ColanasClient:
         return self._request("POST", "/api/v1/system/restart", params, "body")
 
     def system_settings_get(self, **params):
-        """全局设置（端口 / 并发 / 主机名 / 欢迎语 / 代理 / 日系兜底）"""
+        """全局设置（端口 / 并发 / 主机名 / 欢迎语 / 代理 / 日系兜底 / 大模型）"""
         return self._request("GET", "/api/v1/system/settings", params, "query")
 
     def system_settings_set(self, **params):

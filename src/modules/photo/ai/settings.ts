@@ -6,7 +6,15 @@ import { secured } from '../../../../kernel/route';
 import type { KernelApi } from '../../../../kernel/types';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { now, ref } from './schemas';
-import { aiConfig, saveAiConfig, noteAiJob, aiJobRunning } from './config';
+import {
+  aiConfig,
+  saveAiConfig,
+  AI_DONE_BASE,
+  AI_DONE_OCR,
+  AI_DONE_ACTIVITY,
+  noteAiJob,
+  aiJobRunning,
+} from './config';
 import { enqueueScanOnce } from './vision';
 import { faceIndex, fromBuffer, toBuffer, mergeClusterPair } from './face';
 import { paramsFromEnv } from './cluster-v2';
@@ -64,22 +72,24 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
       const cfg = aiConfig(k);
       const uid = String((req as any).user?.sub || '');
       const owner = sql`i.in_trash = 0 and i.library_id in (select id from photo_libraries where owner_id = ${uid})`;
+      // 进度 = 「做过这项分析的照片数」，不是「检出结果的照片数」。
+      // 以前按结果表 count：没有文字的照片永远不写 photo_ocr、没活动的永远不写
+      // photo_activities，OCR / 活动的进度条就永远停在 45% / 24%，看着像没跑完，
+      // 但队列其实已经没有待办任务了（2026-11-06 反馈「一直显示空闲」）。
+      // 分母排除「已记账失败」的坏图：它们永远产不出结果，算进总数会让
+      // 进度条永远差几张、看起来又像没跑完（可用「重新识别」force 重试）。
       const row = (
         await sql<{
           total: number;
-          face: number;
-          place: number;
+          base: number;
           activity: number;
           ocr: number;
-          clip: number;
         }>`
           select
-            (select count(*) from photo_items i where ${owner}) as total,
-            (select count(distinct f.photo_id) from photo_faces f join photo_items i on i.id = f.photo_id where ${owner}) as face,
-            (select count(distinct s.photo_id) from photo_scenes s join photo_items i on i.id = s.photo_id where ${owner}) as place,
-            (select count(distinct a.photo_id) from photo_activities a join photo_items i on i.id = a.photo_id where ${owner}) as activity,
-            (select count(distinct o.photo_id) from photo_ocr o join photo_items i on i.id = o.photo_id where ${owner}) as ocr,
-            (select count(distinct e.photo_id) from photo_embeddings e join photo_items i on i.id = e.photo_id where ${owner}) as clip
+            (select count(*) from photo_items i where ${owner} and i.ai_skip_at = 0) as total,
+            (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_BASE}) <> 0) as base,
+            (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_ACTIVITY}) <> 0) as activity,
+            (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_OCR}) <> 0) as ocr
         `.execute(k.db)
       ).rows[0];
       const total = Number(row?.total) || 0;
@@ -87,13 +97,23 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
         total <= 0 ? 0 : Math.min(100, Math.round((done / total) * 100));
       // 同时保留真实「已识别条数」：19113 张时识别 20 张，百分比会被四舍五入成 0%，
       // 只看百分比会误以为任务没动，所以 pending 用真实剩余数（不再按百分比反推）。
+      const base = Number(row?.base) || 0;
       const doneOf = {
-        face: Number(row?.face) || 0,
-        place: Number(row?.place) || 0,
+        face: base,
+        place: base,
         activity: Number(row?.activity) || 0,
         ocr: Number(row?.ocr) || 0,
-        clip: Number(row?.clip) || 0,
+        clip: base,
       };
+      // 队列里真有任务才算「识别中」。以前只看内存里的 aiJobRunning()，
+      // 批次间隙或任务排队时一律回落 idle，面板就永远显示「空闲」。
+      const active = (
+        await sql<{ n: number }>`
+          select count(*) as n from tasks
+           where type = 'photo.ai.scan' and state in ('pending','running')
+        `.execute(k.db)
+      ).rows[0];
+      const queueActive = Number(active?.n) > 0;
       const progress = {
         face: pct(doneOf.face),
         place: pct(doneOf.place),
@@ -113,7 +133,7 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
       ) => ({
         key,
         label,
-        status: !enabled ? 'disabled' : aiJobRunning(key) ? 'running' : 'idle',
+        status: !enabled ? 'disabled' : queueActive || aiJobRunning(key) ? 'running' : 'idle',
         pending: Math.max(0, totalCount - done),
         // 面板显示「已完成/总数」：几万张里识别 20 张，百分比会被四舍五入成 0%，
         // 只有条数才能让人看出任务真的在推进
@@ -194,8 +214,9 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
         const { stopSidecar } = await import('./sidecar');
         await stopSidecar();
       }
-      // 开关一打开就自己开始识别，不需要用户再去找「开始识别」按钮
-      void enqueueScanOnce(k).catch(() => {});
+      // 开关一打开就自己开始识别，不需要用户再去找「开始识别」按钮。
+      // await 而不是 void：接口返回时任务已入队，前端紧接着刷新就能看到「识别中」。
+      await enqueueScanOnce(k).catch(() => null);
       return cfg;
     },
   );
@@ -214,6 +235,13 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
     async (req: FastifyRequest) => {
       const body = (req.body || {}) as { paused?: boolean };
       const cfg = await saveAiConfig(k, { paused: body.paused === true });
+      if (!cfg.paused) {
+        // 暂停时 photo.ai.scan 的循环检测到 paused 就 break、任务变成 done，
+        // 队列里再没有任何待跑任务。恢复只改配置是不够的 —— 必须重新入队，
+        // 否则「恢复」点完毫无反应、任务栏一直空闲（2026-11-06）。
+        const r = await enqueueScanOnce(k).catch(() => null);
+        k.log.info({ ...(r || {}) }, 'photo.ai queue resumed');
+      }
       return cfg;
     },
   );
@@ -238,6 +266,10 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
         select id from photo_items
          where library_id in (select id from photo_libraries where owner_id = ${uid})
       )`;
+      const itemOwner = sql`id in (
+        select id from photo_items
+         where library_id in (select id from photo_libraries where owner_id = ${uid})
+      )`;
       const kind = String(body.kind || '');
       let count = 0;
       if (kind === 'ocr') {
@@ -245,6 +277,10 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
           await sql<{ n: number }>`select count(*) as n from photo_ocr where ${owner}`.execute(k.db)
         ).rows[0];
         await sql`delete from photo_ocr where ${owner}`.execute(k.db);
+        // 清完成位：不清的话 scan 认为这项已经做过，重置完也不会重新识别
+        await sql`
+          update photo_items set ai_done_mask = ai_done_mask & ~${AI_DONE_OCR} where ${itemOwner}
+        `.execute(k.db);
         count = Number(before?.n) || 0;
       } else if (kind === 'place') {
         const before = (
@@ -254,6 +290,9 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
         ).rows[0];
         await sql`delete from photo_scene_tags where ${owner}`.execute(k.db);
         await sql`delete from photo_scenes where ${owner}`.execute(k.db);
+        await sql`
+          update photo_items set ai_done_mask = ai_done_mask & ~${AI_DONE_BASE} where ${itemOwner}
+        `.execute(k.db);
         count = Number(before?.n) || 0;
       } else if (kind === 'activity') {
         const before = (
@@ -262,8 +301,13 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
           }>`select count(*) as n from photo_activities where ${owner}`.execute(k.db)
         ).rows[0];
         await sql`delete from photo_activities where ${owner}`.execute(k.db);
+        await sql`
+          update photo_items set ai_done_mask = ai_done_mask & ~${AI_DONE_ACTIVITY} where ${itemOwner}
+        `.execute(k.db);
         count = Number(before?.n) || 0;
       }
+      // 清位后立刻重新入队，别让用户再去找「开始识别」
+      await enqueueScanOnce(k).catch(() => null);
       return {
         ok: true,
         count,
@@ -338,15 +382,30 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
         try {
           const abs = resolveAnyPath(root, row.rel_path);
           if (!fs.existsSync(abs)) continue;
-          const out = await s.request<{ faces: Array<{ score: number; emb: number[] }> }>(
+          const out = await s.request<{
+            faces: Array<{
+              score: number;
+              quality?: number;
+              pose?: { yaw: number | null; roll: number | null; iod?: number } | null;
+              emb: number[];
+            }>;
+          }>(
             'analyze',
             { src: abs, faces: true, scenes: false, embed: false, ocr: false, activity: false },
             600_000,
           );
+          const { assignCluster } = await import('./face');
+          const usedClusterIds = new Set<string>();
           for (const face of out.faces) {
-            const { assignCluster } = await import('./face');
-            await assignCluster(k, Float32Array.from(face.emb), row.id);
-            count += 1;
+            const res = await assignCluster(k, Float32Array.from(face.emb), row.id, {
+              quality: face.quality ?? Math.round((Number(face.score) || 0) * 100),
+              score: Number(face.score) || 0,
+              poseYaw: face.pose?.yaw ?? null,
+              poseRoll: face.pose?.roll ?? null,
+              poseIod: face.pose?.iod ?? null,
+              usedClusterIds,
+            });
+            if (res) count += 1;
           }
         } catch (err) {
           k.log.warn(
@@ -454,7 +513,12 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
         await sql`delete from photo_faces`.execute(trx);
         await sql`delete from photo_face_clusters`.execute(trx);
       });
+      // 人脸属于基础分析，清掉基础位后 scan 才会重新跑一遍
+      await sql`
+        update photo_items set ai_done_mask = ai_done_mask & ~${AI_DONE_BASE}
+      `.execute(k.db);
       faceIndex.reset();
+      await enqueueScanOnce(k).catch(() => null);
       return { ok: true, count: Number(faces?.n) || 0, message: '已清空，可重新开始识别' };
     },
   );

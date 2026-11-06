@@ -1,12 +1,13 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**426 个路径 / 455 个操作 / 23 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**448 个路径 / 479 个操作 / 24 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
 - **子账号与权限**（`accounts`）· 21 个操作 · [跳转](#accounts)
 - **认证与账号**（`auth`）· 1 个操作 · [跳转](#auth)
+- **blog**（`blog`）· 19 个操作 · [跳转](#blog)
 - **书房**（`book`）· 39 个操作 · [跳转](#book)
 - **discover**（`discover`）· 18 个操作 · [跳转](#discover)
 - **events**（`events`）· 1 个操作 · [跳转](#events)
@@ -18,7 +19,7 @@
 - **音乐**（`music`）· 34 个操作 · [跳转](#music)
 - **笔记**（`notes`）· 7 个操作 · [跳转](#notes)
 - **其他**（`other`）· 2 个操作 · [跳转](#other)
-- **相册**（`photo`）· 129 个操作 · [跳转](#photo)
+- **相册**（`photo`）· 134 个操作 · [跳转](#photo)
 - **player**（`player`）· 2 个操作 · [跳转](#player)
 - **pt**（`pt`）· 14 个操作 · [跳转](#pt)
 - **RSS 订阅**（`rss`）· 9 个操作 · [跳转](#rss)
@@ -186,6 +187,136 @@ IP 黑名单 · `securityIpList`
 开发用临时令牌（仅当 COLANAS_DEV_TOKEN=1 且非 production 时可用） · `authDevToken`
 
 - 响应：200 -
+
+## blog
+
+### blog
+
+#### `GET /api/v1/blog/audio`
+
+播放 / 下载（mp3，退化时给 wav；支持 Range） · `blogAudio`
+
+- 参数：`id` · 查询 · string · **必填**
+- 响应：200 - · 错误 404
+
+#### `GET /api/v1/blog/audio-url`
+
+带短期令牌的播放地址 · `blogAudioUrl`
+
+- 参数：`id` · 查询 · string · **必填**
+- 响应：200 `BlogAudioUrlResponse` · 错误 404
+
+#### `GET /api/v1/blog/episodes`
+
+已生成的节目（新的在前） · `blogEpisodes`
+
+- 参数：`limit` · 查询 · integer · 可选
+- 响应：200 `BlogEpisodeListResponse`
+
+#### `POST /api/v1/blog/generate`
+
+立即生成一期（后台执行） · `blogGenerate`
+
+- 请求体：（空对象）
+- 响应：200 `BlogGenerateResponse` · 错误 409 / 503
+
+#### `GET /api/v1/blog/news`
+
+预览当前设置会抓到的新闻（不生成音频） · `blogNews`
+
+- 响应：200 `BlogNewsResponse`
+
+#### `POST /api/v1/blog/preview`
+
+合成试听句（同一音色只合成一次，之后读缓存） · `blogPreview`
+
+- 请求体：（空对象）
+- 响应：200 `BlogPreviewResponse` · 错误 503
+
+#### `GET /api/v1/blog/preview/audio`
+
+试听音频（inline，支持 Range） · `blogPreviewAudio`
+
+- 参数：`voice` · 查询 · string · **必填**
+- 响应：200 - · 错误 404
+
+#### `POST /api/v1/blog/remove`
+
+删除一期（连同音频文件） · `blogRemove`
+
+- 请求体：（空对象）
+- 响应：200 `BlogOkResponse`
+
+#### `POST /api/v1/blog/resynth`
+
+从已有稿件重跑语音合成（不抓新闻、不调云端模型、不消耗 token） · `blogResynth`
+
+- 请求体：（空对象）
+- 响应：200 `BlogResynthResponse` · 错误 400 / 404 / 409 / 503
+
+#### `GET /api/v1/blog/settings`
+
+AI 新闻设置 · `blogSettings`
+
+- 响应：200 `BlogSettingsResponse`
+
+#### `POST /api/v1/blog/settings`
+
+保存 AI 新闻设置（counts 整体提交；其余字段未传则保持不变） · `blogSaveSettings`
+
+- 请求体：（空对象）
+- 响应：200 `BlogSettingsResponse` · 错误 400
+
+#### `GET /api/v1/blog/status`
+
+生成进度 · `blogStatus`
+
+- 参数：`id` · 查询 · string · **必填**
+- 响应：200 `BlogStatusResponse` · 错误 404
+
+#### `GET /api/v1/blog/tts/model`
+
+语音模型下载状态（实时探测磁盘） · `blogTtsModel`
+
+- 响应：200 `BlogTtsModelResponse`
+
+#### `POST /api/v1/blog/tts/model/cancel`
+
+取消下载（已下部分保留，下次续传） · `blogTtsModelCancel`
+
+- 响应：200 `BlogTtsModelResponse`
+
+#### `POST /api/v1/blog/tts/model/download`
+
+一键下载语音模型（后台执行，前端轮询进度） · `blogTtsModelDownload`
+
+- 响应：200 `BlogTtsModelResponse`
+
+#### `GET /api/v1/blog/voices`
+
+参考音色清单（内置 3 段 + 用户上传） · `blogVoices`
+
+- 响应：200 `BlogVoiceListResponse`
+
+#### `POST /api/v1/blog/voices/remove`
+
+删除用户上传的音色（内置音色不可删） · `blogVoiceRemove`
+
+- 请求体：（空对象）
+- 响应：200 `BlogOkResponse`
+
+#### `POST /api/v1/blog/voices/upload`
+
+上传参考音色（base64 wav/mp3，自动转 24kHz 单声道） · `blogVoiceUpload`
+
+- 请求体：（空对象）
+- 响应：200 `BlogVoiceUploadResponse` · 错误 400
+
+#### `POST /api/v1/blog/warmup`
+
+预热语音模型（进页面时调用，点试听才不用等 30 秒） · `blogWarmup`
+
+- 响应：200 `BlogWarmupResponse`
 
 ## book
 
@@ -1290,6 +1421,13 @@ Webhook 列表（不含 secret） · `webhookList`
 - 请求体：（空对象）
 - 响应：200 `PhotoAiAnalyzeResponse` · 错误 503
 
+#### `POST /api/v1/photo/ai/ask`
+
+相册助手问答（配了模型走模型，没配走本地统计规则） · `photoAiAsk`
+
+- 请求体：（空对象）
+- 响应：200 `PhotoAskResponse`
+
 #### `GET /api/v1/photo/ai/config`
 
 AI 设置（配置 / 进度 / 任务队列） · `photoAiConfig`
@@ -1321,6 +1459,26 @@ MCP 开放平台状态 · `photoMcpStatus`
 轮换 MCP 访问令牌（明文只返回一次） · `photoMcpTokenRotate`
 
 - 响应：200 `PhotoMcpTokenResponse`
+
+#### `GET /api/v1/photo/ai/model-api`
+
+模型 API 配置（只读掩码视图，与全局 AI 服务共用一份） · `photoAiModelApi`
+
+- 响应：200 `PhotoModelApi`
+
+#### `POST /api/v1/photo/ai/model-api`
+
+保存模型 API（apiKey 留空 = 保留已保存的密钥） · `photoAiModelApiSet`
+
+- 请求体：（空对象）
+- 响应：200 `PhotoModelApi`
+
+#### `POST /api/v1/photo/ai/model-api/test`
+
+测试模型 API 连通性（先 /models，失败再兜底最小 chat 请求） · `photoAiModelApiTest`
+
+- 请求体：（空对象）
+- 响应：200 `PhotoModelApiTestResult`
 
 #### `GET /api/v1/photo/ai/models`
 
@@ -2002,6 +2160,13 @@ GPS 视觉候选生成进度 · `photoGeoVisionStatus`
 - 参数：`q` · 查询 · string · 可选<br>`from` · 查询 · integer · 可选<br>`to` · 查询 · integer · 可选<br>`libraryId` · 查询 · string · 可选<br>`folder` · 查询 · string · 可选<br>`order` · 查询 · enum(asc, desc) · 可选<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
 - 响应：200 `PhotoTimelineResponse` · 错误 400
 
+#### `POST /api/v1/photo/search/hot`
+
+热门推荐（人物 / 场景 / 活动 / 年份，给「随便看看」用） · `photoSearchHot`
+
+- 请求体：（空对象）
+- 响应：200 `PhotoSearchHotResponse`
+
 #### `GET /api/v1/photo/search/hybrid`
 
 混合检索：场景/活动标签 + OCR + 路径，按相关度排序（offset 分页） · `photoSearchHybrid`
@@ -2620,7 +2785,7 @@ RSS 自动下载规则（按账号隔离） · `rssRuleList`
 
 #### `GET /api/v1/system/settings`
 
-全局设置（端口 / 并发 / 主机名 / 欢迎语 / 代理 / 日系兜底） · `systemSettingsGet`
+全局设置（端口 / 并发 / 主机名 / 欢迎语 / 代理 / 日系兜底 / 大模型） · `systemSettingsGet`
 
 - 响应：200 `SystemSettingsResponse`
 

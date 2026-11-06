@@ -32,6 +32,12 @@ Future<bool> musicSetFavorite(String id, bool favorite) async {
   }
 }
 
+/// 封面下方文字区（标题 + 艺人·专辑）的固定高度。
+///
+/// 网格行高和卡片内部**必须用同一个值**：早先两处各写各的（42 / 52），
+/// 一旦算出来的格子比实际窄，卡片就在手机 web 上溢出 2.6px 刷红屏。
+const double _cardTextHeight = 42;
+
 /// 曲目封面网格卡片：方形封面 + 标题 + 艺人·专辑。
 ///
 /// 悬停出现播放 / 收藏 / 更多，
@@ -150,9 +156,9 @@ class _MusicTrackCardState extends State<MusicTrackCard> {
         ),
         const SizedBox(height: 6),
         SizedBox(
-          // 42 而不是 44：网格按 0.76 比例算出的高度只比「封面 + 文字」多出不到 1px，
-          // 44 会在某些宽度下溢出 0.01px（浏览器里会刷屏）。
-          height: 42,
+          // 见 `_cardTextHeight` 的注释：网格行高用的是同一个常量。
+          // 44 会在某些宽度下溢出 0.01px（浏览器里会刷屏），42 + 4px 余量刚好。
+          height: _cardTextHeight,
           child: Column(
             children: [
               Text(
@@ -304,11 +310,18 @@ class MusicTrackGridSliver extends StatelessWidget {
           // 参考实现按 115px 小格算列数，行高 = 格子宽 + 封面下方文字的高度。
           // 用 mainAxisExtent（而不是 childAspectRatio）是唯一不会在窄屏溢出的写法：
           // 比例是按格子宽反推高度，行高永远比「封面 + 文字」多出几像素。
+          //
+          // ⚠️ `constraints.crossAxisExtent` 已经是**扣掉外层 SliverPadding 之后**
+          // 的内容宽度（SliverLayoutBuilder 在 SliverPadding 里面）。以前这里又减了
+          // 一次 `spaceMd * 2`，于是算出的格子比实际窄 2*16/count 像素、行高跟着少，
+          // 手机 web 上就「RenderFlex overflowed by 2.6 pixels」（实测宽度 785、
+          // 5 列：算出 144 实际 150.6）。不要再减。
           const desiredWidth = 128.0;
           const spacing = NasTokens.spaceSm;
-          final content = (constraints.crossAxisExtent - NasTokens.spaceMd * 2)
-              .clamp(0.0, double.infinity);
+          final content = constraints.crossAxisExtent.clamp(0.0, double.infinity);
           final count = (content / desiredWidth).floor().clamp(2, 12);
+          // 与 SliverGridDelegateWithFixedCrossAxisCount 的实际切分口径一致（它不 floor，
+          // 这里 floor 最多再少 1px，仍在下面 4px 余量内）。
           final cellWidth = ((content - spacing * (count - 1)) / count)
               .floorToDouble();
           return SliverGrid(
@@ -316,8 +329,8 @@ class MusicTrackGridSliver extends StatelessWidget {
               crossAxisCount: count,
               mainAxisSpacing: spacing,
               crossAxisSpacing: spacing,
-              // 封面（= 格子宽）+ 6 间距 + 42 文字 + 4 余量
-              mainAxisExtent: cellWidth + 52,
+              // 封面（= 格子宽）+ 6 间距 + 文字区 + 4 余量
+              mainAxisExtent: cellWidth + 6 + _cardTextHeight + 4,
             ),
             delegate: SliverChildBuilderDelegate(
               (context, i) => itemBuilder(context, tracks[i], i),

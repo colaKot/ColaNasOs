@@ -5,7 +5,16 @@ import type { KernelApi } from '../../../../kernel/types';
 import { filesRoot, resolveAnyPath } from '../../files/fs-root';
 import { assignCluster, fromBuffer } from './face';
 import { aiAvailable, ensureSidecar, ffmpegPath } from './sidecar';
-import { aiConfig, noteAiJob, clearAiJob, FACE_MIN_WIDTH_RATIO } from './config';
+import {
+  aiConfig,
+  aiNeededMask,
+  AI_DONE_BASE,
+  AI_DONE_OCR,
+  AI_DONE_ACTIVITY,
+  noteAiJob,
+  clearAiJob,
+  FACE_MIN_WIDTH_RATIO,
+} from './config';
 import { EMB_DIM, now, ref } from './schemas';
 import { Err } from '../../../../kernel/errors';
 import type { FastifyRequest, FastifyReply } from 'fastify';
@@ -91,27 +100,36 @@ export async function runAnalyzeBatch(
   // 未显式指定时跟随开关：开关是用户意图，不该因为调用方没传参数就被跳过
   // （2026-11-04：手动入队只传了 limit，OCR / 活动就一直不跑）
   const wantOcr = (opts.wantOcr ?? cfg.ocrEnabled) === true && cfg.ocrEnabled;
-  const wantActivity = (opts.wantActivity ?? cfg.activityEnabled) === true && cfg.activityEnabled;
+  const wantActivity =
+    (opts.wantActivity ?? cfg.activityEnabled) === true && cfg.activityEnabled;
+  // 「本次要集齐哪些位」必须和本次实际请求一致。按当前开关硬算会让
+  // 手动 analyze（body 默认不带 ocr/activity）永远挑到同一批照片：
+  // 它要求的位这次根本没做，remaining 不降、热循环（冒烟实测 2026-11-06）。
+  // 长期待办仍由 enqueueScanOnce 按开关算（aiNeededMask），两者分工明确。
+  const needMask =
+    AI_DONE_BASE | (wantOcr ? AI_DONE_OCR : 0) | (wantActivity ? AI_DONE_ACTIVITY : 0);
   noteAiJob('face');
   noteAiJob('place');
   noteAiJob('clip');
   if (wantOcr) noteAiJob('ocr');
   if (wantActivity) noteAiJob('activity');
-  // 失败过的不再重复挑：没有 embedding 就做，而坏图永远产不出 embedding，
-  // 不排除就会在每轮批次里反复被选中（实测会打成 0.2s 一轮的热循环）。
+  // 按「做过哪些项」挑片，而不是「有没有 embedding」：
+  // 以前只认 embedding，导致开关后来才打开的照片（OCR / 活动）永远不会被补做，
+  // 系统误判「全部识别完」→ 重启不入队 → 面板一直显示空闲（2026-11-06）。
+  // 失败过的不再重复挑：坏图永远产不出 embedding，不排除就会打成 0.2s 一轮的热循环。
   const pendingCond = force
     ? sql``
-    : sql`and i.ai_skip_at = 0 and not exists (select 1 from photo_embeddings e where e.photo_id = i.id)`;
+    : sql`and i.ai_skip_at = 0 and (i.ai_done_mask & ${needMask}) <> ${needMask}`;
   const rows = (
     opts.libraryId
-      ? await sql<{ id: string; rel_path: string }>`
-          select i.id, i.rel_path from photo_items i
+      ? await sql<{ id: string; rel_path: string; ai_done_mask: number }>`
+          select i.id, i.rel_path, i.ai_done_mask from photo_items i
           where i.library_id = ${opts.libraryId} and i.in_trash = 0
             ${pendingCond}
           order by i.taken_at desc limit ${limit}
         `.execute(k.db)
-      : await sql<{ id: string; rel_path: string }>`
-          select i.id, i.rel_path from photo_items i
+      : await sql<{ id: string; rel_path: string; ai_done_mask: number }>`
+          select i.id, i.rel_path, i.ai_done_mask from photo_items i
           where i.in_trash = 0
             ${pendingCond}
           order by i.taken_at desc limit ${limit}
@@ -135,10 +153,18 @@ export async function runAnalyzeBatch(
       skipped += 1;
       continue;
     }
+    const doneMask = Number(row.ai_done_mask) || 0;
+    // 已经做过的基础结果不重算：老照片只补 OCR / 活动，sidecar 会跳过
+    // 人脸检测和 CLIP 推理，1.9 万张补做不用再付一遍全量推理的代价。
+    const needBase = force || (doneMask & AI_DONE_BASE) === 0;
+    const doOcr = wantOcr && (force || (doneMask & AI_DONE_OCR) === 0);
+    const doActivity = wantActivity && (force || (doneMask & AI_DONE_ACTIVITY) === 0);
     try {
       const out = await s.request<{
         faces: Array<{
           score: number;
+          quality?: number;
+          pose?: { yaw: number | null; roll: number | null; iod?: number } | null;
           emb: number[];
           box?: { left: number; top: number; width: number; height: number } | null;
           imgWidth?: number;
@@ -163,19 +189,21 @@ export async function runAnalyzeBatch(
         'analyze',
         {
           src: abs,
-          faces: cfg.faceEnabled,
-          scenes: cfg.placeEnabled,
-          embed: true,
-          ocr: wantOcr,
-          activity: wantActivity,
+          faces: needBase && cfg.faceEnabled,
+          scenes: needBase && cfg.placeEnabled,
+          embed: needBase,
+          ocr: doOcr,
+          activity: doActivity,
         },
         600_000,
       );
 
-      if (force) {
+      if (force && needBase) {
         await sql`delete from photo_faces where photo_id = ${row.id}`.execute(k.db);
       }
-      if (cfg.faceEnabled) {
+      if (needBase && cfg.faceEnabled) {
+        // 同一张照片共用一份「已用过的组」：合照里两张脸绝不能并进同一个人。
+        const usedClusterIds = new Set<string>();
         for (const face of out.faces) {
           // 小脸门：面积占比过小的脸多半是背景路人，进了库只会把簇搅浑。
           // 阈值按参考实现的口径（box_width / photo_width），可用环境变量覆盖。
@@ -184,11 +212,14 @@ export async function runAnalyzeBatch(
             smallFacesSkipped += 1;
             continue;
           }
-          await assignCluster(
-            k,
-            Float32Array.from(face.emb),
-            row.id,
-            face.box
+          const res = await assignCluster(k, Float32Array.from(face.emb), row.id, {
+            quality: face.quality ?? Math.round((Number(face.score) || 0) * 100),
+            score: Number(face.score) || 0,
+            poseYaw: face.pose?.yaw ?? null,
+            poseRoll: face.pose?.roll ?? null,
+            poseIod: face.pose?.iod ?? null,
+            usedClusterIds,
+            box: face.box
               ? {
                   left: face.box.left,
                   top: face.box.top,
@@ -198,12 +229,11 @@ export async function runAnalyzeBatch(
                   imgHeight: face.imgHeight,
                 }
               : null,
-            Number(face.score) || 1,
-          );
-          faceCount += 1;
+          });
+          if (res) faceCount += 1;
         }
       }
-      if (cfg.placeEnabled && out.scenes.length > 0) {
+      if (needBase && cfg.placeEnabled && out.scenes.length > 0) {
         await sql`
           insert into photo_scenes (photo_id, label, score, updated_at)
           values (${row.id}, ${out.scenes[0].label}, ${out.scenes[0].score}, ${now()})
@@ -213,7 +243,7 @@ export async function runAnalyzeBatch(
         sceneCount += 1;
       }
       // v2：保留多标签与门控出口（top-1 仍在 photo_scenes，兼容既有查询）
-      if (out.sceneGate) {
+      if (needBase && out.sceneGate) {
         const exit = out.sceneGate.exit;
         await sql`delete from photo_scene_tags where photo_id = ${row.id}`.execute(k.db);
         for (const s of out.scenes) {
@@ -227,7 +257,7 @@ export async function runAnalyzeBatch(
         sceneGateCounts[exit] += 1;
         k.log.debug({ photo: row.id, gate: out.sceneGate }, 'scene gate');
       }
-      if (out.embedding.length === EMB_DIM) {
+      if (needBase && out.embedding.length === EMB_DIM) {
         await sql`
           insert into photo_embeddings (photo_id, dim, vec, updated_at)
           values (${row.id}, ${EMB_DIM}, ${toBuffer(out.embedding)}, ${now()})
@@ -236,7 +266,7 @@ export async function runAnalyzeBatch(
         `.execute(k.db);
       }
 
-      if (wantOcr && out.ocr) {
+      if (doOcr && out.ocr) {
         const text = String(out.ocr.text || '').trim();
         if (text) {
           await sql`
@@ -249,7 +279,7 @@ export async function runAnalyzeBatch(
         }
       }
 
-      if (wantActivity && out.activity) {
+      if (doActivity && out.activity) {
         if (force) {
           await sql`delete from photo_activities where photo_id = ${row.id}`.execute(k.db);
         }
@@ -266,20 +296,43 @@ export async function runAnalyzeBatch(
         }
       }
       processed += 1;
+      // 只要这次 analyze 成功返回就记账「做过」，与有没有检出文字 / 活动无关：
+      // 没有文字的照片本来就不会写 photo_ocr，用结果表当完成标记会永远循环。
+      const gained =
+        (needBase ? AI_DONE_BASE : 0) |
+        (doOcr ? AI_DONE_OCR : 0) |
+        (doActivity ? AI_DONE_ACTIVITY : 0);
       if (force) {
         // 重新识别成功了：清掉旧的失败记账，下次常规批次能正常纳入统计
         await sql`
-          update photo_items set ai_skip_at = 0, ai_skip_reason = null where id = ${row.id}
+          update photo_items
+             set ai_done_mask = ${gained}, ai_skip_at = 0, ai_skip_reason = null
+           where id = ${row.id}
+        `.execute(k.db);
+      } else if (gained) {
+        await sql`
+          update photo_items set ai_done_mask = ai_done_mask | ${gained} where id = ${row.id}
         `.execute(k.db);
       }
     } catch (err) {
       const message = String((err as Error)?.message || err);
-      // 记账：坏图不记账就会被每轮重新挑中（见 pendingCond）
-      await sql`
-        update photo_items
-           set ai_skip_at = ${now()}, ai_skip_reason = ${message.slice(0, 200)}
-         where id = ${row.id}
-      `.execute(k.db);
+      if (needBase) {
+        // 坏图 / 基础分析失败：记账，避免每轮重新挑中形成热循环（见 pendingCond）
+        await sql`
+          update photo_items
+             set ai_skip_at = ${now()}, ai_skip_reason = ${message.slice(0, 200)}
+           where id = ${row.id}
+        `.execute(k.db);
+      } else {
+        // 只补做 OCR / 活动失败（多为模型缺失）：照片本身是好的，别把它永久
+        // 踢出待办队列。置位本轮请求的项防止热循环，日志留原因，用户点「重置」可重跑。
+        const gained = (doOcr ? AI_DONE_OCR : 0) | (doActivity ? AI_DONE_ACTIVITY : 0);
+        if (gained) {
+          await sql`
+            update photo_items set ai_done_mask = ai_done_mask | ${gained} where id = ${row.id}
+          `.execute(k.db);
+        }
+      }
       k.log.warn(
         { photo: row.id, err: message },
         'photo-ai analyze failed',
@@ -292,7 +345,7 @@ export async function runAnalyzeBatch(
     await sql<{ n: number }>`
       select count(*) as n from photo_items i
        where i.in_trash = 0 and i.ai_skip_at = 0
-         and not exists (select 1 from photo_embeddings e where e.photo_id = i.id)
+         and (i.ai_done_mask & ${needMask}) <> ${needMask}
     `.execute(k.db)
   ).rows;
 
@@ -1005,7 +1058,8 @@ export async function registerPhotoVision(app: any, k: KernelApi): Promise<void>
  *
  * 这是「打开开关就自己跑」的实现：以前要靠用户去点「开始识别」，
  * 开关开了也只是个配置，不点就永远不动（2026-11-04 反馈）。
- * 三个调用点：① 保存 AI 设置 ② 内核启动（重启续跑）③ 照片扫描结束。
+ * 四个调用点：① 保存 AI 设置 ② 内核启动（重启续跑）③ 照片扫描结束
+ * ④ 队列恢复（暂停时任务会 break 成 done，恢复必须重新入队，2026-11-06）。
  */
 export async function enqueueScanOnce(
   k: KernelApi,
@@ -1013,8 +1067,9 @@ export async function enqueueScanOnce(
 ): Promise<{ queued: boolean; reason?: string }> {
   const cfg = aiConfig(k);
   if (cfg.paused) return { queued: false, reason: 'paused' };
-  // analyze 只产 人脸 / 场景 / embedding，两个开关都关就没活可干
+  // 人脸 / 场景都关时不主动跑全库（用户已经明确不想做基础识别）
   if (!cfg.faceEnabled && !cfg.placeEnabled) return { queued: false, reason: 'disabled' };
+  const needMask = aiNeededMask(cfg);
 
   const busy = (
     await sql<{ n: number }>`
@@ -1024,11 +1079,14 @@ export async function enqueueScanOnce(
   ).rows;
   if (Number(busy[0]?.n) > 0) return { queued: false, reason: 'running' };
 
+  // 与 runAnalyzeBatch 完全同一把尺：缺哪一项就算待办，不再只看 embedding。
+  // 否则「已有 embedding 但 OCR/活动是后来才开开关的」照片会被判定全部完成，
+  // 重启不续跑、暂停恢复也不动，面板一直空闲（2026-11-06）。
   const pending = (
     await sql<{ n: number }>`
       select count(*) as n from photo_items i
        where i.in_trash = 0 and i.ai_skip_at = 0
-         and not exists (select 1 from photo_embeddings e where e.photo_id = i.id)
+         and (i.ai_done_mask & ${needMask}) <> ${needMask}
     `.execute(k.db)
   ).rows;
   if (Number(pending[0]?.n) <= 0) return { queued: false, reason: 'done' };

@@ -30,6 +30,30 @@ const ErrorResponse = Type.Object(
   { $id: 'ErrorResponse' },
 );
 
+/** 大模型配置（与 `kernel/system-settings.ts#LlmSettings` 一一对应） */
+const SystemLlmSchema = Type.Object(
+  {
+    enabled: Type.Boolean({ description: '关闭后只用素材拼接，不调模型' }),
+    provider: Type.String({ maxLength: 40 }),
+    baseUrl: Type.String({ maxLength: 300 }),
+    model: Type.String({ maxLength: 120 }),
+    apiKey: Type.String({ maxLength: 400, description: '明文（用户要求可查看、可复制）' }),
+    webSearch: Type.Boolean({ description: '联网搜索（阿里百炼的搜索插件）' }),
+  },
+  { $id: 'SystemLlm' },
+);
+const SystemLlmPatch = Type.Object(
+  {
+    enabled: Type.Optional(Type.Boolean()),
+    provider: Type.Optional(Type.String({ maxLength: 40 })),
+    baseUrl: Type.Optional(Type.String({ maxLength: 300 })),
+    model: Type.Optional(Type.String({ maxLength: 120 })),
+    apiKey: Type.Optional(Type.String({ maxLength: 400 })),
+    webSearch: Type.Optional(Type.Boolean()),
+  },
+  { $id: 'SystemLlmPatch' },
+);
+
 const SettingsShape = {
   httpPort: Type.Integer({ minimum: 1, maximum: 65535 }),
   httpsPort: Type.Integer({ minimum: 1, maximum: 65535 }),
@@ -39,6 +63,7 @@ const SettingsShape = {
   welcome: Type.String({ maxLength: 100 }),
   proxy: Type.String({ maxLength: 200 }),
   javFallback: Type.Boolean(),
+  llm: Type.Ref('SystemLlm'),
 };
 const SystemSettingsSchema = Type.Object(SettingsShape, { $id: 'SystemSettings' });
 const SystemSettingsBody = Type.Object(
@@ -51,6 +76,7 @@ const SystemSettingsBody = Type.Object(
     welcome: Type.Optional(Type.String({ maxLength: 100 })),
     proxy: Type.Optional(Type.String({ maxLength: 200 })),
     javFallback: Type.Optional(Type.Boolean()),
+    llm: Type.Optional(Type.Ref('SystemLlmPatch')),
   },
   { $id: 'SystemSettingsBody' },
 );
@@ -136,6 +162,8 @@ const LogsResponse = Type.Object(
 
 const SCHEMAS = [
   ErrorResponse,
+  SystemLlmSchema,
+  SystemLlmPatch,
   SystemSettingsSchema,
   SystemSettingsBody,
   SettingsResponse,
@@ -302,7 +330,7 @@ export function registerSystemSettings(app: FastifyInstance, k: KernelApi): void
       schema: {
         operationId: 'systemSettingsGet',
         tags: TAG,
-        summary: '全局设置（端口 / 并发 / 主机名 / 欢迎语 / 代理 / 日系兜底）',
+        summary: '全局设置（端口 / 并发 / 主机名 / 欢迎语 / 代理 / 日系兜底 / 大模型）',
         response: { 200: ref('SystemSettingsResponse') },
       },
     }),

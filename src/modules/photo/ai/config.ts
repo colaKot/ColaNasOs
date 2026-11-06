@@ -15,6 +15,24 @@ export interface PhotoAiConfig {
 
 export const AI_CONFIG_KEY = 'photo.ai';
 
+/** photo_items.ai_done_mask 的位：这张照片「做过」哪些识别（不是「有没有检出结果」） */
+export const AI_DONE_BASE = 1; // 人脸 / 场景 / embedding（一次 analyze 一起产出）
+export const AI_DONE_OCR = 2;
+export const AI_DONE_ACTIVITY = 4;
+
+/**
+ * 当前开关下，一张照片需要集齐哪些位才算识别完成。
+ * 基础位永远要（embedding 是以图搜图的原料）；OCR / 活动只在开关打开时算。
+ * 开关从关变开时 needMask 会变大，以前「已有 embedding 就跳过」的照片会自动被补做。
+ */
+export function aiNeededMask(cfg: PhotoAiConfig): number {
+  return (
+    AI_DONE_BASE |
+    (cfg.ocrEnabled ? AI_DONE_OCR : 0) |
+    (cfg.activityEnabled ? AI_DONE_ACTIVITY : 0)
+  );
+}
+
 export const AI_DEFAULTS: PhotoAiConfig = {
   faceEnabled: true,
   placeEnabled: true,
@@ -54,6 +72,33 @@ export async function saveAiConfig(k: KernelApi, patch: Partial<PhotoAiConfig>):
 export function faceTuning(k: KernelApi): { matchSim: number; minVotes: number; threads: number } {
   return aiConfig(k).tuning;
 }
+
+/**
+ * 人脸「认领护栏」（低质量脸与极端侧脸不参与认领投票）。
+ *
+ * 只有模型、阈值、KNN 参数照抄是不够的：低质量脸 / 极端侧脸互相之间反而更像，
+ * 不加这几道门就会滚成几百张的假人物组，同时干净的人被拆成一堆单张碎片。
+ * - MIN_QUALITY：低于此分的人脸不入库（sidecar 已按 0.55 检测门，这里是二次确认）
+ * - CLAIM_MIN_QUALITY：低于此分只独立成组，不参与投票认领，也不给别人投票
+ * - CLAIM_MAX_ABS_YAW：|yaw| 超阈值的极端侧脸同样只独立成组（yaw 缺失时按参考放行）
+ */
+function envNum(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+export const FACE_MIN_QUALITY = envNum('COLANAS_FACE_MIN_QUALITY', 55);
+export const FACE_CLAIM_MIN_QUALITY = envNum('COLANAS_FACE_CLAIM_MIN_QUALITY', 70);
+/** 设 0 = 关闭姿态门（参考实现同口径） */
+export const FACE_CLAIM_MAX_ABS_YAW = envNum('COLANAS_FACE_CLAIM_MAX_ABS_YAW', 0.4);
+
+/**
+ * 单个簇最多认领多少张脸。超过就冻结（不再吸新脸），对应参考实现的「组体检冻结」简化版。
+ * 一个组一旦滚到上千张，它的成员覆盖了各种长相，任何新脸都能在里面找到「相似」的邻居，
+ * 于是变成黑洞；真有上千张照片的同一个人被拆成两个干净组，也远好过一个混进全库的大杂烩。
+ */
+export const FACE_MAX_GROUP_FACES = envNum('COLANAS_FACE_MAX_GROUP_FACES', 1000);
 
 /** 正在运行的 AI 任务（用于任务进度卡的 running 状态） */
 const running = new Map<string, number>();

@@ -8,7 +8,7 @@ import { sql } from 'kysely';
 import { createDb, checkIntegrity, closeDb, analyzeTables } from './db';
 import { Migrator } from './migrator';
 import { createConfig } from './config';
-import { readSystemSettings } from './system-settings';
+import { migrateDeprecatedLlmModel, readSystemSettings } from './system-settings';
 import { configureProxy } from './proxy-fetch';
 import { readTls } from './tls';
 import { startHttpsProxy } from './https-proxy';
@@ -69,6 +69,9 @@ const QUERY_TOKEN_PATHS = new Set([
   '/api/v1/music/stream',
   '/api/v1/book/file',
   '/api/v1/mount/download',
+  // AI 播客的 mp3 / 试听句：播放器（media_kit / 浏览器 <audio>）只能给 URL
+  '/api/v1/blog/audio',
+  '/api/v1/blog/preview/audio',
   // 浏览器 WebSocket 不能自定义请求头，只能把会话 JWT 放 query
   '/api/v1/system/terminal/ws',
 ]);
@@ -198,6 +201,11 @@ export async function startKernel(opts: KernelOptions) {
   const baseApplied = await migrator.run(BASE_MIGRATIONS, MIGRATION_ORDER);
 
   const config = await createConfig(db);
+  // 旧版本落库的模型名可能是 2026-07-24 下线的 deepseek-chat：改掉并写回，
+  // 否则每期新闻仍拿废弃名去请求（400）。必须在读 systemSettings 之前做。
+  if (await migrateDeprecatedLlmModel(config)) {
+    app.log.info('[settings] 已把下线的 DeepSeek 模型名迁移到当前默认模型');
+  }
   // 全局设置：代理立即生效；端口 / 并发在本次启动读取（保存后需重启）
   const systemSettings = readSystemSettings(config);
   configureProxy(systemSettings.proxy);

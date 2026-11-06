@@ -4,6 +4,7 @@ import { PHOTO_AI_SCHEMAS } from './schemas';
 import { registerPhotoSemantic } from './semantic';
 import { registerPhotoVision } from './vision';
 import { registerPhotoAiSettings } from './settings';
+import { registerPhotoAssistant } from './assistant';
 
 /**
  * photo 智能分析（人脸 / 场景 / 活动 / OCR / 语义 / 以图搜图）。
@@ -18,4 +19,6 @@ export async function registerPhotoAi(app: any, k: KernelApi): Promise<void> {
   await registerPhotoFaces(app, k);
   await registerPhotoSemantic(app, k);
   await registerPhotoAiSettings(app, k);
+  // 相册助手 / 模型 API / 热搜：对齐参考实现的 app_ai/ask、model_api/*、search/hot
+  await registerPhotoAssistant(app, k);
 }

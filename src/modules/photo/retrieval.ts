@@ -27,6 +27,57 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 const TAG = ['photo'];
 const now = () => Math.floor(Date.now() / 1000);
 
+export interface SuggestItem {
+  kind: string;
+  value: string;
+  count: number;
+}
+
+/**
+ * 无关键词时的热门推荐：`/search/suggest` 的空 q 分支与 `/search/hot` 共用。
+ * 以前这段只藏在 suggest 里，客户端又从不用空 q 调，等于一条死分支；
+ * 抽出来后两个接口共用同一份 SQL，不会出现「热搜和推荐结果不一致」。
+ */
+export async function hotSuggestions(k: KernelApi, limit: number): Promise<SuggestItem[]> {
+  const items: SuggestItem[] = [];
+  const persons = (
+    await sql<{ name: string; size: number }>`
+      select name, size from photo_face_clusters
+       where name is not null and name <> '' order by size desc limit ${limit}
+    `.execute(k.db)
+  ).rows;
+  for (const p of persons) items.push({ kind: 'person', value: p.name, count: Number(p.size) });
+
+  const scenes = (
+    await sql<{ label: string; n: number }>`
+      select s.label, count(*) as n from photo_scenes s
+        join photo_items i on i.id = s.photo_id and i.in_trash = 0
+       group by s.label order by n desc limit ${limit}
+    `.execute(k.db)
+  ).rows;
+  for (const s of scenes) items.push({ kind: 'scene', value: s.label, count: Number(s.n) });
+
+  const activities = (
+    await sql<{ label: string; n: number }>`
+      select a.label, count(*) as n from photo_activities a
+        join photo_items i on i.id = a.photo_id and i.in_trash = 0
+       group by a.label order by n desc limit ${limit}
+    `.execute(k.db)
+  ).rows;
+  for (const a of activities) {
+    items.push({ kind: 'activity', value: a.label, count: Number(a.n) });
+  }
+
+  const years = (
+    await sql<{ y: string; n: number }>`
+      select strftime('%Y', taken_at, 'unixepoch') as y, count(*) as n from photo_items
+       where in_trash = 0 group by y order by y desc limit ${limit}
+    `.execute(k.db)
+  ).rows;
+  for (const y of years) items.push({ kind: 'year', value: y.y, count: Number(y.n) });
+  return items;
+}
+
 const ErrorResponse = Type.Object({
   error: Type.String(),
   message: Type.Optional(Type.String()),
@@ -165,44 +216,7 @@ export async function registerPhotoRetrieval(app: any, k: KernelApi): Promise<vo
 
       if (!hasQuery) {
         // 无关键词：返回各类热门（给「随便看看」用）
-        const persons = (
-          await sql<{ name: string; size: number }>`
-            select name, size from photo_face_clusters
-             where name is not null and name <> '' order by size desc limit ${limit}
-          `.execute(k.db)
-        ).rows;
-        for (const p of persons)
-          items.push({ kind: 'person', value: p.name, count: Number(p.size) });
-
-        const scenes = (
-          await sql<{ label: string; n: number }>`
-            select s.label, count(*) as n from photo_scenes s
-              join photo_items i on i.id = s.photo_id and i.in_trash = 0
-             group by s.label order by n desc limit ${limit}
-          `.execute(k.db)
-        ).rows;
-        for (const s of scenes) items.push({ kind: 'scene', value: s.label, count: Number(s.n) });
-
-        const activities = (
-          await sql<{ label: string; n: number }>`
-            select a.label, count(*) as n from photo_activities a
-              join photo_items i on i.id = a.photo_id and i.in_trash = 0
-             group by a.label order by n desc limit ${limit}
-          `.execute(k.db)
-        ).rows;
-        for (const a of activities) {
-          items.push({ kind: 'activity', value: a.label, count: Number(a.n) });
-        }
-
-        const years = (
-          await sql<{ y: string; n: number }>`
-            select strftime('%Y', taken_at, 'unixepoch') as y, count(*) as n from photo_items
-             where in_trash = 0 group by y order by y desc limit ${limit}
-          `.execute(k.db)
-        ).rows;
-        for (const y of years) items.push({ kind: 'year', value: y.y, count: Number(y.n) });
-
-        return { items };
+        return { items: await hotSuggestions(k, limit) };
       }
 
       const persons = (

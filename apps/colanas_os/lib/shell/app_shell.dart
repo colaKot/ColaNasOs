@@ -10,6 +10,7 @@ import '../core/app_visibility.dart';
 import '../core/session.dart';
 import '../core/settings_store.dart';
 import '../features/accounts/accounts_page.dart';
+import '../features/blog/blog_shell.dart';
 import '../features/book/book_shell.dart';
 import '../features/discover/discover_shell.dart';
 import '../features/files/files_page.dart';
@@ -134,6 +135,7 @@ class _AppShellState extends State<AppShell> {
     'video': const VideoShellPage(),
     'discover': const DiscoverShellPage(),
     'music': const MusicShellPage(),
+    'blog': const BlogShellPage(),
     'book': const BookShellPage(),
     'notes': const NotesPage(),
     'netdisk': const MountPage(),

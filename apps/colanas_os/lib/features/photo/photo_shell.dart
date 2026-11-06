@@ -11,6 +11,11 @@ import 'photo_page.dart';
 import 'photo_on_this_day_page.dart';
 import 'photo_ai_settings_page.dart';
 import 'photo_ai_center_page.dart';
+import 'photo_assistant_page.dart';
+import 'photo_discover_page.dart';
+import 'photo_duplicate_insight_page.dart';
+import 'photo_journey_page.dart';
+import 'photo_time_contrast_page.dart';
 import 'photo_collection_page.dart';
 import 'photo_folders_page.dart';
 import 'photo_home_page.dart';
@@ -41,10 +46,10 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
   final NavSelection _selection = NavSelection('home');
 
   Widget _content(String key) {
-    // 契约里没有、但页面已实现的入口：onThisDay（往年今日）/ backup（相册备份）/
-    // models（AI 模型管理）。页面都在（194 / 258 / 132 行），是否恢复成菜单项待定，
-    // 先在这里登记，避免被当成死代码删掉（`app-nav.check` 的 nav-orphan 白名单）。
-    // nav-orphan: onThisDay, models
+    // 契约里没有、但页面已实现的入口：onThisDay（往年今日）。页面在（194 行），
+    // 是否恢复成菜单项待定，先在这里登记，避免被当成死代码删掉
+    //（`app-nav.check` 的 nav-orphan 白名单）。models 已挂进契约菜单，不再豁免。
+    // nav-orphan: onThisDay
     switch (key) {
       case 'home':
         return PhotoHomePage(embedded: true, onNavigate: _selection.select);
@@ -56,6 +61,8 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
         return const PhotoOnThisDayPage(embedded: true);
       case 'photoAiCenter':
         return PhotoAiCenterPage(onNavigate: _selection.select);
+      case 'assistant':
+        return const PhotoAssistantPage();
       case 'favorites':
         return const PhotoPage(favoriteOnly: true);
       case 'album':
@@ -70,6 +77,14 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
         return const PhotoTicketsPage(embedded: true);
       case 'year':
         return const PhotoAnnualPage(embedded: true);
+      case 'timeContrast':
+        return const PhotoTimeContrastPage();
+      case 'journey':
+        return const PhotoJourneyPage();
+      case 'discovery':
+        return PhotoDiscoverPage(onNavigate: _selection.select);
+      case 'duplicateInsight':
+        return PhotoDuplicateInsightPage(onNavigate: _selection.select);
       case 'smartRules':
         return const PhotoSmartPage(embedded: true, section: 'rules');
       case 'activities':

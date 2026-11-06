@@ -559,13 +559,14 @@ class _MusicGroupedPageState extends State<MusicGroupedPage> {
             builder: (context, constraints) {
               // 与曲目网格同一套算法：行高由格子宽 + 文字区高度直接算出，
               // 不用 childAspectRatio，窄屏也不会溢出。
+              // `crossAxisExtent` 已扣过外层 SliverPadding，别再减 spaceMd*2
+              // （见 MusicTrackGridSliver 的注释：多减一次会让格子算窄、卡片溢出）。
               const desiredWidth = 150.0;
               const spacing = NasTokens.spaceSm;
-              final content =
-                  (constraints.crossAxisExtent - NasTokens.spaceMd * 2).clamp(
-                    0.0,
-                    double.infinity,
-                  );
+              final content = constraints.crossAxisExtent.clamp(
+                0.0,
+                double.infinity,
+              );
               final count = (content / desiredWidth).floor().clamp(2, 10);
               final cellWidth = ((content - spacing * (count - 1)) / count)
                   .floorToDouble();

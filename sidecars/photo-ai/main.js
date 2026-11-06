@@ -12,7 +12,8 @@
  *
  * 协议：
  *   invoke('analyze', { src, faces?, scenes?, embed? }) ->
- *     { faces: [{ emb: number[], score }], scenes: [{ label, score }], embedding: number[] }
+ *     { faces: [{ emb, score, quality, pose, box }], scenes: [{ label, score }], embedding: number[] }
+ *     quality = score * 100；pose = { yaw, roll, iod }（kpss 缺失时 yaw/roll 为 null）
  *   invoke('stats') -> 计数器
  */
 'use strict';
@@ -418,6 +419,51 @@ const FACE_MIN_BOX_WIDTH_RATIO_LOOSE = Number(
 );
 const FACE_MAX_FACES_PER_IMAGE = Number(process.env.COLANAS_FACE_MAX_PER_IMAGE ?? 20);
 
+/**
+ * 从 faceLandMark 的 5 点关键点算姿态代理量（对齐参考实现 _computePoseFromKps）。
+ *
+ * 为什么需要：极端侧脸的**检测置信度往往很高**（模型很确定"这是一张脸"），
+ * 只靠 quality 拦不住；而这些脸的 embedding 互相之间反而更像，是"侧脸槽"大杂烩组的原料。
+ * yaw = (鼻尖 x - 双眼中点 x) / 瞳距，无量纲；|yaw| > 0.4 视为极端侧脸。
+ *
+ * kpss 与 bboxes 同处 letterbox 后的输入张量空间，用同一套 (v - pad) / scale 还原。
+ */
+function computePoseFromKps(kpss, faceIndex, affine) {
+  const empty = { yaw: null, roll: null, iod: 0 };
+  if (!kpss || !kpss.data || !kpss.dims) return empty;
+  const dims = kpss.dims;
+  let base = 0;
+  if (dims.length === 3 && dims[1] >= 5 && dims[2] === 2) {
+    base = faceIndex * dims[1] * 2; // [N,5,2]
+  } else if (dims.length === 4 && dims[2] >= 5 && dims[3] === 2) {
+    base = faceIndex * dims[2] * 2; // [1,N,5,2]
+  } else {
+    return empty;
+  }
+  const scale = affine.scale > 0 ? affine.scale : 1;
+  const at = (k) => {
+    const x = numOf(kpss.data[base + k * 2]);
+    const y = numOf(kpss.data[base + k * 2 + 1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return [(x - affine.padX) / scale, (y - affine.padY) / scale];
+  };
+  const le = at(0);
+  const re = at(1);
+  const nose = at(2);
+  if (!le || !re || !nose) return empty;
+  const iod = Math.hypot(re[0] - le[0], re[1] - le[1]);
+  if (!(iod > 1e-3)) return empty;
+  const yaw = (nose[0] - (le[0] + re[0]) / 2) / iod;
+  const roll = (Math.atan2(re[1] - le[1], re[0] - le[0]) * 180) / Math.PI;
+  // 关键点明显跑飞时宁可不判，也不要用一个离谱 yaw 把好脸误杀
+  if (!Number.isFinite(yaw) || Math.abs(yaw) > 8) return empty;
+  return {
+    yaw: Number(yaw.toFixed(4)),
+    roll: Number(roll.toFixed(2)),
+    iod: Math.round(iod),
+  };
+}
+
 /** 检测框是否可信（宽度占比用原图宽度，和参考实现同一口径） */
 function faceBoxAcceptable(box, score, imgWidth) {
   if (score < FACE_DET_SCORE_THRESH) return false;
@@ -452,6 +498,7 @@ async function faces(src) {
   const scores = Array.from(out.scores.data || []);
   const aligns = out.align_imgs;
   const bboxes = out.bboxes;
+  const kpss = out.kpss;
   const n = aligns.dims[0];
   if (n === 0) return [];
 
@@ -490,6 +537,9 @@ async function faces(src) {
 
     result.push({
       score,
+      // 0..100 质量分：服务端护栏（<55 丢弃 / <70 不认领）与参考实现同一量纲
+      quality: Math.round(score * 100),
+      pose: computePoseFromKps(kpss, i, affine),
       emb: l2normalize(Array.from(emb.embedding.data)),
       box,
       imgWidth: ow,

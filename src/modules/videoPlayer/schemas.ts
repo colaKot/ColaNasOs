@@ -59,12 +59,30 @@ export const SessionCreateBody = Type.Object(
         description: '提前转码时长（分钟），不传 = 3 分钟；0 = 整片一次转完',
       }),
     ),
+    /**
+     * 从片源第 `startMs` 毫秒**起转**（0 / 不传 = 从片头转）。
+     *
+     * 进度条拖到「还没转出来」的位置时用：服务端另起一个从该位置开始的会话，
+     * 产物播放列表的时间轴 0 就是 `startMs`，客户端自己加偏移显示。
+     * 没有它就只能顺序续转，「跳到 1:30」要等前面的 1:30 全转完。
+     */
+    startMs: Type.Optional(
+      Type.Integer({
+        minimum: 0,
+        description: '从片源第 startMs 毫秒起转（0 = 片头），与 leadMinutes 正交',
+      }),
+    ),
   },
   { $id: 'PlayerSessionCreateBody' },
 );
 
 export const SessionCreated = Type.Object(
-  { id: Type.String(), url: Type.String() },
+  {
+    id: Type.String(),
+    url: Type.String(),
+    /** 这个会话的时间轴 0 对应的片源位置（毫秒），0 = 从片头转 */
+    startedMs: Type.Optional(Type.Integer()),
+  },
   { $id: 'PlayerSessionCreated' },
 );
 
@@ -90,6 +108,8 @@ export const SessionItem = Type.Object(
     transcodedMs: Type.Optional(Type.Integer()),
     /** 本会话的提前转码时长（毫秒），0 = 用户显式选了整片 */
     leadMs: Type.Optional(Type.Integer()),
+    /** 本会话时间轴 0 对应的片源位置（毫秒）；>0 表示这个会话是从中途起转的 */
+    startedMs: Type.Optional(Type.Integer()),
     error: Type.Union([Type.String(), Type.Null()]),
     url: Type.String(),
     createdAt: Type.Integer(),

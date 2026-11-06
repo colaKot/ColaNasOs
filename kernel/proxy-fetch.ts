@@ -9,6 +9,23 @@ import { ProxyAgent, fetch as undiciFetch } from 'undici';
  */
 let agent: ProxyAgent | null = null;
 let active = '';
+/** 环境变量代理（HTTP_PROXY / HTTPS_PROXY）：设置页没填时兜底，抓国外 RSS 靠它 */
+let envAgent: ProxyAgent | null = null;
+let envChecked = false;
+
+function envProxyAgent(): ProxyAgent | null {
+  if (envChecked) return envAgent;
+  envChecked = true;
+  const url = (
+    process.env.HTTPS_PROXY ||
+    process.env.https_proxy ||
+    process.env.HTTP_PROXY ||
+    process.env.http_proxy ||
+    ''
+  ).trim();
+  if (url) envAgent = new ProxyAgent(url);
+  return envAgent;
+}
 
 export function configureProxy(url: string): void {
   const clean = String(url ?? '').trim();
@@ -26,6 +43,8 @@ export async function proxyFetch(
   url: string,
   init: Record<string, unknown> = {},
 ): Promise<Response> {
-  const opts = agent ? { ...init, dispatcher: agent } : init;
+  // 设置页填的代理优先；没填时用环境变量里的代理（很多人是靠 HTTP(S)_PROXY 配的）
+  const dispatcher = agent ?? envProxyAgent();
+  const opts = dispatcher ? { ...init, dispatcher } : init;
   return undiciFetch(url, opts as never) as unknown as Promise<Response>;
 }

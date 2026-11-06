@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# 临时产物：模型下载器的中转 zip、本地验证脚本与 RSS 样本
+.cache/
 # tsc 增量编译缓存（下次 `npm run build` 只重编改动文件）
 .tsbuildinfo
 build/
@@ -16,7 +18,11 @@ build/
 #   ffmpeg、ONNX 模型、GeoNames 地名库（CC-BY 4.0，需随包分发时单独签名）
 vendor/ffmpeg/
 vendor/models/
+# 语音合成推理二进制（llama-tts，按平台分目录；用 npm run tts:model 下载）
+vendor/llama/
 vendor/geo/
+# 便携 python 运行时（随包分发，体积大，不入库；由 npm run python:bundle 生成）
+vendor/python-runtime/
 # 安装器产物（体积大，不入库）
 dist_installer/
 # 鸿蒙端（flutter_ohos）构建中间物与 SDK 拷入的 har，只保留工程骨架
@@ -35,6 +41,9 @@ docs/17-右键菜单对照.md
 docs/_archive/
 
 # 本地工具与临时产物（不含项目源码，不入库）
+.playwright-cli/
+# 语音合成的调试音频样本（约 15MB，不是发布资源）
+docs/audio/
 .codeartsdoer/
 .workbuddy/
 .dumate/
