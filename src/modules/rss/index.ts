@@ -2,7 +2,14 @@ import crypto from 'node:crypto';
 import { Type } from '@sinclair/typebox';
 import { sql } from 'kysely';
 import { secured } from '../../../kernel/route';
-import { addTorrent, type TransmissionConfig } from '../pt/transmission';
+import { addTorrent } from '../pt/transmission';
+import { fetchTorrentBytes } from '../pt/mteam';
+import {
+  defaultDownloadDir,
+  libraryOfDir,
+  normalizeDir,
+  resolveTransmission,
+} from '../pt/shared';
 import type { ServerModule } from '../../../kernel/types';
 import { Err } from '../../../kernel/errors';
 
@@ -160,6 +167,9 @@ interface ParsedItem {
   link: string;
   published: number | null;
   summary: string;
+  /** 种子直链：`<enclosure url>`，其次 torznab 的 `<link>`、magnet */
+  enclosureUrl: string;
+  sizeBytes: number | null;
 }
 
 function decodeEntities(s: string): string {
@@ -183,6 +193,33 @@ function stripHtml(s: string): string {
   return decodeEntities(s.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * 从 `<item>` 里取种子地址与体积。
+ *
+ * PT / BT 站的 RSS 有两种写法：
+ * - RSS 2.0 标准：`<enclosure url="..." length="..." type="application/x-bittorrent"/>`
+ * - torznab / Jackett：`<link>https://.../download.php?id=1</link>` 本身就是种子直链
+ * 以前完全没解析 enclosure，`rss_items.enclosure_url` 一直是空，
+ * 于是「自动下载」永远筛不到条目、「确认」也只是改状态、什么都不下。
+ */
+function torrentOf(block: string, link: string): { url: string; size: number | null } {
+  const enc = /<enclosure\b([^>]*)\/?>/i.exec(block);
+  if (enc) {
+    const attrs = enc[1] || '';
+    const url = /url\s*=\s*["']([^"']+)["']/i.exec(attrs)?.[1] || '';
+    const len = Number(/length\s*=\s*["'](\d+)["']/i.exec(attrs)?.[1] || 0);
+    if (url) return { url: decodeEntities(url), size: len > 0 ? len : null };
+  }
+  // 没有 enclosure 时，link 是 .torrent / magnet / 常见下载直链就当种子地址
+  const guess = String(link || '').trim();
+  if (/^magnet:/i.test(guess) || /\.torrent(\?|$)/i.test(guess) || /\/download\b/i.test(guess)) {
+    return { url: guess, size: null };
+  }
+  // M-Team / NexusPHP 的 guid 有时直接就是下载地址
+  if (/^https?:\/\/[^/]+\/.*download/i.test(guess)) return { url: guess, size: null };
+  return { url: '', size: null };
+}
+
 export function parseRss(xml: string): { title: string; items: ParsedItem[] } {
   const channel = /<channel[^>]*>([\s\S]*?)<\/channel>/i.exec(xml);
   const channelBlock = channel ? channel[1] : xml;
@@ -198,12 +235,15 @@ export function parseRss(xml: string): { title: string; items: ParsedItem[] } {
     if (!guid) continue;
     const dateStr = tag(block, 'pubDate') || tag(block, 'date');
     const ts = dateStr ? Date.parse(dateStr) : NaN;
+    const t = torrentOf(block, link);
     items.push({
       guid,
       title: tag(block, 'title') || '(untitled)',
       link,
       published: Number.isNaN(ts) ? null : Math.floor(ts / 1000),
       summary: stripHtml(tag(block, 'description') || tag(block, 'summary')).slice(0, 500),
+      enclosureUrl: t.url,
+      sizeBytes: t.size,
     });
   }
   return { title, items };
@@ -370,16 +410,31 @@ export const rss: ServerModule = {
       let added = 0;
       let skipped = 0;
       for (const it of items) {
-        const existing = await sql`
-          select 1 from rss_items where feed_id = ${feedId} and guid = ${it.guid}
-        `.execute(k.db);
-        if (existing.rows.length > 0) {
+        const existing = (
+          await sql<{ enclosure_url: string | null; size_bytes: number | null }>`
+            select enclosure_url, size_bytes from rss_items
+             where feed_id = ${feedId} and guid = ${it.guid}
+          `.execute(k.db)
+        ).rows[0];
+        if (existing) {
+          // 老条目（解析器还不认 enclosure 时存下的）补一次种子地址，
+          // 否则「确认下载」会一直提示没有种子地址。
+          if (!existing.enclosure_url && it.enclosureUrl) {
+            await sql`
+              update rss_items
+                 set enclosure_url = ${it.enclosureUrl},
+                     size_bytes = coalesce(size_bytes, ${it.sizeBytes ?? null})
+               where feed_id = ${feedId} and guid = ${it.guid}
+            `.execute(k.db);
+          }
           skipped += 1;
           continue;
         }
         await sql`
-          insert into rss_items (feed_id, guid, title, link, published, summary)
-          values (${feedId}, ${it.guid}, ${it.title}, ${it.link}, ${it.published}, ${it.summary})
+          insert into rss_items
+            (feed_id, guid, title, link, published, summary, enclosure_url, size_bytes)
+          values (${feedId}, ${it.guid}, ${it.title}, ${it.link}, ${it.published},
+                  ${it.summary}, ${it.enclosureUrl || null}, ${it.sizeBytes ?? null})
         `.execute(k.db);
         added += 1;
       }
@@ -387,20 +442,68 @@ export const rss: ServerModule = {
     };
 
     /**
-     * 按该源自己的设置加种：目录用 feed.save_path，paused 用 feed.paused_default。
-     * 返回 hash（成功才写 rss_downloaded），失败返回 ''。
+     * 按该源自己的设置加种：目录用 feed.save_path（空 = 下载设置里的默认目录），
+     * paused 用 feed.paused_default。返回 hash（成功才写 rss_downloaded），失败返回 ''。
+     *
+     * 两个关键点：
+     * - 下载器走 `resolveTransmission()`（手填 RPC → 随包内置 daemon → 本机探测）。
+     *   以前只读 `pt.transmission`，没手填地址就永远「未配置」，RSS 一个种子都下不动。
+     * - http(s) 直链由**内核**先抓成 .torrent 再以 metainfo 提交：RSS 地址一般自带
+     *   passkey，但站点会挡下载器 UA / 要求 Referer，直接甩给 transmission 常拿到
+     *   错误页（"invalid or corrupt torrent file"）。
      */
     const submitFeedTorrent = async (
-      feed: { save_path?: string | null; paused_default?: number | null },
-      enclosureUrl: string,
+      feed: { id?: string | null; save_path?: string | null; paused_default?: number | null },
+      item: { url: string; guid: string; title?: string | null; uid: string },
     ): Promise<{ hash: string; message: string }> => {
-      const cfg = (k.config.get('pt.transmission') || null) as TransmissionConfig | null;
-      if (!cfg?.url) return { hash: '', message: 'transmission 未配置' };
-      const res = await addTorrent(cfg, enclosureUrl, {
-        downloadDir: String(feed.save_path || '').trim() || undefined,
-        paused: Number(feed.paused_default || 0) === 1,
-      });
-      return { hash: res.ok ? String(res.hash || '') : '', message: res.message };
+      const url = String(item.url || '').trim();
+      if (!url) return { hash: '', message: '该条目没有种子地址' };
+      const cfg = await resolveTransmission(k);
+      if (!cfg) {
+        return { hash: '', message: '没探测到下载器（内置 transmission 未能启动）' };
+      }
+      // 目录：源里选的优先，没选就用「下载设置」里的电影库 / 剧集库根
+      const dir = normalizeDir(String(feed.save_path || '')) || (await defaultDownloadDir(k));
+      const paused = Number(feed.paused_default || 0) === 1;
+      const opts = { downloadDir: dir || undefined, paused };
+
+      let res;
+      if (/^magnet:/i.test(url)) {
+        res = await addTorrent(cfg, url, opts);
+      } else {
+        const bytes = await fetchTorrentBytes({ url });
+        res = bytes
+          ? await addTorrent(cfg, url, { ...opts, metainfo: bytes.toString('base64') })
+          : // 抓不到（响应不是 bencode）就退回让下载器自己下，失败原因会原样带回
+            await addTorrent(cfg, url, opts);
+      }
+      if (!res.ok) return { hash: '', message: res.message };
+      const hash = String(res.hash || '');
+      // 顺手在 PT 台账里也记一条：下载完成时心跳会自动归档进影视库，
+      // 发现页「任务」里也能看到这个 RSS 任务的进度。
+      // 幂等键用 rss: 前缀，避免和 PT 手动下载的 ih:<hash> 撞唯一索引。
+      try {
+        const lib = await libraryOfDir(k, dir);
+        const idem = `rss:${String(feed.id || '')}:${item.guid}`;
+        const dup = (
+          await sql<any>`select id from pt_downloads where idempotency_key = ${idem} limit 1`
+            .execute(k.db)
+        ).rows[0];
+        if (!dup) {
+          await sql`
+            insert into pt_downloads
+              (id, uid, site_id, torrent_id, title, download_url, info_hash, status,
+               message, created_at, idempotency_key, media_id, media_type,
+               library_id, save_path)
+            values (${crypto.randomBytes(8).toString('base64url')}, ${String(item.uid)},
+                    'rss', ${item.guid}, ${String(item.title || '')}, ${url}, ${hash || null},
+                    ${paused ? 'paused' : 'added'}, 'RSS 自动下载', ${now()}, ${idem},
+                    null, ${lib ? (lib.type === 'tv' ? 'tv' : 'movie') : null},
+                    ${lib?.id || null}, ${dir || null})
+          `.execute(k.db);
+        }
+      } catch { /* 台账写失败不影响加种 */ }
+      return { hash, message: res.message };
     };
 
     app.post(
@@ -582,15 +685,28 @@ export const rss: ServerModule = {
                    and coalesce(i.state, 'Pending') = 'Pending'
                    and not exists (
                      select 1 from rss_downloaded d
-                      where d.uid = ${uid} and d.feed_id = i.feed_id and d.guid = i.guid
+                      where d.feed_id = i.feed_id and d.guid = i.guid
                    )
                  order by i.published desc
                  limit 10
               `.execute(k.db)
             ).rows;
             for (const it of pending) {
-              const sent = await submitFeedTorrent(feed, String(it.enclosure_url));
-              if (!sent.hash) continue;
+              const sent = await submitFeedTorrent(feed, {
+                url: String(it.enclosure_url),
+                guid: String(it.guid),
+                title: String(it.title || ''),
+                uid,
+              });
+              if (!sent.hash) {
+                // 失败必须留痕：否则表现是「开了自动下载但什么都不发生」，
+                // 页面和日志都查不出原因（2026-11-10 排查过一轮）。
+                k.log.warn(
+                  { feedId: feed.id, guid: it.guid, message: sent.message },
+                  'rss auto download failed',
+                );
+                continue;
+              }
               await sql`
                 insert into rss_downloaded
                   (id, uid, feed_id, guid, info_hash, title, size_bytes,
@@ -736,16 +852,23 @@ export const rss: ServerModule = {
             const feed = (
               await sql<any>`select * from rss_feeds where id = ${row.feed_id}`.execute(k.db)
             ).rows[0];
-            // 幂等：同 (uid, feed_id, guid) 已存在就不重复插
+            // 幂等：这条 guid 只要下过一次就永远跳过（台账按账号记录，但去重不看账号：
+            // RSS 是单机单实例，同一台机器换个登录账号也不该把同一颗种子再下一遍）。
+            // 用户删掉种子 / 删掉文件后**不会**重新下载 —— 想重下得自己删台账。
             const dup = await sql`
               select 1 from rss_downloaded
-               where uid = ${uid} and feed_id = ${row.feed_id} and guid = ${row.guid}
+               where feed_id = ${row.feed_id} and guid = ${row.guid}
             `.execute(k.db);
             if (dup.rows.length > 0) continue;
             // 真加种：目录/是否暂停都按这个源自己的设置（以前只写留痕、什么都没下）
             let hash = '';
             if (row.enclosure_url) {
-              const r = await submitFeedTorrent(feed ?? {}, String(row.enclosure_url));
+              const r = await submitFeedTorrent(feed ?? {}, {
+                url: String(row.enclosure_url),
+                guid: String(row.guid),
+                title: String(row.title || ''),
+                uid,
+              });
               hash = r.hash;
             }
             await sql`

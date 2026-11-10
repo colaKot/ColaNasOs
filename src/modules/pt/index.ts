@@ -32,6 +32,17 @@ import { normalizeConfig, tmdbGet } from '../discover/tmdb';
 import { resolveSecret, signToken } from '../../../kernel/auth';
 import { registerTransmissionWebUi, transmissionWebDir } from './webui';
 import { ensureDaemon, stopDaemonGracefully } from './daemon';
+import {
+  DEFAULT_DOWNLOAD,
+  DOWNLOAD_KEY,
+  defaultDownloadDir,
+  downloaderMode,
+  libraryOfDir,
+  libraryRootDir,
+  normalizeDownload,
+  resetTransmissionProbe,
+  resolveTransmission as resolveTransmissionShared,
+} from './shared';
 
 /**
  * PT 自动下载：站点 → 搜索 → 筛选 → 择种 → 交给 transmission → 留痕。
@@ -49,7 +60,6 @@ const now = () => Math.floor(Date.now() / 1000);
 const ErrorResponse = Type.Object({ error: Type.String(), message: Type.Optional(Type.String()) });
 const OkResponse = Type.Object({ ok: Type.Boolean() });
 
-const DOWNLOAD_KEY = 'pt.download';
 const DownloadSettings = Type.Object(
   {
     movieLibraryId: Type.String({ maxLength: 64 }),
@@ -93,46 +103,6 @@ const DownloadSettingsResponse = Type.Object(
   },
   { $id: 'PtDownloadSettingsResponse' },
 );
-
-const DEFAULT_DOWNLOAD = {
-  movieLibraryId: '',
-  tvLibraryId: '',
-  siteIds: [] as string[],
-  quality: 'all',
-  hdr: 'all',
-  audioLangs: [] as string[],
-  maxSizeBytes: 0,
-  minSeeders: 3,
-  excludedKeywords: [] as string[],
-  scanIntervalMin: 360,
-  autoDownload: true,
-};
-
-const QUALITIES = new Set(['all', '1080p', '1440p', '4k']);
-const HDRS = new Set(['all', 'hdr', 'hdr10', 'hdr10plus', 'dolby']);
-
-function normalizeDownload(raw: unknown): typeof DEFAULT_DOWNLOAD {
-  const r = (raw || {}) as Record<string, unknown>;
-  const arr = (v: unknown, max: number): string[] =>
-    Array.isArray(v)
-      ? [...new Set(v.map((e) => String(e).trim()).filter(Boolean))].slice(0, max)
-      : [];
-  const quality = String(r.quality ?? 'all');
-  const hdr = String(r.hdr ?? 'all');
-  return {
-    movieLibraryId: String(r.movieLibraryId ?? '').slice(0, 64),
-    tvLibraryId: String(r.tvLibraryId ?? '').slice(0, 64),
-    siteIds: arr(r.siteIds, 100),
-    quality: QUALITIES.has(quality) ? quality : 'all',
-    hdr: HDRS.has(hdr) ? hdr : 'all',
-    audioLangs: arr(r.audioLangs, 20),
-    maxSizeBytes: Math.max(0, Number(r.maxSizeBytes) || 0),
-    minSeeders: Math.max(0, Math.min(1000, Number(r.minSeeders) || 0)),
-    excludedKeywords: arr(r.excludedKeywords, 100),
-    scanIntervalMin: Math.max(5, Math.min(360, Number(r.scanIntervalMin) || 360)),
-    autoDownload: r.autoDownload !== false,
-  };
-}
 
 export const pt: ServerModule = {
   id: 'pt',
@@ -423,71 +393,11 @@ export const pt: ServerModule = {
       return raw;
     };
 
-        /**
-     * 本机没配置时自动找 transmission：探 127.0.0.1:9091 的 RPC。
-     * 409 也算「在」——transmission 首次请求必然 409 + session-id 头。
-     * 结果缓存 60s，避免每 5 秒轮询都去敲端口。
-     */
-    let probedCfg: { at: number; cfg: TransmissionConfig | null } = { at: 0, cfg: null };
-    const probeLocalTransmission = async (): Promise<TransmissionConfig | null> => {
-      const nowMs = Date.now();
-      if (nowMs - probedCfg.at < 60_000) return probedCfg.cfg;
-      for (const port of [9091, 9092]) {
-        const url = `http://127.0.0.1:${port}/transmission/rpc`;
-        try {
-          const ctl = new AbortController();
-          const timer = setTimeout(() => ctl.abort(), 1200);
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ method: 'session-get' }),
-            signal: ctl.signal,
-          });
-          clearTimeout(timer);
-          if (res.status === 200 || res.status === 409) {
-            probedCfg = { at: nowMs, cfg: { url } };
-            return probedCfg.cfg;
-          }
-        } catch {
-          /* 端口没开，继续下一个 */
-        }
-      }
-      probedCfg = { at: nowMs, cfg: null };
-      return null;
-    };
+    // 下载器解析（手填 RPC → 内置 daemon → 本机探测）收在 ./shared.ts，
+    // RSS 模块也用同一份，避免「PT 能用、RSS 一直未配置」。
+    const resolveTransmission = (): Promise<TransmissionConfig | null> =>
+      resolveTransmissionShared(k);
 
-    /** 下载器来源：embedded=我们拉起的 daemon / external=用户自己装的 / none */
-    let downloaderMode: 'embedded' | 'external' | 'none' = 'none';
-
-    /**
-     * 解析当前用哪个下载器：
-     *  1. 用户在设置里填了地址 → 用它；
-     *  2. 否则用**内置** daemon（随包带的 transmission-daemon，直接拉起来，不用用户装）；
-     *  3. 内置不可用（没二进制/起不来）→ 探测本机已有的。
-     */
-    const resolveTransmission = async (): Promise<TransmissionConfig | null> => {
-      const configured = transmissionCfg();
-      if (configured) {
-        downloaderMode = 'external';
-        return configured;
-      }
-      const dl = readDownload();
-      const dir =
-        (await libraryDir(dl.movieLibraryId)) || path.join(k.paths.dataDir, 'downloads');
-      const embedded = await ensureDaemon({
-        dataDir: k.paths.dataDir,
-        downloadDir: dir,
-      });
-      if (embedded) {
-        downloaderMode = 'embedded';
-        return { url: embedded };
-      }
-      const probed = await probeLocalTransmission();
-      downloaderMode = probed ? 'external' : 'none';
-      return probed;
-    };
-
-    /** 下载目录 / 筛选设置（单键存储；未配置时用 DEFAULT_DOWNLOAD） */
     const readDownload = (): typeof DEFAULT_DOWNLOAD =>
       normalizeDownload(k.config.get<Record<string, unknown>>(DOWNLOAD_KEY));
 
@@ -567,21 +477,8 @@ export const pt: ServerModule = {
       await k.config.set(DOWNLOAD_KEY, { ...dl, siteIds: nextIds });
     };
 
-    /** 影视库根 → 绝对路径（transmission 可见路径）；库不存在或越界返回空串 */
-    const libraryDir = async (id: string): Promise<string> => {
-      if (!id) return '';
-      const row = (
-        await sql<{ root_path: string }>`
-          select root_path from video_libraries where id = ${id}
-        `.execute(k.db)
-      ).rows[0];
-      if (!row?.root_path) return '';
-      try {
-        return resolveAnyPath(filesRoot(), row.root_path);
-      } catch {
-        return '';
-      }
-    };
+    /** 影视库根 → 绝对路径（实现见 ./shared.ts，RSS 也用它） */
+    const libraryDir = (id: string): Promise<string> => libraryRootDir(k, id);
 
     /**
      * 下载归档目标：优先用订阅自选的库，其次「下载筛选」里的电影库 / 剧集库。
@@ -605,7 +502,18 @@ export const pt: ServerModule = {
      */
     const archiveCompleted = async (row: any): Promise<string> => {
       const mediaType = String(row?.media_type || 'movie') === 'tv' ? 'tv' : 'movie';
-      const target = await archiveTarget(mediaType, row?.library_id);
+      // 台账里带了明确目录（RSS 源自选的下载目录）时，**只有该目录正好是某个库根**
+      // 才归档；否则说明这份文件不在任何影视库里，按类型回退会把无关的库扫一遍。
+      const savePath = String(row?.save_path || '');
+      let libraryId = String(row?.library_id || '');
+      if (!libraryId && savePath) {
+        const lib = await libraryOfDir(k, savePath);
+        if (!lib) return '';
+        libraryId = lib.id;
+      }
+      const target = libraryId
+        ? { libraryId, dir: await libraryDir(libraryId) }
+        : await archiveTarget(mediaType);
       if (!target.libraryId) return '';
       try {
         await k.tasks.enqueueIfIdle('video.scan', { libraryId: target.libraryId }, { maxAttempts: 1 });
@@ -1811,7 +1719,7 @@ export const pt: ServerModule = {
         // 自动发现的地址连不上（下载器被关了）：清掉探测缓存，下次重新找，
         // 别让用户一直看到 "fetch failed"。
         if (!res.ok && !configured) {
-          probedCfg = { at: 0, cfg: null };
+          resetTransmissionProbe();
           return {
             ok: false,
             message:
@@ -1843,7 +1751,7 @@ export const pt: ServerModule = {
           ok: res.ok,
           // 说清楚在用哪个下载器，否则用户不知道消息从哪来
           message:
-            downloaderMode === 'embedded'
+            downloaderMode() === 'embedded'
               ? `${res.message}（内置 transmission 下载器 ${cfg.url}）`
               : configured
                 ? res.message

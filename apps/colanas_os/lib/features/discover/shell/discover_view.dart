@@ -1691,6 +1691,8 @@ class _RssTabState extends State<_RssTab> {
     unawaited(c.loadFeeds());
     unawaited(c.loadEntries());
     unawaited(c.loadLedger());
+    // 下载设置：RSS 源不填目录时用它，界面上也要把「默认下载目录」显示出来
+    unawaited(c.loadFilter());
   }
 
   @override
@@ -1724,21 +1726,43 @@ class _RssTabState extends State<_RssTab> {
         ),
         Obx(() => Column(
               children: c.feeds
-                  .map((f) => Card(
+                  .map((f) {
+                        final own = (f['save_path'] ?? '').toString();
+                        final fallback =
+                            (c.downloadFilter['movie_save_path'] ?? '').toString();
+                        final dir = own.isNotEmpty ? own : fallback;
+                        return Card(
                         child: ListTile(
                           title: Text((f['name'] ?? '') as String),
-                          subtitle: Text(
-                              '${f['url_masked'] ?? ''} · ${f['last_fetch_status'] ?? '-'}'),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                  '${f['url_masked'] ?? ''} · ${f['last_fetch_status'] ?? '-'}'),
+                              Text(
+                                dir.isEmpty
+                                    ? 'discover_rss_no_dir'.tr
+                                    : '${'discover_rss_dir'.tr}：$dir',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                            ],
+                          ),
                           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Switch(
-                              value: f['auto_download'] == 1 || f['auto_download'] == true,
-                              onChanged: (v) async {
-                                final id = f['id'];
-                                if (id is int) await c.setFeedAuto(id, v);
-                              },
+                            Tooltip(
+                              message: 'discover_rss_auto_download'.tr,
+                              child: Switch(
+                                value: f['auto_download'] == 1 || f['auto_download'] == true,
+                                onChanged: (v) async {
+                                  final id = f['id'];
+                                  if (id is int) await c.setFeedAuto(id, v);
+                                },
+                              ),
                             ),
                             IconButton(
                               icon: const Icon(Icons.refresh),
+                              tooltip: 'discover_rss_refresh_one'.tr,
                               onPressed: () async {
                                 final id = f['id'];
                                 if (id is int) await c.refreshFeed(id);
@@ -1753,7 +1777,8 @@ class _RssTabState extends State<_RssTab> {
                             ),
                           ]),
                         ),
-                      ))
+                      );
+                      })
                   .toList(),
             )),
         const SizedBox(height: 12),
@@ -1913,7 +1938,11 @@ class _AddFeedDialogState extends State<_AddFeedDialog> {
           InputDecorator(
             decoration: InputDecoration(
               labelText: 'discover_rss_save_path'.tr,
-              helperText: 'discover_rss_save_path_hint'.tr,
+              helperText: widget.c.downloadFilter['movie_save_path'] == null ||
+                      (widget.c.downloadFilter['movie_save_path'] ?? '').toString().isEmpty
+                  ? 'discover_rss_save_path_hint'.tr
+                  : '${'discover_rss_default_dir'.tr}：'
+                      '${widget.c.downloadFilter['movie_save_path']}',
               isDense: true,
             ),
             child: Row(
