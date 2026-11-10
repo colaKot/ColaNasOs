@@ -152,6 +152,7 @@
     "transmission.deletingHint": "Large files may take a while; the list refreshes automatically",
     "transmission.actionTimeout": "Timed out; refresh later to confirm the result",
     "transmission.actionFailed": "Action failed",
+    "transmission.completed": "Completed",
     "ui.book.020": "File path copied",
     "ui.book.hd9c32a": "Unknown",
     "transmission.seeding": "Seeding",

@@ -181,6 +181,7 @@
     "transmission.deletingHint": {},
     "transmission.actionTimeout": {},
     "transmission.actionFailed": {},
+    "transmission.completed": {},
     "ui.book.020": {},
     "ui.book.hd9c32a": {},
     "transmission.seeding": {},

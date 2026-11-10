@@ -448,9 +448,17 @@ class CompatApi {
       return _filterOf(res);
     }
     if (path == '/api/pt/filter' && method == 'POST') {
+      // 订阅页的「归档目录」直接传库 id（movie_library_id / tv_library_id）；
+      // 设置页仍传源目录路径，按路径反查库 id。两者都能用，谁传谁说了算。
+      final explicitMovie = b.containsKey('movie_library_id');
+      final explicitTv = b.containsKey('tv_library_id');
       final body = PtDownloadSettingsBody(
-        movieLibraryId: await _libraryIdForPath(b['movie_save_path']),
-        tvLibraryId: await _libraryIdForPath(b['tv_save_path']),
+        movieLibraryId: explicitMovie
+            ? (b['movie_library_id'] ?? '').toString()
+            : await _libraryIdForPath(b['movie_save_path']),
+        tvLibraryId: explicitTv
+            ? (b['tv_library_id'] ?? '').toString()
+            : await _libraryIdForPath(b['tv_save_path']),
         siteIds: (b['site_ids'] as List?)?.map((e) => _rawId(e)).toList(),
         quality: _nullableStr(b['quality']),
         hdr: _nullableStr(b['hdr']),
@@ -673,7 +681,10 @@ class CompatApi {
       'popularity': 0,
       'genre_ids': const <int>[],
       'owned': c['owned'] ?? false,
-      'downloaded': c['owned'] ?? false,
+      // downloaded 以前恒等于 owned（`c['owned']`）：服务端从没回这个字段，
+      // 「已下载」角标等于死代码。现在按 downloadState 判定，删掉文件也保留。
+      'downloaded': (c['downloadState'] ?? '') == 'downloaded',
+      'download_state': c['downloadState'] ?? '',
       'favorited': c['favorited'] ?? false,
     };
   }

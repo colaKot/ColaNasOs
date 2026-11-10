@@ -203,6 +203,8 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '170_music_settings_lastfm',
   '171_discover_favorite_meta',
   '172_rss_feed_download_target',
+  // 下载台账关联影视元数据（media_id / library_id / 完成时间），订阅可选归档库
+  '173_pt_media_link',
 ]);
 
 export interface OrderCheck {

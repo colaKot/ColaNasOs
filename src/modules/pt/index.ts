@@ -333,6 +333,38 @@ export const pt: ServerModule = {
         }
       },
     },
+    {
+      // 下载台账关联影视元数据：完成时要按 media_id 回写发现页角标，
+      // 并按 library_id 把文件目录登记进影视库（电影库 / 剧集库）。
+      id: '173_pt_media_link',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(pt_downloads)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        for (const [col, ddl] of [
+          ['media_id', 'alter table pt_downloads add column media_id integer'],
+          ['media_type', 'alter table pt_downloads add column media_type text'],
+          ['library_id', 'alter table pt_downloads add column library_id text'],
+          ['save_path', 'alter table pt_downloads add column save_path text'],
+          ['completed_at', 'alter table pt_downloads add column completed_at integer'],
+          ['scanned_at', 'alter table pt_downloads add column scanned_at integer'],
+        ] as Array<[string, string]>) {
+          if (!cols.includes(col)) await sql.raw(ddl).execute(db);
+        }
+        await sql`
+          create index if not exists idx_pt_downloads_media
+            on pt_downloads (uid, media_type, media_id)
+        `.execute(db);
+
+        // 订阅可选「存到哪个库」，不选则跟随「下载筛选」里的全局电影库 / 剧集库
+        const subCols = (
+          (await sql`pragma table_info(pt_subscriptions)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        if (!subCols.includes('library_id')) {
+          await sql`alter table pt_subscriptions add column library_id text`.execute(db);
+        }
+      },
+    },
   ],
 
   async register(app, k) {
@@ -340,6 +372,24 @@ export const pt: ServerModule = {
       app.addSchema(schema);
     }
     const uidOf = (req: FastifyRequest) => String(req.user?.sub || '');
+
+    // 老台账（173 迁移之前加的种）没有 media_id：按收藏里的 download_task_id 反查补上。
+    // 不补的话，发现页拿不到「下载中 / 已下载」角标，重复扫描也认不出这部片已经在下。
+    try {
+      await sql`
+        update pt_downloads
+           set media_id = (
+                 select f.tmdb_id from discover_favorites f
+                  where f.download_task_id = pt_downloads.id limit 1),
+               media_type = coalesce(media_type, (
+                 select f.media_type from discover_favorites f
+                  where f.download_task_id = pt_downloads.id limit 1))
+         where media_id is null
+           and exists (
+             select 1 from discover_favorites f where f.download_task_id = pt_downloads.id
+           )
+      `.execute(k.db);
+    } catch { /* discover_favorites 尚未建表时跳过，下轮启动再补 */ }
 
     const sites = async () =>
       (
@@ -531,6 +581,41 @@ export const pt: ServerModule = {
       } catch {
         return '';
       }
+    };
+
+    /**
+     * 下载归档目标：优先用订阅自选的库，其次「下载筛选」里的电影库 / 剧集库。
+     * 电影落电影源目录、剧集落电视剧源目录，传输器直接下进库根，扫一次就入库。
+     */
+    const archiveTarget = async (
+      mediaType: string,
+      overrideLibraryId?: string | null,
+    ): Promise<{ libraryId: string; dir: string }> => {
+      const dl = readDownload();
+      const prefer = String(overrideLibraryId || '').trim();
+      const fallback = String(mediaType) === 'tv' ? dl.tvLibraryId : dl.movieLibraryId;
+      const libraryId = prefer || fallback || '';
+      return { libraryId, dir: await libraryDir(libraryId) };
+    };
+
+    /**
+     * 下载完成 → 登记进影视库。
+     * 文件已经由 transmission 下到库根目录，这里只需入队一次 `video.scan`
+     * （扫描 + 自动刮削），影视库里马上就出现这部片。
+     */
+    const archiveCompleted = async (row: any): Promise<string> => {
+      const mediaType = String(row?.media_type || 'movie') === 'tv' ? 'tv' : 'movie';
+      const target = await archiveTarget(mediaType, row?.library_id);
+      if (!target.libraryId) return '';
+      try {
+        await k.tasks.enqueueIfIdle('video.scan', { libraryId: target.libraryId }, { maxAttempts: 1 });
+      } catch (err) {
+        k.log.warn(
+          { err: String(err), libraryId: target.libraryId },
+          'pt archive: enqueue video.scan failed',
+        );
+      }
+      return target.libraryId;
     };
 
     /**
@@ -1165,6 +1250,8 @@ export const pt: ServerModule = {
             mediaYear: r.media_year,
             posterPath: r.poster_path ?? null,
             ruleId: r.rule_id ?? null,
+            /** 归档到哪个影视库；空 = 跟随下载筛选里的电影库 / 剧集库 */
+            libraryId: r.library_id ?? null,
             season: Number(r.season),
             quality: r.quality,
             hdr: r.hdr,
@@ -1193,6 +1280,8 @@ export const pt: ServerModule = {
             mediaId: Type.Optional(Type.Integer({ minimum: 1 })),
             mediaType: Type.Optional(Type.String({ maxLength: 8 })),
             ruleId: Type.Optional(Type.String({ maxLength: 64 })),
+            /** 归档库（影视库 id）；不传则跟随下载筛选里的默认电影库 / 剧集库 */
+            libraryId: Type.Optional(Type.String({ maxLength: 64 })),
             posterPath: Type.Optional(Type.String({ maxLength: 200 })),
             mediaTitle: Type.Optional(Type.String({ maxLength: 200 })),
             mediaYear: Type.Optional(Type.String({ maxLength: 8 })),
@@ -1245,6 +1334,7 @@ export const pt: ServerModule = {
             await sql`
               update pt_subscriptions
                  set enabled = 1, rule_id = ${b.ruleId ?? null},
+                     library_id = coalesce(${b.libraryId || null}, library_id),
                      poster_path = coalesce(${b.posterPath ?? null}, poster_path),
                      media_title = ${finalTitle}, updated_at = ${ts}
                where id = ${dup.id} and uid = ${uidOf(req)}
@@ -1267,6 +1357,8 @@ export const pt: ServerModule = {
                    media_id = coalesce(${mediaId}, media_id),
                    media_type = ${mediaType},
                    rule_id = coalesce(${b.ruleId ?? null}, rule_id),
+                   library_id = case when ${b.libraryId === undefined} then library_id
+                                     else ${b.libraryId ? String(b.libraryId) : null} end,
                    poster_path = coalesce(${b.posterPath ?? null}, poster_path),
                    season = ${Number(b.season) || 0},
                    quality = ${quality}, hdr = ${hdr},
@@ -1283,12 +1375,12 @@ export const pt: ServerModule = {
         const id = crypto.randomBytes(8).toString('base64url');
         await sql`
           insert into pt_subscriptions
-            (id, uid, media_id, media_type, rule_id, poster_path,
+            (id, uid, media_id, media_type, rule_id, poster_path, library_id,
              media_title, media_year, season, quality, hdr,
              audio_langs_json, resolution_order_json, min_seeders, max_size_bytes,
              excluded_keywords_json, enabled, last_run_at, last_result, created_at, updated_at)
           values (${id}, ${uidOf(req)}, ${mediaId}, ${mediaType}, ${b.ruleId ?? null},
-                  ${b.posterPath ?? null},
+                  ${b.posterPath ?? null}, ${b.libraryId ? String(b.libraryId) : null},
                   ${finalTitle}, ${b.mediaYear ?? null},
                   ${Number(b.season) || 0}, ${quality}, ${hdr},
                   ${JSON.stringify(audioLangs)}, ${JSON.stringify(resolutionOrder)},
@@ -1508,10 +1600,11 @@ export const pt: ServerModule = {
       // 同上：没手填 RPC 地址也要能自动拉起内置 transmission，否则只给候选、不加种。
       const cfg = await resolveTransmission();
       const dl = readDownload();
-      const downloadDir =
-        Number(sub.season) > 0
-          ? await libraryDir(dl.tvLibraryId)
-          : await libraryDir(dl.movieLibraryId);
+      // 订阅可单独选库（sub.library_id），没选就跟随「下载筛选」里的电影库 / 剧集库
+      const subType =
+        String(sub.media_type || '') === 'tv' || Number(sub.season) > 0 ? 'tv' : 'movie';
+      const target = await archiveTarget(subType, sub.library_id);
+      const downloadDir = target.dir;
       let status = 'proposed';
       let message = '未配置 transmission：只给出候选';
       let infoHash: string | null = null;
@@ -1536,10 +1629,13 @@ export const pt: ServerModule = {
       await sql`
         insert into pt_downloads
           (id, uid, subscription_id, site_id, torrent_id, title, download_url,
-           info_hash, status, message, created_at)
+           info_hash, status, message, created_at,
+           media_id, media_type, library_id, save_path)
         values (${crypto.randomBytes(8).toString('base64url')}, ${uid}, ${sub.id},
                 ${candidate.siteId}, ${candidate.torrentId}, ${candidate.title},
-                ${candidate.downloadUrl ?? null}, ${infoHash}, ${status}, ${message}, ${now()})
+                ${candidate.downloadUrl ?? null}, ${infoHash}, ${status}, ${message}, ${now()},
+                ${sub.media_id == null ? null : Number(sub.media_id)}, ${subType},
+                ${target.libraryId || null}, ${target.dir || null})
       `.execute(k.db);
       await sql`
         update pt_subscriptions
@@ -1628,6 +1724,11 @@ export const pt: ServerModule = {
             sizeBytes: r.size_bytes == null ? null : Number(r.size_bytes),
             resolution: r.resolution ?? null,
             canControl: (r.status === 'added' || r.status === 'paused') && !!r.info_hash,
+            mediaId: r.media_id == null ? null : Number(r.media_id),
+            mediaType: r.media_type ?? null,
+            libraryId: r.library_id ?? null,
+            savePath: r.save_path ?? null,
+            completedAt: r.completed_at == null ? null : Number(r.completed_at),
             createdAt: Number(r.created_at),
             updatedAt: Number(r.created_at),
           })),
@@ -2171,6 +2272,42 @@ export const pt: ServerModule = {
           }
         } catch { /* video_items 表/列不存在时跳过 owned 判定 */ }
 
+        // 同一部片已经有活跃下载（排队 / 下载中 / 暂停）时直接跳过。
+        // 以前只按收藏状态拦，用户连点几次「立即扫描」就会重复加种，
+        // 下载列表凭空多出几条记录（2026-11-10 反馈：收藏 2 部出现 4 条）。
+        try {
+          const active = (
+            await sql<any>`
+              select d.id from pt_downloads d
+               where d.uid = ${uid}
+                 and d.status in ('added', 'paused', 'downloading')
+                 and (
+                   (
+                     d.media_id = ${Number(r.tmdb_id)}
+                     and coalesce(d.media_type, 'movie') =
+                         ${String(r.media_type) === 'tv' ? 'tv' : 'movie'}
+                   )
+                   or (${String(r.download_task_id || '')} <> '' and d.id = ${String(r.download_task_id || '')})
+                 )
+               order by d.created_at desc limit 1
+            `.execute(k.db)
+          ).rows[0];
+          if (active) {
+            // 顺手把收藏状态拉回 downloading：收藏 toggle 会把它重置成 watching，
+            // 不修正的话下一轮又会被当成「待下载」。
+            await sql`
+              update discover_favorites
+                 set state = 'downloading',
+                     download_task_id = coalesce(download_task_id, ${String(active.id)}),
+                     updated_at = ${now()}
+               where uid = ${uid} and media_type = ${r.media_type}
+                 and tmdb_id = ${Number(r.tmdb_id)} and state <> 'downloading'
+            `.execute(k.db);
+            skipped += 1;
+            continue;
+          }
+        } catch { /* 迁移未跑 / 老库没有 media_id 列时按旧逻辑继续 */ }
+
         const snap = meta.get(String(r.tmdb_id)) || {};
         const own = parseFavoriteMeta(r.meta);
         let title = String(snap.title ?? snap.name ?? own.title ?? '').trim();
@@ -2247,13 +2384,12 @@ export const pt: ServerModule = {
           continue;
         }
         // 电视剧落到剧集库，电影落到电影库（之前一律用电影库）。
-        const dir = await libraryDir(
-          String(r.media_type) === 'tv' ? dl.tvLibraryId : dl.movieLibraryId,
-        );
+        const mediaType = String(r.media_type) === 'tv' ? 'tv' : 'movie';
+        const target = await archiveTarget(mediaType);
         const added = await submitTorrent(
           cfg,
           { siteId: c.siteId, torrentId: c.torrentId, url: c.downloadUrl },
-          { downloadDir: dir || undefined },
+          { downloadDir: target.dir || undefined },
         );
         if (!added.ok) {
           skipped += 1;
@@ -2263,18 +2399,43 @@ export const pt: ServerModule = {
           );
           continue;
         }
-        const id = crypto.randomBytes(8).toString('base64url');
         // 任务卡上同时留「为什么选它」和下载器返回信息，便于回查筛选是否生效。
         const message = `${picked.reason}｜${added.message}`.slice(0, 300);
-        await sql`
-          insert into pt_downloads
-            (id, uid, site_id, torrent_id, title, download_url, info_hash,
-             status, message, created_at, idempotency_key)
-          values (${id}, ${uid}, ${c.siteId}, ${c.torrentId}, ${c.title},
-                  ${c.downloadUrl}, ${added.hash ?? c.infoHash ?? null}, 'added',
-                  ${message}, ${now()},
-                  ${added.hash ? `ih:${String(added.hash).toLowerCase()}` : `st:${c.siteId}:${c.torrentId}`})
-        `.execute(k.db);
+        const infoHash = added.hash ?? c.infoHash ?? null;
+        // 幂等键唯一索引是全局的：同一颗种子删过再下会撞键，
+        // 直接 insert 会抛异常把整轮扫描打断，所以命中旧行就复活它。
+        const idem = infoHash
+          ? `ih:${String(infoHash).toLowerCase()}`
+          : `st:${c.siteId}:${c.torrentId}`;
+        const prev = (
+          await sql<any>`
+            select id from pt_downloads where idempotency_key = ${idem} limit 1
+          `.execute(k.db)
+        ).rows[0];
+        const id = String(prev?.id || crypto.randomBytes(8).toString('base64url'));
+        if (prev) {
+          await sql`
+            update pt_downloads
+               set status = 'added', message = ${message}, info_hash = ${infoHash},
+                   title = ${c.title}, download_url = ${c.downloadUrl},
+                   media_id = ${Number(r.tmdb_id)}, media_type = ${mediaType},
+                   library_id = ${target.libraryId || null}, save_path = ${target.dir || null},
+                   completed_at = null, scanned_at = null, created_at = ${now()}
+             where id = ${id}
+          `.execute(k.db);
+        } else {
+          await sql`
+            insert into pt_downloads
+              (id, uid, site_id, torrent_id, title, download_url, info_hash,
+               status, message, created_at, idempotency_key,
+               media_id, media_type, library_id, save_path)
+            values (${id}, ${uid}, ${c.siteId}, ${c.torrentId}, ${c.title},
+                    ${c.downloadUrl}, ${infoHash}, 'added',
+                    ${message}, ${now()}, ${idem},
+                    ${Number(r.tmdb_id)}, ${mediaType},
+                    ${target.libraryId || null}, ${target.dir || null})
+          `.execute(k.db);
+        }
         await sql`
           update discover_favorites
              set state = 'downloading', download_task_id = ${id}, updated_at = ${now()}
@@ -2598,6 +2759,84 @@ export const pt: ServerModule = {
       },
     );
 
+    /**
+     * 从 Transmission 同步进度（按账号）。
+     * 首次完成时：写 completed_at → 收藏置 downloaded → 入队 video.scan 归档进影视库。
+     * 心跳也会调它，所以用户不开下载页也能自动完成联动。
+     */
+    const syncDownloads = async (
+      uid: string,
+    ): Promise<{ updated: number; finished: number; message?: string }> => {
+      const cfg = await resolveTransmission();
+      if (!cfg) return { updated: 0, finished: 0, message: 'transmission not configured' };
+      const rows = (
+        await sql<any>`
+          select * from pt_downloads where uid = ${uid}
+            and status in ('added', 'paused', 'downloading')
+            and info_hash is not null and info_hash <> '' limit 200
+        `.execute(k.db)
+      ).rows;
+      if (!rows.length) return { updated: 0, finished: 0 };
+      const got = await torrentGet(cfg, rows.map((r) => String(r.info_hash)));
+      if (!got.ok) return { updated: 0, finished: 0, message: got.message };
+      const byHash = new Map(got.items.map((t) => [t.hashString.toLowerCase(), t]));
+      let updated = 0;
+      let finished = 0;
+      const doneRows: any[] = [];
+      for (const r of rows) {
+        const t = byHash.get(String(r.info_hash).toLowerCase());
+        if (!t) continue;
+        const status =
+          t.status === 6 || t.percentDone >= 1
+            ? 'completed'
+            : t.status === 0
+              ? 'paused'
+              : 'downloading';
+        if (status === String(r.status)) continue;
+        await sql`
+          update pt_downloads set status = ${status} where id = ${r.id}
+        `.execute(k.db);
+        updated += 1;
+        if (status === 'completed' && r.status !== 'completed') {
+          finished += 1;
+          doneRows.push(r);
+        }
+      }
+      for (const r of doneRows) {
+        const mediaId = r.media_id == null ? null : Number(r.media_id);
+        const mediaType = String(r.media_type || '') === 'tv' ? 'tv' : 'movie';
+        // 归档：文件本来就在库根目录，扫一次即可出现在影视库（含自动刮削）。
+        const libraryId = await archiveCompleted(r);
+        try {
+          await sql`
+            update pt_downloads
+               set completed_at = ${now()},
+                   library_id = coalesce(${libraryId || null}, library_id),
+                   scanned_at = ${libraryId ? now() : null}
+             where id = ${r.id}
+          `.execute(k.db);
+        } catch { /* 迁移未跑时忽略 */ }
+        try {
+          await sql`
+            update discover_favorites set state = 'downloaded', updated_at = ${now()}
+             where uid = ${uid} and state = 'downloading'
+               and (
+                 download_task_id = ${String(r.id)}
+                 or (
+                   ${mediaId} is not null and tmdb_id = ${mediaId}
+                   and media_type = ${mediaType}
+                 )
+               )
+          `.execute(k.db);
+        } catch { /* 迁移未跑时忽略 */ }
+        k.log.info(
+          { uid, id: r.id, libraryId, mediaId },
+          'pt download completed and archived',
+        );
+      }
+      return { updated, finished };
+    };
+
     /** 从 Transmission 同步进度；首次完成的下载把收藏 downloading → downloaded */
     app.post(
       '/api/v1/pt/downloads/sync-status',
@@ -2615,47 +2854,7 @@ export const pt: ServerModule = {
           },
         },
       }),
-      async (req: FastifyRequest) => {
-        const cfg = await resolveTransmission();
-        if (!cfg) return { updated: 0, finished: 0, message: 'transmission not configured' };
-        const rows = (
-          await sql<any>`
-            select * from pt_downloads where uid = ${uidOf(req)}
-              and status in ('added', 'paused', 'downloading')
-              and info_hash is not null and info_hash <> '' limit 200
-          `.execute(k.db)
-        ).rows;
-        if (!rows.length) return { updated: 0, finished: 0 };
-        const got = await torrentGet(cfg, rows.map((r) => String(r.info_hash)));
-        if (!got.ok) return { updated: 0, finished: 0, message: got.message };
-        const byHash = new Map(got.items.map((t) => [t.hashString.toLowerCase(), t]));
-        let updated = 0;
-        let finished = 0;
-        const doneIds: string[] = [];
-        for (const r of rows) {
-          const t = byHash.get(String(r.info_hash).toLowerCase());
-          if (!t) continue;
-          const status = t.status === 6 || t.percentDone >= 1
-            ? 'completed'
-            : t.status === 0 ? 'paused' : 'downloading';
-          if (status === String(r.status)) continue;
-          await sql`update pt_downloads set status = ${status} where id = ${r.id}`.execute(k.db);
-          updated += 1;
-          if (status === 'completed' && r.status !== 'completed') {
-            finished += 1;
-            doneIds.push(String(r.id));
-          }
-        }
-        for (const id of doneIds) {
-          try {
-            await sql`
-              update discover_favorites set state = 'downloaded', updated_at = ${now()}
-               where download_task_id = ${id} and state = 'downloading'
-            `.execute(k.db);
-          } catch { /* 迁移未跑时忽略 */ }
-        }
-        return { updated, finished };
-      },
+      async (req: FastifyRequest) => syncDownloads(uidOf(req)),
     );
 
     /** 收藏三态列表：按 state 过滤，标题/海报从榜单快照补 */
@@ -2809,6 +3008,24 @@ export const pt: ServerModule = {
       return total;
     });
 
+    // 后台任务：下载进度同步 —— 心跳里跑，用户不开「下载器」页面也能
+    // 在下载完成时写完成状态并归档进影视库。
+    k.tasks.register('pt.download-sync', async () => {
+      const uids = (
+        await sql<{ uid: string }>`
+          select distinct uid from pt_downloads
+           where status in ('added', 'paused', 'downloading')
+        `.execute(k.db)
+      ).rows.map((r) => String(r.uid || ''));
+      const total = { updated: 0, finished: 0 };
+      for (const uid of uids.filter(Boolean)) {
+        const r = await syncDownloads(uid);
+        total.updated += r.updated;
+        total.finished += r.finished;
+      }
+      return total;
+    });
+
     // 调度：每分钟心跳检查一次，订阅与收藏扫描都按「下载筛选」的间隔判断谁到期，
     // 改设置后无需重启。另外：
     //  - 自动下载关闭时收藏扫描整体跳过；
@@ -2831,6 +3048,13 @@ export const pt: ServerModule = {
           } catch (err) {
             k.log.warn({ err: String(err), id: sub.id }, 'pt subscription enqueue failed');
           }
+        }
+
+        // 进度同步：每分钟一次足够（transmission 自己下完很久也不会变状态）
+        try {
+          await k.tasks.enqueueIfIdle('pt.download-sync', {}, { maxAttempts: 1 });
+        } catch (err) {
+          k.log.warn({ err: String(err) }, 'pt download sync enqueue failed');
         }
 
         if (dl.autoDownload) {

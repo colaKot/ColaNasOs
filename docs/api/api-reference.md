@@ -1985,7 +1985,7 @@ PT 站点列表（不返回 cookie 明文） · `ptSiteList`
 
 新增 / 更新订阅 · `ptSubscriptionUpsert`
 
-- 请求体：`id` string · 可选<br>`mediaId` integer · 可选<br>`mediaType` string · 可选<br>`ruleId` string · 可选<br>`posterPath` string · 可选<br>`mediaTitle` string · 可选<br>`mediaYear` string · 可选<br>`season` integer · 可选<br>`quality` string · 可选<br>`hdr` string · 可选<br>`audioLangs` array<string> · 可选<br>`resolutionOrder` array<string> · 可选<br>`minSeeders` integer · 可选<br>`maxSizeBytes` integer · 可选<br>`excludedKeywords` array<string> · 可选<br>`enabled` boolean · 可选
+- 请求体：`id` string · 可选<br>`mediaId` integer · 可选<br>`mediaType` string · 可选<br>`ruleId` string · 可选<br>`libraryId` string · 可选<br>`posterPath` string · 可选<br>`mediaTitle` string · 可选<br>`mediaYear` string · 可选<br>`season` integer · 可选<br>`quality` string · 可选<br>`hdr` string · 可选<br>`audioLangs` array<string> · 可选<br>`resolutionOrder` array<string> · 可选<br>`minSeeders` integer · 可选<br>`maxSizeBytes` integer · 可选<br>`excludedKeywords` array<string> · 可选<br>`enabled` boolean · 可选
 - 响应：200 object
 
 #### `GET /api/v1/pt/torrents`

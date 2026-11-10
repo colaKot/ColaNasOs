@@ -1023,6 +1023,7 @@ class DiscoverMediaCard {
   final String? posterUrl;
   final bool? owned;
   final bool? favorited;
+  final String? downloadState;
 
   const DiscoverMediaCard({
     required this.id,
@@ -1041,6 +1042,7 @@ class DiscoverMediaCard {
     this.posterUrl,
     this.owned,
     this.favorited,
+    this.downloadState,
   });
 
   factory DiscoverMediaCard.fromJson(Map<String, dynamic> json) => DiscoverMediaCard(
@@ -1060,6 +1062,7 @@ class DiscoverMediaCard {
         posterUrl: json['posterUrl'] == null ? null : json['posterUrl'] as String?,
         owned: json['owned'] == null ? null : json['owned'] as bool,
         favorited: json['favorited'] == null ? null : json['favorited'] as bool,
+        downloadState: json['downloadState'] == null ? null : json['downloadState'] as String,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -1079,6 +1082,7 @@ class DiscoverMediaCard {
         if (posterUrl != null) 'posterUrl': posterUrl!,
         if (owned != null) 'owned': owned!,
         if (favorited != null) 'favorited': favorited!,
+        if (downloadState != null) 'downloadState': downloadState!,
       };
 }
 

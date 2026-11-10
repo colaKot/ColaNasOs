@@ -38,6 +38,10 @@ class _TransmissionPageState extends State<TransmissionPage> {
   /// 多选：存 info hash；轮询刷新后按新列表清掉已消失的任务
   final Set<String> _selected = <String>{};
 
+  /// 上一次看到的「已下完」集合：新出现完成项时同步一次，
+  /// 让服务端写完成时间并把文件登记进影视库（不然只有点进发现页才联动）。
+  final Set<String> _completedHashes = <String>{};
+
   /// 5 秒轮询：下载进度不动就没意义了，但也别太频繁（transmission RPC 会排队）
   Timer? _timer;
 
@@ -87,6 +91,7 @@ class _TransmissionPageState extends State<TransmissionPage> {
         _error = '';
         _loading = false;
       });
+      unawaited(_syncCompleted(list));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -96,9 +101,28 @@ class _TransmissionPageState extends State<TransmissionPage> {
     }
   }
 
+  /// 新出现「已下完」的任务时让服务端同步一次：写 completed_at、
+  /// 收藏置「已下载」、并入队 video.scan 把文件归档进影视库。
+  Future<void> _syncCompleted(List<Map<String, dynamic>> list) async {
+    final done = list
+        .where((e) => ((e['percent'] as num?)?.toDouble() ?? 0) >= 1)
+        .map((e) => (e['hash'] ?? '').toString())
+        .where((h) => h.isNotEmpty)
+        .toSet();
+    final fresh = done.difference(_completedHashes);
+    _completedHashes
+      ..clear()
+      ..addAll(done);
+    if (fresh.isEmpty) return;
+    try {
+      await ApiSession.instance.client.ptDownloadSyncStatus();
+    } catch (_) {
+      /* 同步失败不影响列表展示，下次轮询还会再试 */
+    }
+  }
+
   static const _downloading = <int>{1, 2, 3, 4};
-  static const _paused = <int>{0};
-  static const _seeding = <int>{5, 6};
+  static const _paused = <int>{0};  static const _seeding = <int>{5, 6};
 
   List<Map<String, dynamic>> _of(Set<int> statuses) =>
       _items.where((t) => statuses.contains(_status(t))).toList();
@@ -481,8 +505,13 @@ class _TransmissionPageState extends State<TransmissionPage> {
       sub = '${tr('transmission.paused')} · ${(percent * 100).toStringAsFixed(1)}%'
           '${size > 0 ? ' · ${_size(size)}' : ''}';
     } else {
-      sub = '${tr('transmission.seeding')} · ${tr('transmission.ratio')} '
-          '${ratio.toStringAsFixed(2)} · ↑ ${_speed(rateUp)}';
+      // 下载完成 = 已落盘（percent 满）并转为做种；直接写「下载完成」，
+      // 「做种」是 transmission 的后续动作，不放进标题。
+      sub = percent >= 1
+          ? '${tr('transmission.completed')} · ${tr('transmission.ratio')} '
+              '${ratio.toStringAsFixed(2)} · ↑ ${_speed(rateUp)}'
+          : '${tr('transmission.seeding')} · ${tr('transmission.ratio')} '
+              '${ratio.toStringAsFixed(2)} · ↑ ${_speed(rateUp)}';
     }
 
     final hash = (t['hash'] ?? '').toString();

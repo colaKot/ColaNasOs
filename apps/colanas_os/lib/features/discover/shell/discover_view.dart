@@ -741,13 +741,10 @@ class _BrowseCard extends StatelessWidget {
                             ), headers: compatAuthHeaders,),
                   ),
                 ),
-                // 左上：类型角标（紧凑版省掉，卡片小的时候角标会盖住海报）
+                // 左上：状态角标 —— 已在影视库打勾 / 下载中 / 已下载（删了文件也保留），
+                // 都没有时才显示类型角标（紧凑版省掉，卡片小的时候角标会盖住海报）
                 if (!compact)
-                  Positioned(
-                    left: 4,
-                    top: 4,
-                    child: _pill(isTv ? 'discover_tv'.tr : 'discover_movie'.tr, Colors.black54),
-                  ),
+                  Positioned(left: 4, top: 4, child: _stateBadge(isTv)),
                 // 右上：评分
                 if (!compact && rating != null && rating! > 0)
                   Positioned(
@@ -756,16 +753,6 @@ class _BrowseCard extends StatelessWidget {
                     child: _pill(
                       '★ ${rating!.toStringAsFixed(1)}',
                       _ratingColor(rating!),
-                    ),
-                  ),
-                // 左下：已拥有 / 已下载
-                if (item['owned'] == true || item['downloaded'] == true)
-                  Positioned(
-                    left: 4,
-                    bottom: 4,
-                    child: _pill(
-                      item['owned'] == true ? 'discover_owned'.tr : 'discover_downloaded'.tr,
-                      item['owned'] == true ? Colors.green.shade700 : Colors.blueGrey,
                     ),
                   ),
                 // 右下：收藏五角星（点击切换）
@@ -829,6 +816,34 @@ class _BrowseCard extends StatelessWidget {
       ),
     ];
     return ContextMenuUtil.region(child: card, entries: entries);
+  }
+
+  /// 左上角状态角标：在影视库 → 绿底勾（优先）；下载中 / 已下载 → 文字角标；
+  /// 都没有才显示「电影 / 剧集」类型角标。
+  Widget _stateBadge(bool isTv) {
+    final state = (item['download_state'] ?? '').toString();
+    if (item['owned'] == true) {
+      return Tooltip(
+        message: 'discover_in_library'.tr,
+        child: Container(
+          width: 20,
+          height: 20,
+          decoration: BoxDecoration(
+            color: Colors.green.shade600,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white70, width: 1),
+          ),
+          child: const Icon(Icons.check, size: 13, color: Colors.white),
+        ),
+      );
+    }
+    if (state == 'downloading') {
+      return _pill('discover_downloading'.tr, Colors.blue.shade700);
+    }
+    if (state == 'downloaded') {
+      return _pill('discover_downloaded'.tr, Colors.blueGrey.shade700);
+    }
+    return _pill(isTv ? 'discover_tv'.tr : 'discover_movie'.tr, Colors.black54);
   }
 
   Widget _pill(String text, Color color) {
@@ -901,6 +916,121 @@ Future<void> _showPtResults(BuildContext context, DiscoverController c,
 }
 
 // ==================== PT ====================
+/// 订阅区块上方的「下载归档目录」：电影 / 剧集各选一个影视库。
+/// 下载完成时服务端按这个库把文件扫进影视库（不选就跟随设置页里的默认目录）。
+class _ArchiveTargetRow extends StatelessWidget {
+  const _ArchiveTargetRow(this.c);
+
+  final DiscoverController c;
+
+  Future<void> _save({String? movieId, String? tvId}) async {
+    final f = c.downloadFilter;
+    // 服务端是全量覆盖，所以把当前筛选条件一起回传，避免只改库把站点/画质清空。
+    await c.saveFilter(<String, dynamic>{
+      'movie_library_id': movieId ?? (f['movie_library_id'] ?? '').toString(),
+      'tv_library_id': tvId ?? (f['tv_library_id'] ?? '').toString(),
+      'site_ids': (f['site_ids'] as List?) ?? const <dynamic>[],
+      'quality': f['quality'] ?? 'all',
+      'hdr': f['hdr'] ?? 'all',
+      'audio_langs': (f['audio_langs'] as List?) ?? const <dynamic>[],
+      'max_size_bytes': f['max_size_bytes'] ?? 0,
+      'min_seeders': f['min_seeders'] ?? 0,
+      'excluded_keywords': (f['excluded_keywords'] as List?) ?? const <dynamic>[],
+      'scan_interval_minutes': f['scan_interval_minutes'] ?? 60,
+      'auto_download': f['auto_download'] ?? true,
+    });
+  }
+
+  /// 同一库有多个源目录时会重复出现，按 libraryId 去重后只列一次。
+  List<Map<String, dynamic>> _libsOf(String type) {
+    final seen = <String>{};
+    final out = <Map<String, dynamic>>[];
+    for (final s in c.videoSources) {
+      final mt = (s['media_type'] ?? '').toString();
+      final ok = type == 'movie'
+          ? (mt == 'movie' || mt == 'mixed')
+          : (mt == 'tv' || mt == 'mixed');
+      final id = (s['libraryId'] ?? '').toString();
+      if (!ok || id.isEmpty || !seen.add(id)) continue;
+      out.add(s);
+    }
+    return out;
+  }
+
+  Widget _dropdown(BuildContext context, String label, String value, String type,
+      ValueChanged<String> onChanged) {
+    final libs = _libsOf(type);
+    final has = libs.any((l) => (l['libraryId'] ?? '').toString() == value);
+    return InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        isDense: true,
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          isExpanded: true,
+          isDense: true,
+          value: has ? value : '',
+          items: [
+            DropdownMenuItem<String>(
+              value: '',
+              child: Text('discover_download_dir_default'.tr,
+                  overflow: TextOverflow.ellipsis),
+            ),
+            for (final l in libs)
+              DropdownMenuItem<String>(
+                value: (l['libraryId'] ?? '').toString(),
+                child: Text(
+                  (l['libraryName'] ?? '').toString().isNotEmpty
+                      ? (l['libraryName'] ?? '').toString()
+                      : (l['path'] ?? '').toString(),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: (v) => onChanged(v ?? ''),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final f = c.downloadFilter;
+      if (f.isEmpty) return const SizedBox.shrink();
+      final movieId = (f['movie_library_id'] ?? '').toString();
+      final tvId = (f['tv_library_id'] ?? '').toString();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('discover_archive_title'.tr,
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text('discover_archive_hint'.tr,
+              style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: _dropdown(context, 'discover_archive_movie'.tr, movieId, 'movie',
+                    (v) => _save(movieId: v)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _dropdown(context, 'discover_archive_tv'.tr, tvId, 'tv',
+                    (v) => _save(tvId: v)),
+              ),
+            ],
+          ),
+        ],
+      );
+    });
+  }
+}
+
 class _PtTab extends StatelessWidget {
   const _PtTab(this.c);
 
@@ -978,6 +1108,9 @@ class _PtTab extends StatelessWidget {
                       ))
                   .toList(),
             )),
+        const SizedBox(height: 12),
+        // ===== 归档目录（下载完成后自动同步进哪个影视库）=====
+        _ArchiveTargetRow(c),
         const SizedBox(height: 12),
         // ===== 订阅（针对具体影视，命中好种后自动下载）=====
         Row(
@@ -1850,8 +1983,10 @@ class _TasksTabState extends State<_TasksTab> {
         Obx(() {
           // 只显示还没下完的任务：下完后会归位到「已下载」，
           // 否则同一部片会同时出现在「任务」和「已下载」里，让人分不清状态。
+          // 服务端状态是小写（completed），以前按 'Completed' 比较恒不成立，
+          // 下完的片子一直赖在「任务」里，看起来像永远没下完。
           final active = c.tasks
-              .where((t) => (t['status'] ?? '').toString() != 'Completed')
+              .where((t) => (t['status'] ?? '').toString().toLowerCase() != 'completed')
               .toList();
           if (active.isEmpty) {
             return Padding(
@@ -2053,6 +2188,8 @@ class _SettingsTabState extends State<_SettingsTab> {
   final Set<String> _audio = <String>{};
   final Set<int> _siteIds = <int>{};
   bool _loaded = false;
+  /// 「立即扫描」进行中：按钮置灰 + 转圈，扫完弹出「扫了几条 / 新增几条」
+  bool _scanning = false;
 
   @override
   void initState() {
@@ -2204,6 +2341,30 @@ class _SettingsTabState extends State<_SettingsTab> {
   }
 
   /// 该类型的默认源目录（电影 → 第一个 movie/mixed，电视剧 → 第一个 tv/mixed）
+  /// 立即扫描：按钮转圈 → 结果提示（待下载几条 / 新增几条 / 跳过几条）。
+  /// 以前点了没有任何反馈，用户以为没生效就反复点，一次扫描就被触发好几遍。
+  Future<void> _runScan() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _scanning = true);
+    try {
+      final r = await c.scanFavorites();
+      final scanned = (r?['scanned'] as num?)?.toInt() ?? 0;
+      final submitted = (r?['submitted'] as num?)?.toInt() ?? 0;
+      final skipped = (r?['skipped'] as num?)?.toInt() ?? 0;
+      final text = scanned == 0
+          ? 'discover_scan_none'.tr
+          : 'discover_scan_result'.tr
+              .replaceAll('{scanned}', '$scanned')
+              .replaceAll('{submitted}', '$submitted')
+              .replaceAll('{skipped}', '$skipped');
+      messenger.showSnackBar(SnackBar(content: Text(text)));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
   String _defaultPathFor(bool isMovie) {
     for (final s in c.videoSources) {
       final mt = (s['media_type'] ?? '').toString();
@@ -2613,15 +2774,15 @@ class _SettingsTabState extends State<_SettingsTab> {
                     ),
                     const SizedBox(width: 10),
                     OutlinedButton.icon(
-                      onPressed: () async {
-                        await c.scanFavorites();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(SnackBar(content: Text('discover_scan_done'.tr)));
-                        }
-                      },
-                      icon: const Icon(Icons.search, size: 16),
-                      label: Text('discover_scan_now'.tr),
+                      onPressed: _scanning ? null : () => _runScan(),
+                      icon: _scanning
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.search, size: 16),
+                      label: Text(_scanning ? 'discover_scanning'.tr : 'discover_scan_now'.tr),
                     ),
                   ],
                 ),
@@ -2667,6 +2828,9 @@ String _taskStatusText(dynamic s) {
   switch ((s ?? '').toString().toLowerCase()) {
     case 'downloading':
       return 'discover_status_downloading'.tr;
+    case 'added':
+    case 'queued':
+      return 'discover_status_queued'.tr;
     case 'paused':
       return 'discover_status_paused'.tr;
     case 'completed':

@@ -123,6 +123,7 @@
     "transmission.downloading": "下载中",
     "transmission.paused": "已暂停",
     "transmission.seeding": "做种中",
+    "transmission.completed": "下载完成",
     "transmission.ratio": "分享率",
     "transmission.fullUi": "完整界面",
     "transmission.openFailed": "打开完整界面失败",

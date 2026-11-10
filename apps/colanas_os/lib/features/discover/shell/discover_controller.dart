@@ -137,6 +137,9 @@ class DiscoverController extends GetxController {
     if (i == 1) {
       loadSites();
       loadSubscriptions();
+      // 订阅页的「下载归档目录」下拉要库列表 + 当前保存的库 id
+      loadFilter();
+      loadVideoSources();
     } else if (i == 2) {
       loadFeeds();
       loadEntries();
@@ -628,10 +631,14 @@ class DiscoverController extends GetxController {
     return res.success;
   }
 
-  Future<void> scanFavorites() async {
-    await _api.favoriteScan();
+  /// 立即扫描待下载收藏：返回服务端统计（scanned / submitted / skipped / owned），
+  /// 前端据此提示「扫了几条、新增几条」，避免点了没反应又连点几次。
+  Future<Map<String, dynamic>?> scanFavorites() async {
+    final res = await _api.favoriteScan();
     await loadTasks();
+    await loadFavorites();
     await loadBrowse(reset: true);
+    return res.success ? res.data : null;
   }
 
   // ---------- 发现设置（TMDB 凭据）----------

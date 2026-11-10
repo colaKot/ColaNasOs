@@ -5,6 +5,7 @@ import { Type } from '@sinclair/typebox';
 import { secured } from '../../../kernel/route';
 import type { KernelApi } from '../../../kernel/types';
 import { Err } from '../../../kernel/errors';
+import { activeProxy } from '../../../kernel/proxy-fetch';
 import {
   isFresh,
   listSnapshots,
@@ -22,6 +23,15 @@ import {
   tmdbGet,
   type TmdbConfig,
 } from './tmdb';
+import {
+  attachCachedRatings,
+  cachedRatings,
+  doubanCacheStats,
+  doubanCatalog,
+  enrichDouban,
+  ratingProviderOf,
+  setRatingProvider,
+} from './rating';
 
 /**
  * 影视发现：目录（正在热映 / 热门 / 高分 / 即将上映）→ 详情 → 搜索。
@@ -33,6 +43,42 @@ import {
  *   - 图片走服务端代理 + 磁盘缓存，客户端不需要拿到 key，也不受图片域连通性影响。
  */
 const TAG = ['discover'];
+
+/** 收藏状态合法值（其它值一律回落到 watching） */
+const FAVORITE_STATES = new Set(['watching', 'downloading', 'downloaded', 'owned']);
+
+/** TMDB 官方风格 id → 中文名（静态表，不联网；与前端 compat 的静态表一致） */
+const MOVIE_GENRES: Array<{ id: number; name: string }> = [
+  { id: 28, name: '动作' },
+  { id: 12, name: '冒险' },
+  { id: 16, name: '动画' },
+  { id: 35, name: '喜剧' },
+  { id: 80, name: '犯罪' },
+  { id: 99, name: '纪录片' },
+  { id: 18, name: '剧情' },
+  { id: 10751, name: '家庭' },
+  { id: 14, name: '奇幻' },
+  { id: 27, name: '恐怖' },
+  { id: 9648, name: '悬疑' },
+  { id: 10749, name: '爱情' },
+  { id: 878, name: '科幻' },
+  { id: 53, name: '惊悚' },
+  { id: 10752, name: '战争' },
+  { id: 37, name: '西部' },
+];
+
+const TV_GENRES: Array<{ id: number; name: string }> = [
+  { id: 10759, name: '动作冒险' },
+  { id: 16, name: '动画' },
+  { id: 35, name: '喜剧' },
+  { id: 80, name: '犯罪' },
+  { id: 99, name: '纪录片' },
+  { id: 18, name: '剧情' },
+  { id: 10751, name: '家庭' },
+  { id: 9648, name: '悬疑' },
+  { id: 10764, name: '真人秀' },
+  { id: 10765, name: '科幻奇幻' },
+];
 
 /** 进程内一层：同一页面连续翻页 / 反复切 tab，不必每次摸库 */
 const L1_TTL_MS = 60 * 1000;
@@ -49,6 +95,10 @@ const SettingsItem = Type.Object(
     baseUrl: Type.String(),
     language: Type.String(),
     imageBase: Type.String(),
+    /** 评分体系：tmdb（默认）或 douban；决定列表里展示 vote_average 还是 ratingDouban */
+    ratingProvider: Type.String({ description: 'tmdb / douban' }),
+    /** 系统设置 → 网络代理实际生效的地址（只读回显，不可配） */
+    proxyUrl: Type.String(),
   },
   { $id: 'DiscoverSettings' },
 );
@@ -59,6 +109,7 @@ const SettingsBody = Type.Object(
     baseUrl: Type.Optional(Type.String({ maxLength: 200 })),
     language: Type.Optional(Type.String({ maxLength: 20 })),
     imageBase: Type.Optional(Type.String({ maxLength: 200 })),
+    ratingProvider: Type.Optional(Type.String({ maxLength: 16 })),
   },
   { $id: 'DiscoverSettingsBody' },
 );
@@ -74,10 +125,22 @@ const MediaCard = Type.Object(
     backdropPath: Type.Union([Type.String(), Type.Null()]),
     year: Type.Union([Type.Integer(), Type.Null()]),
     rating: Type.Union([Type.Number(), Type.Null()]),
+    /** 豆瓣分（评分体系=豆瓣时前端展示这个；未补齐为 null） */
+    ratingDouban: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    doubanVoteCount: Type.Optional(Type.Union([Type.Integer(), Type.Null()])),
+    doubanId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    doubanUrl: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    /** 非 TMDB 来源（豆瓣榜单占位卡）的绝对海报地址 */
+    posterUrl: Type.Optional(Type.Union([Type.String(), Type.Null()])),
     /** 本库里已经有这部片（按 nfo_tmdb_id 精确匹配），客户端打「已拥有」角标 */
     owned: Type.Optional(Type.Boolean()),
     /** 当前账号已收藏（discover_favorites） */
     favorited: Type.Optional(Type.Boolean()),
+    /**
+     * 下载状态（客户端左上角角标用）：空 = 没下过，
+     * downloading = 已在下载器里排队 / 下载中，downloaded = 下载完成（删了也保留）。
+     */
+    downloadState: Type.Optional(Type.String({ description: "'' / downloading / downloaded" })),
   },
   { $id: 'DiscoverMediaCard' },
 );
@@ -125,6 +188,8 @@ const CatalogResponse = Type.Object(
     totalPages: Type.Integer(),
     degraded: Type.Boolean(),
     reason: Type.String(),
+    /** 当前评分体系（tmdb / douban）：客户端据此决定卡片显示哪个分 */
+    ratingProvider: Type.Optional(Type.String()),
     /** true = 本次是"上游失败，回退到最近一次快照"，客户端应提示内容可能偏旧 */
     stale: Type.Optional(Type.Boolean()),
     /** 这份数据的抓取时间（Unix 秒）；stale 时用于显示"X 小时前" */
@@ -186,6 +251,24 @@ const DetailResponse = Type.Object(
     rating: Type.Union([Type.Number(), Type.Null()]),
     genres: Type.Array(Type.String()),
     cast: Type.Array(Type.String()),
+    /** 演员卡（带头像相对路径 + 角色名）：参考实现 详情页按这个渲染头像横滑列表 */
+    castMembers: Type.Optional(
+      Type.Array(
+        Type.Object({
+          name: Type.String(),
+          character: Type.String(),
+          profilePath: Type.Union([Type.String(), Type.Null()]),
+        }),
+        { maxItems: 20 },
+      ),
+    ),
+    /** IMDb id（TMDB external_ids）；没配 Key 或取不到为 null */
+    imdbId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    /** 豆瓣条目 id / 链接 / 评分（来自本地豆瓣缓存，不额外联网） */
+    doubanId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    doubanUrl: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    ratingDouban: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+    ratingProvider: Type.Optional(Type.String()),
     /** TV 的季集（电影为空数组）；season 0 = 特别篇，已过滤 */
     seasons: Type.Array(
       Type.Object({
@@ -194,6 +277,18 @@ const DetailResponse = Type.Object(
         episodes: Type.Integer(),
       }),
     ),
+    /** 详情页「信息」区：参考实现 参考页逐项渲染这些字段 */
+    status: Type.String({ description: 'Released / Returning Series 等' }),
+    tagline: Type.String(),
+    /** ISO 639-1，参考页会 toUpperCase 展示 */
+    originalLanguage: Type.String(),
+    voteCount: Type.Integer(),
+    numberOfSeasons: Type.Integer(),
+    numberOfEpisodes: Type.Integer(),
+    countries: Type.Array(Type.String()),
+    networks: Type.Array(Type.String()),
+    companies: Type.Array(Type.String()),
+    createdBy: Type.Array(Type.String()),
     degraded: Type.Boolean(),
     reason: Type.String(),
   },
@@ -224,14 +319,30 @@ const FavoriteBody = Type.Object(
     id: Type.Integer({ minimum: 1 }),
     mediaType: Type.String({ maxLength: 8 }),
     favorite: Type.Boolean(),
+    /** 收藏状态；不传或非法值一律回落 watching */
+    state: Type.Optional(
+      Type.String({ description: 'watching / downloading / downloaded / owned' }),
+    ),
   },
   { $id: 'DiscoverFavoriteBody' },
 );
-const FavoriteResponse = Type.Object({ favorite: Type.Boolean() }, { $id: 'DiscoverFavoriteResponse' });
+const FavoriteResponse = Type.Object(
+  { favorite: Type.Boolean(), state: Type.String() },
+  { $id: 'DiscoverFavoriteResponse' },
+);
+const FavoriteListQuery = Type.Object(
+  { state: Type.Optional(Type.String()) },
+  { $id: 'DiscoverFavoriteListQuery' },
+);
 const FavoriteListResponse = Type.Object(
   {
     items: Type.Array(
-      Type.Object({ id: Type.Integer(), mediaType: Type.String() }),
+      Type.Object({
+        id: Type.Integer(),
+        mediaType: Type.String(),
+        state: Type.String(),
+        downloadTaskId: Type.Union([Type.String(), Type.Null()]),
+      }),
     ),
   },
   { $id: 'DiscoverFavoriteListResponse' },
@@ -252,6 +363,7 @@ const SCHEMAS = [
   ImageQuery,
   FavoriteBody,
   FavoriteResponse,
+  FavoriteListQuery,
   FavoriteListResponse,
   ErrorResponse,
 ];
@@ -274,9 +386,10 @@ function toCard(raw: any, mediaType: string) {
 }
 
 /**
- * 给发现页卡片打「已拥有 / 已收藏」。
+ * 给发现页卡片打「已拥有 / 已收藏 / 下载状态」。
  * - owned：`video_items.nfo_tmdb_id` 精确匹配（与排重/刮削共用一列），没刮削过不猜；
- * - favorited：当前账号在 `discover_favorites` 里的记录（每用户独立）。
+ * - favorited：当前账号在 `discover_favorites` 里的记录（每用户独立）；
+ * - downloadState：`pt_downloads` 里同一部片的活跃 / 已完成记录（删了种子也保留已完成）。
  */
 async function markFlags(
   k: KernelApi,
@@ -284,35 +397,92 @@ async function markFlags(
   media: string,
   uid: string,
 ) {
+  type Flagged = { id: number; owned?: boolean; favorited?: boolean; downloadState?: string };
   const ids = items.map((i) => Number(i.id)).filter((n) => n > 0);
-  if (ids.length === 0) return items as Array<{ id: number; owned?: boolean; favorited?: boolean }>;
+  if (ids.length === 0) return items as Flagged[];
   try {
+    const inList = sql.join(ids.map((n) => sql`${n}`), sql`, `);
     const ownedRows = (
       await sql<{ nfo_tmdb_id: number }>`
         select distinct nfo_tmdb_id from video_items
-         where nfo_tmdb_id in (${sql.join(ids.map((n) => sql`${n}`), sql`, `)})
+         where nfo_tmdb_id in (${inList})
       `.execute(k.db)
     ).rows;
     const owned = new Set(ownedRows.map((r) => Number(r.nfo_tmdb_id)));
-    let fav = new Set<number>();
+    const fav = new Map<number, string>();
     if (uid) {
       const favRows = (
-        await sql<{ tmdb_id: number }>`
-          select tmdb_id from discover_favorites
+        await sql<{ tmdb_id: number; state: string }>`
+          select tmdb_id, state from discover_favorites
            where uid = ${uid} and media_type = ${media}
-             and tmdb_id in (${sql.join(ids.map((n) => sql`${n}`), sql`, `)})
+             and tmdb_id in (${inList})
         `.execute(k.db)
       ).rows;
-      fav = new Set(favRows.map((r) => Number(r.tmdb_id)));
+      for (const r of favRows) fav.set(Number(r.tmdb_id), String(r.state || 'watching'));
     }
-    return (items as Array<{ id: number; owned?: boolean; favorited?: boolean }>).map((it) => ({
-      ...it,
-      owned: owned.has(Number(it.id)),
-      favorited: fav.has(Number(it.id)),
-    }));
+    // 下载台账：按 media_id 关联（173 迁移补齐），拿不到就当没下载过
+    const downloading = new Set<number>();
+    const completed = new Set<number>();
+    if (uid) {
+      try {
+        const rows = (
+          await sql<{ media_id: number; status: string }>`
+            select media_id, status from pt_downloads
+             where uid = ${uid} and media_type = ${media}
+               and media_id in (${inList})
+          `.execute(k.db)
+        ).rows;
+        for (const r of rows) {
+          const st = String(r.status || '');
+          if (st === 'completed') completed.add(Number(r.media_id));
+          else if (st === 'added' || st === 'paused' || st === 'downloading') {
+            downloading.add(Number(r.media_id));
+          }
+        }
+      } catch { /* pt 模块未启用时忽略 */ }
+    }
+    return (items as Flagged[]).map((it) => {
+      const id = Number(it.id);
+      const state = fav.get(id) || '';
+      const isDownloading = downloading.has(id) || state === 'downloading';
+      const isDownloaded = completed.has(id) || state === 'downloaded';
+      return {
+        ...it,
+        owned: owned.has(id),
+        favorited: fav.has(id),
+        downloadState: isDownloading ? 'downloading' : isDownloaded ? 'downloaded' : '',
+      };
+    });
   } catch {
-    return items as Array<{ id: number; owned?: boolean; favorited?: boolean }>;
+    return items as Flagged[];
   }
+}
+
+/** 递归统计目录里的文件数与总字节数；目录不存在等异常一律按 0 处理 */
+async function dirStats(dir: string): Promise<{ files: number; bytes: number }> {
+  let files = 0;
+  let bytes = 0;
+  try {
+    const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      try {
+        if (e.isDirectory()) {
+          const sub = await dirStats(full);
+          files += sub.files;
+          bytes += sub.bytes;
+        } else if (e.isFile()) {
+          bytes += (await fs.promises.stat(full)).size;
+          files += 1;
+        }
+      } catch {
+        /* 单个文件读不到就跳过 */
+      }
+    }
+  } catch {
+    /* 目录不存在 */
+  }
+  return { files, bytes };
 }
 
 interface CacheEntry {
@@ -326,6 +496,19 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
   const cache = new Map<string, CacheEntry>();
 
   const config = (): TmdbConfig => normalizeConfig(k.config.get('discover.tmdb'));
+
+  /**
+   * 列表统一收尾：带上当前评分体系；豆瓣模式下把**已缓存**的豆瓣分贴到卡片上
+   * （不发网络请求，真正缺失的由前端再调 douban/enrich 批量补）。
+   */
+  const finishList = async <T extends { id: number }>(
+    items: T[],
+    media: string,
+  ): Promise<{ items: T[]; ratingProvider: string }> => {
+    const provider = ratingProviderOf(k);
+    if (provider !== 'douban' || items.length === 0) return { items, ratingProvider: provider };
+    return { items: await attachCachedRatings(k, items, media), ratingProvider: provider };
+  };
 
   // 启动时清一次过期快照：只靠"写入时顺带清"的话，用户不再打开发现页就永远不清理
   void pruneSnapshots(k.db, { retainSec: RETAIN_SEC }).catch(() => 0);
@@ -392,6 +575,8 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
         baseUrl: cfg.baseUrl,
         language: cfg.language,
         imageBase: cfg.imageBase,
+        ratingProvider: ratingProviderOf(k),
+        proxyUrl: activeProxy(),
       };
     },
   );
@@ -413,6 +598,7 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
         baseUrl?: string;
         language?: string;
         imageBase?: string;
+        ratingProvider?: string;
       };
       const current = (k.config.get<Record<string, unknown>>('discover.tmdb') || {}) as Record<string, unknown>;
       const next = {
@@ -423,6 +609,9 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
         ...(body.imageBase ? { imageBase: body.imageBase } : {}),
       };
       await k.config.set('discover.tmdb', next);
+      if (body.ratingProvider !== undefined) {
+        await setRatingProvider(k, body.ratingProvider);
+      }
       cache.clear();
       const cfg = normalizeConfig(next);
       return {
@@ -431,6 +620,8 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
         baseUrl: cfg.baseUrl,
         language: cfg.language,
         imageBase: cfg.imageBase,
+        ratingProvider: ratingProviderOf(k),
+        proxyUrl: activeProxy(),
       };
     },
   );
@@ -481,7 +672,14 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
       const minVote = Number.isFinite(Number(q.minVote)) ? Number(q.minVote) : 0;
       const cfg = config();
       if (!isConfigured(cfg)) {
-        return { items: [], page, totalPages: 0, degraded: true, reason: '未配置 TMDB API Key' };
+        return {
+          items: [],
+          page,
+          totalPages: 0,
+          degraded: true,
+          reason: '未配置 TMDB API Key',
+          ratingProvider: ratingProviderOf(k),
+        };
       }
 
       // 有筛选条件时走 TMDB /discover（trending 等榜单接口不支持筛选）
@@ -573,13 +771,18 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
             (v: any) => (Array.isArray(v?.results) ? v.results.length : 0),
           );
           const data = hit.value as any;
-          return {
-            items: await markFlags(
+          const multi = await finishList(
+            await markFlags(
               k,
               (data?.results || []).map((r: any) => toCard(r, media)),
               media,
               String(req.user?.sub || ''),
             ),
+            media,
+          );
+          return {
+            items: multi.items,
+            ratingProvider: multi.ratingProvider,
             page: 1,
             totalPages: 1,
             degraded: false,
@@ -595,8 +798,13 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
         );
         const data = hit.value as any;
         const items = (data?.results || []).map((r: any) => toCard(r, media));
+        const single = await finishList(
+          await markFlags(k, items, media, String(req.user?.sub || '')),
+          media,
+        );
         return {
-          items: await markFlags(k, items, media, String(req.user?.sub || '')),
+          items: single.items,
+          ratingProvider: single.ratingProvider,
           page,
           totalPages: Number(data?.total_pages) || 0,
           degraded: false,
@@ -634,7 +842,14 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
       const keyword = String(q.q || '').trim().slice(0, 100);
       const cfg = config();
       if (!isConfigured(cfg)) {
-        return { items: [], page, totalPages: 0, degraded: true, reason: '未配置 TMDB API Key' };
+        return {
+          items: [],
+          page,
+          totalPages: 0,
+          degraded: true,
+          reason: '未配置 TMDB API Key',
+          ratingProvider: ratingProviderOf(k),
+        };
       }
       if (!keyword) {
         return { items: [], page, totalPages: 0, degraded: false, reason: '' };
@@ -642,8 +857,13 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
       try {
         const data = await tmdbGet(cfg, `/search/${media}`, { query: keyword, page });
         const cards = (data?.results || []).map((r: any) => toCard(r, media));
+        const fin = await finishList(
+          await markFlags(k, cards, media, String(req.user?.sub || '')),
+          media,
+        );
         return {
-          items: await markFlags(k, cards, media, String(req.user?.sub || '')),
+          items: fin.items,
+          ratingProvider: fin.ratingProvider,
           page,
           totalPages: Number(data?.total_pages) || 0,
           degraded: false,
@@ -677,6 +897,7 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
         id?: number;
         mediaType?: string;
         favorite?: boolean;
+        state?: string;
       };
       const uid = String(req.user?.sub || '');
       const id = Number(b.id) || 0;
@@ -684,11 +905,15 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
       if (!uid || id <= 0) {
         return reply.code(400).send({ error: Err.badRequest, message: 'id required' });
       }
+      const raw = typeof b.state === 'string' ? b.state.trim() : '';
+      const state = FAVORITE_STATES.has(raw) ? raw : 'watching';
+      const now = Math.floor(Date.now() / 1000);
       if (b.favorite === true) {
         await sql`
-          insert into discover_favorites (uid, media_type, tmdb_id, created_at)
-          values (${uid}, ${mediaType}, ${id}, ${Math.floor(Date.now() / 1000)})
-          on conflict (uid, media_type, tmdb_id) do nothing
+          insert into discover_favorites (uid, media_type, tmdb_id, created_at, state, updated_at)
+          values (${uid}, ${mediaType}, ${id}, ${now}, ${state}, ${now})
+          on conflict (uid, media_type, tmdb_id) do update set
+            state = excluded.state, updated_at = excluded.updated_at
         `.execute(k.db);
       } else {
         await sql`
@@ -696,7 +921,7 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
            where uid = ${uid} and media_type = ${mediaType} and tmdb_id = ${id}
         `.execute(k.db);
       }
-      return { favorite: b.favorite === true };
+      return { favorite: b.favorite === true, state: b.favorite === true ? state : '' };
     },
   );
 
@@ -706,20 +931,47 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
       schema: {
         operationId: 'discoverFavorites',
         tags: TAG,
-        summary: '当前账号的发现收藏（id + mediaType）',
+        summary: '当前账号的发现收藏（id + mediaType + state）',
+        querystring: ref('DiscoverFavoriteListQuery'),
         response: { 200: ref('DiscoverFavoriteListResponse') },
       },
     }),
     async (req: FastifyRequest) => {
       const uid = String(req.user?.sub || '');
+      const q = (req.query || {}) as { state?: string };
+      const state = typeof q.state === 'string' ? q.state.trim() : '';
       const rows = (
-        await sql<{ tmdb_id: number; media_type: string }>`
-          select tmdb_id, media_type from discover_favorites
-           where uid = ${uid} order by created_at desc limit 500
-        `.execute(k.db)
+        state
+          ? await sql<{
+              tmdb_id: number;
+              media_type: string;
+              state: string | null;
+              download_task_id: string | null;
+            }>`
+              select tmdb_id, media_type, state, download_task_id
+                from discover_favorites
+               where uid = ${uid} and state = ${state}
+               order by created_at desc limit 500
+            `.execute(k.db)
+          : await sql<{
+              tmdb_id: number;
+              media_type: string;
+              state: string | null;
+              download_task_id: string | null;
+            }>`
+              select tmdb_id, media_type, state, download_task_id
+                from discover_favorites
+               where uid = ${uid}
+               order by created_at desc limit 500
+            `.execute(k.db)
       ).rows;
       return {
-        items: rows.map((r) => ({ id: Number(r.tmdb_id), mediaType: r.media_type })),
+        items: rows.map((r) => ({
+          id: Number(r.tmdb_id),
+          mediaType: r.media_type,
+          state: String(r.state || 'watching'),
+          downloadTaskId: r.download_task_id == null ? null : String(r.download_task_id),
+        })),
       };
     },
   );
@@ -753,17 +1005,43 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
         rating: null,
         genres: [] as string[],
         cast: [] as string[],
+        castMembers: [] as Array<{
+          name: string;
+          character: string;
+          profilePath: string | null;
+        }>,
+        imdbId: null as string | null,
+        doubanId: null as string | null,
+        doubanUrl: null as string | null,
+        ratingDouban: null as number | null,
         seasons: [] as Array<{ season: number; name: string; episodes: number }>,
+        status: '',
+        tagline: '',
+        originalLanguage: '',
+        voteCount: 0,
+        numberOfSeasons: 0,
+        numberOfEpisodes: 0,
+        countries: [] as string[],
+        networks: [] as string[],
+        companies: [] as string[],
+        createdBy: [] as string[],
       };
       if (!isConfigured(cfg)) {
-        return { ...empty, degraded: true, reason: '未配置 TMDB API Key' };
+        return {
+          ...empty,
+          degraded: true,
+          reason: '未配置 TMDB API Key',
+          ratingProvider: ratingProviderOf(k),
+        };
       }
       try {
         const hit = await cached(`detail:${media}:${id}`, () =>
-          tmdbGet(cfg, `/${media}/${id}`, { append_to_response: 'credits' }),
+          tmdbGet(cfg, `/${media}/${id}`, { append_to_response: 'credits,external_ids' }),
         );
         const data = hit.value as any;
         const date = String(data?.release_date || data?.first_air_date || '');
+        // 豆瓣条目：只读本地缓存，不为了详情页再打一次豆瓣
+        const douban = (await cachedRatings(k, media, [id])).get(id) ?? null;
         return {
           ...empty,
           title: String(data?.title || data?.name || ''),
@@ -776,6 +1054,22 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
           rating: Number.isFinite(Number(data?.vote_average)) ? Number(data.vote_average) : null,
           genres: (data?.genres || []).map((g: any) => String(g?.name || '')).filter(Boolean),
           cast: (data?.credits?.cast || []).slice(0, 12).map((c: any) => String(c?.name || '')).filter(Boolean),
+          castMembers: (data?.credits?.cast || [])
+            .slice(0, 12)
+            .map((c: any) => ({
+              name: String(c?.name || ''),
+              character: String(c?.character || ''),
+              profilePath: c?.profile_path ? String(c.profile_path) : null,
+            }))
+            .filter((c: { name: string }) => c.name.length > 0),
+          imdbId: data?.external_ids?.imdb_id
+            ? String(data.external_ids.imdb_id)
+            : data?.imdb_id
+              ? String(data.imdb_id)
+              : null,
+          doubanId: douban?.doubanId ?? null,
+          doubanUrl: douban?.url ?? null,
+          ratingDouban: douban?.rating ?? null,
           seasons: (data?.seasons || [])
             .map((s: any) => ({
               season: Number(s?.season_number) || 0,
@@ -783,11 +1077,39 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
               episodes: Number(s?.episode_count) || 0,
             }))
             .filter((s: { season: number }) => s.season > 0),
+          // 详情页「信息」区：电影的国家来自 production_countries，
+          // 剧集用 origin_country（ISO 码，没有中文名）。
+          status: String(data?.status || ''),
+          tagline: String(data?.tagline || ''),
+          originalLanguage: String(data?.original_language || ''),
+          voteCount: Number(data?.vote_count) || 0,
+          numberOfSeasons: Number(data?.number_of_seasons) || 0,
+          numberOfEpisodes: Number(data?.number_of_episodes) || 0,
+          countries: (
+            (data?.production_countries || []).map((c: any) => String(c?.name || ''))
+              .filter(Boolean) as string[]
+          ).concat(
+            (data?.origin_country || []).map((c: any) => String(c || '')).filter(Boolean),
+          ).filter((v, i, arr) => arr.indexOf(v) === i),
+          networks: (data?.networks || [])
+            .map((n: any) => String(n?.name || ''))
+            .filter(Boolean),
+          companies: (data?.production_companies || [])
+            .map((c: any) => String(c?.name || ''))
+            .filter(Boolean),
+          createdBy: (data?.created_by || [])
+            .map((c: any) => String(c?.name || ''))
+            .filter(Boolean),
           degraded: false,
           reason: '',
         };
       } catch (err) {
-        return { ...empty, degraded: true, reason: String((err as Error)?.message || err).slice(0, 200) };
+        return {
+          ...empty,
+          degraded: true,
+          reason: String((err as Error)?.message || err).slice(0, 200),
+          ratingProvider: ratingProviderOf(k),
+        };
       }
     },
   );
@@ -885,6 +1207,239 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
       },
     }),
     async () => ({ pruned: await pruneSnapshots(k.db, { retainSec: RETAIN_SEC }) }),
+  );
+
+  // TMDB 连通性自检：真打一次轻量端点。baseUrl 已含 /3（见 tmdb.ts 的 DEFAULT_BASE），
+  // 所以这里只传 /configuration；任何失败都收敛成 ok=false，绝不把异常抛成 500。
+  app.post(
+    '/api/v1/discover/settings/test',
+    secured('discover:read', {
+      schema: {
+        operationId: 'discoverSettingsTest',
+        tags: TAG,
+        summary: '测试 TMDB 连通性（请求 /3/configuration）',
+        response: {
+          200: Type.Object({
+            ok: Type.Boolean(),
+            elapsedMs: Type.Integer(),
+            proxyUrl: Type.String(),
+            imageBaseUrl: Type.String(),
+            message: Type.String(),
+          }),
+        },
+      },
+    }),
+    async () => {
+      const cfg = config();
+      const proxyUrl = activeProxy();
+      const started = Date.now();
+      try {
+        await tmdbGet(cfg, '/configuration');
+        return {
+          ok: true,
+          elapsedMs: Date.now() - started,
+          proxyUrl,
+          imageBaseUrl: cfg.imageBase,
+          message: '连接成功',
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          elapsedMs: Date.now() - started,
+          proxyUrl,
+          imageBaseUrl: cfg.imageBase,
+          message: `连接失败：${String((err as Error)?.message || err).slice(0, 200)}`,
+        };
+      }
+    },
+  );
+
+  // 缓存占用：图片落盘目录（不存在按 0）+ media_rating 表（不存在按 0）。
+  // 纯只读统计，所有异常吞掉，绝不影响发现页主链路。
+  app.get(
+    '/api/v1/discover/cache/stats',
+    secured('discover:read', {
+      schema: {
+        operationId: 'discoverCacheStats',
+        tags: TAG,
+        summary: '发现缓存统计（图片文件数 / 字节、评分数）',
+        response: {
+          200: Type.Object({
+            images: Type.Object({
+              tmdb: Type.Object({ files: Type.Integer(), bytes: Type.Integer() }),
+              douban: Type.Object({ files: Type.Integer(), bytes: Type.Integer() }),
+            }),
+            ratings: Type.Object({
+              tmdb: Type.Integer(),
+              douban: Type.Integer(),
+            }),
+            douban: Type.Optional(
+              Type.Object(
+                {
+                  ratingRows: Type.Integer(),
+                  chartRows: Type.Integer(),
+                  provider: Type.String(),
+                },
+                { additionalProperties: true },
+              ),
+            ),
+          }),
+        },
+      },
+    }),
+    async () => {
+      const tmdb = await dirStats(path.join(k.paths.dataDir, 'discover-images'));
+      const douban = await dirStats(path.join(k.paths.dataDir, 'discover-douban-images'));
+      const ratings = { tmdb: 0, douban: 0 };
+      try {
+        // 表存在时按来源分组统计；列名不同时退回 count(*) 兜底。
+        const rows = (
+          await sql<{ provider: string; n: number }>`
+            select provider, count(*) as n from media_rating group by provider
+          `.execute(k.db)
+        ).rows;
+        for (const r of rows) {
+          const n = Number(r.n) || 0;
+          if (String(r.provider).toLowerCase() === 'douban') ratings.douban += n;
+          else ratings.tmdb += n;
+        }
+      } catch {
+        try {
+          const total = (
+            await sql<{ n: number }>`select count(*) as n from media_rating`.execute(k.db)
+          ).rows[0];
+          ratings.tmdb = Number(total?.n) || 0;
+        } catch {
+          /* 表不存在 → 保持 0 */
+        }
+      }
+      // 豆瓣评分走自己的缓存表（douban_ratings / douban_chart）
+      const doubanStats = await doubanCacheStats(k);
+      ratings.douban = Math.max(ratings.douban, doubanStats.ratingRows);
+      return {
+        images: { tmdb, douban },
+        ratings,
+        douban: { ...doubanStats, provider: ratingProviderOf(k) },
+      };
+    },
+  );
+
+  // 批量补豆瓣评分：读缓存 → 缺失的按 TMDB 详情（标题/年份）查豆瓣，落 douban_ratings。
+  app.post(
+    '/api/v1/discover/douban/enrich',
+    secured('discover:write', {
+      schema: {
+        operationId: 'discoverDoubanEnrich',
+        tags: TAG,
+        summary: '批量补豆瓣评分（带缓存，缺的才联网）',
+        body: Type.Object({
+          mediaIds: Type.Array(Type.Integer(), { maxItems: 60 }),
+          mediaType: Type.Optional(Type.String({ maxLength: 8 })),
+        }),
+        response: {
+          200: Type.Object({
+            items: Type.Record(
+              Type.String(),
+              Type.Object(
+                {
+                  rating: Type.Union([Type.Number(), Type.Null()]),
+                  vote_count: Type.Union([Type.Integer(), Type.Null()]),
+                  douban_id: Type.Union([Type.String(), Type.Null()]),
+                  url: Type.Union([Type.String(), Type.Null()]),
+                },
+                { additionalProperties: true },
+              ),
+            ),
+            provider: Type.String(),
+          }),
+        },
+      },
+    }),
+    async (req: FastifyRequest) => {
+      const b = (req.body || {}) as { mediaIds?: number[]; mediaType?: string };
+      const media = b.mediaType === 'tv' ? 'tv' : 'movie';
+      const res = await enrichDouban(k, config(), media, b.mediaIds || []);
+      return { items: res.items, provider: ratingProviderOf(k) };
+    },
+  );
+
+  // 豆瓣榜单：豆瓣给排名/评分，TMDB 反查补海报与简介。
+  // fast=true 只回已落库的条目（首屏秒开），未命中的由客户端再取完整数据。
+  app.post(
+    '/api/v1/discover/douban/catalogs/:kind',
+    secured('discover:read', {
+      schema: {
+        operationId: 'discoverDoubanCatalogs',
+        tags: TAG,
+        summary: '豆瓣榜单（按 code 取豆瓣榜，TMDB 反查补卡片）',
+        params: Type.Object({ kind: Type.String({ maxLength: 8 }) }),
+        body: Type.Object({
+          code: Type.String({ maxLength: 32 }),
+          count: Type.Optional(Type.Integer({ minimum: 1, maximum: 40 })),
+          fast: Type.Optional(Type.Boolean()),
+        }),
+        response: {
+          200: Type.Object({
+            items: Type.Array(Type.Ref('DiscoverMediaCard')),
+            page: Type.Integer(),
+            totalPages: Type.Integer(),
+            degraded: Type.Boolean(),
+            reason: Type.String(),
+            ratingProvider: Type.String(),
+            tag: Type.String(),
+            cached: Type.Integer(),
+          }),
+        },
+      },
+    }),
+    async (req: FastifyRequest) => {
+      const p = (req.params || {}) as { kind?: string };
+      const b = (req.body || {}) as { code?: string; count?: number; fast?: boolean };
+      const kind = p.kind === 'tv' ? 'tv' : 'movie';
+      const code = String(b.code || 'hot').slice(0, 32);
+      const cookie = String(k.config.get('discover.doubanCookie') || '');
+      const res = await doubanCatalog(k, config(), {
+        kind,
+        code,
+        count: Number(b.count) || 20,
+        fast: b.fast === true,
+        cookie: cookie || undefined,
+      });
+      return {
+        items: res.items,
+        page: 1,
+        totalPages: 1,
+        degraded: res.degraded,
+        reason: res.reason,
+        ratingProvider: 'douban',
+        tag: res.tag,
+        cached: res.cached,
+      };
+    },
+  );
+
+  // 风格表：TMDB 官方 id + 中文名（静态常量，不联网）。
+  app.get(
+    '/api/v1/discover/genres/:mediaType',
+    secured('discover:read', {
+      schema: {
+        operationId: 'discoverGenres',
+        tags: TAG,
+        summary: '风格表（TMDB 官方 id + 中文名）',
+        params: Type.Object({ mediaType: Type.String() }),
+        response: {
+          200: Type.Object({
+            mediaType: Type.String(),
+            items: Type.Array(Type.Object({ id: Type.Integer(), name: Type.String() })),
+          }),
+        },
+      },
+    }),
+    async (req: FastifyRequest) => {
+      const p = (req.params || {}) as { mediaType?: string };
+      const mediaType = p.mediaType === 'tv' ? 'tv' : 'movie';
+      return { mediaType, items: mediaType === 'tv' ? TV_GENRES : MOVIE_GENRES };
+    },
   );
 }
 export { DiscoverUnavailable, imageUrl };
