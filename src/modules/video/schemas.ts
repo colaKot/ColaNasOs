@@ -1083,6 +1083,14 @@ export const HomeLibraryRow = Type.Object(
     libraryName: Type.String(),
     libType: Type.Optional(Type.String()),
     items: Type.Array(Type.Ref(Item)),
+    /**
+     * 电视剧库专用：按剧聚合的「最近更新」卡片（一部剧一条）。
+     *
+     * 为什么另开一个数组而不是把 items 换掉：`items` 是「文件」，一部剧 40 集
+     * 会铺 40 张一样的卡（用户 2026-11-11 反馈）。前端遇到 tv 库优先用这个，
+     * 其余库照旧用 items。可选字段，老客户端不受影响。
+     */
+    series: Type.Optional(Type.Array(Type.Ref(SeriesItem))),
   },
   { $id: 'VideoHomeLibraryRow' },
 );

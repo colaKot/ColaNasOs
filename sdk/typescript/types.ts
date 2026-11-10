@@ -3503,6 +3503,7 @@ export type VideoHomeLibraryRow = {
   "libraryName": string;
   "libType"?: string;
   "items": VideoItem[];
+  "series"?: VideoSeriesItem[];
 };
 
 export type VideoHomeResponse = {

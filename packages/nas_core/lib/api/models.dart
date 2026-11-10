@@ -11743,12 +11743,14 @@ class VideoHomeLibraryRow {
   final String libraryName;
   final String? libType;
   final List<VideoItem> items;
+  final List<VideoSeriesItem>? series;
 
   const VideoHomeLibraryRow({
     required this.libraryId,
     required this.libraryName,
     this.libType,
     required this.items,
+    this.series,
   });
 
   factory VideoHomeLibraryRow.fromJson(Map<String, dynamic> json) => VideoHomeLibraryRow(
@@ -11756,6 +11758,7 @@ class VideoHomeLibraryRow {
         libraryName: json['libraryName'] as String,
         libType: json['libType'] == null ? null : json['libType'] as String,
         items: (json['items'] as List<dynamic>).map((e) => VideoItem.fromJson(e as Map<String, dynamic>)).toList(),
+        series: json['series'] == null ? null : (json['series'] as List<dynamic>).map((e) => VideoSeriesItem.fromJson(e as Map<String, dynamic>)).toList(),
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -11763,6 +11766,7 @@ class VideoHomeLibraryRow {
         'libraryName': libraryName,
         if (libType != null) 'libType': libType!,
         'items': items.map((e) => e.toJson()).toList(),
+        if (series != null) 'series': series!.map((e) => e.toJson()).toList(),
       };
 }
 

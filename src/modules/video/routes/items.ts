@@ -1144,6 +1144,7 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           libraryName: string;
           libType: string;
           items: unknown[];
+          series?: unknown[];
         }> = [];
         for (const l of visibleLibs) {
           if (Number(l.items) === 0) continue;
@@ -1191,12 +1192,25 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           }
           if (items.length === 0) continue;
           items.sort((a, b) => b.at - a.at);
-          perLib.push({
+          const row: {
+            libraryId: string;
+            libraryName: string;
+            libType: string;
+            items: unknown[];
+            series?: unknown[];
+          } = {
             libraryId: l.id,
             libraryName: l.name,
             libType: lt,
             items: items.slice(0, addLimit).map((x) => x.item),
-          });
+          };
+          // 电视剧库：另给一份「按剧聚合」的卡片（一部剧一条）。
+          // `items` 里是逐集数据，前端碰到 tv 库优先用这份，否则首页一排全是
+          // 同一部剧的不同集（用户 2026-11-11 反馈）。
+          if (lt === 'tv') {
+            row.series = await recentSeriesOf(k.db, l.id, addLimit, offline);
+          }
+          perLib.push(row);
         }
 
         return {
@@ -1496,3 +1510,83 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
       },
     );
   }
+
+/**
+ * 电视剧库的「最近更新」卡片：一部剧一条。
+ *
+ * 排序用该剧最新的文件时间（`max(mtime)`）—— 用户刚下完一集，这部剧就该往前排。
+ * 封面照 `/video/series` 的口径：优先取本剧里「有海报的那一集」，都没有才退回最小 id，
+ * 否则前端拿 `/video/art` 会整排 404（表现为灰块）。
+ *
+ * `series` 为空的条目（识别不出季 / 集号的视频混在剧库里）单独算「1 季 1 集」，
+ * 保证它们不会从首页凭空消失。
+ */
+async function recentSeriesOf(
+  db: Parameters<typeof offlineSmbPrefixes>[0],
+  libraryId: string,
+  limit: number,
+  offline: string[],
+): Promise<Array<{ name: string; seasons: number; episodes: number; coverId: string | null }>> {
+  const off = offline.length > 0 ? sql`and ${offlineCond(offline, 'rel_path')}` : sql``;
+  const grouped = (
+    await sql<{
+      name: string;
+      seasons: number;
+      episodes: number;
+      cover_id: string | null;
+      at: number;
+    }>`
+      select series as name,
+             count(distinct coalesce(season, 0)) as seasons,
+             count(*) as episodes,
+             coalesce(
+               min(case when coalesce(nullif(nfo_poster, ''), nullif(nfo_thumb, '')) is not null
+                        then id end),
+               min(id)
+             ) as cover_id,
+             max(mtime) as at
+        from video_items
+       where library_id = ${libraryId}
+         and media_type = 'video'
+         and series is not null
+         and series <> ''
+         ${off}
+       group by series
+       order by at desc
+       limit ${limit}
+    `.execute(db)
+  ).rows;
+
+  const solos = (
+    await sql<{ id: string; name: string; at: number }>`
+      select id,
+             coalesce(nullif(nfo_name, ''), title) as name,
+             mtime as at
+        from video_items
+       where library_id = ${libraryId}
+         and media_type = 'video'
+         and (series is null or series = '')
+         ${off}
+       order by mtime desc
+       limit ${limit}
+    `.execute(db)
+  ).rows;
+
+  const merged: Array<{ at: number; out: unknown }> = [
+    ...grouped.map((r) => ({
+      at: Number(r.at) || 0,
+      out: {
+        name: r.name,
+        seasons: Number(r.seasons) || 1,
+        episodes: Number(r.episodes) || 0,
+        coverId: r.cover_id,
+      },
+    })),
+    ...solos.map((r) => ({
+      at: Number(r.at) || 0,
+      out: { name: r.name, seasons: 1, episodes: 1, coverId: r.id },
+    })),
+  ];
+  merged.sort((a, b) => b.at - a.at);
+  return merged.slice(0, limit).map((x) => x.out as never);
+}

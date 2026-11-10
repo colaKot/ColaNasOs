@@ -13436,6 +13436,12 @@
             "items": {
               "$ref": "#/components/schemas/VideoItem"
             }
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VideoSeriesItem"
+            }
           }
         }
       },

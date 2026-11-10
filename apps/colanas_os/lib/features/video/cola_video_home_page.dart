@@ -12,6 +12,8 @@ import 'video_item_actions.dart';
 import 'video_jp_pages.dart';
 import 'video_list_view.dart';
 import 'video_media_viewer_page.dart';
+import 'video_series_detail_page.dart';
+import 'video_series_grid_page.dart';
 
 /// 影视首页：**来源 / 推荐 / 继续观看 / 每库最近添加** 四段式。
 ///
@@ -481,10 +483,58 @@ class _VideoHomePageState extends State<VideoHomePage> {
   }
 
   Widget _libraryRowSection(BuildContext context, VideoHomeLibraryRow row) {
-    return _hScroller(
-      context,
-      title: '${tr('video.home.recentAdd')} · ${row.libraryName}',
-      items: row.items,
+    final title = '${tr('video.home.recentAdd')} · ${row.libraryName}';
+    // 电视剧库：服务端另给一份按剧聚合的卡片（`series`），一部剧一张，
+    // 否则这里一排全是同一部剧的不同集（用户 2026-11-11 反馈）。
+    final series = row.series;
+    if (row.libType == 'tv' && series != null && series.isNotEmpty) {
+      return _seriesScroller(
+        context,
+        title: title,
+        libraryId: row.libraryId,
+        items: series,
+      );
+    }
+    return _hScroller(context, title: title, items: row.items);
+  }
+
+  /// 剧集卡片横滑（首页「最近添加 · 电视剧」用）。
+  Widget _seriesScroller(
+    BuildContext context, {
+    required String title,
+    required String libraryId,
+    required List<VideoSeriesItem> items,
+  }) {
+    final width = MediaQuery.of(context).size.width;
+    final cardW = width < 480 ? 104.0 : width < 900 ? 120.0 : 136.0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionHeader(context, title),
+        SizedBox(
+          height: cardW * 1.5 + 46,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: NasTokens.spaceMd),
+            itemCount: items.length,
+            separatorBuilder: (_, _) => const SizedBox(width: NasTokens.spaceSm),
+            itemBuilder: (context, i) {
+              final s = items[i];
+              return SeriesPosterCard(
+                item: s,
+                width: cardW,
+                onTap: () => openVideoSeries(
+                  context,
+                  name: s.name,
+                  coverId: s.coverId,
+                  libraryId: libraryId,
+                  headers: videoArtHeaders,
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
