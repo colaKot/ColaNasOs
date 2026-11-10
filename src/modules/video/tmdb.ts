@@ -163,16 +163,36 @@ export async function downloadTmdbImage(
 const NOISE = [
   /\[[^\]]*\]/g,
   /\([^)]*\)/g,
-  /\b(2160p|1440p|1080p|1080i|720p|576p|480p|4k|8k|uhd)\b/gi,
+  // 音频规格写在**最前面**：`DTS-HDMA7.1` 里的 `DTS` 会被下面那条短的
+  // `\b(...|dts(-hd)?|...)\b` 先吃掉一半，剩 `-HDMA7.1` 再也匹配不到任何规则，
+  // 结果片名里留着 `-HDMA7 1`，拿去搜 TMDB 命中 0 条（2026-11-11 实测）。
+  /(?:^|[\s._-])(?:dts[- .]?hd(?:ma)?|truehd|ddp|eac3|ac3|aac|flac|atmos|opus)[\s.-]*\d(?:[.\s]\d)?/gi,
+  /\b(2160p|1440p|1080p|1080i|720p|576p|480p|4k|8k|uhd|muhd)\b/gi,
   /\b(x264|x265|h264|h265|hevc|avc|av1|10bit|8bit|12bit)\b/gi,
+  // `H.265` / `H 265` 这种带分隔符的写法
+  /\b[hb][ ._-]?26[45]\b/gi,
   /\b(hdr10\+?|hdr|sdr|dolby\s*vision|dv|hlg)\b/gi,
+  // iTunes 源标签（`iT.WEB-DL`）。必须排在下面 `web` 那条**前面**：
+  // 否则 `WEB` 先被清掉，前瞻里就找不到 web 了。带前瞻限定是为了不误删片名《It》。
+  /\bit(?=[\s._-]?web)/gi,
   /\b(remux|bluray|blu-ray|bdrip|brrip|web-dl|webdl|webrip|web|hdtv|dvdrip|hdrip|hdcam)\b/gi,
   /\b(aac|ac3|eac3|dts(-hd)?|truehd|atmos|flac|ddp?5\.1|dd5\.1|5\.1|7\.1)\b/gi,
+  // 杜比视界的常见缩写写法（`DoVi` / `Do.Vi`）
+  /\b(?:dovi|dolby[ .-]?vision)\b/gi,
   /\b(proper|repack|internal|extended|uncut|limited|remastered|directors?\.cut)\b/gi,
+  // 国家 / 地区缩写是发布名里的固定标签，留在片名里搜不到东西。
+  // 刻意不收 `us`（会把《Us》这种片名整个删掉），也不收两位的 `it`（《It》）。
+  /\b(?:usa|eur|ger|ita|fra|jpn|chn|hk|tw|kor|rus)\b/gi,
   /\b(中字|中文字幕|简中|繁中|双字|字幕|无码|流出|破解)\b/gi,
   /\b(chs|cht|gb|big5|eng|jpn)\b/gi,
+  // 半截括号：`(2026)` 被年份逻辑整段摘走后，留着孤零零的 `)` 会进片名
+  /[()\[\]{}]+/g,
 ];
 const GROUP_TAIL = /\s-\s*[A-Za-z0-9@._]+$/;
+// 发布组尾巴跟 `10bit-CHD` 连在一起时上面那条（要求「空格 + -」）匹配不到，
+// 清完标签会剩一个 `-CHD`。只吃「空格 + 连字符 + 全大写/数字」，
+// 片名里的 `Spider-Man`、`- Fallout` 这种带小写或空格的不会被误删。
+const GROUP_TAIL_GLUED = /\s-[A-Z0-9]{2,10}$/;
 const SEASON_EP = /\bS\d{1,2}(E\d{1,3})?\b/gi;
 
 /**
@@ -204,8 +224,11 @@ export function guessTitle(fileStem: string): { title: string; year: number | nu
     else s = s.replace(lastMatch.text, ' ');
   }
   s = s.replace(SEASON_EP, ' ');
+  // `S01.E01` 被分隔符切成两半时，SEASON_EP 只吃掉了 `S01`，剩一个裸集号
+  s = s.replace(/\bE\d{1,3}\b/gi, ' ');
   for (const re of NOISE) s = s.replace(re, ' ');
   s = s.replace(GROUP_TAIL, ' ');
+  s = s.replace(GROUP_TAIL_GLUED, ' ');
   // 分隔符（`.` `_`）还原成空格；连字符保留（很多片名里带 -）
   s = s.replace(/[._]+/g, ' ').replace(/\s+/g, ' ').trim();
   s = s.replace(/^[-–—\s]+|[-–—\s]+$/g, '').trim();

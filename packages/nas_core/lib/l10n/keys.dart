@@ -2562,6 +2562,13 @@ class I18nKeys {
   static const videoSeasonMissingOne = 'video.season.missingOne';
   static const videoSeasonEpisodes = 'video.seasonEpisodes';
   static const videoSeasonsEpisodes = 'video.seasonsEpisodes';
+  static const videoSeriesEpisode = 'video.series.episode';
+  static const videoSeriesEpisodeCount = 'video.series.episodeCount';
+  static const videoSeriesEpisodeList = 'video.series.episodeList';
+  static const videoSeriesPlay = 'video.series.play';
+  static const videoSeriesResume = 'video.series.resume';
+  static const videoSeriesSeason = 'video.series.season';
+  static const videoSeriesSeasonList = 'video.series.seasonList';
   static const videoSeriesLoadFailed = 'video.seriesLoadFailed';
   static const videoSmart4k = 'video.smart.4k';
   static const videoSmartAtmos = 'video.smart.atmos';
@@ -2672,4 +2679,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2630;
+const int i18nKeyCount = 2637;

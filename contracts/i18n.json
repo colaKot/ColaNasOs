@@ -3308,6 +3308,19 @@
       "seasons": {},
       "episodes": {}
     },
+    "video.series.episode": {
+      "n": {}
+    },
+    "video.series.episodeCount": {
+      "n": {}
+    },
+    "video.series.episodeList": {},
+    "video.series.play": {},
+    "video.series.resume": {},
+    "video.series.season": {
+      "n": {}
+    },
+    "video.series.seasonList": {},
     "video.seriesLoadFailed": {
       "error": {}
     },

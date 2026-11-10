@@ -18,6 +18,7 @@ import 'video_page.dart';
 import 'video_app_settings_page.dart';
 import 'video_client_settings_page.dart';
 import 'video_settings_pages.dart';
+import 'video_series_grid_page.dart';
 import 'video_smart_albums_page.dart';
 
 /// 影视主页：左侧二级导航 + 内容区。
@@ -202,6 +203,15 @@ class _VideoShellPageState extends State<VideoShellPage> {
               libraryId: lib.id,
               libType: lib.libType,
               title: lib.name,
+            );
+          }
+          // 电视剧库：一部剧只占一张卡（右上角总集数），点进去才分层看季 / 集。
+          // 逐集铺卡的列表对剧库完全不可用（40 集就是 40 张同样的海报）。
+          if (lib.libType == 'tv') {
+            return VideoSeriesGridPage(
+              key: ValueKey('video-tv-${lib.id}'),
+              libraryId: lib.id,
+              embedded: true,
             );
           }
           return VideoPage(embedded: true, libraryId: lib.id);

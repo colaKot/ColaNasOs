@@ -769,46 +769,29 @@ class VideoDetailPageState extends State<VideoDetailPage> {
     final info = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Text(
-                item.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: wide ? 26 : 20,
-                  height: 1.2,
-                  fontWeight: FontWeight.w700,
+        // 嵌入模式的右上角有一枚浮层胶囊（刮削 + 更多），它压在内容层之上。
+        // 标题行右侧必须让出这段宽度，否则长片名会被胶囊盖住。
+        // 评分也**不再放标题行右端**：那个位置正好是胶囊的地盘，
+        // 之前 6.5 和 ⋮ 叠在一起就是这么来的（2026-11-11 用户截图）。
+        Padding(
+          padding: EdgeInsets.only(right: widget.embedded ? 104 : 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  item.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: wide ? 26 : 20,
+                    height: 1.2,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-            if (score > 0) ...[
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    score.toStringAsFixed(1),
-                    style: TextStyle(
-                      fontSize: wide ? 22 : 18,
-                      height: 1.1,
-                      fontWeight: FontWeight.w800,
-                      color: scheme.primary,
-                    ),
-                  ),
-                  Text(
-                    tr('video.detail.score'),
-                    style: TextStyle(
-                      fontSize: NasTokens.fontMicro,
-                      color: context.nasTextSecondary,
-                    ),
-                  ),
-                ],
-              ),
             ],
-          ],
+          ),
         ),
         if ((item.originalName ?? '').isNotEmpty &&
             item.originalName != item.title) ...[
@@ -823,11 +806,29 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             ),
           ),
         ],
-        if (meta.isNotEmpty) ...[
+        if (meta.isNotEmpty || score > 0) ...[
           const SizedBox(height: 8),
           Wrap(
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              if (score > 0) ...[
+                Text(
+                  '★ ${score.toStringAsFixed(1)}',
+                  style: TextStyle(
+                    fontSize: NasTokens.fontCaption,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.primary,
+                  ),
+                ),
+                if (meta.isNotEmpty)
+                  Text(
+                    ' · ',
+                    style: TextStyle(
+                      fontSize: NasTokens.fontCaption,
+                      color: context.nasTextSecondary,
+                    ),
+                  ),
+              ],
               for (var i = 0; i < meta.length; i++) ...[
                 if (i > 0)
                   Text(
