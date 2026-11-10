@@ -593,7 +593,24 @@ class DiscoverController extends GetxController {
   Future<void> unFavorite(int mediaId) async {
     await _api.favoriteToggle(mediaId: mediaId, on: false);
     await loadFavorites();
-    await loadBrowse(reset: true);
+    // 之前这里还跟着 loadBrowse(reset: true) —— 取消一个收藏要把整页发现列表
+    // 重新拉一遍（要走 TMDB / 代理），点一下星标就卡住。改成只更新受影响的那几项。
+    _setFavorited(mediaId, false);
+  }
+
+  /// 就地更新各列表里的收藏星标（不重新拉整页）
+  void _setFavorited(int mediaId, bool on) {
+    void upd(RxList<Map<String, dynamic>> list) {
+      for (var i = 0; i < list.length; i++) {
+        if (((list[i]['id'] as num?)?.toInt() ?? 0) == mediaId) {
+          list[i] = {...list[i], 'favorited': on};
+        }
+      }
+    }
+
+    upd(browseItems);
+    upd(catalogItems);
+    upd(mediaSearchResults);
   }
 
   // ---------- 下载筛选 ----------
