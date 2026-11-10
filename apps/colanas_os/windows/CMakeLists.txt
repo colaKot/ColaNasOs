@@ -32,6 +32,13 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# 插件源码里有中文注释（UTF-8 无 BOM）。MSVC 默认按系统代码页（936/GBK）读，
+# 会报 C4819「该文件包含不能在当前代码页中表示的字符」，而 Flutter 模板开了
+# /WX（警告视为错误）→ 直接 C2220 构建失败。显式声明源码是 UTF-8 可根治。
+if(MSVC)
+  add_compile_options(/utf-8)
+endif()
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
