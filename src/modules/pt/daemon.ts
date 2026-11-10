@@ -169,6 +169,32 @@ export async function ensureDaemon(opts: {
   }
 }
 
+/**
+ * 优雅停止：先让所有活动种子停下来（Transmission 会向 tracker 发 event=stopped），
+ * 再杀进程。
+ *
+ * 为什么需要：直接 kill 时 tracker 仍认为这个 peer 活着；下次启动 daemon 重新
+ * announce，M-Team 这类 PT 站会判「同一个种子已在别处下载」并报
+ * `You already are downloading the same torrent` —— 用户明明只在这台机器下过。
+ * 开发期内核被反复重启时最容易撞上。
+ */
+export async function stopDaemonGracefully(): Promise<void> {
+  if (!child) return;
+  const url = daemonRpcUrl();
+  try {
+    // 动态 require 避免 daemon ↔ transmission 的顶层循环依赖
+    const { torrentList, torrentAction } = await import('./transmission');
+    const list = await torrentList({ url });
+    const hashes = list.items.filter((t) => t.status !== 0).map((t) => t.hashString);
+    if (hashes.length > 0) await torrentAction({ url }, 'stop', hashes);
+    // 给 tracker 的 stopped 公告一点时间发出去
+    await new Promise((resolve) => setTimeout(resolve, 800));
+  } catch {
+    /* 尽力而为：停不掉就直接杀 */
+  }
+  stopDaemon();
+}
+
 /** 内核退出时带走子进程，避免留下孤儿 */
 export function stopDaemon(): void {
   if (!child) return;

@@ -31,7 +31,7 @@ import { filesRoot, resolveAnyPath } from '../files/fs-root';
 import { normalizeConfig, tmdbGet } from '../discover/tmdb';
 import { resolveSecret, signToken } from '../../../kernel/auth';
 import { registerTransmissionWebUi, transmissionWebDir } from './webui';
-import { ensureDaemon, stopDaemon } from './daemon';
+import { ensureDaemon, stopDaemonGracefully } from './daemon';
 
 /**
  * PT 自动下载：站点 → 搜索 → 筛选 → 择种 → 交给 transmission → 留痕。
@@ -2866,6 +2866,9 @@ export const pt: ServerModule = {
     app.addHook('onClose', async () => {
       clearInterval(timer);
       clearTimeout(bootTimer);
+      // 正常关闭时先向 tracker 发 stopped 再杀 daemon，避免旧 peer 残留
+      // 导致下次启动被判「同一资源重复下载」。
+      await stopDaemonGracefully();
     });
   },
 };
