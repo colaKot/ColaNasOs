@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
+import { Err } from '../../../kernel/errors';
 import { resolveSecret, verifyToken } from '../../../kernel/auth';
 import type { KernelApi } from '../../../kernel/types';
 import type { TransmissionConfig } from './transmission';
@@ -164,7 +165,7 @@ export function registerTransmissionWebUi(
   /** RPC 反代：把同源请求打到用户配置的 RPC 地址（Basic 认证 + session-id 原样透传） */
   const proxy = async (req: FastifyRequest, reply: FastifyReply, target: string) => {
     if (!(await authorized(req))) {
-      return reply.code(401).send({ error: 'unauthorized' });
+      return reply.code(401).send({ error: Err.unauthorized });
     }
     const cfg = await deps.cfg();
     if (!cfg?.url) return reply.code(503).send({ error: 'transmission 未配置' });

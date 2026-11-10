@@ -337,7 +337,7 @@ global.fetch = async (url, init) => {
   r = await post('/api/v1/pt/rules/update', { id: 'nope', name: 'x' });
   check('rule_update_missing_404', r.statusCode === 404, 'status=' + r.statusCode);
 
-  r = await post('/api/v1/pt/rules/delete', { id: ruleId });
+  await post('/api/v1/pt/rules/delete', { id: ruleId });
   r = await post('/api/v1/pt/rules/list');
   check('rule_delete', r.json().items.length === 0, JSON.stringify(r.json()).slice(0, 120));
 
@@ -360,7 +360,7 @@ global.fetch = async (url, init) => {
   );
 
   // 再订阅同一部片：不应新增第二行（按 media_id 去重）
-  r = await post('/api/v1/pt/subscriptions/upsert', {
+  await post('/api/v1/pt/subscriptions/upsert', {
     mediaId: 550,
     mediaType: 'movie',
     mediaTitle: '搏击俱乐部',

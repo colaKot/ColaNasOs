@@ -357,7 +357,7 @@ export async function doubanCatalog(
     return { items, degraded: false, reason: '', tag, cached: items.length };
   }
 
-  let chart: DoubanItem[] = [];
+  let chart: DoubanItem[];
   try {
     chart = await fetchDoubanChart(tag, opts.cookie ? { cookie: opts.cookie } : {});
   } catch (err) {

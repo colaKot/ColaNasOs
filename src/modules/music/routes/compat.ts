@@ -1604,7 +1604,7 @@ p{margin:0;color:#5b5b66;line-height:1.7}</style></head><body><div class="card">
       // root_path 本身是绝对路径时 rel_path 也就是绝对路径 —— 两种都要能吃下。
       const relPath = normSlashes(row?.rel_path ?? musicPath);
       const dirRel = path.dirname(relPath);
-      let targetDir = '';
+      let targetDir: string;
       try {
         if (isAbsoluteInput(dirRel)) targetDir = absoluteInput(dirRel);
         else targetDir = resolveInRoot(filesRoot(), dirRel === '.' ? '' : dirRel);
@@ -1635,7 +1635,7 @@ p{margin:0;color:#5b5b66;line-height:1.7}</style></head><body><div class="card">
     scan_interval_ms?: number | null;
   }) => {
     const abs = absOfRoot(row.root_path);
-    let exists = false;
+    let exists: boolean;
     try {
       exists = !!abs && fs.existsSync(abs);
     } catch {
@@ -1680,8 +1680,8 @@ p{margin:0;color:#5b5b66;line-height:1.7}</style></head><body><div class="card">
     const body = (req.body || {}) as Record<string, unknown>;
     const raw = String(body.path ?? '').trim();
     if (!raw) return { ok: false, message: 'path required' };
-    let rel = '';
-    let abs = '';
+    let rel: string;
+    let abs: string;
     try {
       if (isAbsoluteInput(raw)) {
         abs = absoluteInput(raw);

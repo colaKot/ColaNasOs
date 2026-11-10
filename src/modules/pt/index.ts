@@ -871,7 +871,7 @@ export const pt: ServerModule = {
         }
         const started = Date.now();
         let status = 'ok';
-        let message = '';
+        let message: string;
         let count = 0;
         const keyword = '1080p';
         if (site.kind === 'mteam') {
@@ -2892,7 +2892,7 @@ export const pt: ServerModule = {
           .filter((r) => !state || String(r.state || 'watching') === state)
           .map((r) => {
             const m = meta.get(String(r.tmdb_id)) || {};
-            let own: Record<string, any> = {};
+            let own: Record<string, any>;
             try {
               own = r.meta ? JSON.parse(String(r.meta)) : {};
             } catch {

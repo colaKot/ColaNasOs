@@ -408,7 +408,7 @@ function makeAudio(out, opts) {
   r = await post('/api/v1/music/compat/list', reader, { is_favorite: 1 });
   check('favorite_isolated', r.json().items.length === 0, 'n=' + r.json().items.length);
 
-  r = await post('/api/v1/music/compat/favorite/batch', bearer, { index_ids: [alpha.id], is_favorite: 0 });
+  await post('/api/v1/music/compat/favorite/batch', bearer, { index_ids: [alpha.id], is_favorite: 0 });
   r = await post('/api/v1/music/compat/list', bearer, { is_favorite: 1 });
   check('favorite_off', r.json().items.length === 0, 'n=' + r.json().items.length);
 
@@ -587,7 +587,7 @@ function makeAudio(out, opts) {
   );
 
   // 关掉间隔扫描（前端发 scan_interval:0）必须能落回 0
-  r = await post('/api/v1/music/compat/source/update', bearer, {
+  await post('/api/v1/music/compat/source/update', bearer, {
     id: cnSrc.id,
     scan_interval: 0,
     scan_interval_ms: 0,
