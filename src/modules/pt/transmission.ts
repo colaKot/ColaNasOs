@@ -179,7 +179,7 @@ export async function transmissionStatus(
 }
 
 /**
- * 批量读取 torrent 实时状态（参考实现 1:1 的 downloads/sync-status 用）。
+ * 批量读取 torrent 实时状态（既有实现 1:1 的 downloads/sync-status 用）。
  * Transmission status: 0=已暂停, 1~5=排队/下载/做种, 6=完成。
  */
 export async function torrentGet(

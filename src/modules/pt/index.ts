@@ -220,7 +220,7 @@ export const pt: ServerModule = {
       },
     },
     {
-      // 参考实现 1:1：预览候选 → 提交下载闭环需要幂等键与来源列
+      // 既有实现 1:1：预览候选 → 提交下载闭环需要幂等键与来源列
       id: '153_pt_download_idem',
       async up(db) {
         const cols = (
@@ -2084,7 +2084,7 @@ export const pt: ServerModule = {
     );
 
 
-    // ------------------------------------------------ 参考实现 1:1：预览 → 提交 → 状态同步
+    // ------------------------------------------------ 既有实现 1:1：预览 → 提交 → 状态同步
     /** 从榜单快照里补 title / 海报（收藏分区用；快照结构不固定，全部 try/catch） */
     const catalogMeta = async (): Promise<Map<string, any>> => {
       const out = new Map<string, any>();

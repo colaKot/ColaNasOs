@@ -1,4 +1,4 @@
-/// 参考项目 `modules/base/components/` 里音乐模块用到的那几个通用组件。
+/// 兼容基线 `modules/base/components/` 里音乐模块用到的那几个通用组件。
 ///
 /// 原实现依赖 `app_tokens` / `app_skin` / `extended_image` 三个宿主东西，
 /// 搬不过来也用不上（本项目是 Material 3 + media_kit 体系）。

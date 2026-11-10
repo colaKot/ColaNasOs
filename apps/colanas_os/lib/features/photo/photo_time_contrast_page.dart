@@ -9,7 +9,7 @@ import 'photo_viewer_page.dart';
 /// 时光对照：同一个「月-日」在不同年份的照片并排看。
 ///
 /// 直接复用 `/photo/on-this-day`（服务端已按年份分组），不新增后端接口。
-/// 参考实现是「CLIP 找同地点不同年份的相似构图」，这里用同月同日做可解释的
+/// 既有实现是「CLIP 找同地点不同年份的相似构图」，这里用同月同日做可解释的
 /// 规则版：用户能自己选日期，且每一对都能说清「为什么被放在一起」。
 class PhotoTimeContrastPage extends StatefulWidget {
   const PhotoTimeContrastPage({super.key});

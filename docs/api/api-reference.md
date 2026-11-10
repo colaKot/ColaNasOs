@@ -1520,7 +1520,7 @@ GPS 视觉候选生成进度 · `photoGeoVisionStatus`
 
 记忆：候选 / 已确认 / 已忽略 + 年度章节 · `photoMemories`
 
-- 参数：`days` · 查询 · integer · 可选<br>`minPhotos` · 查询 · integer · 可选<br>`limit` · 查询 · integer · 可选
+- 参数：`days` · 查询 · integer · 可选<br>`minPhotos` · 查询 · integer · 可选<br>`limit` · 查询 · integer · 可选<br>`offset` · 查询 · integer · 可选
 - 响应：200 `PhotoMemoryList`
 
 #### `GET /api/v1/photo/memories/chapters`

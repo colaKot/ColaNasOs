@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-/// 参考实现 `utils/cola_device_utils.dart` 的最小等价实现。
+/// 既有实现 `utils/cola_device_utils.dart` 的最小等价实现。
 ///
 /// 参考版依赖 `device_utils_io.dart` / `device_utils_web.dart` 两个平台文件
 /// （要读 dart:io / window.navigator），这里只用 `defaultTargetPlatform` +

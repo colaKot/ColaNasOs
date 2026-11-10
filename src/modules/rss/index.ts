@@ -127,7 +127,7 @@ const RuleRunResponse = Type.Object({
 const IdBody = Type.Object({ id: Type.String({ minLength: 1 }) });
 const OkResponse = Type.Object({ ok: Type.Boolean() });
 
-// ---- 参考实现 影视发现 1:1 兼容：条目状态 / 下载台账 / feed 自动下载
+// ---- 既有实现 影视发现 1:1 兼容：条目状态 / 下载台账 / feed 自动下载
 const EntryActionBody = Type.Object({
   id: Type.String({ minLength: 1 }),
   action: Type.Union([Type.Literal('confirm'), Type.Literal('reject')]),
@@ -821,7 +821,7 @@ export const rss: ServerModule = {
       },
     );
 
-    // ------------------------------------------------ 参考实现 影视发现兼容
+    // ------------------------------------------------ 既有实现 影视发现兼容
     app.post(
       '/api/v1/rss/entries/action',
       secured('rss:write', {

@@ -25,7 +25,7 @@ import 'playlist/view/cola_playlist_view.dart';
 import 'source_setting/view/cola_source_settings_view.dart';
 import 'sub_list/view/cola_sub_list_overlay.dart';
 
-/// 是否启用音乐的 1:1 移植版。
+/// 是否启用音乐的 兼容适配版。
 /// 置 false 可一行回退到旧的 `MusicShellPage`（旧实现文件全部保留）。
 const bool kMusicShell = true;
 
@@ -64,7 +64,7 @@ class _MusicShellViewState extends State<MusicShellView> {
     _ctrl = Get.put(MusicMainController());
     _detail = Get.put(MusicDetailRouter());
     _scrobbler = LastfmScrobbler(MusicPlayServiceController.instance);
-    // 「打开所在文件夹」「回到首页」在参考实现里走 GetX 命名路由，
+    // 「打开所在文件夹」「回到首页」在既有实现里走 GetX 命名路由，
     // 这里注入到统一桌面壳（AppShell.openApp）。
     AppRoutes.toFilesHandler = (_) => AppShell.openApp('files');
     AppRoutes.toHomeHandler = () => AppShell.openApp('home');
@@ -140,7 +140,7 @@ class _MusicShellViewState extends State<MusicShellView> {
         page = const MusicCacheSettingsView();
         break;
       case 'settings.app':
-        // 契约里这一项原本没有对应页面（参考实现只有「来源 / 缓存」两页），
+        // 契约里这一项原本没有对应页面（既有实现只有「来源 / 缓存」两页），
         // 现在放 Last.fm 在线数据源与账号绑定。
         page = const MusicLastfmSettingsView();
         break;

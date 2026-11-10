@@ -1,4 +1,4 @@
-/// 参考实现 `/api/music/*` → 本项目 `/api/v1/music/compat/*` 的唯一映射点。
+/// 既有实现 `/api/music/*` → 本项目 `/api/v1/music/compat/*` 的唯一映射点。
 ///
 /// 为什么只有「转发」而没有字段映射：30 多个字段的映射、cursor → page 的换算、
 /// int id ↔ uuid 的互转，全部放在服务端 `src/modules/music/routes/compat.ts` 里。
@@ -6,7 +6,7 @@
 ///
 /// 这里只处理两件本地差异：
 /// 1. `/api/music/detail/get` 在服务端叫 `/compat/detail`；
-/// 2. `source/update/$id`、`source/relocate/$id` 在参考实现里是**路径参数**，
+/// 2. `source/update/$id`、`source/relocate/$id` 在既有实现里是**路径参数**，
 ///    服务端统一收 body 里的 `id`。
 ///
 /// **不要改搬运过来的 controller / view 源文件**，差异就该烂在这一层。

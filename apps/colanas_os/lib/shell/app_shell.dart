@@ -134,11 +134,11 @@ class _AppShellState extends State<AppShell> {
     'photo': const PhotoShellPage(),
     'files': const FilesPage(),
     'video': const VideoShellPage(),
-    // 参考实现 1:1 移植版；置 kDiscoverShell=false 可回退到旧实现。
+    // 兼容适配实现；置 kDiscoverShell=false 可回退到旧实现。
     'discover': kDiscoverShell
         ? const DiscoverShellView()
         : const DiscoverShellPage(),
-    // 参考实现 1:1 移植版；置 kMusicShell=false 可回退到旧实现。
+    // 兼容适配实现；置 kMusicShell=false 可回退到旧实现。
     'music': kMusicShell ? const MusicShellView() : const MusicShellPage(),
     'blog': const BlogShellPage(),
     'monitor': const MonitorPage(),

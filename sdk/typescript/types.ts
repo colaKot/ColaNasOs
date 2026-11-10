@@ -1626,6 +1626,7 @@ export type PhotoMemoryQuery = {
   "days"?: number;
   "minPhotos"?: number;
   "limit"?: number;
+  "offset"?: number;
 };
 
 export type PhotoMemorySaveBody = {
@@ -2284,6 +2285,9 @@ export type PhotoMemoryPick = {
   "id": string;
   "path": string;
   "takenAt": number;
+  "mediaKind"?: string;
+  "durationMs"?: number;
+  "liveKind"?: string;
 };
 
 export type PhotoChapterPage = {

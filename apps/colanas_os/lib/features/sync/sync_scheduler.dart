@@ -129,7 +129,7 @@ class SyncScheduler {
         // 只跑本机创建的任务：别的设备的目录/基线不该被这台机器动
         if (task.deviceId.isNotEmpty && task.deviceId != _deviceId) continue;
         if (SyncEngine.instance.isRunning(task.id)) continue;
-        // 每任务间隔：0 = 仅手动（参考实现语义）
+        // 每任务间隔：0 = 仅手动（既有实现语义）
         final minutes = task.syncConfig.intervalMinutes;
         if (minutes <= 0) continue;
         final gap = minutes * 60 * 1000;

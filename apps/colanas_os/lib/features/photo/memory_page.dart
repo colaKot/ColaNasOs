@@ -31,28 +31,74 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
   int? _chapterYear;
   String? _chapterDate;
 
+  // 真分页：每页 10 条，滚到底再拉；total* 仍来自服务端
+  static const int _pageSize = 10;
+  final ScrollController _scroll = ScrollController();
+  List<PhotoMemoryItem> _shown = const [];
+  int _page = 0;
+  bool _hasMore = true;
+  bool _loadingMore = false;
+
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(() {
+      if (_scroll.position.pixels >=
+          _scroll.position.maxScrollExtent - 200) {
+        _load(reset: false);
+      }
+    });
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load({bool reset = true}) async {
+    if (_loadingMore) return;
+    if (reset) {
+      _page = 0;
+      _shown = const [];
+      _hasMore = true;
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    } else {
+      if (!_hasMore) return;
+      _loadingMore = true;
+      setState(() {});
+    }
     try {
       final data = await ApiSession.instance.client.photoMemories(
         days: 3650,
         minPhotos: 12,
-        limit: 40,
+        limit: _pageSize,
+        offset: _page * _pageSize,
       );
       if (!mounted) return;
+      final page = switch (_tab) {
+        1 => data.candidates,
+        2 => data.ignored,
+        _ => data.memories,
+      };
+      final total = switch (_tab) {
+        1 => data.totalCandidates ?? 0,
+        2 => data.totalIgnored ?? 0,
+        _ => data.totalMemories ?? 0,
+      };
       setState(() {
         _data = data;
+        _shown = [..._shown, ...page];
+        _page += 1;
+        _hasMore = page.isNotEmpty && _shown.length < total;
         _loading = false;
-        if (_tab == 0 && data.memories.isEmpty && data.candidates.isNotEmpty) {
+        _loadingMore = false;
+        if (reset && _tab == 0 && data.memories.isEmpty &&
+            data.candidates.isNotEmpty) {
           _tab = 1;
         }
       });
@@ -61,19 +107,12 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
       setState(() {
         _error = e.toString();
         _loading = false;
+        _loadingMore = false;
       });
     }
   }
 
-  List<PhotoMemoryItem> get _list {
-    final data = _data;
-    if (data == null) return const [];
-    return switch (_tab) {
-      1 => data.candidates,
-      2 => data.ignored,
-      _ => data.memories,
-    };
-  }
+  List<PhotoMemoryItem> get _list => _shown;
 
   Future<void> _save(PhotoMemoryItem item) async {
     try {
@@ -147,7 +186,7 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
               actions: [
                 IconButton(
                   tooltip: tr('photo.memory.rediscover'),
-                  onPressed: _load,
+                  onPressed: () => _load(),
                   icon: const Icon(Icons.autorenew),
                 ),
               ],
@@ -161,8 +200,8 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
           : _loading
               ? const NasLoading()
               : _error != null
-                  ? NasErrorState(message: _error!, onRetry: _load)
-                  : RefreshIndicator(onRefresh: _load, child: _body()),
+                  ? NasErrorState(message: _error!, onRetry: () => _load())
+                  : RefreshIndicator(onRefresh: () => _load(), child: _body()),
     );
   }
 
@@ -171,6 +210,7 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
     final chapters = data?.chapters ?? const <PhotoMemoryChapter>[];
     final list = _list;
     return ListView(
+      controller: _scroll,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
       children: [
@@ -216,7 +256,10 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
                   _ => data?.totalMemories ?? data?.memories.length ?? 0,
                 },
                 selected: _tab == i,
-                onTap: () => setState(() => _tab = i),
+                onTap: () {
+                  setState(() => _tab = i);
+                  _load();
+                },
               ),
               const SizedBox(width: 18),
             ],
@@ -250,6 +293,17 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
                   onRemove: _tab == 0 ? () => _remove(item) : null,
                 ),
             ],
+          ),
+        if (_loadingMore)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
           ),
       ],
     );
@@ -1045,7 +1099,8 @@ class _LeftPage extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final safe = photos.isEmpty ? 0 : photoIndex.clamp(0, photos.length - 1);
     final current = photos.isEmpty ? page.cover : photos[safe];
-    final video = _isVideoPath(current.path);
+    final video =
+        (current.mediaKind ?? '') == 'video' || _isVideoPath(current.path);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

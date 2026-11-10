@@ -5,7 +5,7 @@ import 'compat/getx.dart';
 import 'discover_controller.dart';
 import 'discover_view.dart';
 
-/// 是否启用影视发现的 1:1 移植版。
+/// 是否启用影视发现的 兼容适配版。
 /// 置 false 可一行回退到旧的 `DiscoverShellPage`（便于对比与排障）。
 const bool kDiscoverShell = true;
 

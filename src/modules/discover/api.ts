@@ -251,7 +251,7 @@ const DetailResponse = Type.Object(
     rating: Type.Union([Type.Number(), Type.Null()]),
     genres: Type.Array(Type.String()),
     cast: Type.Array(Type.String()),
-    /** 演员卡（带头像相对路径 + 角色名）：参考实现 详情页按这个渲染头像横滑列表 */
+    /** 演员卡（带头像相对路径 + 角色名）：既有实现 详情页按这个渲染头像横滑列表 */
     castMembers: Type.Optional(
       Type.Array(
         Type.Object({
@@ -277,7 +277,7 @@ const DetailResponse = Type.Object(
         episodes: Type.Integer(),
       }),
     ),
-    /** 详情页「信息」区：参考实现 参考页逐项渲染这些字段 */
+    /** 详情页「信息」区：既有实现 参考页逐项渲染这些字段 */
     status: Type.String({ description: 'Released / Returning Series 等' }),
     tagline: Type.String(),
     /** ISO 639-1，参考页会 toUpperCase 展示 */
@@ -692,7 +692,7 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
         sort !== '' ||
         country !== '' ||
         minVote > 0;
-      // TV 没有 upcoming / now_playing 端点：统一落到 on_the_air（参考实现的合法端点）
+      // TV 没有 upcoming / now_playing 端点：统一落到 on_the_air（既有实现的合法端点）
       const apiPath = filtered
         ? `/discover/${media}`
         : kind === 'trending_day'

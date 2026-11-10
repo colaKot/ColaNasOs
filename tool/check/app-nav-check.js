@@ -24,7 +24,8 @@ const spec = JSON.parse(fs.readFileSync(path.join(root, 'contracts', 'apps.json'
 const SHELL_OF = {
   photo: 'apps/colanas_os/lib/features/photo/photo_shell.dart',
   video: 'apps/colanas_os/lib/features/video/video_shell.dart',
-  music: 'apps/colanas_os/lib/features/music/music_shell.dart',
+  // 兼容适配实现是当前生效的壳（旧 `music_shell.dart` 保留做回退）
+  music: 'apps/colanas_os/lib/features/music/shell/music_shell_view.dart',
   blog: 'apps/colanas_os/lib/features/blog/blog_shell.dart',
   discover: 'apps/colanas_os/lib/features/discover/discover_shell.dart',
   // 同步没有单独的 shell 文件：菜单与内容都在 sync_page.dart 里

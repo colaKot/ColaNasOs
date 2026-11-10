@@ -445,7 +445,7 @@ Map<String, String> get _imageHeaders {
               // 背景：同一张图 cover + 模糊，填满卡片（contain 两侧会留白）
               Positioned.fill(
                 child: ImageFiltered(
-                  imageFilter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  imageFilter: ui.ImageFilter.blur(sigmaX: 26, sigmaY: 26),
                   child: NasCoverImage(
                     url: _thumb(path, size: 240),
                     headers: _imageHeaders,
@@ -457,7 +457,7 @@ Map<String, String> get _imageHeaders {
               // 用户看到的就是「只看到一小部分」（2026-11-04）。
               Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(2),
                   child: NasCoverImage(
                     url: _thumb(path, size: 720),
                     headers: _imageHeaders,

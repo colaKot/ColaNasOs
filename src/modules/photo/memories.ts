@@ -48,7 +48,15 @@ const DayFramesQuery = Type.Object(
 );
 
 const PickRef = Type.Object(
-  { id: Type.String(), path: Type.String(), takenAt: Type.Integer() },
+  {
+    id: Type.String(),
+    path: Type.String(),
+    takenAt: Type.Integer(),
+    // 书页大图靠它区分图片/视频，不再靠扩展名猜
+    mediaKind: Type.Optional(Type.String()),
+    durationMs: Type.Optional(Type.Integer()),
+    liveKind: Type.Optional(Type.String()),
+  },
   { $id: 'PhotoMemoryPick' },
 );
 
@@ -243,6 +251,9 @@ interface PhotoRow {
   /** 封面挑图要用：横屏优先，缺这两个字段就无法判断 */
   width: number | null;
   height: number | null;
+  media_kind: string | null;
+  duration_ms: number | null;
+  live_kind: string | null;
 }
 
 function pad2(v: number): string {
@@ -364,7 +375,8 @@ async function photosBetween(
 ): Promise<PhotoRow[]> {
   return (
     await sql<PhotoRow>`
-      select id, rel_path, taken_at, geohash5, latitude, longitude, camera, width, height
+      select id, rel_path, taken_at, geohash5, latitude, longitude, camera, width, height,
+             media_kind, duration_ms, live_kind
         from photo_items
        where in_trash = 0 and taken_at >= ${from} and taken_at < ${to}
          and (${uid} = '' or library_id in (select id from photo_libraries where owner_id = ${uid}))
@@ -502,6 +514,9 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
           id: s.row.id,
           path: s.row.rel_path,
           takenAt: Number(s.row.taken_at),
+          mediaKind: String(s.row.media_kind || 'image'),
+          durationMs: Number(s.row.duration_ms) || 0,
+          liveKind: String(s.row.live_kind || ''),
         }));
 
         // 地点：按当天出现最多的 geohash5 取最近地名（最多试 4 个格）
@@ -550,7 +565,14 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
         days.push({
           date: day,
           photoCount: list.length,
-          cover: { id: cover.id, path: cover.rel_path, takenAt: Number(cover.taken_at) },
+          cover: {
+            id: cover.id,
+            path: cover.rel_path,
+            takenAt: Number(cover.taken_at),
+            mediaKind: String(cover.media_kind || 'image'),
+            durationMs: Number(cover.duration_ms) || 0,
+            liveKind: String(cover.live_kind || ''),
+          },
           coverScore: coverOf(cover.id),
           picks,
           place,
@@ -947,10 +969,11 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
     }),
     async (req: FastifyRequest) => {
       const uid = String(req.user?.sub || '');
-      const q = (req.query || {}) as { days?: number; minPhotos?: number; limit?: number; locale?: string };
+      const q = (req.query || {}) as { days?: number; minPhotos?: number; limit?: number; offset?: number; locale?: string };
       const days = Math.max(1, Math.min(Number(q.days) || 3650, 3650));
       const minPhotos = Math.max(1, Math.min(Number(q.minPhotos) || 12, 100));
       const limit = Math.max(1, Math.min(Number(q.limit) || 40, 100));
+      const offset = Math.max(0, Number(q.offset) || 0);
       const now = Math.floor(Date.now() / 1000);
       const rows = await photosBetween(k.db, now - days * 86400, now + 86400, 20000, uid);
       const labels = await labelsOf(
@@ -1043,9 +1066,9 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
       memories.sort(desc);
       ignored.sort(desc);
       return {
-        candidates: candidates.slice(0, limit),
-        memories: memories.slice(0, limit),
-        ignored: ignored.slice(0, limit),
+        candidates: candidates.slice(offset, offset + limit),
+        memories: memories.slice(offset, offset + limit),
+        ignored: ignored.slice(offset, offset + limit),
         chapters,
         totalCandidates: candidates.length,
         totalMemories: memories.length,

@@ -1,13 +1,13 @@
-/// 参考实现 `core/api/cola_api_controller.dart` 的最小等价实现。
+/// 既有实现 `core/api/cola_api_controller.dart` 的最小等价实现。
 ///
-/// 参考项目是「一个 ApiController 管所有 URL / token / P2P」，音乐模块只用到其中
+/// 兼容基线是「一个 ApiController 管所有 URL / token / P2P」，音乐模块只用到其中
 /// 很小一部分：封面地址、原始文件地址、转码地址、token 刷新、几个能力探测开关。
 /// 这里全部映射到本项目的 `ApiSession` + `/api/v1/music/*`。
 library;
 
 import '../../../../core/session.dart';
 
-/// 能力探测开关（参考项目有 P2P / shell 支持等差异，本项目一律「支持」）
+/// 能力探测开关（兼容基线有 P2P / shell 支持等差异，本项目一律「支持」）
 class ApiRuntimeState {
   const ApiRuntimeState();
 

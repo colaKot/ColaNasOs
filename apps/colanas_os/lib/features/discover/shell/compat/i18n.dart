@@ -1,4 +1,4 @@
-// AUTO-GENERATED from 参考实现的 zh_cn.dart；固定中文，暂不接本项目多语。
+// AUTO-GENERATED from 既有实现的 zh_cn.dart；固定中文，暂不接本项目多语。
 const Map<String, String> kCompatZhCN = <String, String>{
   'cancel': "取消",
   'discover_add': "添加",

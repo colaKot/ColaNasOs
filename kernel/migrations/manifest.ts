@@ -169,7 +169,7 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '151_photo_orig_size',
   // 在 NAS 上删过的照片留指纹墓碑，清空回收站后也不再被手机重新上传
   '152_photo_deleted_fp',
-  // 影视发现 1:1 移植：PT 下载闭环 / 收藏三态 / RSS 台账与条目状态
+  // 影视发现 兼容适配：PT 下载闭环 / 收藏三态 / RSS 台账与条目状态
   '153_pt_download_idem',
   '154_discover_favorite_state',
   '155_rss_compat',

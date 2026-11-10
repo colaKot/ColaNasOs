@@ -19,6 +19,6 @@ export async function registerPhotoAi(app: any, k: KernelApi): Promise<void> {
   await registerPhotoFaces(app, k);
   await registerPhotoSemantic(app, k);
   await registerPhotoAiSettings(app, k);
-  // 相册助手 / 模型 API / 热搜：对齐参考实现的 app_ai/ask、model_api/*、search/hot
+  // 相册助手 / 模型 API / 热搜：对齐既有实现的 app_ai/ask、model_api/*、search/hot
   await registerPhotoAssistant(app, k);
 }

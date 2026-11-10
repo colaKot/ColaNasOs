@@ -277,7 +277,7 @@ export const discover: ServerModule = {
     await registerDiscoverApi(app, k);
 
     /**
-     * 影视库源目录（参考实现 的 `/api/video/source/list`）。
+     * 影视库源目录（既有实现 的 `/api/video/source/list`）。
      *
      * 发现页设置里「电影 / 剧集下载目录」下拉要它：`path` 会被存进 pt.download
      * 当 transmission 的 download-dir。参考页按 `media_type` 过滤（movie/tv，mixed 两边都列），

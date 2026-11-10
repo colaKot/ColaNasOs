@@ -9,7 +9,7 @@ import 'music_track_view.dart';
 
 /// 歌单 · 我的歌单：卡片网格 + 新建 / 重命名 / 删除。
 ///
-/// 卡片样式对齐参考实现：封面铺满、底部渐变压一层名字与曲目数，右上角「更多」。
+/// 卡片样式对齐既有实现：封面铺满、底部渐变压一层名字与曲目数，右上角「更多」。
 class MusicPlaylistsPage extends StatefulWidget {
   const MusicPlaylistsPage({super.key, this.embedded = true});
 

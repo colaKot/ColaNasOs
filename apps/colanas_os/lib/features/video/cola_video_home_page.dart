@@ -15,8 +15,8 @@ import 'video_media_viewer_page.dart';
 
 /// 影视首页：**来源 / 推荐 / 继续观看 / 每库最近添加** 四段式。
 ///
-/// 这是与参考实现 `video_home_page` 对齐的关键改动。旧版把一个搜索框加一整面
-/// 无限网格当首页，语义是「查找」；参考实现是「编辑精选」式的浏览页，
+/// 这是与既有实现 `video_home_page` 对齐的关键改动。旧版把一个搜索框加一整面
+/// 无限网格当首页，语义是「查找」；既有实现是「编辑精选」式的浏览页，
 /// 看着完全不像，问题就出在这里 —— 不是样式细节，是信息架构不同。
 class VideoHomePage extends StatefulWidget {
   const VideoHomePage({super.key, this.embedded = false, this.onNavigate});
@@ -38,7 +38,7 @@ class _VideoHomePageState extends State<VideoHomePage> {
   VideoStatsResponse? _stats;
   late final void Function() _unsub;
 
-  /// 手机端底部浮动胶囊：0 = 主页，1..n = 各影视库（参考实现就是这么切库的）
+  /// 手机端底部浮动胶囊：0 = 主页，1..n = 各影视库（既有实现就是这么切库的）
   int _libIndex = 0;
 
   /// 库内容按需建、建完保活（切回主页再切回来不重新拉一页）
@@ -212,7 +212,7 @@ class _VideoHomePageState extends State<VideoHomePage> {
     );
 
     // 桌面端保持原样：库入口就是「来源」卡片，点进整页。
-    // 手机端才用底部浮动胶囊切库（主页 + 各库），与参考实现一致 ——
+    // 手机端才用底部浮动胶囊切库（主页 + 各库），与既有实现一致 ——
     // 手机上「点卡片 → 推整页 → 返回」来回两次，切库成本比桌面高得多。
     if (!isCompactWidth(context) || _libs.isEmpty) return homeBody;
     return _withLibChips(homeBody);
@@ -270,7 +270,7 @@ class _VideoHomePageState extends State<VideoHomePage> {
   Widget _libView(int index) {
     if (index <= 0) return const SizedBox.shrink();
     final lib = _libs[index - 1];
-    // 日本库的入口是**演员网格**（参考实现同款：先进角色列表，右上角再切「影片」），
+    // 日本库的入口是**演员网格**（既有实现同款：先进角色列表，右上角再切「影片」），
     // 不能像普通库那样直接甩一个影片列表 —— 2026-11-04 用户反馈。
     if (lib.libType == 'jp_movie') {
       return VideoJpActorPage(embedded: true, libraryId: lib.id);

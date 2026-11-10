@@ -285,7 +285,7 @@ class _TrackMoreButton extends StatelessWidget {
   }
 }
 
-/// 曲目网格：参考实现是 115px 左右的小格，这里按 168 上限自适应列数。
+/// 曲目网格：既有实现是 115px 左右的小格，这里按 168 上限自适应列数。
 class MusicTrackGridSliver extends StatelessWidget {
   const MusicTrackGridSliver({
     super.key,
@@ -307,7 +307,7 @@ class MusicTrackGridSliver extends StatelessWidget {
       ),
       sliver: SliverLayoutBuilder(
         builder: (context, constraints) {
-          // 参考实现按 115px 小格算列数，行高 = 格子宽 + 封面下方文字的高度。
+          // 既有实现按 115px 小格算列数，行高 = 格子宽 + 封面下方文字的高度。
           // 用 mainAxisExtent（而不是 childAspectRatio）是唯一不会在窄屏溢出的写法：
           // 比例是按格子宽反推高度，行高永远比「封面 + 文字」多出几像素。
           //
@@ -343,7 +343,7 @@ class MusicTrackGridSliver extends StatelessWidget {
   }
 }
 
-/// 曲目行（历史 / 专辑详情 / 歌单详情用），高度与参考实现的 62px 表格行接近。
+/// 曲目行（历史 / 专辑详情 / 歌单详情用），高度与既有实现的 62px 表格行接近。
 class MusicTrackRow extends StatelessWidget {
   const MusicTrackRow({
     super.key,
@@ -584,7 +584,7 @@ class MusicPaneHeader extends StatelessWidget {
   }
 }
 
-/// 搜索防抖（300ms）：参考实现的搜索框是边输入边过滤。
+/// 搜索防抖（300ms）：既有实现的搜索框是边输入边过滤。
 class MusicSearchDebouncer {
   MusicSearchDebouncer(this.onFire);
 

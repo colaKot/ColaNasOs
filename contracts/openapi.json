@@ -6118,6 +6118,10 @@
             "minimum": 1,
             "maximum": 100,
             "type": "integer"
+          },
+          "offset": {
+            "minimum": 0,
+            "type": "integer"
           }
         }
       },
@@ -8468,6 +8472,15 @@
           },
           "takenAt": {
             "type": "integer"
+          },
+          "mediaKind": {
+            "type": "string"
+          },
+          "durationMs": {
+            "type": "integer"
+          },
+          "liveKind": {
+            "type": "string"
           }
         }
       },
@@ -25288,6 +25301,15 @@
             },
             "in": "query",
             "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "offset",
             "required": false
           }
         ],

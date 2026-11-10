@@ -420,7 +420,7 @@ class _FilesPageState extends State<FilesPage> {
         // 手机端：文件页是单页模块，需要自己的 56 顶栏（房子 + 标题）。
         // 桌面由 AppShell 的 NasTopBar 提供标题，这里不再叠一层。
         if (!compact) return content;
-        // 手机端底部三个 tab 与参考实现一致：文件夹 / 收藏 / 最近。
+        // 手机端底部三个 tab 与既有实现一致：文件夹 / 收藏 / 最近。
         // 收藏与最近**只存本机**（见 core/file_shortcuts.dart）
         return NasAppScaffold(
           title: tr('app.files'),

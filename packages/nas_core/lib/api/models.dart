@@ -7670,23 +7670,35 @@ class PhotoMemoryPick {
   final String id;
   final String path;
   final int takenAt;
+  final String? mediaKind;
+  final int? durationMs;
+  final String? liveKind;
 
   const PhotoMemoryPick({
     required this.id,
     required this.path,
     required this.takenAt,
+    this.mediaKind,
+    this.durationMs,
+    this.liveKind,
   });
 
   factory PhotoMemoryPick.fromJson(Map<String, dynamic> json) => PhotoMemoryPick(
         id: json['id'] as String,
         path: json['path'] as String,
         takenAt: json['takenAt'] as int,
+        mediaKind: json['mediaKind'] == null ? null : json['mediaKind'] as String,
+        durationMs: json['durationMs'] == null ? null : json['durationMs'] as int,
+        liveKind: json['liveKind'] == null ? null : json['liveKind'] as String,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'path': path,
         'takenAt': takenAt,
+        if (mediaKind != null) 'mediaKind': mediaKind!,
+        if (durationMs != null) 'durationMs': durationMs!,
+        if (liveKind != null) 'liveKind': liveKind!,
       };
 }
 

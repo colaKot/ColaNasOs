@@ -9,7 +9,7 @@ import 'sync_scheduler.dart';
 
 /// 创建 / 编辑同步任务：设备确认 → 规则（名称/模式/按需/高级）→ 路径。
 ///
-/// 与参考实现同顺序；「按需同步 / 冲突策略 / 删除传播」先以禁用态展示，
+/// 与既有实现同顺序；「按需同步 / 冲突策略 / 删除传播」先以禁用态展示，
 /// 待服务端 S-C 落地后打开（避免做成假开关）。
 class SyncCreateWizard extends StatefulWidget {
   const SyncCreateWizard({

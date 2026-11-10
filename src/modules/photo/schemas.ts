@@ -488,6 +488,8 @@ export const MemoryQuery = Type.Object(
     days: Type.Optional(Type.Integer({ minimum: 1, maximum: 3650 })),
     minPhotos: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+    // 记忆列表真分页：三个数组各自按 offset/limit 切片，total* 仍是截断前总数
+    offset: Type.Optional(Type.Integer({ minimum: 0 })),
   },
   { $id: 'PhotoMemoryQuery' },
 );

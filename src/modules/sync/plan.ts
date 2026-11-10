@@ -16,7 +16,7 @@ export const MTIME_TOLERANCE_MS = 2000;
 
 export type SyncMode = 'bidirectional' | 'download_only' | 'upload_only';
 
-/** 冲突策略：manual 为保守默认（不猜），与参考实现的三选一并存 */
+/** 冲突策略：manual 为保守默认（不猜），与既有实现的三选一并存 */
 export type ConflictStrategy = 'prefer_newer' | 'prefer_local' | 'prefer_remote' | 'manual';
 
 export interface SyncOptions {

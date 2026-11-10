@@ -6,7 +6,7 @@ import '../../core/session.dart';
 
 /// 相册助手：单轮问答。
 ///
-/// 对齐参考实现的「相册助手」浮层：四个预设问题 + 自由输入，服务端把只读库统计
+/// 对齐既有实现的「相册助手」浮层：四个预设问题 + 自由输入，服务端把只读库统计
 /// 塞进 system prompt。没配模型（或模型调不通）时自动退回本地统计规则，
 /// 页面会如实标明当前回答来自哪条路径，不装作有 AI。
 class PhotoAssistantPage extends StatefulWidget {

@@ -1556,11 +1556,12 @@ class ApiClient {
   }
 
   /// 记忆：候选 / 已确认 / 已忽略 + 年度章节
-  Future<PhotoMemoryList> photoMemories({int? days, int? minPhotos, int? limit}) async {
+  Future<PhotoMemoryList> photoMemories({int? days, int? minPhotos, int? limit, int? offset}) async {
     final query = <String, String>{
       if (days != null) 'days': '$days',
       if (minPhotos != null) 'minPhotos': '$minPhotos',
       if (limit != null) 'limit': '$limit',
+      if (offset != null) 'offset': '$offset',
     };
     final res = await transport.send('GET', _uri('/api/v1/photo/memories', query), headers: await _headers());
     return PhotoMemoryList.fromJson(_asMap(_decode(res)));

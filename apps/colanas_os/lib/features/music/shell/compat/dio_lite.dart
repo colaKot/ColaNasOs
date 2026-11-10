@@ -247,7 +247,7 @@ class Dio {
 }
 
 /// 自签证书放行的 HttpClient（NAS 多为 https + 自签）。
-/// 参考项目用 dio 的 badCertificateCallback，这里等价。
+/// 兼容基线用 dio 的 badCertificateCallback，这里等价。
 Dio createDioWithBadCertificateCompat() {
   final client = HttpClient()
     ..connectionTimeout = const Duration(seconds: 30)

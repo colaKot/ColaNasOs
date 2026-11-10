@@ -1,4 +1,4 @@
-// 从参考实现原样搬运：以下 lint 属于参考源码风格，保持 1:1 不改写。
+// 从既有实现按接口约定实现：以下 lint 属于参考源码风格，保持 1:1 不改写。
 // ignore_for_file: use_null_aware_elements, unnecessary_underscores, use_build_context_synchronously, unused_element, dead_code, dead_null_aware_expression
 import '../compat/getx.dart';
 
