@@ -154,6 +154,10 @@ class I18nKeys {
   static const transmissionRemoveConfirm = 'transmission.removeConfirm';
   static const transmissionRemoveFiles = 'transmission.removeFiles';
   static const transmissionErrDuplicate = 'transmission.errDuplicate';
+  static const transmissionNoDaemon = 'transmission.noDaemon';
+  static const transmissionDeleting = 'transmission.deleting';
+  static const transmissionDeletingHint = 'transmission.deletingHint';
+  static const transmissionActionTimeout = 'transmission.actionTimeout';
   static const transmissionActionFailed = 'transmission.actionFailed';
   // ---- ui ----
   static const uiBook020 = 'ui.book.020';
@@ -2655,4 +2659,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2613;
+const int i18nKeyCount = 2617;

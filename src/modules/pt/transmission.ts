@@ -137,11 +137,14 @@ export async function torrentAction(
   // 一次 RPC 带多个 ids：批量操作不必逐个往返。
   const args: Record<string, unknown> = { ids };
   if (action === 'remove') args['delete-local-data'] = opts.deleteLocalData === true;
+  // 删除带 delete-local-data 时 daemon 要真的删文件，几十 GB 的资源 10s 默认超时
+  // 会直接 abort（前端只看到 "This operation was aborted" 的 400）。这里给足时间。
+  const timeoutMs = opts.timeoutMs ?? (action === 'remove' ? 180_000 : 10_000);
   try {
     const payload = { method, arguments: args };
-    let res = await rpc(cfg, payload, opts);
+    let res = await rpc(cfg, payload, { ...opts, timeoutMs });
     if (res.status === 409 && res.sessionId) {
-      res = await rpc(cfg, payload, { ...opts, sessionId: res.sessionId });
+      res = await rpc(cfg, payload, { ...opts, timeoutMs, sessionId: res.sessionId });
     }
     if (res.status !== 200) {
       return { ok: false, message: `transmission http ${res.status}` };

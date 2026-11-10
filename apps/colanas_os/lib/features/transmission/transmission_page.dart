@@ -150,11 +150,15 @@ class _TransmissionPageState extends State<TransmissionPage> {
               shrinkWrap: true,
               children: [
                 NasEmptyState(
-                  title: tr('transmission.empty'),
+                  // 区分「下载器正常但没任务」和「下载器根本连不上」：
+                  // 后者再显示「暂无下载任务」会让人以为只是空列表。
+                  title: _ready
+                      ? tr('transmission.empty')
+                      : tr('transmission.noDaemon'),
                   message: _ready
                       ? tr('transmission.emptyHint')
                       : (_hint.isEmpty ? tr('transmission.emptyHint') : _hint),
-                  icon: Icons.download_outlined,
+                  icon: _ready ? Icons.download_outlined : Icons.error_outline,
                 ),
               ],
             ),
@@ -267,6 +271,29 @@ class _TransmissionPageState extends State<TransmissionPage> {
     bool deleteLocalData = false,
   }) async {
     if (hashes.isEmpty) return;
+
+    // 删除（尤其勾了删源文件）可能要几十秒：先弹一个不可关闭的小进度框，
+    // 删完自动关掉并刷新列表。暂停/开始是毫秒级，不弹。
+    final showProgress = action == 'remove';
+    BuildContext? dialogCtx;
+    if (showProgress) {
+      unawaited(showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          dialogCtx = ctx;
+          return const _RemoveProgressDialog();
+        },
+      ));
+      // 让 dialog 先 build 出来，避免请求瞬间完成时 pop 错页面
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+    }
+    void closeProgress() {
+      final ctx = dialogCtx;
+      if (ctx != null && ctx.mounted) Navigator.of(ctx).pop();
+      dialogCtx = null;
+    }
+
     try {
       final res = await ApiSession.instance.client.ptTorrentAction(
         body: {
@@ -278,14 +305,25 @@ class _TransmissionPageState extends State<TransmissionPage> {
       if (res['ok'] != true) {
         throw StateError((res['message'] ?? '').toString());
       }
-      if (!mounted) return;
+      if (!mounted) {
+        closeProgress();
+        return;
+      }
       setState(_selected.clear);
+      closeProgress();
       await _load(silent: true);
     } catch (e) {
+      closeProgress();
       if (!mounted) return;
+      final raw = e.toString();
+      final friendly = raw.contains('aborted') || raw.contains('timeout')
+          ? tr('transmission.actionTimeout')
+          : raw;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${tr('transmission.actionFailed')}: $e')),
+        SnackBar(content: Text('${tr('transmission.actionFailed')}: $friendly')),
       );
+      // 超时的情况下任务可能其实已经删掉了，刷新一次以真实状态为准
+      await _load(silent: true);
     }
   }
 
@@ -586,5 +624,39 @@ class _TransmissionPageState extends State<TransmissionPage> {
   static String _speed(int bytesPerSec) {
     if (bytesPerSec <= 0) return '0 B/s';
     return '${_size(bytesPerSec)}/s';
+  }
+}
+
+/// 删除种子时的不可关闭进度框：Transmission 不返回删除进度，用不确定进度条，
+/// 删完由调用方 pop。
+class _RemoveProgressDialog extends StatelessWidget {
+  const _RemoveProgressDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        title: Text(tr('transmission.deleting')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              tr('transmission.deletingHint'),
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: context.nasTextSecondary,
+              ),
+            ),
+            const SizedBox(height: NasTokens.spaceMd),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: const LinearProgressIndicator(minHeight: 6),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
