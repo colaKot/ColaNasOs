@@ -17,6 +17,7 @@ build/
 # 第三方二进制/数据（从各自上游引入，不入库）：
 #   ffmpeg、ONNX 模型、GeoNames 地名库（CC-BY 4.0，需随包分发时单独签名）
 vendor/ffmpeg/
+vendor/transmission-win/
 vendor/models/
 # 语音合成推理二进制（llama-tts，按平台分目录；用 npm run tts:model 下载）
 vendor/llama/
@@ -54,6 +55,9 @@ docs/audio/
 .screenshots/
 .tmp-chrome-profile/
 .tmp/
+# 一次性验证脚本（真库副本 / 临时探针），留在磁盘但不入库；
+# 未跟踪文件会让 verify:fast 的选步误判成改动、退成全量
+tool/tmp/
 .merkle-snapshot.json
 vr9.txt
 # 带水印的原始图标导出，不入库（去水印版在 resources/）

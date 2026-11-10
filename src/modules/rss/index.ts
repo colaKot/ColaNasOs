@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Type } from '@sinclair/typebox';
 import { sql } from 'kysely';
 import { secured } from '../../../kernel/route';
+import { addTorrent, type TransmissionConfig } from '../pt/transmission';
 import type { ServerModule } from '../../../kernel/types';
 import { Err } from '../../../kernel/errors';
 
@@ -32,6 +33,10 @@ const AddBody = Type.Object({
   url: Type.Optional(Type.String({ maxLength: 2048 })),
   xml: Type.Optional(Type.String({ maxLength: MAX_XML })),
   title: Type.Optional(Type.String({ maxLength: 200 })),
+  /** 下载目录（服务端相对路径，空 = 用「下载设置」里的默认目录） */
+  savePath: Type.Optional(Type.String({ maxLength: 512 })),
+  /** true = 命中就开下；false = 只加种、任务保持暂停 */
+  immediate: Type.Optional(Type.Boolean()),
 });
 
 const FeedItem = Type.Object({
@@ -40,7 +45,29 @@ const FeedItem = Type.Object({
   title: Type.String(),
   lastFetch: Type.Union([Type.Integer(), Type.Null()]),
   createdAt: Type.Integer(),
+  autoDownload: Type.Boolean(),
+  /** 参考页卡片标题用 name（没有就用 title） */
+  name: Type.String(),
+  /** 打码地址（只露域名 + 前几位），参考页副标题显示这个 */
+  urlMasked: Type.String(),
+  /** 最近一次抓取是否成功（lastFetch 有值即视为 ok） */
+  lastFetchStatus: Type.String(),
+  /** 该源的下载目录（空 = 默认目录） */
+  savePath: Type.String(),
+  /** true = 立即下载；false = 只加种、暂停 */
+  immediate: Type.Boolean(),
 });
+
+/** `https://a.b.com/path?token=xxx` → `a.b.com/path?••••`：别把私有 RSS token 打到界面上 */
+function maskUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    const path = u.pathname.length > 24 ? `${u.pathname.slice(0, 24)}…` : u.pathname;
+    return `${u.host}${path}${u.search ? '?••••' : ''}`;
+  } catch {
+    return raw.length > 40 ? `${raw.slice(0, 40)}…` : raw;
+  }
+}
 
 const FeedListResponse = Type.Object({ items: Type.Array(FeedItem) });
 
@@ -64,6 +91,7 @@ const RssEntry = Type.Object({
   link: Type.String(),
   published: Type.Union([Type.Integer(), Type.Null()]),
   summary: Type.String(),
+  state: Type.String(),
 });
 
 const ItemsResponse = Type.Object({ items: Type.Array(RssEntry), total: Type.Integer() });
@@ -91,6 +119,40 @@ const RuleRunResponse = Type.Object({
 
 const IdBody = Type.Object({ id: Type.String({ minLength: 1 }) });
 const OkResponse = Type.Object({ ok: Type.Boolean() });
+
+// ---- 参考实现 影视发现 1:1 兼容：条目状态 / 下载台账 / feed 自动下载
+const EntryActionBody = Type.Object({
+  id: Type.String({ minLength: 1 }),
+  action: Type.Union([Type.Literal('confirm'), Type.Literal('reject')]),
+});
+const EntryActionResponse = Type.Object({
+  ok: Type.Boolean(),
+  state: Type.String(),
+  autoSubmitted: Type.Boolean(),
+});
+
+const DownloadedQuery = Type.Object({
+  keyword: Type.Optional(Type.String()),
+  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 2000 })),
+});
+const DownloadedItem = Type.Object({
+  id: Type.String(),
+  feedId: Type.String(),
+  guid: Type.String(),
+  infoHash: Type.String(),
+  title: Type.String(),
+  sizeBytes: Type.Integer(),
+  enclosureUrl: Type.String(),
+  downloadTaskId: Type.String(),
+  createTime: Type.Integer(),
+});
+const DownloadedListResponse = Type.Object({ items: Type.Array(DownloadedItem) });
+const DownloadedDeleteResponse = Type.Object({ ok: Type.Boolean(), deleted: Type.Boolean() });
+const DownloadedClearResponse = Type.Object({ ok: Type.Boolean(), deleted: Type.Integer() });
+const FeedAutoDownloadBody = Type.Object({
+  id: Type.String({ minLength: 1 }),
+  enabled: Type.Boolean(),
+});
 
 interface ParsedItem {
   guid: string;
@@ -230,6 +292,71 @@ export const rss: ServerModule = {
         `.execute(db);
       },
     },
+    {
+      id: '155_rss_compat',
+      async up(db) {
+        // 逐列守卫补列：SQLite 的 add column 允许「带 default 的 not null」
+        const itemCols = await sql<{ name: string }>`pragma table_info(rss_items)`.execute(db);
+        const hasItem = (name: string) => itemCols.rows.some((c) => c.name === name);
+        if (!hasItem('state')) {
+          await sql`alter table rss_items add column state text not null default 'Pending'`.execute(db);
+        }
+        if (!hasItem('size_bytes')) {
+          await sql`alter table rss_items add column size_bytes integer`.execute(db);
+        }
+        if (!hasItem('info_hash')) {
+          await sql`alter table rss_items add column info_hash text`.execute(db);
+        }
+        if (!hasItem('enclosure_url')) {
+          await sql`alter table rss_items add column enclosure_url text`.execute(db);
+        }
+        if (!hasItem('state_updated_at')) {
+          await sql`alter table rss_items add column state_updated_at integer`.execute(db);
+        }
+
+        const feedCols = await sql<{ name: string }>`pragma table_info(rss_feeds)`.execute(db);
+        if (!feedCols.rows.some((c) => c.name === 'auto_download')) {
+          await sql`alter table rss_feeds add column auto_download integer not null default 0`.execute(db);
+        }
+
+        await sql`
+          create table if not exists rss_downloaded (
+            id text primary key,
+            uid text not null default '',
+            feed_id text,
+            guid text,
+            info_hash text,
+            title text,
+            size_bytes integer,
+            enclosure_url text,
+            download_task_id text,
+            created_at integer not null
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_rss_downloaded_uid_created on rss_downloaded (uid, created_at desc)
+        `.execute(db);
+        await sql`
+          create index if not exists idx_rss_downloaded_guid on rss_downloaded (guid)
+        `.execute(db);
+      },
+    },
+    {
+      // 每个 RSS 源自己的下载目标：目录 + 是否立即开始。
+      // 之前 feed 级只有 auto_download 开关，下载目录全靠全局设置，
+      // 「这个源下到剧集目录、那个源下到电影目录」做不到（2026-11-10 反馈）。
+      id: '172_rss_feed_download_target',
+      async up(db) {
+        const cols = await sql<{ name: string }>`pragma table_info(rss_feeds)`.execute(db);
+        const has = (name: string) => cols.rows.some((c) => c.name === name);
+        if (!has('save_path')) {
+          await sql`alter table rss_feeds add column save_path text`.execute(db);
+        }
+        if (!has('paused_default')) {
+          await sql`alter table rss_feeds add column paused_default integer not null default 0`.execute(db);
+        }
+      },
+    },
   ],
 
   async register(app, k) {
@@ -257,6 +384,23 @@ export const rss: ServerModule = {
         added += 1;
       }
       return { added, skipped };
+    };
+
+    /**
+     * 按该源自己的设置加种：目录用 feed.save_path，paused 用 feed.paused_default。
+     * 返回 hash（成功才写 rss_downloaded），失败返回 ''。
+     */
+    const submitFeedTorrent = async (
+      feed: { save_path?: string | null; paused_default?: number | null },
+      enclosureUrl: string,
+    ): Promise<{ hash: string; message: string }> => {
+      const cfg = (k.config.get('pt.transmission') || null) as TransmissionConfig | null;
+      if (!cfg?.url) return { hash: '', message: 'transmission 未配置' };
+      const res = await addTorrent(cfg, enclosureUrl, {
+        downloadDir: String(feed.save_path || '').trim() || undefined,
+        paused: Number(feed.paused_default || 0) === 1,
+      });
+      return { hash: res.ok ? String(res.hash || '') : '', message: res.message };
     };
 
     app.post(
@@ -295,15 +439,31 @@ export const rss: ServerModule = {
         }
 
         const id = crypto.randomBytes(8).toString('base64url');
+        const savePath = String((body as { savePath?: string }).savePath || '').trim();
+        const pausedDefault = (body as { immediate?: boolean }).immediate === false ? 1 : 0;
         await sql`
-          insert into rss_feeds (id, url, title, last_fetch, created_at)
-          values (${id}, ${body.url || ''}, ${title}, ${null}, ${now()})
+          insert into rss_feeds (id, url, title, last_fetch, created_at, save_path, paused_default)
+          values (${id}, ${body.url || ''}, ${title}, ${null}, ${now()},
+                  ${savePath || null}, ${pausedDefault})
         `.execute(k.db);
 
         // 内联 xml 的订阅没有 url 可供后续抓取，因此添加时就把条目落库
         if (parsedXml) await insertItems(id, parsedXml.items);
 
-        return { id, url: body.url || '', title, lastFetch: null, createdAt: now() };
+        // 复用 FeedItem schema：**所有必填字段都要给**（少一个就 500，P3 栽过）
+        return {
+          id,
+          url: body.url || '',
+          title,
+          name: String(title || body.url || ''),
+          urlMasked: maskUrl(String(body.url || '')),
+          lastFetchStatus: '',
+          lastFetch: null,
+          createdAt: now(),
+          autoDownload: false,
+          savePath,
+          immediate: pausedDefault === 0,
+        };
       },
     );
 
@@ -318,7 +478,18 @@ export const rss: ServerModule = {
         },
       }),
       async () => {
-        const res = await sql<{ id: string; url: string; title: string; last_fetch: number | null; created_at: number }>`
+        const res = await sql<
+          {
+            id: string;
+            url: string;
+            title: string;
+            last_fetch: number | null;
+            created_at: number;
+            auto_download?: number | null;
+            save_path?: string | null;
+            paused_default?: number | null;
+          }
+        >`
           select * from rss_feeds order by created_at desc
         `.execute(k.db);
         return {
@@ -326,8 +497,14 @@ export const rss: ServerModule = {
             id: r.id,
             url: r.url,
             title: r.title,
+            name: String(r.title || r.url || ''),
+            urlMasked: maskUrl(String(r.url || '')),
+            lastFetchStatus: r.last_fetch ? 'ok' : '',
             lastFetch: r.last_fetch,
             createdAt: r.created_at,
+            autoDownload: Number(r.auto_download || 0) === 1,
+            savePath: String(r.save_path || ''),
+            immediate: Number(r.paused_default || 0) === 0,
           })),
         };
       },
@@ -347,8 +524,8 @@ export const rss: ServerModule = {
       async (req, reply) => {
         const body = (req.body || {}) as { id?: string; url?: string; xml?: string };
         const rows = body.id
-          ? (await sql<{ id: string; url: string }>`select id, url from rss_feeds where id = ${body.id}`.execute(k.db)).rows
-          : (await sql<{ id: string; url: string }>`select id, url from rss_feeds`.execute(k.db)).rows;
+          ? (await sql<any>`select * from rss_feeds where id = ${body.id}`.execute(k.db)).rows
+          : (await sql<any>`select * from rss_feeds`.execute(k.db)).rows;
 
         if (body.id && rows.length === 0) {
           return reply.code(404).send({ error: Err.notFound, message: 'feed not found' });
@@ -391,6 +568,44 @@ export const rss: ServerModule = {
           skipped += r.skipped;
           fed += 1;
           await sql`update rss_feeds set last_fetch = ${now()} where id = ${feed.id}`.execute(k.db);
+
+          // 该源开了「自动下载」：把还没处理过、带种子地址的新条目直接加种。
+          // 目录与该源自己的「立即下载」设置一致（不加 paused 就是只挂种子）。
+          if (Number(feed.auto_download || 0) === 1) {
+            const uid = String(req.user?.sub || '');
+            const pending = (
+              await sql<any>`
+                select i.guid, i.title, i.size_bytes, i.info_hash, i.enclosure_url
+                  from rss_items i
+                 where i.feed_id = ${feed.id}
+                   and coalesce(i.enclosure_url, '') <> ''
+                   and coalesce(i.state, 'Pending') = 'Pending'
+                   and not exists (
+                     select 1 from rss_downloaded d
+                      where d.uid = ${uid} and d.feed_id = i.feed_id and d.guid = i.guid
+                   )
+                 order by i.published desc
+                 limit 10
+              `.execute(k.db)
+            ).rows;
+            for (const it of pending) {
+              const sent = await submitFeedTorrent(feed, String(it.enclosure_url));
+              if (!sent.hash) continue;
+              await sql`
+                insert into rss_downloaded
+                  (id, uid, feed_id, guid, info_hash, title, size_bytes,
+                   enclosure_url, download_task_id, created_at)
+                values (${crypto.randomBytes(8).toString('base64url')}, ${uid},
+                        ${feed.id}, ${it.guid}, ${it.info_hash ?? sent.hash},
+                        ${it.title ?? null}, ${it.size_bytes ?? null},
+                        ${it.enclosure_url}, ${sent.hash}, ${now()})
+              `.execute(k.db);
+              await sql`
+                update rss_items set state = 'Confirmed', state_updated_at = ${now()}
+                 where feed_id = ${feed.id} and guid = ${it.guid}
+              `.execute(k.db);
+            }
+          }
         }
 
         if (fed === 0) {
@@ -412,25 +627,30 @@ export const rss: ServerModule = {
           summary: '条目列表（发布时间倒序）',
           querystring: Type.Object({
             feedId: Type.Optional(Type.String()),
+            state: Type.Optional(Type.String()),
             limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 })),
           }),
           response: { 200: ItemsResponse },
         },
       }),
       async (req) => {
-        const q = (req.query || {}) as { feedId?: string; limit?: number };
+        const q = (req.query || {}) as { feedId?: string; state?: string; limit?: number };
         const limit = Math.min(Math.max(q.limit ?? 50, 1), 500);
-        const base = `
-          select i.guid, i.feed_id, f.title as feed_title, i.title, i.link, i.published, i.summary
+        const feedId = q.feedId ?? null;
+        const state = q.state ?? null;
+        const res = await sql<Record<string, string | number | null>>`
+          select i.guid, i.feed_id, f.title as feed_title, i.title, i.link, i.published, i.summary, i.state
           from rss_items i join rss_feeds f on f.id = i.feed_id
-        `;
-        const res = q.feedId
-          ? await sql<Record<string, string | number | null>>`${sql.raw(base)} where i.feed_id = ${q.feedId} order by i.published desc, i.title limit ${limit}`.execute(k.db)
-          : await sql<Record<string, string | number | null>>`${sql.raw(base)} order by i.published desc, i.title limit ${limit}`.execute(k.db);
+          where (${feedId} is null or i.feed_id = ${feedId})
+            and (${state} is null or i.state = ${state})
+          order by i.published desc, i.title limit ${limit}
+        `.execute(k.db);
 
-        const count = q.feedId
-          ? await sql<{ n: number }>`select count(*) as n from rss_items where feed_id = ${q.feedId}`.execute(k.db)
-          : await sql<{ n: number }>`select count(*) as n from rss_items`.execute(k.db);
+        const count = await sql<{ n: number }>`
+          select count(*) as n from rss_items
+          where (${feedId} is null or feed_id = ${feedId})
+            and (${state} is null or state = ${state})
+        `.execute(k.db);
 
         return {
           items: res.rows.map((r) => ({
@@ -441,6 +661,7 @@ export const rss: ServerModule = {
             link: String(r.link ?? ''),
             published: r.published === null ? null : Number(r.published),
             summary: String(r.summary ?? ''),
+            state: String(r.state ?? 'Pending'),
           })),
           total: count.rows[0]?.n ?? 0,
         };
@@ -463,6 +684,188 @@ export const rss: ServerModule = {
         if (!body.id) return reply.code(400).send({ error: Err.badRequest, message: 'id required' });
         await sql`delete from rss_items where feed_id = ${body.id}`.execute(k.db);
         await sql`delete from rss_feeds where id = ${body.id}`.execute(k.db);
+        return { ok: true };
+      },
+    );
+
+    // ------------------------------------------------ 参考实现 影视发现兼容
+    app.post(
+      '/api/v1/rss/entries/action',
+      secured('rss:write', {
+        schema: {
+          operationId: 'rssEntryAction',
+          tags: TAG,
+          summary: '确认 / 拒绝 RSS 条目（兼容 guid 或 feedId:guid）',
+          body: EntryActionBody,
+          response: { 200: EntryActionResponse },
+        },
+      }),
+      async (req) => {
+        const uid = String(req.user?.sub || '');
+        const b = (req.body || {}) as { id?: string; action?: 'confirm' | 'reject' };
+        const id = b.id || '';
+        const state = b.action === 'reject' ? 'Rejected' : 'Confirmed';
+
+        // rss_items 主键是 (feed_id, guid)，没有单列 id，也没法按 uid 过滤：
+        // 优先把整个 id 当 guid 全表查，未命中再按 feedId:guid 拆复合键
+        let rows = (
+          await sql<any>`select * from rss_items where guid = ${id}`.execute(k.db)
+        ).rows;
+        if (rows.length === 0) {
+          const sep = id.indexOf(':');
+          if (sep > 0) {
+            rows = (
+              await sql<any>`
+                select * from rss_items
+                 where feed_id = ${id.slice(0, sep)} and guid = ${id.slice(sep + 1)}
+              `.execute(k.db)
+            ).rows;
+          }
+        }
+
+        for (const row of rows) {
+          await sql`
+            update rss_items set state = ${state}, state_updated_at = ${now()}
+             where feed_id = ${row.feed_id} and guid = ${row.guid}
+          `.execute(k.db);
+        }
+
+        let autoSubmitted = false;
+        if (b.action === 'confirm') {
+          for (const row of rows) {
+            const feed = (
+              await sql<any>`select * from rss_feeds where id = ${row.feed_id}`.execute(k.db)
+            ).rows[0];
+            // 幂等：同 (uid, feed_id, guid) 已存在就不重复插
+            const dup = await sql`
+              select 1 from rss_downloaded
+               where uid = ${uid} and feed_id = ${row.feed_id} and guid = ${row.guid}
+            `.execute(k.db);
+            if (dup.rows.length > 0) continue;
+            // 真加种：目录/是否暂停都按这个源自己的设置（以前只写留痕、什么都没下）
+            let hash = '';
+            if (row.enclosure_url) {
+              const r = await submitFeedTorrent(feed ?? {}, String(row.enclosure_url));
+              hash = r.hash;
+            }
+            await sql`
+              insert into rss_downloaded
+                (id, uid, feed_id, guid, info_hash, title, size_bytes,
+                 enclosure_url, download_task_id, created_at)
+              values (${crypto.randomBytes(8).toString('base64url')}, ${uid},
+                      ${row.feed_id}, ${row.guid}, ${row.info_hash ?? hash ?? null},
+                      ${row.title ?? null}, ${row.size_bytes ?? null},
+                      ${row.enclosure_url ?? null}, ${hash || null}, ${now()})
+            `.execute(k.db);
+            autoSubmitted = true;
+          }
+        }
+
+        return { ok: true, state, autoSubmitted };
+      },
+    );
+
+    app.get(
+      '/api/v1/rss/downloaded',
+      secured('rss:read', {
+        schema: {
+          operationId: 'rssDownloadedList',
+          tags: TAG,
+          summary: '永久下载台账（按账号隔离）',
+          querystring: DownloadedQuery,
+          response: { 200: DownloadedListResponse },
+        },
+      }),
+      async (req) => {
+        const uid = String(req.user?.sub || '');
+        const q = (req.query || {}) as { keyword?: string; limit?: number };
+        const limit = Math.min(Math.max(q.limit ?? 200, 1), 2000);
+        const kw = q.keyword ? `%${q.keyword}%` : null;
+        const rows = (
+          kw
+            ? await sql<any>`
+                select * from rss_downloaded
+                 where uid = ${uid}
+                   and (title like ${kw} or guid like ${kw} or info_hash like ${kw})
+                 order by created_at desc limit ${limit}
+              `.execute(k.db)
+            : await sql<any>`
+                select * from rss_downloaded
+                 where uid = ${uid}
+                 order by created_at desc limit ${limit}
+              `.execute(k.db)
+        ).rows;
+        return {
+          items: rows.map((r) => ({
+            id: String(r.id),
+            feedId: String(r.feed_id ?? ''),
+            guid: String(r.guid ?? ''),
+            infoHash: String(r.info_hash ?? ''),
+            title: String(r.title ?? ''),
+            sizeBytes: Number(r.size_bytes ?? 0),
+            enclosureUrl: String(r.enclosure_url ?? ''),
+            downloadTaskId: String(r.download_task_id ?? ''),
+            createTime: Number(r.created_at),
+          })),
+        };
+      },
+    );
+
+    app.post(
+      '/api/v1/rss/downloaded/delete',
+      secured('rss:write', {
+        schema: {
+          operationId: 'rssDownloadedDelete',
+          tags: TAG,
+          summary: '删除一条下载台账',
+          body: IdBody,
+          response: { 200: DownloadedDeleteResponse },
+        },
+      }),
+      async (req) => {
+        const uid = String(req.user?.sub || '');
+        const b = (req.body || {}) as { id?: string };
+        const res = await sql`
+          delete from rss_downloaded where id = ${b.id || ''} and uid = ${uid}
+        `.execute(k.db);
+        return { ok: true, deleted: Number(res.numAffectedRows ?? 0) > 0 };
+      },
+    );
+
+    app.post(
+      '/api/v1/rss/downloaded/clear',
+      secured('rss:write', {
+        schema: {
+          operationId: 'rssDownloadedClear',
+          tags: TAG,
+          summary: '清空当前账号的下载台账',
+          response: { 200: DownloadedClearResponse },
+        },
+      }),
+      async (req) => {
+        const uid = String(req.user?.sub || '');
+        const res = await sql`delete from rss_downloaded where uid = ${uid}`.execute(k.db);
+        return { ok: true, deleted: Number(res.numAffectedRows ?? 0) };
+      },
+    );
+
+    app.post(
+      '/api/v1/rss/feeds/auto-download',
+      secured('rss:write', {
+        schema: {
+          operationId: 'rssFeedAutoDownload',
+          tags: TAG,
+          summary: '设置 feed 级自动下载开关',
+          body: FeedAutoDownloadBody,
+          response: { 200: OkResponse },
+        },
+      }),
+      async (req) => {
+        const b = (req.body || {}) as { id?: string; enabled?: boolean };
+        await sql`
+          update rss_feeds set auto_download = ${b.enabled === true ? 1 : 0}
+           where id = ${b.id || ''}
+        `.execute(k.db);
         return { ok: true };
       },
     );

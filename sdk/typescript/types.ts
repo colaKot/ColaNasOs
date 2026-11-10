@@ -93,10 +93,28 @@ export type BlogEpisodeItem = {
 
 export type BlogEpisodeListResponse = {
   "items": BlogEpisodeItem[];
+  "total": number;
+  "limit": number;
+  "offset": number;
+};
+
+export type BlogScriptItem = {
+  "category": string;
+  "title": string;
+  "link": string;
+  "source": string;
+};
+
+export type BlogScriptResponse = {
+  "id": string;
+  "title": string;
+  "script": string;
+  "items": BlogScriptItem[];
 };
 
 export type BlogQuery = {
   "limit"?: number;
+  "offset"?: number;
 };
 
 export type BlogGenerateBody = {
@@ -197,319 +215,6 @@ export type BlogErrorResponse = {
   "code"?: string;
 };
 
-export type BookLibraryItem = {
-  "id": string;
-  "name": string;
-  "path": string;
-  "type": string;
-  "items": number;
-  "scanWhenStart": number;
-  "scanWhenChange": number;
-  "scanIntervalHours": number;
-  "createdAt": number;
-  "lastScanAt": number;
-};
-
-export type BookLibraryListResponse = {
-  "items": BookLibraryItem[];
-};
-
-export type BookLibraryCreateBody = {
-  "name": string;
-  "path": string;
-  "type"?: "book" | "comic";
-};
-
-export type BookLibraryUpdateBody = {
-  "id": string;
-  "name"?: string;
-  "type"?: "book" | "comic";
-  "scanWhenStart"?: boolean;
-  "scanWhenChange"?: boolean;
-  "scanIntervalHours"?: number;
-};
-
-export type BookLibraryRemoveBody = {
-  "id": string;
-};
-
-export type BookScanBody = {
-  "libraryId"?: string;
-  "limit"?: number;
-  "prune"?: boolean;
-};
-
-export type BookScanResponse = {
-  "libraries": number;
-  "books": number;
-  "added": number;
-  "updated": number;
-  "skipped": number;
-  "parsed": number;
-  "missing"?: number;
-  "pruned"?: number;
-};
-
-export type BookItem = {
-  "id": string;
-  "libraryId": string;
-  "path": string;
-  "type": string;
-  "title": string;
-  "author": string;
-  "language": string;
-  "publisher": string;
-  "format": string;
-  "pageCount": number;
-  "hasCover": boolean;
-  "size": number;
-  "favorite": boolean;
-  "progressPercent": number;
-  "collection": string;
-  "collectionIndex": number;
-  "archived": boolean;
-};
-
-export type BookListQuery = {
-  "libraryId"?: string;
-  "type"?: "book" | "comic";
-  "q"?: string;
-  "format"?: string;
-  "favorite"?: string;
-  "archived"?: string;
-  "listId"?: string;
-  "cursor"?: string;
-  "limit"?: number;
-};
-
-export type BookListResponse = {
-  "items": BookItem[];
-  "nextCursor": string;
-};
-
-export type BookIdQuery = {
-  "id": string;
-  "token"?: string;
-};
-
-export type BookFileUrlResponse = {
-  "url": string;
-  "expiresInSec": number;
-};
-
-export type BookStatsResponse = {
-  "libraries": number;
-  "books": number;
-  "bookCount": number;
-  "comicCount": number;
-  "favorites": number;
-};
-
-export type BookFavoriteBody = {
-  "id": string;
-};
-
-export type BookProgressBody = {
-  "id": string;
-  "position": string;
-  "percent": number;
-};
-
-export type BookProgress = {
-  "bookId": string;
-  "position": string;
-  "percent": number;
-  "updatedAt": number;
-};
-
-export type BookTocPage = {
-  "index": number;
-  "title": string;
-};
-
-export type BookTocResponse = {
-  "kind": string;
-  "total": number;
-  "pages": {
-    "index": number;
-    "title": string;
-  }[];
-};
-
-export type BookPageQuery = {
-  "id": string;
-  "index": number;
-};
-
-export type BookPageResponse = {
-  "kind": string;
-  "index": number;
-  "title": string;
-  "text"?: string;
-  "truncated"?: boolean;
-  "mime"?: string;
-  "data"?: string;
-};
-
-export type BookOkResponse = {
-  "ok": boolean;
-};
-
-export type BookCollectionItem = {
-  "name": string;
-  "books": number;
-  "coverId": string;
-};
-
-export type BookCollectionsQuery = {
-  "q"?: string;
-  "cursor"?: string;
-  "limit"?: number;
-};
-
-export type BookCollectionsResponse = {
-  "items": BookCollectionItem[];
-  "nextCursor": string;
-};
-
-export type BookCollectionItemsQuery = {
-  "name": string;
-  "cursor"?: string;
-  "limit"?: number;
-};
-
-export type BookCollectionBody = {
-  "id": string;
-  "name"?: string;
-  "index"?: number;
-};
-
-export type BookArchiveBody = {
-  "id": string;
-  "archived"?: boolean;
-};
-
-export type BookListItem = {
-  "id": string;
-  "name": string;
-  "books": number;
-  "createdAt": number;
-};
-
-export type BookListsResponse = {
-  "items": BookListItem[];
-};
-
-export type BookListCreateBody = {
-  "name": string;
-};
-
-export type BookListRemoveBody = {
-  "id": string;
-};
-
-export type BookListRenameBody = {
-  "id": string;
-  "name": string;
-};
-
-export type BookListRefBody = {
-  "listId": string;
-  "bookId": string;
-};
-
-export type BookListItemsQuery = {
-  "listId": string;
-};
-
-export type BookListItemsResponse = {
-  "items": BookItem[];
-};
-
-export type BookHistoryQuery = {
-  "limit"?: number;
-};
-
-export type BookCacheStatsResponse = {
-  "files": number;
-  "bytes": number;
-};
-
-export type BookCacheClearResponse = {
-  "files": number;
-  "bytes": number;
-};
-
-export type BookUserCollection = {
-  "id": string;
-  "name": string;
-  "paths": string[];
-  "books": number;
-  "coverId": string;
-  "createdAt": number;
-  "updatedAt": number;
-};
-
-export type BookUserCollectionListResponse = {
-  "items": BookUserCollection[];
-};
-
-export type BookUserCollectionBody = {
-  "name": string;
-  "paths": string[];
-};
-
-export type BookUserCollectionUpdateBody = {
-  "id": string;
-  "name"?: string;
-  "paths"?: string[];
-};
-
-export type BookUserCollectionItemsQuery = {
-  "id": string;
-  "limit"?: number;
-};
-
-export type BookErrorResponse = {
-  "error": string;
-  "message"?: string;
-  "code"?: string;
-  "traceId"?: string;
-  "details"?: Record<string, unknown>;
-};
-
-export type BookFulltextReindexBody = Record<string, unknown>;
-
-export type BookFulltextQuery = {
-  "q": string;
-  "limit"?: number;
-};
-
-export type BookFulltextHit = {
-  "bookId": string;
-  "title": string;
-  "author": string;
-  "snippet": string;
-};
-
-export type BookFulltextResponse = {
-  "items": BookFulltextHit[];
-  "total": number;
-};
-
-export type BookFulltextReindexResponse = {
-  "indexed": number;
-  "skipped": number;
-};
-
-export type BookFulltextError = {
-  "error": string;
-  "message"?: string;
-  "code"?: string;
-  "traceId"?: string;
-  "details"?: Record<string, unknown>;
-};
-
 export type DiscoverScrapeBody = {
   "libraryId"?: string;
 };
@@ -553,6 +258,8 @@ export type DiscoverSettings = {
   "baseUrl": string;
   "language": string;
   "imageBase": string;
+  "ratingProvider": string;
+  "proxyUrl": string;
 };
 
 export type DiscoverSettingsBody = {
@@ -560,6 +267,7 @@ export type DiscoverSettingsBody = {
   "baseUrl"?: string;
   "language"?: string;
   "imageBase"?: string;
+  "ratingProvider"?: string;
 };
 
 export type DiscoverMediaCard = {
@@ -572,6 +280,11 @@ export type DiscoverMediaCard = {
   "backdropPath": string;
   "year": number;
   "rating": number;
+  "ratingDouban"?: number;
+  "doubanVoteCount"?: number;
+  "doubanId"?: string;
+  "doubanUrl"?: string;
+  "posterUrl"?: string;
   "owned"?: boolean;
   "favorited"?: boolean;
 };
@@ -596,6 +309,7 @@ export type DiscoverCatalogResponse = {
   "totalPages": number;
   "degraded": boolean;
   "reason": string;
+  "ratingProvider"?: string;
   "stale"?: boolean;
   "snapshotAt"?: number;
 };
@@ -641,11 +355,31 @@ export type DiscoverDetailResponse = {
   "rating": number;
   "genres": string[];
   "cast": string[];
+  "castMembers"?: {
+    "name": string;
+    "character": string;
+    "profilePath": string;
+  }[];
+  "imdbId"?: string;
+  "doubanId"?: string;
+  "doubanUrl"?: string;
+  "ratingDouban"?: number;
+  "ratingProvider"?: string;
   "seasons": {
     "season": number;
     "name": string;
     "episodes": number;
   }[];
+  "status": string;
+  "tagline": string;
+  "originalLanguage": string;
+  "voteCount": number;
+  "numberOfSeasons": number;
+  "numberOfEpisodes": number;
+  "countries": string[];
+  "networks": string[];
+  "companies": string[];
+  "createdBy": string[];
   "degraded": boolean;
   "reason": string;
 };
@@ -659,16 +393,24 @@ export type DiscoverFavoriteBody = {
   "id": number;
   "mediaType": string;
   "favorite": boolean;
+  "state"?: string;
 };
 
 export type DiscoverFavoriteResponse = {
   "favorite": boolean;
+  "state": string;
+};
+
+export type DiscoverFavoriteListQuery = {
+  "state"?: string;
 };
 
 export type DiscoverFavoriteListResponse = {
   "items": {
     "id": number;
     "mediaType": string;
+    "state": string;
+    "downloadTaskId": string;
   }[];
 };
 
@@ -720,12 +462,14 @@ export type FilesCheckResponse = {
   "uploadId": string;
   "uploaded": number[];
   "chunkSize": number;
+  "sessionId"?: string;
 };
 
 export type FilesChunkQuery = {
   "path": string;
   "index": number;
   "total"?: number;
+  "sid"?: string;
 };
 
 export type FilesChunkResponse = {
@@ -758,6 +502,7 @@ export type FilesDownloadQuery = {
 export type FilesThumbQuery = {
   "path": string;
   "size"?: number;
+  "at"?: number;
 };
 
 export type FilesErrorResponse = {
@@ -890,198 +635,6 @@ export type FilesOpLogListResponse = {
   "total": number;
   "limit": number;
   "offset": number;
-};
-
-export type MediaToolThumbnailsBody = {
-  "source": string;
-  "target"?: string;
-  "size"?: number;
-};
-
-export type MediaToolTranscodeBody = {
-  "source": string;
-  "target": string;
-  "preset"?: "audio" | "web720" | "copy";
-};
-
-export type MediaToolJobCreated = {
-  "id": string;
-};
-
-export type MediaToolJobItem = {
-  "id": string;
-  "kind": "thumbnails" | "transcode";
-  "source": string;
-  "target": string;
-  "status": "pending" | "running" | "done" | "failed" | "canceled";
-  "total": number;
-  "done": number;
-  "failed": number;
-  "error": string;
-  "createdAt": number;
-  "updatedAt": number;
-};
-
-export type MediaToolJobListResponse = {
-  "items": MediaToolJobItem[];
-};
-
-export type MediaToolJobListQuery = {
-  "status"?: "pending" | "running" | "done" | "failed" | "canceled";
-  "limit"?: number;
-};
-
-export type MediaToolIdBody = {
-  "id": string;
-};
-
-export type MediaToolOkResponse = {
-  "ok": boolean;
-};
-
-export type MediaToolErrorResponse = {
-  "error": string;
-  "message"?: string;
-  "code"?: string;
-  "traceId"?: string;
-  "details"?: Record<string, unknown>;
-};
-
-export type MediaToolTaskItem = {
-  "id": string;
-  "uid": string;
-  "kind": string;
-  "source": string;
-  "target": string;
-  "config": Record<string, unknown>;
-  "status": string;
-  "total": number;
-  "done": number;
-  "processed": number;
-  "skipped": number;
-  "nonMedia": number;
-  "failed": number;
-  "inBytes": number;
-  "outBytes": number;
-  "progress": number;
-  "lastError": string;
-  "startAt": number;
-  "endAt": number;
-  "createdAt": number;
-  "updatedAt": number;
-};
-
-export type MediaToolTaskListResponse = {
-  "items": MediaToolTaskItem[];
-};
-
-export type MediaToolTaskUpsertBody = {
-  "id"?: string;
-  "kind": "thumbnails" | "video" | "audio" | "image" | "arrange";
-  "source": string;
-  "target": string;
-  "config"?: Record<string, unknown>;
-};
-
-export type MediaToolTaskIdBody = {
-  "id": string;
-};
-
-export type MediaToolTaskOkResponse = {
-  "ok": boolean;
-};
-
-export type MountItem = {
-  "id": string;
-  "name": string;
-  "kind": string;
-  "baseUrl": string;
-  "username": string;
-  "rootPath": string;
-  "readOnly": boolean;
-  "status": string;
-  "lastError": string;
-  "lastCheckAt": number;
-  "createdAt": number;
-};
-
-export type MountListResponse = {
-  "items": MountItem[];
-};
-
-export type MountCreateBody = {
-  "name": string;
-  "kind": "webdav" | "rclone";
-  "baseUrl": string;
-  "username"?: string;
-  "password"?: string;
-  "rootPath"?: string;
-  "readOnly"?: boolean;
-};
-
-export type MountRemoveBody = {
-  "id": string;
-};
-
-export type MountTestBody = {
-  "id": string;
-};
-
-export type MountBrowseQuery = {
-  "id": string;
-  "path"?: string;
-};
-
-export type MountEntry = {
-  "name": string;
-  "path": string;
-  "dir": boolean;
-  "size": number;
-  "mtime": number;
-};
-
-export type MountBrowseResponse = {
-  "path": string;
-  "items": MountEntry[];
-};
-
-export type MountPathQuery = {
-  "id": string;
-  "path": string;
-  "token"?: string;
-};
-
-export type MountDownloadUrlResponse = {
-  "url": string;
-  "expiresInSec": number;
-};
-
-export type MountPathBody = {
-  "id": string;
-  "path": string;
-};
-
-export type MountUploadQuery = {
-  "id": string;
-  "path": string;
-  "size"?: number;
-};
-
-export type MountTargetResponse = {
-  "mount": MountItem;
-  "path": string;
-};
-
-export type MountOkResponse = {
-  "ok": boolean;
-};
-
-export type MountErrorResponse = {
-  "error": string;
-  "message"?: string;
-  "code"?: string;
-  "traceId"?: string;
-  "details"?: Record<string, unknown>;
 };
 
 export type MusicLibraryItem = {
@@ -1588,6 +1141,9 @@ export type PhotoItem = {
   "height": number;
   "mime": string;
   "favorite": boolean;
+  "mediaKind": string;
+  "durationMs": number;
+  "liveKind": string;
 };
 
 export type PhotoTimelineQuery = {
@@ -1663,6 +1219,13 @@ export type PhotoStatsResponse = {
   }[];
 };
 
+export type PhotoAlbumRule = {
+  "kind": "face" | "scene" | "date";
+  "value"?: string;
+  "from"?: number;
+  "to"?: number;
+};
+
 export type PhotoAlbum = {
   "id": string;
   "name": string;
@@ -1672,6 +1235,8 @@ export type PhotoAlbum = {
   "description": string;
   "coverItemId": string;
   "sortOrder": number;
+  "rules": PhotoAlbumRule[];
+  "ruleCount": number;
 };
 
 export type PhotoAlbumListResponse = {
@@ -1681,6 +1246,8 @@ export type PhotoAlbumListResponse = {
 export type PhotoAlbumCreateBody = {
   "name": string;
   "itemIds"?: string[];
+  "coverItemId"?: string;
+  "rules"?: PhotoAlbumRule[];
 };
 
 export type PhotoAlbumMembersBody = {
@@ -1704,37 +1271,7 @@ export type PhotoAlbumUpdateBody = {
   "description"?: string;
   "coverItemId"?: string;
   "sortOrder"?: number;
-};
-
-export type PhotoCollection = {
-  "id": string;
-  "name": string;
-  "items": number;
-  "coverPath": string;
-  "createdAt": number;
-};
-
-export type PhotoCollectionListResponse = {
-  "items": PhotoCollection[];
-};
-
-export type PhotoCollectionCreateBody = {
-  "name": string;
-};
-
-export type PhotoCollectionDeleteBody = {
-  "id": string;
-};
-
-export type PhotoCollectionMembersBody = {
-  "collectionId": string;
-  "itemIds": string[];
-};
-
-export type PhotoCollectionItemsQuery = {
-  "collectionId": string;
-  "cursor"?: string;
-  "limit"?: number;
+  "rules"?: PhotoAlbumRule[];
 };
 
 export type PhotoGeoMissingQuery = {
@@ -1957,6 +1494,7 @@ export type PhotoAiConfig = {
   "activityEnabled": boolean;
   "ocrEnabled": boolean;
   "similarEnabled": boolean;
+  "petEnabled": boolean;
   "faceMinShowCount": number;
   "gpuPrefer": boolean;
   "paused": boolean;
@@ -1976,6 +1514,7 @@ export type PhotoAiProgress = {
 export type PhotoAiQueueJob = {
   "key": string;
   "label": string;
+  "detail": string;
   "status": string;
   "pending": number;
   "done": number;
@@ -2000,6 +1539,7 @@ export type PhotoAiConfigBody = {
   "activityEnabled"?: boolean;
   "ocrEnabled"?: boolean;
   "similarEnabled"?: boolean;
+  "petEnabled"?: boolean;
   "faceMinShowCount"?: number;
   "gpuPrefer"?: boolean;
   "paused"?: boolean;
@@ -2197,10 +1737,14 @@ export type PhotoFaceClusterItem = {
 
 export type PhotoFaceClusterList = {
   "items": PhotoFaceClusterItem[];
+  "total"?: number;
+  "nextCursor"?: string;
 };
 
 export type PhotoFaceClusterQuery = {
   "id": string;
+  "limit"?: number;
+  "cursor"?: number;
 };
 
 export type PhotoFaceItem = {
@@ -2235,6 +1779,8 @@ export type PhotoFaceBackfillResponse = {
 
 export type PhotoFaceList = {
   "items": PhotoFaceItem[];
+  "total"?: number;
+  "nextCursor"?: string;
 };
 
 export type PhotoSceneSummaryItem = {
@@ -2363,6 +1909,8 @@ export type PhotoSemanticSearchResponse = {
 
 export type PhotoFaceClusterFilter = {
   "minCount"?: number;
+  "limit"?: number;
+  "cursor"?: number;
 };
 
 export type PhotoFaceNameBody = {
@@ -2372,6 +1920,22 @@ export type PhotoFaceNameBody = {
 
 export type PhotoFaceDissolveBody = {
   "clusterId": string;
+};
+
+export type PhotoFaceSweepBody = {
+  "fragmentMax"?: number;
+  "limit"?: number;
+  "onlyNamed"?: boolean;
+  "dryRun"?: boolean;
+};
+
+export type PhotoFaceSweepResult = {
+  "candidates": number;
+  "fragments": number;
+  "unbound": number;
+  "assigned": number;
+  "left": number;
+  "elapsedMs": number;
 };
 
 export type PhotoFaceMergeBody = {
@@ -2392,6 +1956,17 @@ export type PhotoFaceMoveBody = {
 export type PhotoFaceMoveResponse = {
   "ok": boolean;
   "clusterId": string;
+};
+
+export type PhotoFaceCoverBody = {
+  "clusterId": string;
+  "photoId": string;
+};
+
+export type PhotoFaceCoverResponse = {
+  "ok": boolean;
+  "coverPhotoId": string;
+  "coverFaceId": string;
 };
 
 export type PhotoFaceMergeCandidateBody = {
@@ -2427,24 +2002,6 @@ export type PhotoFaceMergeUndoBody = {
 export type PhotoFaceMergeUndoResponse = {
   "restored": number;
   "faces": number;
-};
-
-export type PhotoFaceRebuildBody = {
-  "limit"?: number;
-};
-
-export type PhotoFaceRebuildResponse = {
-  "runId": string;
-  "faces": number;
-  "clusters": number;
-  "ms": number;
-  "coverage"?: number;
-  "elapsedMs"?: number;
-  "algoVersion"?: string;
-};
-
-export type PhotoFaceRollbackBody = {
-  "runId": string;
 };
 
 export type PhotoFaceOk = {
@@ -2761,6 +2318,9 @@ export type PhotoTicket = {
   "fromStation": string;
   "toStation": string;
   "code": string;
+  "seatClass"?: string;
+  "seat"?: string;
+  "price"?: string;
   "evidence": string[];
 };
 
@@ -2820,6 +2380,12 @@ export type PhotoYearReport = {
   "busiestDays": PhotoLabelCount[];
   "earliest": number;
   "latest": number;
+  "picks"?: {
+    "photoId": string;
+    "path": string;
+    "takenAt": number;
+    "reason": string;
+  }[];
 };
 
 export type PhotoYearReportQuery = {
@@ -2856,6 +2422,22 @@ export type PhotoBackupCheckResponse = {
   "missing": PhotoBackupCheckResultFile[];
   "total": number;
   "missingBytes": number;
+};
+
+export type PhotoBackupCheckContentItem = {
+  "size": number;
+  "md5"?: string;
+};
+
+export type PhotoBackupCheckContentBody = {
+  "items": PhotoBackupCheckContentItem[];
+};
+
+export type PhotoBackupCheckContentResponse = {
+  "matched": string[];
+  "absent": number[];
+  "scanned": number;
+  "hashed": number;
 };
 
 export type PhotoBackupCommitBody = {
@@ -3029,6 +2611,119 @@ export type SystemLogsResponse = {
     "msg": string;
   }[];
   "truncated": boolean;
+  "limit": number;
+  "offset": number;
+  "hasMore": boolean;
+};
+
+export type TransferSession = {
+  "id": string;
+  "owner": string;
+  "ownerName"?: string;
+  "direction": string;
+  "path": string;
+  "name": string;
+  "size": number;
+  "transferred": number;
+  "totalChunks": number;
+  "doneChunks": number[];
+  "state": string;
+  "origin": string;
+  "device": string;
+  "error": string;
+  "createdAt": number;
+  "updatedAt": number;
+  "finishedAt": number;
+};
+
+export type TransferStats = {
+  "active": number;
+  "done": number;
+  "failed": number;
+  "paused": number;
+  "activeBytes": number;
+  "speedBps": number;
+};
+
+export type TransferSessionsResponse = {
+  "items": {
+    "id": string;
+    "owner": string;
+    "ownerName"?: string;
+    "direction": string;
+    "path": string;
+    "name": string;
+    "size": number;
+    "transferred": number;
+    "totalChunks": number;
+    "doneChunks": number[];
+    "state": string;
+    "origin": string;
+    "device": string;
+    "error": string;
+    "createdAt": number;
+    "updatedAt": number;
+    "finishedAt": number;
+  }[];
+  "total": number;
+  "stats": {
+    "active": number;
+    "done": number;
+    "failed": number;
+    "paused": number;
+    "activeBytes": number;
+    "speedBps": number;
+  };
+};
+
+export type TransferListQuery = {
+  "state"?: string;
+  "direction"?: string;
+  "owner"?: string;
+  "q"?: string;
+  "limit"?: number;
+  "offset"?: number;
+};
+
+export type TransferBeginBody = {
+  "id"?: string;
+  "direction"?: string;
+  "path": string;
+  "size"?: number;
+  "totalChunks"?: number;
+  "origin"?: string;
+  "device"?: string;
+};
+
+export type TransferBeginResponse = {
+  "session": {
+    "id": string;
+    "owner": string;
+    "ownerName"?: string;
+    "direction": string;
+    "path": string;
+    "name": string;
+    "size": number;
+    "transferred": number;
+    "totalChunks": number;
+    "doneChunks": number[];
+    "state": string;
+    "origin": string;
+    "device": string;
+    "error": string;
+    "createdAt": number;
+    "updatedAt": number;
+    "finishedAt": number;
+  };
+};
+
+export type TransferIdBody = {
+  "id": string;
+};
+
+export type TransferOkResponse = {
+  "ok": boolean;
+  "affected"?: number;
 };
 
 export type VideoSourceItem = {
@@ -3378,11 +3073,40 @@ export type VideoListQuery = {
   "folderPath"?: string;
   "folderMode"?: string;
   "letter"?: string;
+  "resolution"?: string;
+  "jpTag"?: string;
+  "sourceId"?: string;
 };
 
 export type VideoListResponse = {
   "items": VideoItem[];
   "nextCursor": string;
+};
+
+export type VideoFacetsQuery = {
+  "libraryId"?: string;
+};
+
+export type VideoFacetCount = {
+  "key": string;
+  "count": number;
+};
+
+export type VideoSourceFacet = {
+  "id": string;
+  "count": number;
+};
+
+export type VideoGenreFacet = {
+  "name": string;
+  "count": number;
+};
+
+export type VideoFacetsResponse = {
+  "sources": VideoSourceFacet[];
+  "genres": VideoGenreFacet[];
+  "tags": VideoFacetCount[];
+  "resolutions": VideoFacetCount[];
 };
 
 export type VideoImageFolderQuery = {

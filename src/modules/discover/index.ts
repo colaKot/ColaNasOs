@@ -187,12 +187,157 @@ export const discover: ServerModule = {
         `.execute(db);
       },
     },
+    {
+      // 收藏三态（watching / downloading / downloaded / owned）+ 下载任务号：
+      // 只给已有 discover_favorites 补列，不动主键 (uid, media_type, tmdb_id)。
+      id: '154_discover_favorite_state',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(discover_favorites)`.execute(db)).rows as Array<{
+            name: string;
+          }>
+        ).map((r) => r.name);
+        if (!cols.includes('state')) {
+          await sql`alter table discover_favorites add column state text not null default 'watching'`.execute(db);
+        }
+        if (!cols.includes('download_task_id')) {
+          await sql`alter table discover_favorites add column download_task_id text`.execute(db);
+        }
+        if (!cols.includes('updated_at')) {
+          await sql`alter table discover_favorites add column updated_at integer`.execute(db);
+        }
+      },
+    },
+    {
+      // 收藏条目的展示元数据（标题 / 海报 / 上映日期）。
+      //
+      // 为什么要有：收藏只存 tmdb_id，列表要靠 media_catalog 快照反查；但用户在
+      // 「搜索」里收藏的条目不在榜单快照里，卡片就退化成「TMDB #1423191」+ 没海报，
+      // 看着像没收藏成功（2026-11-10 反馈）。现在抓到一次就写在这里，之后秒回。
+      id: '171_discover_favorite_meta',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(discover_favorites)`.execute(db)).rows as Array<{
+            name: string;
+          }>
+        ).map((r) => r.name);
+        if (!cols.includes('meta')) {
+          await sql`alter table discover_favorites add column meta text`.execute(db);
+        }
+      },
+    },
+    {
+      // 评分体系 = 豆瓣 时的两级缓存：
+      //  - douban_ratings：TMDB 媒体 id ↔ 豆瓣条目/评分的映射（补齐一次，之后秒回）
+      //  - douban_chart：豆瓣榜单条目（含反查到的 TMDB 卡片），供 fast 首屏占位
+      id: '156_douban_rating_cache',
+      async up(db) {
+        await sql`
+          create table if not exists douban_ratings (
+            media_id integer not null,
+            media_type text not null default 'movie',
+            douban_id text,
+            title text,
+            year text,
+            rating real,
+            vote_count integer,
+            url text,
+            updated_at integer not null,
+            primary key (media_id, media_type)
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_douban_ratings_updated
+          on douban_ratings (updated_at desc)
+        `.execute(db);
+        await sql`
+          create table if not exists douban_chart (
+            kind text not null,
+            code text not null,
+            douban_id text not null,
+            rank integer not null default 0,
+            title text not null,
+            rating real,
+            payload text,
+            updated_at integer not null,
+            primary key (kind, code, douban_id)
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_douban_chart_order
+          on douban_chart (kind, code, rank)
+        `.execute(db);
+      },
+    },
   ],
 
   async register(app, k) {
     await registerDoubanRoutes(app, k);
     for (const schema of DISCOVER_SCHEMAS) app.addSchema(schema);
     await registerDiscoverApi(app, k);
+
+    /**
+     * 影视库源目录（参考实现 的 `/api/video/source/list`）。
+     *
+     * 发现页设置里「电影 / 剧集下载目录」下拉要它：`path` 会被存进 pt.download
+     * 当 transmission 的 download-dir。参考页按 `media_type` 过滤（movie/tv，mixed 两边都列），
+     * 所以 lib_type 必须归一成这三种；一库多源就展开成多条。
+     */
+    app.post(
+      '/api/v1/video/source/list',
+      secured('discover:read', {
+        schema: {
+          operationId: 'videoSourceList',
+          tags: ['video'],
+          summary: '影视库源目录（发现页下载目录下拉用）',
+          body: Type.Object({}, { additionalProperties: true }),
+          response: {
+            // 包一层 items：数组直返在生成客户端里拿不到（只能拿到 Map）
+            200: Type.Object({
+              items: Type.Array(
+                Type.Object({
+                  id: Type.String(),
+                  libraryId: Type.String(),
+                  libraryName: Type.String(),
+                  path: Type.String(),
+                  mediaType: Type.String({ description: 'movie / tv / mixed' }),
+                }),
+              ),
+            }),
+          },
+        },
+      }),
+      async () => {
+        const rows = (
+          await sql<any>`
+            select l.id as library_id, l.name as library_name, l.lib_type,
+                   coalesce(s.root_path, l.root_path) as path
+              from video_libraries l
+              left join video_library_sources s on s.library_id = l.id
+             order by l.name asc
+          `.execute(k.db)
+        ).rows;
+        const seen = new Set<string>();
+        const items: Array<Record<string, string>> = [];
+        for (const r of rows) {
+          const path = String(r.path || '');
+          const key = `${r.library_id}:${path}`;
+          if (!path || seen.has(key)) continue;
+          seen.add(key);
+          const libType = String(r.lib_type || 'movie');
+          const mediaType =
+            libType === 'tv' ? 'tv' : libType === 'mixed' ? 'mixed' : 'movie';
+          items.push({
+            id: key,
+            libraryId: String(r.library_id),
+            libraryName: String(r.library_name || ''),
+            path,
+            mediaType,
+          });
+        }
+        return { items };
+      },
+    );
 
     app.post(
       '/api/v1/discover/scrape',

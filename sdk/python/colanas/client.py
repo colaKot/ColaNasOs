@@ -79,18 +79,6 @@ class ColanasClient:
         """账号密码登录（可选 TOTP）"""
         return self._request("POST", "/api/v1/auth/login", params, "body")
 
-    def backup_list(self, **params):
-        """列出备份"""
-        return self._request("GET", "/api/v1/backup/list", params, "query")
-
-    def backup_restore(self, **params):
-        """从备份恢复（先校验 sha256）"""
-        return self._request("POST", "/api/v1/backup/restore", params, "body")
-
-    def backup_run(self, **params):
-        """备份一个目录（逐文件 sha256 清单）"""
-        return self._request("POST", "/api/v1/backup/run", params, "body")
-
     def blog_audio(self, **params):
         """播放 / 下载（mp3，退化时给 wav；支持 Range）"""
         return self._request("GET", "/api/v1/blog/audio", params, "query")
@@ -131,6 +119,10 @@ class ColanasClient:
         """保存 AI 新闻设置（counts 整体提交；其余字段未传则保持不变）"""
         return self._request("POST", "/api/v1/blog/settings", params, "body")
 
+    def blog_script(self, **params):
+        """某一期的播报稿全文与引用链接"""
+        return self._request("GET", "/api/v1/blog/script", params, "query")
+
     def blog_settings(self, **params):
         """AI 新闻设置"""
         return self._request("GET", "/api/v1/blog/settings", params, "query")
@@ -167,161 +159,9 @@ class ColanasClient:
         """预热语音模型（进页面时调用，点试听才不用等 30 秒）"""
         return self._request("POST", "/api/v1/blog/warmup", params, "body")
 
-    def book_archive(self, **params):
-        """归档 / 取消归档（按当前用户隔离）"""
-        return self._request("POST", "/api/v1/book/archive", params, "body")
-
-    def book_cache_clear(self, **params):
-        """清空封面 / PDF 页图缓存"""
-        return self._request("POST", "/api/v1/book/cache/clear", params, "body")
-
-    def book_cache_stats(self, **params):
-        """封面 / PDF 页图缓存占用"""
-        return self._request("GET", "/api/v1/book/cache", params, "query")
-
-    def book_collection_items(self, **params):
-        """合集内的书（按序号、标题排序）"""
-        return self._request("GET", "/api/v1/book/collections/items", params, "query")
-
-    def book_collections(self, **params):
-        """合集列表（按合集名聚合，带书数与封面书 id）"""
-        return self._request("GET", "/api/v1/book/collections", params, "query")
-
-    def book_collection_set(self, **params):
-        """设置 / 清除书籍所属合集与序号"""
-        return self._request("POST", "/api/v1/book/collection", params, "body")
-
-    def book_cover(self, **params):
-        """封面（epub / cbz 内嵌图，首次访问提取并缓存）"""
-        return self._request("GET", "/api/v1/book/cover", params, "query")
-
-    def book_favorite_add(self, **params):
-        """收藏"""
-        return self._request("POST", "/api/v1/book/favorites/add", params, "body")
-
-    def book_favorite_remove(self, **params):
-        """取消收藏"""
-        return self._request("POST", "/api/v1/book/favorites/remove", params, "body")
-
-    def book_file(self, **params):
-        """阅读 / 下载（支持 Range / ETag）"""
-        return self._request("GET", "/api/v1/book/file", params, "query")
-
-    def book_file_url(self, **params):
-        """生成带短期令牌的阅读地址（可直接交给外部阅读器）"""
-        return self._request("GET", "/api/v1/book/file-url", params, "query")
-
-    def book_fulltext_reindex(self, **params):
-        """重建全文索引（书名 / 作者 + txt 正文）"""
-        return self._request("POST", "/api/v1/book/search/reindex", params, "body")
-
-    def book_fulltext_search(self, **params):
-        """全文检索（FTS5，返回片段）"""
-        return self._request("GET", "/api/v1/book/search", params, "query")
-
-    def book_history(self, **params):
-        """阅读历史（最近读的在最前）"""
-        return self._request("GET", "/api/v1/book/history", params, "query")
-
-    def book_history_clear(self, **params):
-        """清空当前用户的阅读历史（不影响阅读进度）"""
-        return self._request("POST", "/api/v1/book/history/clear", params, "body")
-
-    def book_item(self, **params):
-        """书籍详情（含当前用户收藏与进度）"""
-        return self._request("GET", "/api/v1/book/item", params, "query")
-
-    def book_library_create(self, **params):
-        """新建书库（目录须在 files 根内）"""
-        return self._request("POST", "/api/v1/book/libraries", params, "body")
-
-    def book_library_list(self, **params):
-        """书库列表"""
-        return self._request("GET", "/api/v1/book/libraries", params, "query")
-
-    def book_library_remove(self, **params):
-        """删除书库（级联清理收藏 / 进度 / 归档 / 列表条目）"""
-        return self._request("POST", "/api/v1/book/libraries/remove", params, "body")
-
-    def book_library_update(self, **params):
-        """改名 / 切换书籍或漫画类型"""
-        return self._request("POST", "/api/v1/book/libraries/update", params, "body")
-
-    def book_list(self, **params):
-        """书架（标题序 + 排序键 cursor；可按格式 / 收藏过滤）"""
-        return self._request("GET", "/api/v1/book/list", params, "query")
-
-    def book_list_add(self, **params):
-        """把书加入自定义列表（重复加入跳过）"""
-        return self._request("POST", "/api/v1/book/lists/add", params, "body")
-
-    def book_list_create(self, **params):
-        """新建自定义列表（同用户重名 409）"""
-        return self._request("POST", "/api/v1/book/lists", params, "body")
-
-    def book_list_items(self, **params):
-        """自定义列表内的书（按加入顺序）"""
-        return self._request("GET", "/api/v1/book/lists/items", params, "query")
-
-    def book_list_remove(self, **params):
-        """删除自定义列表（级联清条目）"""
-        return self._request("POST", "/api/v1/book/lists/remove", params, "body")
-
-    def book_list_remove_item(self, **params):
-        """把书移出自定义列表"""
-        return self._request("POST", "/api/v1/book/lists/items/remove", params, "body")
-
-    def book_list_rename(self, **params):
-        """重命名自定义列表"""
-        return self._request("POST", "/api/v1/book/lists/rename", params, "body")
-
-    def book_lists(self, **params):
-        """当前用户的自定义列表（按名称排序）"""
-        return self._request("GET", "/api/v1/book/lists", params, "query")
-
-    def book_page(self, **params):
-        """内置阅读器单页（文本页返回纯文本，图片页返回 base64）"""
-        return self._request("GET", "/api/v1/book/page", params, "query")
-
-    def book_progress(self, **params):
-        """当前用户阅读进度（无记录返回 0）"""
-        return self._request("GET", "/api/v1/book/progress", params, "query")
-
-    def book_progress_save(self, **params):
-        """保存阅读进度"""
-        return self._request("POST", "/api/v1/book/progress/save", params, "body")
-
-    def book_scan(self, **params):
-        """扫描索引（epub/cbz 解析元数据；未变文件跳过）"""
-        return self._request("POST", "/api/v1/book/scan", params, "body")
-
-    def book_stats(self, **params):
-        """书库 / 藏书 / 当前用户收藏数"""
-        return self._request("GET", "/api/v1/book/stats", params, "query")
-
-    def book_toc(self, **params):
-        """内置阅读器目录（epub spine / txt 分章 / cbz 图片页）"""
-        return self._request("GET", "/api/v1/book/toc", params, "query")
-
-    def book_user_collection_create(self, **params):
-        """新建图书合集"""
-        return self._request("POST", "/api/v1/book/user-collections", params, "body")
-
-    def book_user_collection_items(self, **params):
-        """合集里的书"""
-        return self._request("GET", "/api/v1/book/user-collections/items", params, "query")
-
-    def book_user_collection_list(self, **params):
-        """当前用户的图书合集（含书数与封面）"""
-        return self._request("GET", "/api/v1/book/user-collections", params, "query")
-
-    def book_user_collection_remove(self, **params):
-        """删除合集（不动书与索引）"""
-        return self._request("POST", "/api/v1/book/user-collections/remove", params, "body")
-
-    def book_user_collection_update(self, **params):
-        """改名 / 换目录"""
-        return self._request("POST", "/api/v1/book/user-collections/update", params, "body")
+    def discover_cache_stats(self, **params):
+        """发现缓存统计（图片文件数 / 字节、评分数）"""
+        return self._request("GET", "/api/v1/discover/cache/stats", params, "query")
 
     def discover_catalog(self, **params):
         """发现目录（trending / popular / top_rated / upcoming / now_playing / on_air）"""
@@ -343,6 +183,14 @@ class ColanasClient:
         """豆瓣榜单（热门/选电影等 tag）"""
         return self._request("GET", "/api/v1/discover/douban", params, "query")
 
+    def discover_douban_catalogs(self, **params):
+        """豆瓣榜单（按 code 取豆瓣榜，TMDB 反查补卡片）"""
+        return self._request("POST", "/api/v1/discover/douban/catalogs/{kind}", params, "body")
+
+    def discover_douban_enrich(self, **params):
+        """批量补豆瓣评分（带缓存，缺的才联网）"""
+        return self._request("POST", "/api/v1/discover/douban/enrich", params, "body")
+
     def discover_douban_rating(self, **params):
         """按标题（+年份）查豆瓣评分"""
         return self._request("GET", "/api/v1/discover/douban/rating", params, "query")
@@ -356,16 +204,20 @@ class ColanasClient:
         return self._request("GET", "/api/v1/discover/douban/settings", params, "query")
 
     def discover_douban_test(self, **params):
-        """测试豆瓣连通性（用当前 Cookie）"""
+        """测试豆瓣连通性（网站 / Cookie / TMDB 反查）"""
         return self._request("POST", "/api/v1/discover/douban/test", params, "body")
 
     def discover_favorites(self, **params):
-        """当前账号的发现收藏（id + mediaType）"""
+        """当前账号的发现收藏（id + mediaType + state）"""
         return self._request("GET", "/api/v1/discover/favorites", params, "query")
 
     def discover_favorite_set(self, **params):
         """收藏 / 取消收藏发现条目（每用户独立）"""
         return self._request("POST", "/api/v1/discover/favorites/set", params, "body")
+
+    def discover_genres(self, **params):
+        """风格表（TMDB 官方 id + 中文名）"""
+        return self._request("GET", "/api/v1/discover/genres/{mediaType}", params, "query")
 
     def discover_image(self, **params):
         """海报 / 剧照代理（磁盘缓存；客户端不需要知道图片域）"""
@@ -394,6 +246,10 @@ class ColanasClient:
     def discover_settings_set(self, **params):
         """保存影视发现设置（apiKey 留空 = 不改）"""
         return self._request("POST", "/api/v1/discover/settings", params, "body")
+
+    def discover_settings_test(self, **params):
+        """测试 TMDB 连通性（请求 /3/configuration）"""
+        return self._request("POST", "/api/v1/discover/settings/test", params, "body")
 
     def events_recent(self, **params):
         """事件增量拉取（按序号，供客户端局部刷新）"""
@@ -479,110 +335,6 @@ class ColanasClient:
         """触发事件（内部/调试）"""
         return self._request("POST", "/api/v1/integration/emit", params, "body")
 
-    def media_tool_job_cancel(self, **params):
-        """取消任务（运行中的在下一批检查点停）"""
-        return self._request("POST", "/api/v1/media-tool/jobs/cancel", params, "body")
-
-    def media_tool_jobs(self, **params):
-        """媒体工具任务列表（state / 进度 / 失败数）"""
-        return self._request("GET", "/api/v1/media-tool/jobs", params, "query")
-
-    def media_tool_task_delete(self, **params):
-        """删除媒体任务（不动磁盘文件）"""
-        return self._request("POST", "/api/v1/media-tool/tasks/delete", params, "body")
-
-    def media_tool_task_get(self, **params):
-        """读取单个媒体任务"""
-        return self._request("GET", "/api/v1/media-tool/tasks/get", params, "query")
-
-    def media_tool_task_list(self, **params):
-        """媒体工具任务列表（按账号隔离）"""
-        return self._request("GET", "/api/v1/media-tool/tasks", params, "query")
-
-    def media_tool_task_start(self, **params):
-        """开始 / 续跑任务"""
-        return self._request("POST", "/api/v1/media-tool/tasks/start", params, "body")
-
-    def media_tool_task_stop(self, **params):
-        """停止任务（运行中的在下一批检查点停）"""
-        return self._request("POST", "/api/v1/media-tool/tasks/stop", params, "body")
-
-    def media_tool_task_upsert(self, **params):
-        """创建 / 编辑媒体任务（除单图压缩外需管理员）"""
-        return self._request("POST", "/api/v1/media-tool/tasks/upsert", params, "body")
-
-    def media_tool_thumbnails(self, **params):
-        """批量生成缩略图（目录 → JPEG，保留子目录结构）"""
-        return self._request("POST", "/api/v1/media-tool/thumbnails", params, "body")
-
-    def media_tool_transcode(self, **params):
-        """单文件转码（audio AAC / web720 / copy）"""
-        return self._request("POST", "/api/v1/media-tool/transcode", params, "body")
-
-    def message_list(self, **params):
-        """我的消息（可按未读过滤）"""
-        return self._request("GET", "/api/v1/messages", params, "query")
-
-    def message_read(self, **params):
-        """标记已读（仅自己的消息）"""
-        return self._request("POST", "/api/v1/messages/read", params, "body")
-
-    def message_read_all(self, **params):
-        """全部已读"""
-        return self._request("POST", "/api/v1/messages/read-all", params, "body")
-
-    def message_remove(self, **params):
-        """删除自己的消息"""
-        return self._request("POST", "/api/v1/messages/remove", params, "body")
-
-    def message_send(self, **params):
-        """发送站内消息"""
-        return self._request("POST", "/api/v1/messages/send", params, "body")
-
-    def message_unread(self, **params):
-        """未读数"""
-        return self._request("GET", "/api/v1/messages/unread-count", params, "query")
-
-    def mount_browse(self, **params):
-        """浏览远程目录（相对挂载根）"""
-        return self._request("GET", "/api/v1/mount/list", params, "query")
-
-    def mount_create(self, **params):
-        """新建远程挂载（WebDAV / rclone）"""
-        return self._request("POST", "/api/v1/mount/mounts", params, "body")
-
-    def mount_delete(self, **params):
-        """删除远程文件（不删目录）"""
-        return self._request("POST", "/api/v1/mount/delete", params, "body")
-
-    def mount_download(self, **params):
-        """下载远程文件（WebDAV 透传 Range）"""
-        return self._request("GET", "/api/v1/mount/download", params, "query")
-
-    def mount_download_url(self, **params):
-        """生成带短期令牌的下载地址（可直接交给外部下载器）"""
-        return self._request("GET", "/api/v1/mount/download-url", params, "query")
-
-    def mount_list(self, **params):
-        """挂载列表（不含密码）"""
-        return self._request("GET", "/api/v1/mount/mounts", params, "query")
-
-    def mount_mkdir(self, **params):
-        """新建远程目录"""
-        return self._request("POST", "/api/v1/mount/mkdir", params, "body")
-
-    def mount_remove(self, **params):
-        """删除挂载（只删配置，不动远程数据）"""
-        return self._request("POST", "/api/v1/mount/mounts/remove", params, "body")
-
-    def mount_test(self, **params):
-        """连接测试（同时更新 status / lastError）"""
-        return self._request("POST", "/api/v1/mount/mounts/test", params, "body")
-
-    def mount_upload(self, **params):
-        """上传（application/x-colanas-upload 原始流）"""
-        return self._request("POST", "/api/v1/mount/upload", params, "body")
-
     def music_albums(self, **params):
         """专辑聚合（张数 / 总时长 / 代表封面）"""
         return self._request("GET", "/api/v1/music/albums", params, "query")
@@ -634,6 +386,10 @@ class ColanasClient:
     def music_favorite(self, **params):
         """收藏 / 取消收藏曲目（按用户隔离）"""
         return self._request("POST", "/api/v1/music/favorite", params, "body")
+
+    def music_favorite_ids(self, **params):
+        """我的收藏 id 列表（曲库页星标状态用，只回 id 不带曲目）"""
+        return self._request("GET", "/api/v1/music/favorites/ids", params, "query")
 
     def music_favorites(self, **params):
         """我的收藏（按收藏时间倒序，返回完整曲目）"""
@@ -719,34 +475,6 @@ class ColanasClient:
         """生成带短期令牌的播放地址（format=auto 时 Web 端按需转 AAC）"""
         return self._request("GET", "/api/v1/music/stream-url", params, "query")
 
-    def note_create(self, **params):
-        """新建笔记"""
-        return self._request("POST", "/api/v1/notes/create", params, "body")
-
-    def note_get(self, **params):
-        """笔记详情"""
-        return self._request("GET", "/api/v1/notes/get", params, "query")
-
-    def note_list(self, **params):
-        """笔记列表（关键词 / 标签 / 置顶优先）"""
-        return self._request("GET", "/api/v1/notes", params, "query")
-
-    def note_remove(self, **params):
-        """软删除笔记"""
-        return self._request("POST", "/api/v1/notes/remove", params, "body")
-
-    def note_restore(self, **params):
-        """恢复到历史版本（生成新版本）"""
-        return self._request("POST", "/api/v1/notes/restore", params, "body")
-
-    def note_update(self, **params):
-        """更新笔记（先存历史版本；baseVersion 不一致返回 409）"""
-        return self._request("POST", "/api/v1/notes/update", params, "body")
-
-    def note_versions(self, **params):
-        """版本历史（新→旧）"""
-        return self._request("GET", "/api/v1/notes/versions", params, "query")
-
     def openapi_json(self, **params):
         """导出 OpenAPI 文档"""
         return self._request("GET", "/openapi.json", params, "query")
@@ -831,6 +559,10 @@ class ColanasClient:
         """当前用户的相册列表"""
         return self._request("GET", "/api/v1/photo/albums", params, "query")
 
+    def photo_album_reapply(self, **params):
+        """按规则重算相册成员（只增不减，返回新增张数）"""
+        return self._request("POST", "/api/v1/photo/albums/reapply", params, "body")
+
     def photo_album_remove(self, **params):
         """从相册移出照片"""
         return self._request("POST", "/api/v1/photo/albums/remove", params, "body")
@@ -840,8 +572,12 @@ class ColanasClient:
         return self._request("POST", "/api/v1/photo/albums/update", params, "body")
 
     def photo_backup_check(self, **params):
-        """备份前置比对：哪些文件库里已经有了（MD5 优先，其次同名同大小）"""
+        """（兼容）备份前置比对；新客户端请用 /backup/check_content"""
         return self._request("POST", "/api/v1/photo/backup/check", params, "body")
+
+    def photo_backup_check_content(self, **params):
+        """备份内容去重：跨全部相册源查已有内容与一定不存在的 size"""
+        return self._request("POST", "/api/v1/photo/backup/check_content", params, "body")
 
     def photo_backup_commit(self, **params):
         """登记一次备份结果"""
@@ -879,30 +615,6 @@ class ColanasClient:
         """撤销一个清理批次（恢复回收站状态）"""
         return self._request("POST", "/api/v1/photo/cleanup/undo", params, "body")
 
-    def photo_collection_add(self, **params):
-        """把照片加入集合"""
-        return self._request("POST", "/api/v1/photo/collections/add", params, "body")
-
-    def photo_collection_create(self, **params):
-        """新建集合"""
-        return self._request("POST", "/api/v1/photo/collections", params, "body")
-
-    def photo_collection_delete(self, **params):
-        """删除集合（只删集合关系，不动照片）"""
-        return self._request("POST", "/api/v1/photo/collections/delete", params, "body")
-
-    def photo_collection_items(self, **params):
-        """集合里的照片（按加入时间倒序）"""
-        return self._request("GET", "/api/v1/photo/collections/items", params, "query")
-
-    def photo_collection_list(self, **params):
-        """集合列表"""
-        return self._request("GET", "/api/v1/photo/collections", params, "query")
-
-    def photo_collection_remove(self, **params):
-        """把照片移出集合"""
-        return self._request("POST", "/api/v1/photo/collections/remove", params, "body")
-
     def photo_day_frames(self, **params):
         """一日一帧：每天挑一张代表作（配当日标签与地点）"""
         return self._request("GET", "/api/v1/photo/memories/day-frames", params, "query")
@@ -920,8 +632,12 @@ class ColanasClient:
         return self._request("POST", "/api/v1/photo/faces/backfill", params, "body")
 
     def photo_face_clusters(self, **params):
-        """人脸聚类列表（按人数倒序；少于 minCount 的碎片组不显示，具名组豁免）"""
+        """人脸聚类列表（按人数倒序，分页；少于 minCount 的碎片组不显示，具名组豁免）"""
         return self._request("GET", "/api/v1/photo/faces/clusters", params, "query")
+
+    def photo_face_cover(self, **params):
+        """把簇内某张照片设为人脸封面"""
+        return self._request("POST", "/api/v1/photo/faces/cover", params, "body")
 
     def photo_face_dissolve(self, **params):
         """解散人脸簇（脸放回未分组，不删数据）"""
@@ -956,12 +672,8 @@ class ColanasClient:
         return self._request("POST", "/api/v1/photo/faces/name", params, "body")
 
     def photo_face_purge(self, **params):
-        """清理误检人脸（低分 / 无归属）"""
+        """清理误检人脸（仅低检测置信度）"""
         return self._request("POST", "/api/v1/photo/faces/purge", params, "body")
-
-    def photo_face_rebuild(self, **params):
-        """全库重算人脸簇（先快照，可用 rollback 还原）"""
-        return self._request("POST", "/api/v1/photo/faces/rebuild", params, "body")
 
     def photo_face_relations(self, **params):
         """人物关系图：同框共现边 + 证据张数"""
@@ -979,13 +691,13 @@ class ColanasClient:
         """全部重新识别人脸（清空现有聚类与人脸记录）"""
         return self._request("POST", "/api/v1/photo/faces/reset", params, "body")
 
-    def photo_face_rollback(self, **params):
-        """回滚一次全库重建"""
-        return self._request("POST", "/api/v1/photo/faces/rollback", params, "body")
-
     def photo_faces(self, **params):
-        """某个人脸簇下的照片"""
+        """某个人脸簇下的照片（分页，按拍摄时间倒序）"""
         return self._request("GET", "/api/v1/photo/faces", params, "query")
+
+    def photo_face_sweep(self, **params):
+        """二轮收割：把挂起脸与历史碎片簇按成员级相似度重新归位"""
+        return self._request("POST", "/api/v1/photo/faces/sweep", params, "body")
 
     def photo_face_tuning(self, **params):
         """保存人脸聚类参数（认人严格度 / 参考数 / 线程数）"""
@@ -1070,6 +782,10 @@ class ColanasClient:
     def photo_library_update(self, **params):
         """设置当前用户相册库的来源目录"""
         return self._request("POST", "/api/v1/photo/libraries/update", params, "body")
+
+    def photo_live(self, **params):
+        """动态照片里的那段视频（支持 Range；非动态照片 404）"""
+        return self._request("GET", "/api/v1/photo/live", params, "query")
 
     def photo_map_bounds(self, **params):
         """可视范围内的 geohash 格代表点（客户端按世界像素聚簇）"""
@@ -1299,6 +1015,10 @@ class ColanasClient:
         """暂停 / 恢复 / 移除下载任务（移除不删本地数据）"""
         return self._request("POST", "/api/v1/pt/downloads/action", params, "body")
 
+    def pt_download_preview(self, **params):
+        """预览候选（搜索并落候选缓存，不建下载任务）"""
+        return self._request("POST", "/api/v1/pt/downloads/preview", params, "body")
+
     def pt_downloads(self, **params):
         """下载留痕（最近 200 条）"""
         return self._request("GET", "/api/v1/pt/downloads", params, "query")
@@ -1310,6 +1030,38 @@ class ColanasClient:
     def pt_download_settings_set(self, **params):
         """保存下载目录与筛选（自动下载 / 扫描间隔立即生效）"""
         return self._request("POST", "/api/v1/pt/download/settings", params, "body")
+
+    def pt_download_submit(self, **params):
+        """提交候选到 Transmission（幂等）"""
+        return self._request("POST", "/api/v1/pt/downloads/submit", params, "body")
+
+    def pt_download_sync_status(self, **params):
+        """同步下载进度与完成状态"""
+        return self._request("POST", "/api/v1/pt/downloads/sync-status", params, "body")
+
+    def pt_favorite_list(self, **params):
+        """收藏三态列表（watching/downloading/downloaded/owned）"""
+        return self._request("GET", "/api/v1/pt/favorites", params, "query")
+
+    def pt_favorite_scan(self, **params):
+        """扫描待下载收藏并自动提交"""
+        return self._request("POST", "/api/v1/pt/favorites/scan", params, "body")
+
+    def pt_rule_add(self, **params):
+        """新增择种规则"""
+        return self._request("POST", "/api/v1/pt/rules/add", params, "body")
+
+    def pt_rule_delete(self, **params):
+        """删除择种规则"""
+        return self._request("POST", "/api/v1/pt/rules/delete", params, "body")
+
+    def pt_rule_list(self, **params):
+        """择种规则列表"""
+        return self._request("POST", "/api/v1/pt/rules/list", params, "body")
+
+    def pt_rule_update(self, **params):
+        """修改择种规则"""
+        return self._request("POST", "/api/v1/pt/rules/update", params, "body")
 
     def pt_search(self, **params):
         """按媒体信息搜索所有启用站点（串行）"""
@@ -1326,6 +1078,10 @@ class ColanasClient:
     def pt_site_list(self, **params):
         """PT 站点列表（不返回 cookie 明文）"""
         return self._request("GET", "/api/v1/pt/sites", params, "query")
+
+    def pt_site_test(self, **params):
+        """测试 PT 站点连通性（真搜一次，结果落库）"""
+        return self._request("POST", "/api/v1/pt/sites/{id}/test", params, "body")
 
     def pt_site_upsert(self, **params):
         """新增 / 更新 PT 站点（cookie 密文落库）"""
@@ -1347,6 +1103,10 @@ class ColanasClient:
         """新增 / 更新订阅"""
         return self._request("POST", "/api/v1/pt/subscriptions/upsert", params, "body")
 
+    def pt_torrents(self, **params):
+        """Transmission 实时任务（下载中 / 暂停 / 做种）"""
+        return self._request("GET", "/api/v1/pt/torrents", params, "query")
+
     def pt_transmission_test(self, **params):
         """探测 transmission 连通性"""
         return self._request("POST", "/api/v1/pt/transmission/test", params, "body")
@@ -1358,6 +1118,26 @@ class ColanasClient:
     def rss_add_feed(self, **params):
         """添加订阅（url 或直接给 xml）"""
         return self._request("POST", "/api/v1/rss/feeds", params, "body")
+
+    def rss_downloaded_clear(self, **params):
+        """清空当前账号的下载台账"""
+        return self._request("POST", "/api/v1/rss/downloaded/clear", params, "body")
+
+    def rss_downloaded_delete(self, **params):
+        """删除一条下载台账"""
+        return self._request("POST", "/api/v1/rss/downloaded/delete", params, "body")
+
+    def rss_downloaded_list(self, **params):
+        """永久下载台账（按账号隔离）"""
+        return self._request("GET", "/api/v1/rss/downloaded", params, "query")
+
+    def rss_entry_action(self, **params):
+        """确认 / 拒绝 RSS 条目（兼容 guid 或 feedId:guid）"""
+        return self._request("POST", "/api/v1/rss/entries/action", params, "body")
+
+    def rss_feed_auto_download(self, **params):
+        """设置 feed 级自动下载开关"""
+        return self._request("POST", "/api/v1/rss/feeds/auto-download", params, "body")
 
     def rss_items(self, **params):
         """条目列表（发布时间倒序）"""
@@ -1402,26 +1182,6 @@ class ColanasClient:
     def security_ip_remove(self, **params):
         """移出 IP 黑名单"""
         return self._request("POST", "/api/v1/security/ip/remove", params, "body")
-
-    def share_create(self, **params):
-        """创建分享链接（可选过期与密码）"""
-        return self._request("POST", "/api/v1/share/create", params, "body")
-
-    def share_download(self, **params):
-        """通过分享链接下载（公开，支持 Range）"""
-        return self._request("GET", "/api/v1/share/download", params, "query")
-
-    def share_info(self, **params):
-        """查看分享链接信息（公开）"""
-        return self._request("GET", "/api/v1/share/info", params, "query")
-
-    def share_list(self, **params):
-        """列出分享链接"""
-        return self._request("GET", "/api/v1/share/list", params, "query")
-
-    def share_revoke(self, **params):
-        """撤销分享链接"""
-        return self._request("POST", "/api/v1/share/revoke", params, "body")
 
     def sync_claim_legacy(self, **params):
         """认领升级前的无主任务（uid 为空的同设备任务）"""
@@ -1516,7 +1276,7 @@ class ColanasClient:
         return self._request("POST", "/api/v1/system/exec", params, "body")
 
     def system_logs(self, **params):
-        """服务端日志尾部（logs/kernel.log，按时间正序返回最后 N 行）"""
+        """服务端日志分页（logs/kernel.log，时间倒序；第 1 页为最新）"""
         return self._request("GET", "/api/v1/system/logs", params, "query")
 
     def system_monitor(self, **params):
@@ -1579,6 +1339,38 @@ class ColanasClient:
         """恢复任务（paused → pending）"""
         return self._request("POST", "/api/v1/tasks/resume", params, "body")
 
+    def transfer_begin(self, **params):
+        """开启或续传一个传输会话（同路径活跃会话直接复用）"""
+        return self._request("POST", "/api/v1/transfer/begin", params, "body")
+
+    def transfer_cancel(self, **params):
+        """取消传输（已传分片保留，可再次续传）"""
+        return self._request("POST", "/api/v1/transfer/cancel", params, "body")
+
+    def transfer_finish(self, **params):
+        """标记会话完成（幂等）"""
+        return self._request("POST", "/api/v1/transfer/finish", params, "body")
+
+    def transfer_pause(self, **params):
+        """暂停传输"""
+        return self._request("POST", "/api/v1/transfer/pause", params, "body")
+
+    def transfer_prune(self, **params):
+        """清理已结束的旧会话记录（不碰磁盘文件）"""
+        return self._request("POST", "/api/v1/transfer/prune", params, "body")
+
+    def transfer_resume(self, **params):
+        """恢复传输"""
+        return self._request("POST", "/api/v1/transfer/resume", params, "body")
+
+    def transfer_session_get(self, **params):
+        """单个传输会话"""
+        return self._request("GET", "/api/v1/transfer/sessions/{id}", params, "query")
+
+    def transfer_sessions(self, **params):
+        """传输会话列表（全部来源：本机 / 其他设备 / 其他用户）"""
+        return self._request("GET", "/api/v1/transfer/sessions", params, "query")
+
     def user_audit_logs(self, **params):
         """账号操作审计（创建 / 编辑 / 删除 / 2FA / 权限）"""
         return self._request("GET", "/api/v1/accounts/users/audit-logs", params, "query")
@@ -1626,30 +1418,6 @@ class ColanasClient:
     def user_update(self, **params):
         """编辑账号（用户名 / 密码 / 手机 / 备注）"""
         return self._request("POST", "/api/v1/accounts/users/update", params, "body")
-
-    def vault_create(self, **params):
-        """创建加密空间"""
-        return self._request("POST", "/api/v1/vault/create", params, "body")
-
-    def vault_delete(self, **params):
-        """删除加密空间条目"""
-        return self._request("POST", "/api/v1/vault/delete", params, "body")
-
-    def vault_export(self, **params):
-        """解密导出到 files 根内的目录（保留相对路径）"""
-        return self._request("POST", "/api/v1/vault/export", params, "body")
-
-    def vault_get(self, **params):
-        """读取并解密一个文件"""
-        return self._request("POST", "/api/v1/vault/get", params, "body")
-
-    def vault_list(self, **params):
-        """列出加密空间条目"""
-        return self._request("POST", "/api/v1/vault/list", params, "body")
-
-    def vault_put(self, **params):
-        """写入一个文件（AES-256-GCM）"""
-        return self._request("POST", "/api/v1/vault/put", params, "body")
 
     def video_actor_avatars(self, **params):
         """按演员名批量取头像与档案（详情页演职人员区用）"""
@@ -1702,6 +1470,10 @@ class ColanasClient:
     def video_duplicates(self, **params):
         """重复视频（豆瓣 / IMDB / 番号 / 标题+年份 四把钥匙，并查集分组）"""
         return self._request("GET", "/api/v1/video/duplicates", params, "query")
+
+    def video_facets(self, **params):
+        """筛选面板选项：来源 / 标签 / 分辨率计数 + NFO 题材前 30（排除单体作品）"""
+        return self._request("GET", "/api/v1/video/facets", params, "query")
 
     def video_favorites(self, **params):
         """我收藏的影片"""
@@ -1882,6 +1654,10 @@ class ColanasClient:
     def video_smart_albums(self, **params):
         """智能合集（预设规则）与各自条数"""
         return self._request("GET", "/api/v1/video/smart-albums", params, "query")
+
+    def video_source_list(self, **params):
+        """影视库源目录（发现页下载目录下拉用）"""
+        return self._request("POST", "/api/v1/video/source/list", params, "body")
 
     def video_source_probe(self, **params):
         """探测 SMB 来源可达性并刷新在线状态"""

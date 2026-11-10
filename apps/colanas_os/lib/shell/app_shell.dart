@@ -11,24 +11,20 @@ import '../core/session.dart';
 import '../core/settings_store.dart';
 import '../features/accounts/accounts_page.dart';
 import '../features/blog/blog_shell.dart';
-import '../features/book/book_shell.dart';
 import '../features/discover/discover_shell.dart';
+import '../features/discover/shell/discover_shell_view.dart';
 import '../features/files/files_page.dart';
 import '../features/home/home_page.dart';
-import '../features/media_tool/media_tool_page.dart';
-import '../features/messages/messages_page.dart';
 import '../features/monitor/monitor_page.dart';
-import '../features/mount/mount_page.dart';
 import '../features/music/music_shell.dart';
-import '../features/notes/notes_page.dart';
+import '../features/music/shell/music_shell_view.dart';
 import '../features/photo/photo_shell.dart';
-import '../features/safety/safety_page.dart';
 import '../features/settings/settings_page.dart';
-import '../features/share/share_page.dart';
 import '../features/sync/sync_page.dart';
 import '../features/sync/sync_scheduler.dart';
 import '../features/sync/sync_tray_bridge.dart';
 import '../features/terminal/terminal_page.dart';
+import '../features/transmission/transmission_page.dart';
 import '../features/transfer/transfer_page.dart';
 import '../features/video/video_shell.dart';
 import 'app_nav_shell.dart';
@@ -64,11 +60,16 @@ class _AppShellState extends State<AppShell> {
   String _selected = 'home';
 
   /// 非首页时侧栏收成图标条；鼠标移上去临时展开显示文字
-  bool _navHovered = false;
+  // 一级栏宽度固定后不再需要 hover 展开状态（保留注释说明来龙去脉）
 
   /// 收起（未悬停）只留图标：56；悬停展开到「图标 + 4 个汉字」：128
-  static const _navCollapsedWidth = 56.0;
-  static const _navExpandedWidth = 128.0;
+  /// 一级栏固定宽度：图标 + 2 个汉字。
+  ///
+  /// 以前是「选中首页 / 鼠标悬停时展开、其余时候收起」，鼠标一动整栏就跳一下，
+  /// 用户明确要求**固定**（2026-11-09）：不再隐藏/展开，永远这个宽度。
+  ///
+  /// 84 = 侧栏内外边距 8+16 + 图标 20 + 间距 8 + 两个汉字 28 + 余量。
+  static const _navWidth = 84.0;
 
   /// 手机底部曾经固定的四项（相册 / 影视 / 音乐 / 发现）。
   ///
@@ -133,21 +134,19 @@ class _AppShellState extends State<AppShell> {
     'photo': const PhotoShellPage(),
     'files': const FilesPage(),
     'video': const VideoShellPage(),
-    'discover': const DiscoverShellPage(),
-    'music': const MusicShellPage(),
+    // 参考实现 1:1 移植版；置 kDiscoverShell=false 可回退到旧实现。
+    'discover': kDiscoverShell
+        ? const DiscoverShellView()
+        : const DiscoverShellPage(),
+    // 参考实现 1:1 移植版；置 kMusicShell=false 可回退到旧实现。
+    'music': kMusicShell ? const MusicShellView() : const MusicShellPage(),
     'blog': const BlogShellPage(),
-    'book': const BookShellPage(),
-    'notes': const NotesPage(),
-    'netdisk': const MountPage(),
-    'share': const SharePage(),
-    'backup': const SafetyPage(),
     'monitor': const MonitorPage(),
-    'messages': const MessagesPage(),
     'terminal': const TerminalPage(),
     'sync': const SyncPage(),
     'transfer': const TransferPage(),
+    'transmission': const TransmissionPage(),
     'accounts': const AccountsPage(),
-    'mediaTool': const MediaToolPage(),
     'settings': const SettingsPage(),
   };
 
@@ -261,24 +260,43 @@ class _AppShellState extends State<AppShell> {
         if (mode == LayoutMode.compact) {
           // 手机端：**工作台是唯一入口**，App 全屏（自带 56 顶栏 + 底部二级菜单）。
           // 因此这里不再有一级底部导航，也没有「更多」弹层 —— 两层底部栏没法共存。
-          return Scaffold(
-            backgroundColor: Colors.transparent,
-            body: SafeArea(
-              // 工作台自己不带顶栏，交给这里避开状态栏；
-              // App 页的顶栏要把底色铺到状态栏下面，所以 top: false。
-              top: currentId == 'home',
-              bottom: false,
-              child: _withCapabilityNotice(currentId, body, NasTokens.spaceSm),
+          //
+          // 2026-11-08 用户要求：App 首页按 Android 手势返回要回**工作台**，
+          // 不能把整个 App 退到后台。顺序是「先退 App 内下钻 → 再回工作台 → 最后才是退出」。
+          return PopScope(
+            // 只有站在工作台且没有下钻时才把返回让给系统（= 退出/最小化）
+            canPop: currentId == 'home' && ShellBack.depth(currentId) == 0,
+            onPopInvokedWithResult: (didPop, _) {
+              if (didPop) return;
+              final back = ShellBack.handlerFor(currentId);
+              if (back != null) {
+                back();
+                return;
+              }
+              if (currentId != 'home') _open('home');
+            },
+            child: Scaffold(
+              backgroundColor: Colors.transparent,
+              body: SafeArea(
+                // 工作台自己不带顶栏，交给这里避开状态栏；
+                // App 页的顶栏要把底色铺到状态栏下面，所以 top: false。
+                top: currentId == 'home',
+                bottom: false,
+                child: _withCapabilityNotice(
+                  currentId,
+                  body,
+                  NasTokens.spaceSm,
+                ),
+              ),
+              // 常驻播放条：无曲目时高度为 0，不占位
+              bottomNavigationBar: const MiniPlayerBar(),
             ),
-            // 常驻播放条：无曲目时高度为 0，不占位
-            bottomNavigationBar: const MiniPlayerBar(),
           );
         }
 
         // TV 上常显完整侧栏（无鼠标悬停），间距也放大一档
         final tv = TvScope.of(context);
         final gap = tv ? NasTokens.spaceLg : NasTokens.spaceMd;
-        final collapsedNav = !tv && _selected != 'home' && !_navHovered;
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: SafeArea(
@@ -287,30 +305,18 @@ class _AppShellState extends State<AppShell> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  MouseRegion(
-                    onEnter: (_) {
-                      if (_selected != 'home' && !_navHovered) {
-                        setState(() => _navHovered = true);
-                      }
-                    },
-                    onExit: (_) {
-                      if (_navHovered) setState(() => _navHovered = false);
-                    },
-                    child: NasSideNav(
-                      width: tv
-                          ? kTvNavWidth
-                          : collapsedNav
-                          ? _navCollapsedWidth
-                          : _navExpandedWidth,
-                      iconOnly: collapsedNav,
-                      groups: _navGroups(),
-                      selectedId: currentId,
-                      onSelect: _open,
-                      header: _brand(compact: collapsedNav),
-                      footer: _accountCard(compact: collapsedNav),
-                      // 测试用：一级栏与二级栏的 id 会重名（`home`），key 前缀区分
-                      debugLabel: 'app',
-                    ),
+                  NasSideNav(
+                    // 固定宽度：图标 + 2 个字（TV 上仍用大栏，遥控器按字找）
+                    width: tv ? kTvNavWidth : _navWidth,
+                    // 桌面档永远显示文字，不再折叠；TV 已是展开态
+                    iconOnly: false,
+                    groups: _navGroups(),
+                    selectedId: currentId,
+                    onSelect: _open,
+                    header: _brand(compact: !tv),
+                    footer: _accountCard(compact: !tv),
+                    // 测试用：一级栏与二级栏的 id 会重名（`home`），key 前缀区分
+                    debugLabel: 'app',
                   ),
                   SizedBox(width: gap),
                   Expanded(
@@ -318,8 +324,10 @@ class _AppShellState extends State<AppShell> {
                       children: [
                         NasTopBar(
                           title: _labelOf(currentId),
+                          // 首页不显示副标题（「存储、内存与服务状态一览」，
+                          // 2026-11-07 反馈删除）；其余 App 仍显示分组名
                           subtitle: currentId == 'home'
-                              ? tr('home.summary')
+                              ? null
                               : tr(AppVisuals.groupOf(currentId).i18nKey),
                           // 顶部搜索暂时不显示（2026-11-04）：它只按 App 名字跳转，
                           // 但每个二级页面顶上都要占一条输入框，用户反馈「怪怪的」。
@@ -331,7 +339,8 @@ class _AppShellState extends State<AppShell> {
                               valueListenable: ShellBack.revision,
                               builder: (context, _, _) {
                                 final back = ShellBack.handlerFor(currentId);
-                                if (back == null) return const SizedBox.shrink();
+                                if (back == null)
+                                  return const SizedBox.shrink();
                                 return NasIconAction(
                                   icon: Icons.arrow_back,
                                   tooltip: tr('common.back'),

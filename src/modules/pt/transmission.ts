@@ -60,12 +60,18 @@ async function rpc(
 export async function addTorrent(
   cfg: TransmissionConfig,
   filename: string,
-  opts: { timeoutMs?: number; fetchImpl?: typeof fetch; downloadDir?: string } = {},
+  opts: {
+    timeoutMs?: number;
+    fetchImpl?: typeof fetch;
+    downloadDir?: string;
+    /** true = 只加种不开始（RSS「不立即下载」时用：先把种子挂上去，等用户手动开始） */
+    paused?: boolean;
+  } = {},
 ): Promise<TransmissionResult> {
   if (!cfg.url) return { ok: false, message: 'transmission url not configured' };
   if (!filename) return { ok: false, message: 'torrent url required' };
 
-  const args: Record<string, unknown> = { filename, paused: false };
+  const args: Record<string, unknown> = { filename, paused: opts.paused === true };
   // download-dir 是「下载器所在机器」的绝对路径；单机 NAS 口径下由服务端
   // 把影视库根解析成绝对路径再传，跨机部署不保证一致。
   if (opts.downloadDir) args['download-dir'] = opts.downloadDir;
@@ -151,5 +157,136 @@ export async function transmissionStatus(
     return { ok: true, message: 'ok', version: String(res.json?.arguments?.version || '') };
   } catch (err) {
     return { ok: false, message: String((err as Error)?.message || err).slice(0, 160) };
+  }
+}
+
+/**
+ * 批量读取 torrent 实时状态（参考实现 1:1 的 downloads/sync-status 用）。
+ * Transmission status: 0=已暂停, 1~5=排队/下载/做种, 6=完成。
+ */
+export async function torrentGet(
+  cfg: TransmissionConfig,
+  hashes: string[],
+  opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+): Promise<{
+  ok: boolean;
+  message: string;
+  items: Array<{ hashString: string; status: number; percentDone: number; name: string }>;
+}> {
+  if (!cfg.url) return { ok: false, message: 'transmission url not configured', items: [] };
+  if (!hashes.length) return { ok: true, message: 'ok', items: [] };
+  try {
+    const payload = {
+      method: 'torrent-get',
+      arguments: { ids: hashes, fields: ['hashString', 'status', 'percentDone', 'name'] },
+    };
+    let res = await rpc(cfg, payload, opts);
+    if (res.status === 409 && res.sessionId) {
+      res = await rpc(cfg, payload, { ...opts, sessionId: res.sessionId });
+    }
+    if (res.status !== 200 || res.json?.result !== 'success') {
+      return { ok: false, message: `transmission http ${res.status}`, items: [] };
+    }
+    const list = (res.json?.arguments?.torrents ?? []) as Array<Record<string, unknown>>;
+    return {
+      ok: true,
+      message: 'ok',
+      items: list.map((t) => ({
+        hashString: String(t.hashString ?? ''),
+        status: Number(t.status ?? 0),
+        percentDone: Number(t.percentDone ?? 0),
+        name: String(t.name ?? ''),
+      })),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      message: String((err as Error)?.message || err).slice(0, 160),
+      items: [],
+    };
+  }
+}
+
+export interface TorrentInfo {
+  hashString: string;
+  name: string;
+  /** Transmission: 0=暂停 1~2=校验 3~4=下载 5~6=做种 */
+  status: number;
+  percentDone: number;
+  rateDownload: number;
+  rateUpload: number;
+  totalSize: number;
+  downloadedEver: number;
+  uploadRatio: number;
+  /** 预计剩余秒数；-1 = 未知，-2 = 不会完成 */
+  eta: number;
+  addedDate: number;
+  error: number;
+  errorString: string;
+  downloadDir: string;
+}
+
+/** 读全部 torrent 的实时状态（Transmission 一级页面用；不带 ids 即「全部」） */
+export async function torrentList(
+  cfg: TransmissionConfig,
+  opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+): Promise<{ ok: boolean; message: string; items: TorrentInfo[] }> {
+  if (!cfg.url) return { ok: false, message: 'transmission url not configured', items: [] };
+  const payload = {
+    method: 'torrent-get',
+    arguments: {
+      fields: [
+        'hashString',
+        'name',
+        'status',
+        'percentDone',
+        'rateDownload',
+        'rateUpload',
+        'totalSize',
+        'downloadedEver',
+        'uploadRatio',
+        'eta',
+        'addedDate',
+        'error',
+        'errorString',
+        'downloadDir',
+      ],
+    },
+  };
+  try {
+    let res = await rpc(cfg, payload, opts);
+    if (res.status === 409 && res.sessionId) {
+      res = await rpc(cfg, payload, { ...opts, sessionId: res.sessionId });
+    }
+    if (res.status !== 200 || res.json?.result !== 'success') {
+      return { ok: false, message: `transmission http ${res.status}`, items: [] };
+    }
+    const list = (res.json?.arguments?.torrents ?? []) as Array<Record<string, unknown>>;
+    return {
+      ok: true,
+      message: 'ok',
+      items: list.map((t) => ({
+        hashString: String(t.hashString ?? ''),
+        name: String(t.name ?? ''),
+        status: Number(t.status ?? 0),
+        percentDone: Number(t.percentDone ?? 0),
+        rateDownload: Number(t.rateDownload ?? 0),
+        rateUpload: Number(t.rateUpload ?? 0),
+        totalSize: Number(t.totalSize ?? 0),
+        downloadedEver: Number(t.downloadedEver ?? 0),
+        uploadRatio: Number(t.uploadRatio ?? 0),
+        eta: Number(t.eta ?? -1),
+        addedDate: Number(t.addedDate ?? 0),
+        error: Number(t.error ?? 0),
+        errorString: String(t.errorString ?? ''),
+        downloadDir: String(t.downloadDir ?? ''),
+      })),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      message: String((err as Error)?.message || err).slice(0, 160),
+      items: [],
+    };
   }
 }

@@ -109,11 +109,6 @@
                 "id": "album",
                 "labelKey": "ui.photo.053",
                 "icon": "photo_album_outlined"
-              },
-              {
-                "id": "collection",
-                "labelKey": "photo.nav.collection",
-                "icon": "collections_outlined"
               }
             ]
           },
@@ -172,12 +167,7 @@
             "labelKey": "photo.nav.similarCleanup",
             "icon": "cleaning_services_outlined"
           },
-          {
-            "id": "discovery",
-            "labelKey": "photo.nav.discovery",
-            "icon": "explore_outlined"
-          },
-          {
+                    {
             "id": "duplicateInsight",
             "labelKey": "photo.nav.duplicateInsight",
             "icon": "content_copy_outlined"
@@ -533,11 +523,6 @@
                 "id": "playlists",
                 "labelKey": "ui.music.030",
                 "icon": "queue_music_outlined"
-              },
-              {
-                "id": "collections",
-                "labelKey": "music.nav.collections",
-                "icon": "collections_bookmark_outlined"
               }
             ]
           },
@@ -612,175 +597,6 @@
           }
         ]
       }
-    },
-    {
-      "id": "book",
-      "nameKey": "app.book",
-      "route": "/book",
-      "icon": "book",
-      "endpoints": [
-        "desktop",
-        "tablet",
-        "mobile",
-        "web"
-      ],
-      "available": true,
-      "group": "media",
-      "accent": [
-        "#10B981",
-        "#059669"
-      ],
-      "nav": {
-        "style": "side",
-        "sections": [
-          {
-            "id": "library",
-            "titleKey": "book.nav.library",
-            "icon": "local_library_outlined",
-            "items": [
-              {
-                "id": "books",
-                "labelKey": "book.nav.books",
-                "icon": "book_outlined"
-              },
-              {
-                "id": "comics",
-                "labelKey": "book.nav.comics",
-                "icon": "auto_stories_outlined"
-              },
-              {
-                "id": "favorites",
-                "labelKey": "nav.favorites",
-                "icon": "favorite_outline"
-              },
-              {
-                "id": "history",
-                "labelKey": "book.nav.history",
-                "icon": "history"
-              },
-              {
-                "id": "files",
-                "labelKey": "nav.filesView",
-                "icon": "folder_outlined"
-              }
-            ]
-          },
-          {
-            "id": "lists",
-            "titleKey": "book.nav.lists",
-            "icon": "playlist_play_outlined",
-            "items": [
-              {
-                "id": "lists",
-                "labelKey": "book.nav.myLists",
-                "icon": "playlist_add_outlined"
-              },
-              {
-                "id": "collections",
-                "labelKey": "book.nav.collections",
-                "icon": "collections_bookmark_outlined"
-              }
-            ]
-          },
-          {
-            "id": "settings",
-            "titleKey": "ui.settings.017",
-            "icon": "settings_outlined",
-            "items": [
-              {
-                "id": "settings.source",
-                "labelKey": "book.nav.sources",
-                "icon": "folder_special_outlined"
-              },
-              {
-                "id": "settings.cache",
-                "labelKey": "book.nav.cache",
-                "icon": "download_for_offline_outlined"
-              }
-            ]
-          }
-        ],
-        "mobile": {
-          "tabs": [
-            "books",
-            "comics",
-            "favorites",
-            "@more"
-          ]
-        }
-      }
-    },
-    {
-      "id": "notes",
-      "nameKey": "app.notes",
-      "route": "/notes",
-      "icon": "note",
-      "endpoints": [
-        "desktop",
-        "tablet",
-        "mobile",
-        "web"
-      ],
-      "available": true,
-      "group": "data",
-      "accent": [
-        "#FBBF24",
-        "#F59E0B"
-      ]
-    },
-    {
-      "id": "netdisk",
-      "nameKey": "app.netdisk",
-      "route": "/netdisk",
-      "icon": "cloud",
-      "endpoints": [
-        "desktop",
-        "tablet",
-        "mobile",
-        "web"
-      ],
-      "available": true,
-      "group": "data",
-      "accent": [
-        "#0EA5E9",
-        "#22D3EE"
-      ]
-    },
-    {
-      "id": "share",
-      "nameKey": "app.share",
-      "route": "/share",
-      "icon": "share",
-      "endpoints": [
-        "desktop",
-        "tablet",
-        "mobile",
-        "web"
-      ],
-      "available": true,
-      "group": "data",
-      "accent": [
-        "#A855F7",
-        "#EC4899"
-      ]
-    },
-    {
-      "id": "backup",
-      "nameKey": "app.backup",
-      "route": "/backup",
-      "icon": "backup",
-      "endpoints": [
-        "desktop",
-        "tablet",
-        "mobile",
-        "web"
-      ],
-      "available": true,
-      "group": "data",
-      "accent": [
-        "#14B8A6",
-        "#10B981"
-      ]
     },
     {
       "id": "ai",
@@ -878,10 +694,10 @@
       ]
     },
     {
-      "id": "messages",
-      "nameKey": "app.messages",
-      "route": "/messages",
-      "icon": "bell",
+      "id": "transmission",
+      "nameKey": "app.transmission",
+      "route": "/transmission",
+      "icon": "download",
       "endpoints": [
         "desktop",
         "tablet",
@@ -891,8 +707,8 @@
       "available": true,
       "group": "service",
       "accent": [
-        "#F43F5E",
-        "#FB7185"
+        "#0EA5E9",
+        "#22D3EE"
       ]
     },
     {
@@ -910,22 +726,6 @@
       "accent": [
         "#64748B",
         "#94A3B8"
-      ]
-    },
-    {
-      "id": "mediaTool",
-      "nameKey": "app.mediaTool",
-      "route": "/media-tool",
-      "icon": "wand",
-      "endpoints": [
-        "desktop",
-        "web"
-      ],
-      "available": true,
-      "group": "service",
-      "accent": [
-        "#D946EF",
-        "#8B5CF6"
       ]
     },
     {

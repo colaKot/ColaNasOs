@@ -84,6 +84,33 @@
     "accounts.removeFailed": {
       "error": {}
     },
+    "accounts.scope.all": {},
+    "accounts.scope.allHint": {},
+    "accounts.scope.allRead": {},
+    "accounts.scope.allWrite": {},
+    "accounts.scope.clear": {},
+    "accounts.scope.domain.blog": {},
+    "accounts.scope.domain.discover": {},
+    "accounts.scope.domain.files": {},
+    "accounts.scope.domain.integration": {},
+    "accounts.scope.domain.music": {},
+    "accounts.scope.domain.photo": {},
+    "accounts.scope.domain.player": {},
+    "accounts.scope.domain.pt": {},
+    "accounts.scope.domain.rss": {},
+    "accounts.scope.domain.security": {},
+    "accounts.scope.domain.sync": {},
+    "accounts.scope.domain.system": {},
+    "accounts.scope.domain.user": {},
+    "accounts.scope.domain.video": {},
+    "accounts.scope.read": {},
+    "accounts.scope.required": {},
+    "accounts.scope.summary": {
+      "n": {}
+    },
+    "accounts.scope.title": {},
+    "accounts.scope.wildcardHint": {},
+    "accounts.scope.write": {},
     "accounts.search": {},
     "accounts.selectUser": {},
     "accounts.tab.logins": {},
@@ -124,24 +151,28 @@
     "accounts.twofa.scanHint": {},
     "app.accounts": {},
     "app.ai": {},
-    "app.backup": {},
     "app.blog": {},
-    "app.book": {},
     "app.discover": {},
     "app.files": {},
-    "app.mediaTool": {},
-    "app.messages": {},
     "app.monitor": {},
     "app.music": {},
-    "app.netdisk": {},
-    "app.notes": {},
     "app.photo": {},
     "app.settings": {},
-    "app.share": {},
     "app.sync": {},
     "app.terminal": {},
     "app.transfer": {},
+    "app.transmission": {},
+    "transmission.ratio": {},
+    "transmission.seeding": {},
+    "transmission.paused": {},
+    "transmission.downloading": {},
+    "transmission.emptyHint": {},
+    "transmission.empty": {},
+    "transmission.external": {},
+    "transmission.builtin": {},
+    "transmission.webUiMissing": {},
     "app.video": {},
+    "audio.channelName": {},
     "auth.login": {},
     "auth.logout": {},
     "auth.scopes": {},
@@ -182,12 +213,27 @@
     "blog.episodes.items": {
       "count": {}
     },
+    "blog.episodes.newest": {},
+    "blog.episodes.next": {},
+    "blog.episodes.perPage": {
+      "count": {}
+    },
+    "blog.episodes.prev": {},
+    "blog.episodes.range": {
+      "from": {},
+      "to": {},
+      "total": {}
+    },
     "blog.episodes.resynth": {},
+    "blog.episodes.script": {},
     "blog.episodes.status.done": {},
     "blog.episodes.status.failed": {},
     "blog.episodes.status.pending": {},
     "blog.episodes.status.running": {},
     "blog.episodes.title": {},
+    "blog.episodes.total": {
+      "count": {}
+    },
     "blog.estimate": {},
     "blog.generate.busy": {},
     "blog.generate.eta": {
@@ -197,6 +243,7 @@
       "error": {}
     },
     "blog.generate.needsVoice": {},
+    "blog.generate.noCount": {},
     "blog.generate.now": {},
     "blog.generate.preparing": {},
     "blog.generate.running": {
@@ -215,9 +262,22 @@
     "blog.plan.time": {},
     "blog.plan.title": {},
     "blog.player.next": {},
+    "blog.player.noEpisode": {},
+    "blog.player.open": {},
     "blog.player.pause": {},
     "blog.player.play": {},
     "blog.player.prev": {},
+    "blog.player.title": {},
+    "blog.queue.add": {},
+    "blog.queue.addAll": {},
+    "blog.queue.added": {},
+    "blog.queue.clear": {},
+    "blog.queue.empty": {},
+    "blog.queue.enqueue": {},
+    "blog.queue.noMore": {},
+    "blog.queue.playNext": {},
+    "blog.queue.remove": {},
+    "blog.queue.title": {},
     "blog.refresh": {},
     "blog.retry": {},
     "blog.save": {},
@@ -225,6 +285,11 @@
       "error": {}
     },
     "blog.saved": {},
+    "blog.script.empty": {},
+    "blog.script.links": {},
+    "blog.script.noLinks": {},
+    "blog.script.title": {},
+    "blog.settings.title": {},
     "blog.speed.title": {},
     "blog.speed.value": {
       "value": {}
@@ -273,108 +338,6 @@
       "name": {}
     },
     "blog.voice.warm": {},
-    "book.cache.empty": {},
-    "book.cache.hint": {},
-    "book.cache.open": {},
-    "book.cache.serverHint": {},
-    "book.cache.serverTitle": {},
-    "book.cache.title": {},
-    "book.collection.addPath": {},
-    "book.collection.create": {},
-    "book.collection.deleteConfirm": {
-      "name": {}
-    },
-    "book.collection.edit": {},
-    "book.collection.empty": {},
-    "book.collection.emptyHint": {},
-    "book.collection.name": {},
-    "book.collection.noPath": {},
-    "book.collection.paths": {},
-    "book.collection.pathsHint": {},
-    "book.empty.books": {},
-    "book.empty.comics": {},
-    "book.filter.all": {},
-    "book.filter.favorite": {},
-    "book.fulltextTitle": {
-      "keyword": {}
-    },
-    "book.history.clear": {},
-    "book.history.clearConfirm": {},
-    "book.history.empty": {},
-    "book.lists.addBook": {},
-    "book.lists.create": {},
-    "book.lists.deleteConfirm": {
-      "name": {}
-    },
-    "book.lists.empty": {},
-    "book.lists.emptyBooks": {},
-    "book.lists.removeBook": {},
-    "book.lists.rename": {},
-    "book.nav.books": {},
-    "book.nav.cache": {},
-    "book.nav.collections": {},
-    "book.nav.comics": {},
-    "book.nav.history": {},
-    "book.nav.library": {},
-    "book.nav.lists": {},
-    "book.nav.myLists": {},
-    "book.nav.sources": {},
-    "book.pruneConfirm": {
-      "count": {}
-    },
-    "book.reader.direction": {},
-    "book.reader.ltr": {},
-    "book.reader.rtl": {},
-    "book.scanDone": {
-      "added": {},
-      "updated": {},
-      "skipped": {},
-      "parsed": {}
-    },
-    "book.select.all": {},
-    "book.select.count": {
-      "count": {}
-    },
-    "book.select.none": {},
-    "book.shareCopied": {
-      "minutes": {}
-    },
-    "book.shareFailed": {
-      "error": {}
-    },
-    "book.shelfCount": {
-      "count": {}
-    },
-    "book.sort.asc": {},
-    "book.sort.author": {},
-    "book.sort.created": {},
-    "book.sort.desc": {},
-    "book.sort.progress": {},
-    "book.sort.title": {},
-    "book.sort.updated": {},
-    "book.source.add": {},
-    "book.source.books": {
-      "n": {}
-    },
-    "book.source.removeConfirm": {
-      "name": {}
-    },
-    "book.source.scanInterval": {},
-    "book.source.scanIntervalEvery": {
-      "hours": {}
-    },
-    "book.source.scanIntervalOff": {},
-    "book.source.scanNow": {},
-    "book.source.scanWhenChange": {},
-    "book.source.scanWhenStart": {},
-    "book.source.title": {},
-    "book.source.type": {},
-    "book.source.type.book": {},
-    "book.source.type.comic": {},
-    "book.stats": {
-      "books": {},
-      "favorites": {}
-    },
     "capability.limited": {
       "name": {}
     },
@@ -384,6 +347,7 @@
     "capability.webHint": {},
     "common.back": {},
     "common.cancel": {},
+    "common.clean": {},
     "common.cleanupFailed": {
       "error": {}
     },
@@ -399,6 +363,7 @@
     "common.deleteFailed": {
       "error": {}
     },
+    "common.dirRelativeRoot": {},
     "common.empty": {},
     "common.error": {},
     "common.errorWith": {
@@ -415,8 +380,10 @@
       "count": {}
     },
     "common.more": {},
+    "common.name": {},
     "common.ok": {},
     "common.open": {},
+    "common.pathCopied": {},
     "common.pending": {},
     "common.pendingHint": {},
     "common.progressSaved": {
@@ -446,6 +413,7 @@
     "common.select": {},
     "common.size": {},
     "common.test": {},
+    "common.unknown": {},
     "discover.board.info": {
       "name": {}
     },
@@ -518,12 +486,19 @@
     "discover.genre.drama": {},
     "discover.genre.family": {},
     "discover.genre.fantasy": {},
+    "discover.genre.history": {},
     "discover.genre.horror": {},
+    "discover.genre.kids": {},
+    "discover.genre.music": {},
     "discover.genre.mystery": {},
+    "discover.genre.news": {},
     "discover.genre.reality": {},
     "discover.genre.romance": {},
     "discover.genre.scifi": {},
+    "discover.genre.soap": {},
+    "discover.genre.talk": {},
     "discover.genre.thriller": {},
+    "discover.genre.tvMovie": {},
     "discover.genre.war": {},
     "discover.genre.western": {},
     "discover.kind.onAir": {},
@@ -739,7 +714,18 @@
     "help.video.title": {},
     "home.apps": {},
     "home.backup.hint": {},
+    "home.backup.lastDone": {
+      "count": {},
+      "time": {}
+    },
+    "home.backup.progress": {
+      "done": {},
+      "total": {}
+    },
+    "home.backup.running": {},
+    "home.backup.scanning": {},
     "home.backup.title": {},
+    "home.backup.waitingWifi": {},
     "home.cores": {},
     "home.cpu": {},
     "home.disk": {},
@@ -760,6 +746,9 @@
     "home.viewGrid": {},
     "home.viewList": {},
     "login.autoLogin": {},
+    "login.autoMatched": {
+      "url": {}
+    },
     "login.changeServer": {},
     "login.connect": {},
     "login.connectedTo": {
@@ -769,7 +758,13 @@
       "reason": {}
     },
     "login.hidePassword": {},
+    "login.matchFailed": {},
+    "login.matchingPort": {},
     "login.password": {},
+    "login.pickServer": {},
+    "login.scanEmpty": {},
+    "login.scanLan": {},
+    "login.scanning": {},
     "login.server": {},
     "login.serverRequired": {},
     "login.serverStep": {},
@@ -780,82 +775,6 @@
     "login.totp": {},
     "login.twoFactor": {},
     "login.username": {},
-    "media_tool.action.edit": {},
-    "media_tool.action.new": {},
-    "media_tool.action.start": {},
-    "media_tool.action.stop": {},
-    "media_tool.cancelFailed": {
-      "error": {}
-    },
-    "media_tool.comingSoon": {},
-    "media_tool.comingSoonHint": {},
-    "media_tool.empty": {},
-    "media_tool.entry.arrange": {},
-    "media_tool.entry.audioTrans": {},
-    "media_tool.entry.batchCompress": {},
-    "media_tool.entry.singleCompress": {},
-    "media_tool.entry.tasks": {},
-    "media_tool.entry.thumbnails": {},
-    "media_tool.entry.videoTrans": {},
-    "media_tool.field.abrate": {},
-    "media_tool.field.acodec": {},
-    "media_tool.field.by": {},
-    "media_tool.field.byDay": {},
-    "media_tool.field.byMonth": {},
-    "media_tool.field.byYear": {},
-    "media_tool.field.channels": {},
-    "media_tool.field.channelsMono": {},
-    "media_tool.field.channelsSource": {},
-    "media_tool.field.channelsStereo": {},
-    "media_tool.field.format": {},
-    "media_tool.field.fps": {},
-    "media_tool.field.policy": {},
-    "media_tool.field.policyCopy": {},
-    "media_tool.field.policySkip": {},
-    "media_tool.field.quality": {},
-    "media_tool.field.resolution": {},
-    "media_tool.field.sameName": {},
-    "media_tool.field.sameOverwrite": {},
-    "media_tool.field.sameRename": {},
-    "media_tool.field.sameSkip": {},
-    "media_tool.field.sampleRate": {},
-    "media_tool.field.size": {},
-    "media_tool.field.source": {},
-    "media_tool.field.target": {},
-    "media_tool.field.threads": {},
-    "media_tool.field.thumbSize": {},
-    "media_tool.field.vbitrate": {},
-    "media_tool.field.vcodec": {},
-    "media_tool.group.audio": {},
-    "media_tool.group.image": {},
-    "media_tool.group.other": {},
-    "media_tool.group.video": {},
-    "media_tool.jobFailed": {
-      "failed": {}
-    },
-    "media_tool.stats": {
-      "done": {},
-      "total": {},
-      "skipped": {},
-      "failed": {}
-    },
-    "media_tool.status.stopped": {},
-    "media_tool.upload": {},
-    "media_tool.uploadFailed": {
-      "error": {}
-    },
-    "media_tool.uploadHint": {},
-    "media_tool.uploaded": {
-      "count": {}
-    },
-    "media_tool.zip": {},
-    "media_tool.zipHint": {},
-    "messages.markFailed": {
-      "error": {}
-    },
-    "messages.titleUnread": {
-      "count": {}
-    },
     "monitor.cpu": {
       "cores": {},
       "load": {}
@@ -868,24 +787,6 @@
       "hours": {},
       "platform": {},
       "arch": {}
-    },
-    "mount.connectFailed": {
-      "error": {}
-    },
-    "mount.deleteConfirm": {
-      "name": {}
-    },
-    "mount.deleteEntryConfirm": {
-      "name": {}
-    },
-    "mount.downloadCopied": {
-      "minutes": {}
-    },
-    "mount.getFailed": {
-      "error": {}
-    },
-    "mount.testFailed": {
-      "error": {}
     },
     "music.addedTo": {
       "name": {}
@@ -1045,32 +946,6 @@
     "nav.home": {},
     "nav.logout": {},
     "nav.more": {},
-    "notes.conflict.body": {},
-    "notes.conflict.overwrite": {},
-    "notes.conflict.reload": {},
-    "notes.conflict.reloaded": {},
-    "notes.conflict.title": {},
-    "notes.edit": {},
-    "notes.pinFailed": {
-      "error": {}
-    },
-    "notes.preview": {},
-    "notes.previewEmpty": {},
-    "notes.restoreFailed": {
-      "error": {}
-    },
-    "notes.savedAt": {
-      "time": {}
-    },
-    "notes.versionAuthor": {
-      "author": {}
-    },
-    "notes.versionLoadFailed": {
-      "error": {}
-    },
-    "notes.versionTitle": {
-      "count": {}
-    },
     "photo.ai.activities": {},
     "photo.ai.allDone": {},
     "photo.ai.alreadyQueued": {},
@@ -1088,8 +963,10 @@
     "photo.ai.enableActivity": {},
     "photo.ai.enableFace": {},
     "photo.ai.enableOcr": {},
+    "photo.ai.enablePet": {},
     "photo.ai.enablePlace": {},
     "photo.ai.enableSimilar": {},
+    "photo.ai.faceSection": {},
     "photo.ai.faceTuning": {},
     "photo.ai.faceTuningHint": {},
     "photo.ai.faces": {},
@@ -1100,6 +977,11 @@
     },
     "photo.ai.hideNone": {},
     "photo.ai.hint": {},
+    "photo.ai.kind.activity": {},
+    "photo.ai.kind.base": {},
+    "photo.ai.kind.ocr": {},
+    "photo.ai.master": {},
+    "photo.ai.masterHint": {},
     "photo.ai.matchSim": {},
     "photo.ai.matchSimHint": {},
     "photo.ai.mcp": {},
@@ -1133,12 +1015,14 @@
       "pending": {}
     },
     "photo.ai.purge": {},
+    "photo.ai.queueHint": {},
     "photo.ai.queued": {},
     "photo.ai.recluster": {},
     "photo.ai.rescanMissing": {},
     "photo.ai.reset": {},
     "photo.ai.resetAll": {},
     "photo.ai.resetAllConfirm": {},
+    "photo.ai.resetKind": {},
     "photo.ai.resume": {},
     "photo.ai.running": {},
     "photo.ai.save": {},
@@ -1149,6 +1033,7 @@
     },
     "photo.ai.scenes": {},
     "photo.ai.startActivity": {},
+    "photo.ai.startAll": {},
     "photo.ai.startFaceScene": {},
     "photo.ai.startOcr": {},
     "photo.ai.status.disabled": {},
@@ -1157,21 +1042,57 @@
     "photo.ai.sub.activity": {},
     "photo.ai.sub.face": {},
     "photo.ai.sub.ocr": {},
+    "photo.ai.sub.pet": {},
     "photo.ai.sub.place": {},
     "photo.ai.sub.similar": {},
     "photo.ai.taskProgress": {},
     "photo.ai.threads": {},
     "photo.ai.threadsHint": {},
+    "photo.album.addDate": {},
+    "photo.album.addFace": {},
+    "photo.album.addScene": {},
+    "photo.album.addTo": {},
+    "photo.album.added": {
+      "n": {}
+    },
+    "photo.album.autoCover": {},
+    "photo.album.cover": {},
     "photo.album.coverBadge": {},
     "photo.album.coverSet": {},
+    "photo.album.createNew": {},
+    "photo.album.date": {},
+    "photo.album.dateFrom": {
+      "d": {}
+    },
+    "photo.album.dateTo": {
+      "d": {}
+    },
     "photo.album.description": {},
     "photo.album.descriptionHint": {},
     "photo.album.edit": {},
+    "photo.album.editTitle": {},
+    "photo.album.face": {},
+    "photo.album.facetsFailed": {
+      "error": {}
+    },
     "photo.album.moveDown": {},
     "photo.album.moveUp": {},
     "photo.album.name": {},
+    "photo.album.noFace": {},
+    "photo.album.noNamedFace": {},
+    "photo.album.noScene": {},
+    "photo.album.photoCount": {
+      "n": {}
+    },
+    "photo.album.pickDate": {},
+    "photo.album.pickFace": {},
+    "photo.album.pickScene": {},
     "photo.album.removePhoto": {},
+    "photo.album.rules": {},
+    "photo.album.rulesHint": {},
+    "photo.album.scene": {},
     "photo.album.setCover": {},
+    "photo.album.unnamedFace": {},
     "photo.analyzeActivity": {
       "count": {},
       "remaining": {}
@@ -1205,21 +1126,136 @@
     "photo.ask.send": {},
     "photo.ask.title": {},
     "photo.ask.try": {},
+    "photo.backup.albumEmpty": {},
+    "photo.backup.albumSelectMulti": {},
+    "photo.backup.albumsSelected": {
+      "count": {}
+    },
+    "photo.backup.allAlbums": {},
+    "photo.backup.backupNow": {},
+    "photo.backup.bytesDone": {
+      "size": {}
+    },
+    "photo.backup.cellularConfirm": {},
+    "photo.backup.checking": {
+      "count": {}
+    },
+    "photo.backup.dirByAlbum": {},
+    "photo.backup.dirByMonth": {},
+    "photo.backup.dirByYear": {},
+    "photo.backup.dirExampleAlbum": {},
+    "photo.backup.dirExampleMonth": {},
+    "photo.backup.dirExampleYear": {},
+    "photo.backup.dirStyle": {},
     "photo.backup.done": {
       "uploaded": {},
       "skipped": {},
       "failed": {}
     },
+    "photo.backup.enable": {},
+    "photo.backup.enableHint": {},
     "photo.backup.failed": {
       "error": {}
     },
+    "photo.backup.failedCount": {
+      "count": {}
+    },
+    "photo.backup.fileLogs": {},
+    "photo.backup.fileLogsTitle": {
+      "time": {}
+    },
+    "photo.backup.folderName": {},
     "photo.backup.job": {
       "total": {},
       "uploaded": {},
       "skipped": {}
     },
+    "photo.backup.keepScreenOn": {},
+    "photo.backup.keepScreenOnHint": {},
+    "photo.backup.loadFailed": {
+      "reason": {}
+    },
+    "photo.backup.manualCancel": {},
+    "photo.backup.manualPath": {},
+    "photo.backup.needLogin": {},
+    "photo.backup.newFolder": {},
+    "photo.backup.noRuns": {},
+    "photo.backup.noSource": {},
+    "photo.backup.notifyChannel": {},
+    "photo.backup.notifyDone": {
+      "count": {}
+    },
+    "photo.backup.notifyPaused": {},
+    "photo.backup.notifyScanning": {},
+    "photo.backup.notifyText": {
+      "done": {},
+      "total": {},
+      "uploaded": {}
+    },
+    "photo.backup.notifyTitle": {},
+    "photo.backup.onlyPhotos": {},
+    "photo.backup.onlyPhotosHint": {},
+    "photo.backup.openSettings": {},
+    "photo.backup.pausedMobile": {},
+    "photo.backup.permissionMissing": {},
+    "photo.backup.photoCount": {
+      "count": {}
+    },
+    "photo.backup.pickHere": {},
+    "photo.backup.pickSource": {},
+    "photo.backup.pickSourceHint": {},
+    "photo.backup.pickTitle": {},
+    "photo.backup.progressCount": {
+      "done": {},
+      "total": {}
+    },
+    "photo.backup.renameByDate": {},
+    "photo.backup.renameByDateHint": {},
+    "photo.backup.rescanAll": {},
+    "photo.backup.rescanAllConfirm": {},
+    "photo.backup.roots": {},
+    "photo.backup.runItem": {
+      "success": {},
+      "failed": {},
+      "skipped": {}
+    },
+    "photo.backup.runs": {},
+    "photo.backup.savingMode": {},
+    "photo.backup.savingModeHint": {},
+    "photo.backup.selectAll": {},
+    "photo.backup.selectedCount": {
+      "count": {}
+    },
+    "photo.backup.skip": {},
+    "photo.backup.skippedDup": {
+      "count": {}
+    },
+    "photo.backup.source": {},
+    "photo.backup.statusDone": {
+      "count": {}
+    },
+    "photo.backup.statusError": {},
+    "photo.backup.statusIdle": {},
+    "photo.backup.statusOff": {},
+    "photo.backup.statusRunning": {
+      "done": {},
+      "total": {}
+    },
+    "photo.backup.stop": {},
+    "photo.backup.target": {},
+    "photo.backup.title": {},
     "photo.backup.total": {
       "total": {},
+      "count": {}
+    },
+    "photo.backup.totalBackedUp": {
+      "count": {}
+    },
+    "photo.backup.unselectAll": {},
+    "photo.backup.up": {},
+    "photo.backup.uploadLiveVideo": {},
+    "photo.backup.uploadLiveVideoHint": {},
+    "photo.backup.uploadedCount": {
       "count": {}
     },
     "photo.backup.uploading": {
@@ -1227,6 +1263,12 @@
       "total": {},
       "name": {}
     },
+    "photo.backup.useCellular": {},
+    "photo.backup.useCellularHint": {},
+    "photo.backup.usePath": {},
+    "photo.backup.waitWifi": {},
+    "photo.backup.waitingWifi": {},
+    "photo.backup.webHint": {},
     "photo.cleanup.md5Hint": {
       "missing": {},
       "candidates": {}
@@ -1260,21 +1302,22 @@
     "photo.cleanupRestored": {
       "count": {}
     },
-    "photo.collection.addPhotos": {},
-    "photo.collection.added": {
-      "n": {}
-    },
-    "photo.collection.confirmDelete": {},
-    "photo.collection.count": {
-      "n": {}
-    },
-    "photo.collection.delete": {},
-    "photo.collection.empty": {},
-    "photo.collection.new": {},
-    "photo.collection.pickTitle": {},
     "photo.count": {
       "count": {}
     },
+    "photo.date.clear": {},
+    "photo.date.days": {
+      "n": {}
+    },
+    "photo.date.last30": {},
+    "photo.date.last7": {},
+    "photo.date.lastMonth": {},
+    "photo.date.lastYear": {},
+    "photo.date.none": {},
+    "photo.date.thisMonth": {},
+    "photo.date.thisYear": {},
+    "photo.date.today": {},
+    "photo.date.yesterday": {},
     "photo.delete.confirm": {
       "count": {}
     },
@@ -1290,23 +1333,6 @@
     "photo.deleteConfirm": {
       "name": {}
     },
-    "photo.discovery.activeDays": {},
-    "photo.discovery.bytes": {},
-    "photo.discovery.cities": {},
-    "photo.discovery.empty": {},
-    "photo.discovery.footprint": {},
-    "photo.discovery.hint": {},
-    "photo.discovery.library": {},
-    "photo.discovery.photos": {},
-    "photo.discovery.places": {},
-    "photo.discovery.quickEntries": {},
-    "photo.discovery.title": {},
-    "photo.discovery.todayNew": {},
-    "photo.discovery.topActivities": {},
-    "photo.discovery.topPeople": {},
-    "photo.discovery.topScenes": {},
-    "photo.discovery.travelDays": {},
-    "photo.discovery.videos": {},
     "photo.duplicate.empty": {},
     "photo.duplicate.goCleanup": {},
     "photo.duplicate.groups": {},
@@ -1332,6 +1358,7 @@
     "photo.face.clusterCount": {
       "count": {}
     },
+    "photo.face.coverSet": {},
     "photo.face.dissolve": {},
     "photo.face.dissolveBody": {
       "count": {}
@@ -1350,10 +1377,14 @@
     },
     "photo.face.moveOut": {},
     "photo.face.moveTo": {},
+    "photo.face.moveToCluster": {},
     "photo.face.moved": {},
     "photo.face.noCandidates": {},
     "photo.face.noFaces": {},
     "photo.face.noOtherCluster": {},
+    "photo.face.removeFromCluster": {},
+    "photo.face.removeFromClusterConfirm": {},
+    "photo.face.setCover": {},
     "photo.faceCluster.unnamed": {
       "id": {}
     },
@@ -1379,6 +1410,12 @@
     "photo.filter.scene": {},
     "photo.filter.time": {},
     "photo.filter.title": {},
+    "photo.filter.type": {},
+    "photo.filter.typeAll": {},
+    "photo.filter.typeImage": {},
+    "photo.filter.typeLive": {},
+    "photo.filter.typePanorama": {},
+    "photo.filter.typeVideo": {},
     "photo.folders.count": {
       "count": {}
     },
@@ -1607,6 +1644,10 @@
       "hashed": {},
       "remaining": {}
     },
+    "photo.media.live": {},
+    "photo.media.playLive": {},
+    "photo.media.playVideo": {},
+    "photo.media.video": {},
     "photo.memory.chapters": {},
     "photo.memory.chaptersHint": {},
     "photo.memory.confirm": {},
@@ -1689,7 +1730,6 @@
     "photo.nav.chapter": {},
     "photo.nav.collection": {},
     "photo.nav.dayFrame": {},
-    "photo.nav.discovery": {},
     "photo.nav.duplicateInsight": {},
     "photo.nav.favorites": {},
     "photo.nav.files": {},
@@ -1855,6 +1895,13 @@
     "photo.suggest.scene": {},
     "photo.suggest.suggestions": {},
     "photo.suggest.year": {},
+    "photo.ticket.all": {},
+    "photo.ticket.flight": {},
+    "photo.ticket.month": {
+      "month": {},
+      "year": {}
+    },
+    "photo.ticket.train": {},
     "photo.timeContrast.earliest": {},
     "photo.timeContrast.empty": {},
     "photo.timeContrast.emptyHint": {},
@@ -1869,10 +1916,8 @@
       "count": {}
     },
     "photo.timeContrast.title": {},
-    "photo.timeline.addToCollection": {},
     "photo.timeline.all": {},
     "photo.timeline.batchFavorite": {},
-    "photo.timeline.noCollection": {},
     "photo.timeline.select": {},
     "photo.timeline.selected": {
       "n": {}
@@ -1918,6 +1963,9 @@
     "photo.upload.partial": {
       "ok": {},
       "failed": {}
+    },
+    "photo.video.failed": {
+      "error": {}
     },
     "photo.yearView.count": {
       "count": {}
@@ -2000,8 +2048,14 @@
     "player.resolution": {},
     "player.retry": {},
     "player.rewind10": {},
+    "player.seekBack": {
+      "n": {}
+    },
     "player.seekFailed": {
       "error": {}
+    },
+    "player.seekForward": {
+      "n": {}
     },
     "player.seekingTarget": {},
     "player.settings": {},
@@ -2010,6 +2064,12 @@
     "player.speed": {},
     "player.speedBoost": {},
     "player.subtitle": {},
+    "player.subtitleSearch": {},
+    "player.subtitleSearchEmpty": {},
+    "player.subtitleSearchHint": {},
+    "player.subtitleSearchNoSub": {},
+    "player.subtitleSearchNone": {},
+    "player.subtitleSearchTip": {},
     "player.switchFailed": {
       "error": {}
     },
@@ -2022,47 +2082,6 @@
     "player.unlock": {},
     "player.videoCodec": {},
     "player.volume": {},
-    "safety.backupDone": {
-      "files": {},
-      "bytes": {}
-    },
-    "safety.backupFailed": {
-      "error": {}
-    },
-    "safety.binary": {
-      "bytes": {}
-    },
-    "safety.deleteConfirm": {
-      "path": {}
-    },
-    "safety.files": {
-      "count": {}
-    },
-    "safety.readFailed": {
-      "error": {}
-    },
-    "safety.restoreDone": {
-      "restored": {},
-      "skipped": {}
-    },
-    "safety.restoreFailed": {
-      "error": {}
-    },
-    "safety.restoreTitle": {
-      "id": {}
-    },
-    "safety.source": {
-      "source": {}
-    },
-    "safety.unlockFailed": {
-      "error": {}
-    },
-    "safety.unlocked": {
-      "id": {}
-    },
-    "safety.writeFailed": {
-      "error": {}
-    },
     "settings.about": {},
     "settings.account": {
       "name": {}
@@ -2152,10 +2171,6 @@
     "settings.rebuildFailed": {
       "error": {}
     },
-    "settings.reindexDone": {
-      "indexed": {},
-      "skipped": {}
-    },
     "settings.restart": {},
     "settings.restartConfirm": {},
     "settings.restartHint": {},
@@ -2227,19 +2242,6 @@
     "setup.tooShort": {},
     "setup.username": {},
     "setup.usernameRequired": {},
-    "share.created": {
-      "url": {}
-    },
-    "share.expiry": {
-      "date": {}
-    },
-    "share.revokeFailed": {
-      "error": {}
-    },
-    "share.summary": {
-      "expires": {},
-      "downloads": {}
-    },
     "style.apply": {},
     "style.aurora": {},
     "style.aurora.desc": {},
@@ -2411,12 +2413,33 @@
     "terminal.failed": {
       "error": {}
     },
+    "transfer.added": {},
+    "transfer.all": {},
+    "transfer.byMe": {},
+    "transfer.cancel": {},
+    "transfer.canceled": {},
+    "transfer.completed": {},
+    "transfer.done": {},
+    "transfer.downloading": {},
+    "transfer.empty": {},
     "transfer.failed": {
       "error": {}
     },
+    "transfer.failedState": {},
+    "transfer.fromDevice": {},
+    "transfer.inProgress": {},
+    "transfer.pause": {},
+    "transfer.paused": {},
+    "transfer.prune": {},
+    "transfer.pruned": {},
+    "transfer.queued": {},
+    "transfer.resume": {},
+    "transfer.speed": {},
+    "transfer.statsLine": {},
     "transfer.titleActive": {
       "count": {}
     },
+    "transfer.uploadDir": {},
     "transfer.uploading": {
       "percent": {}
     },
@@ -2448,55 +2471,6 @@
     "ui.accounts.h3f790d": {},
     "ui.accounts.ha0a92d": {},
     "ui.accounts.hcaaca9": {},
-    "ui.book.001": {},
-    "ui.book.002": {},
-    "ui.book.003": {},
-    "ui.book.004": {},
-    "ui.book.005": {},
-    "ui.book.006": {},
-    "ui.book.007": {},
-    "ui.book.008": {},
-    "ui.book.009": {},
-    "ui.book.010": {},
-    "ui.book.011": {},
-    "ui.book.012": {},
-    "ui.book.013": {},
-    "ui.book.014": {},
-    "ui.book.015": {},
-    "ui.book.016": {},
-    "ui.book.017": {},
-    "ui.book.018": {},
-    "ui.book.019": {},
-    "ui.book.020": {},
-    "ui.book.021": {},
-    "ui.book.022": {},
-    "ui.book.023": {},
-    "ui.book.024": {},
-    "ui.book.025": {},
-    "ui.book.026": {},
-    "ui.book.027": {},
-    "ui.book.028": {},
-    "ui.book.029": {},
-    "ui.book.030": {},
-    "ui.book.031": {},
-    "ui.book.032": {},
-    "ui.book.h062e5e": {},
-    "ui.book.h2662b5": {},
-    "ui.book.h2c598c": {},
-    "ui.book.h39ee20": {},
-    "ui.book.h4b60a3": {},
-    "ui.book.h693575": {},
-    "ui.book.h698bea": {},
-    "ui.book.h6a16ee": {},
-    "ui.book.h8eccf0": {},
-    "ui.book.h9c5bde": {},
-    "ui.book.h9d2601": {},
-    "ui.book.hacf014": {},
-    "ui.book.hb4f0a0": {},
-    "ui.book.hbadd9d": {},
-    "ui.book.hd403d5": {},
-    "ui.book.hd9c32a": {},
-    "ui.book.hde1cb6": {},
     "ui.discover.001": {},
     "ui.discover.002": {},
     "ui.discover.003": {},
@@ -2524,66 +2498,9 @@
     "ui.files.h439f15": {},
     "ui.login.h1b8cb2": {},
     "ui.login.hfbaa29": {},
-    "ui.media_tool.001": {},
-    "ui.media_tool.002": {},
-    "ui.media_tool.003": {},
-    "ui.media_tool.004": {},
-    "ui.media_tool.005": {},
-    "ui.media_tool.006": {},
-    "ui.media_tool.007": {},
-    "ui.media_tool.008": {},
-    "ui.media_tool.009": {},
-    "ui.media_tool.010": {},
-    "ui.media_tool.011": {},
-    "ui.media_tool.012": {},
-    "ui.media_tool.013": {},
-    "ui.media_tool.014": {},
-    "ui.media_tool.015": {},
-    "ui.media_tool.016": {},
-    "ui.media_tool.017": {},
-    "ui.media_tool.h1f425b": {},
-    "ui.media_tool.h32cef6": {},
-    "ui.media_tool.h3e3c80": {},
-    "ui.media_tool.h4dcbbc": {},
-    "ui.media_tool.ha5ffdc": {},
-    "ui.media_tool.hb4c185": {},
-    "ui.media_tool.he99b48": {},
-    "ui.messages.001": {},
-    "ui.messages.002": {},
-    "ui.messages.003": {},
-    "ui.messages.004": {},
-    "ui.messages.005": {},
-    "ui.messages.006": {},
     "ui.monitor.001": {},
     "ui.monitor.002": {},
     "ui.monitor.003": {},
-    "ui.mount.001": {},
-    "ui.mount.002": {},
-    "ui.mount.003": {},
-    "ui.mount.004": {},
-    "ui.mount.005": {},
-    "ui.mount.006": {},
-    "ui.mount.007": {},
-    "ui.mount.008": {},
-    "ui.mount.009": {},
-    "ui.mount.010": {},
-    "ui.mount.011": {},
-    "ui.mount.012": {},
-    "ui.mount.013": {},
-    "ui.mount.014": {},
-    "ui.mount.015": {},
-    "ui.mount.016": {},
-    "ui.mount.017": {},
-    "ui.mount.018": {},
-    "ui.mount.019": {},
-    "ui.mount.020": {},
-    "ui.mount.021": {},
-    "ui.mount.022": {},
-    "ui.mount.023": {},
-    "ui.mount.024": {},
-    "ui.mount.h11ed55": {},
-    "ui.mount.h8da879": {},
-    "ui.mount.he48389": {},
     "ui.music.001": {},
     "ui.music.002": {},
     "ui.music.003": {},
@@ -2646,40 +2563,6 @@
     "ui.music.hfa69ac": {},
     "ui.music.hfcc741": {},
     "ui.music.hff934c": {},
-    "ui.notes.001": {},
-    "ui.notes.002": {},
-    "ui.notes.003": {},
-    "ui.notes.004": {},
-    "ui.notes.005": {},
-    "ui.notes.006": {},
-    "ui.notes.007": {},
-    "ui.notes.008": {},
-    "ui.notes.009": {},
-    "ui.notes.010": {},
-    "ui.notes.011": {},
-    "ui.notes.012": {},
-    "ui.notes.013": {},
-    "ui.notes.014": {},
-    "ui.notes.015": {},
-    "ui.notes.016": {},
-    "ui.notes.017": {},
-    "ui.notes.018": {},
-    "ui.notes.019": {},
-    "ui.notes.020": {},
-    "ui.notes.021": {},
-    "ui.notes.022": {},
-    "ui.notes.h13cc56": {},
-    "ui.notes.h355630": {},
-    "ui.notes.h3bebd0": {},
-    "ui.notes.h5174c5": {},
-    "ui.notes.h6a5c4d": {},
-    "ui.notes.h78f683": {},
-    "ui.notes.h7aeae1": {},
-    "ui.notes.h_conflictBody": {},
-    "ui.notes.h_conflictOverwrite": {},
-    "ui.notes.h_conflictReload": {},
-    "ui.notes.h_conflictReloaded": {},
-    "ui.notes.h_conflictTitle": {},
     "ui.photo.001": {},
     "ui.photo.002": {},
     "ui.photo.003": {},
@@ -2782,31 +2665,6 @@
     "ui.photo.hf39ac5": {},
     "ui.photo.hfadc6b": {},
     "ui.photo.hfe6c48": {},
-    "ui.safety.001": {},
-    "ui.safety.002": {},
-    "ui.safety.003": {},
-    "ui.safety.004": {},
-    "ui.safety.006": {},
-    "ui.safety.007": {},
-    "ui.safety.008": {},
-    "ui.safety.009": {},
-    "ui.safety.010": {},
-    "ui.safety.011": {},
-    "ui.safety.012": {},
-    "ui.safety.013": {},
-    "ui.safety.014": {},
-    "ui.safety.015": {},
-    "ui.safety.016": {},
-    "ui.safety.017": {},
-    "ui.safety.018": {},
-    "ui.safety.019": {},
-    "ui.safety.020": {},
-    "ui.safety.021": {},
-    "ui.safety.022": {},
-    "ui.safety.h2c65a2": {},
-    "ui.safety.h393f28": {},
-    "ui.safety.h468120": {},
-    "ui.safety.h9f82f5": {},
     "ui.settings.001": {},
     "ui.settings.002": {},
     "ui.settings.003": {},
@@ -2821,7 +2679,6 @@
     "ui.settings.012": {},
     "ui.settings.013": {},
     "ui.settings.014": {},
-    "ui.settings.015": {},
     "ui.settings.016": {},
     "ui.settings.017": {},
     "ui.settings.018": {},
@@ -2830,18 +2687,10 @@
     "ui.settings.h4b0e3b": {},
     "ui.settings.h525229": {},
     "ui.settings.h59156f": {},
-    "ui.settings.h6536fe": {},
     "ui.settings.h93f888": {},
     "ui.settings.hc591ec": {},
     "ui.settings.hc9ca33": {},
     "ui.settings.he700d5": {},
-    "ui.share.001": {},
-    "ui.share.002": {},
-    "ui.share.003": {},
-    "ui.share.004": {},
-    "ui.share.005": {},
-    "ui.share.006": {},
-    "ui.share.h409752": {},
     "ui.shell.h2aea9e": {},
     "ui.shell.h8d6e63": {},
     "ui.shell.hsync": {},
@@ -3032,6 +2881,16 @@
     "video.copyUrl": {
       "minutes": {}
     },
+    "video.delete.confirm": {
+      "count": {}
+    },
+    "video.delete.done": {
+      "count": {}
+    },
+    "video.delete.doneTrash": {
+      "count": {}
+    },
+    "video.delete.permanentHint": {},
     "video.detail.actor": {},
     "video.detail.director": {},
     "video.detail.episodes": {},
@@ -3122,6 +2981,20 @@
     "video.favoriteFailed": {
       "error": {}
     },
+    "video.filter.all": {},
+    "video.filter.cracked": {},
+    "video.filter.genre": {},
+    "video.filter.ltx": {},
+    "video.filter.noOptions": {},
+    "video.filter.res1080": {},
+    "video.filter.res4k": {},
+    "video.filter.resolution": {},
+    "video.filter.source": {},
+    "video.filter.sourceN": {
+      "n": {}
+    },
+    "video.filter.tag": {},
+    "video.filter.uncensored": {},
     "video.flag.chineseSub": {},
     "video.flag.uncensored": {},
     "video.history.all": {},
@@ -3150,6 +3023,17 @@
     "video.jp.birthplace": {},
     "video.jp.bust": {},
     "video.jp.daily": {},
+    "video.jp.deleteNeedFilter": {},
+    "video.jp.deleteTooMany": {
+      "count": {}
+    },
+    "video.jp.deleteWorks": {},
+    "video.jp.deleteWorksBody": {
+      "count": {}
+    },
+    "video.jp.deleteWorksDone": {
+      "count": {}
+    },
     "video.jp.empty": {},
     "video.jp.emptyActors": {},
     "video.jp.fanart": {},
@@ -3285,6 +3169,7 @@
     },
     "video.media.grid": {},
     "video.media.hideName": {},
+    "video.media.letterFilter": {},
     "video.media.next": {},
     "video.media.open": {},
     "video.media.prev": {},

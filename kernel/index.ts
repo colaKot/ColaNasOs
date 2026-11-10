@@ -59,6 +59,10 @@ const PUBLIC_PATHS = new Set([
   '/api/v1/auth/bootstrap',
   '/api/v1/share/info',
   '/api/v1/share/download',
+  // Last.fm 授权完成后由**浏览器**重定向到这条回调，不可能带 Authorization 头。
+  // 安全性靠一次性 token：token 是服务端 auth.getToken 拿到的随机串，
+  // 只在绑定期间与发起人绑定（music_settings 里 `lastfm.pending.<token>`）。
+  '/api/v1/music/compat/lastfm/link/callback',
   // MCP 客户端使用独立访问令牌（不是会话 JWT），由 MCP 路由自行校验
   '/api/mcp',
 ]);
@@ -67,6 +71,10 @@ const PUBLIC_PATHS = new Set([
 const QUERY_TOKEN_PATHS = new Set([
   '/api/v1/video/stream',
   '/api/v1/music/stream',
+  // 音乐壳（搬运过来的播放器）走的是 compat 直链：media_kit 只能拿到 URL，
+  // 带不了 Authorization 头，token 只能放 query。漏了这条 → 手机端点歌 401、
+  // 播放条出来了却不播放、时长也解析不到（2026-11-08）。
+  '/api/v1/music/compat/stream',
   '/api/v1/book/file',
   '/api/v1/mount/download',
   // AI 播客的 mp3 / 试听句：播放器（media_kit / 浏览器 <audio>）只能给 URL
@@ -221,7 +229,7 @@ export async function startKernel(opts: KernelOptions) {
   const recovered = await queue.recover();
   if (recovered > 0) app.log.warn({ recovered }, 'recovered running tasks back to pending');
 
-  const secret = resolveSecret();
+  const secret = await resolveSecret(opts.dataDir);
   // 开发令牌（`/auth/dev-token`）与开发期 CORS：**必须显式开启**，production 下永不启用。
   // 旧写法是 `COLANAS_DEV_TOKEN === '1' || NODE_ENV !== 'production'` —— 等于「默认开机就给任何人发 * scope 令牌」，已修正。
   const devTokenEnabled =
@@ -293,7 +301,7 @@ export async function startKernel(opts: KernelOptions) {
       reset: () => cacheStats.reset(),
     },
     media: {
-      thumb: (src, dst, size) => mediaBridge.thumb(src, dst, size),
+      thumb: (src, dst, size, atSec) => mediaBridge.thumb(src, dst, size, atSec),
       transcode: (src, dst, preset) => mediaBridge.transcode(src, dst, preset),
       hls: (src, dir, opts) => mediaBridge.hls(src, dir, opts),
       cancel: (dir) => mediaBridge.cancel(dir),
@@ -333,6 +341,9 @@ export async function startKernel(opts: KernelOptions) {
     // （`/api/**` 的未匹配请求保持原有 401 行为，避免暴露「接口存在与否」）
     if (!req.routeOptions?.url && !url.startsWith('/api/')) return;
     if (PUBLIC_PATHS.has(url)) return;
+    // 内置 transmission Web UI（静态页 + RPC 反代）：浏览器里的页面拿不到 JWT，
+    // 由该模块自己用「一次性票据换 Cookie」鉴权（见 src/modules/pt/webui.ts）。
+    if (url === '/transmission' || url.startsWith('/transmission/')) return;
     // HLS 分片由播放器按 m3u8 里的相对名拉取，无法携带请求头；
     // 用**会话级短期签名令牌**（?t=，sub 必须是 hls:<session>）代替裸会话 UUID。
     const hlsPrefix = '/api/v1/player/hls/';
@@ -656,7 +667,7 @@ export async function startKernel(opts: KernelOptions) {
     await indexer.stop();
     await mediaBridge.stop();
     await closeDb(handle);
-    // 只 flush、不销毁：模块的收尾日志（如 mediaTool pump）在 close 之后仍可能写日志，
+    // 只 flush、不销毁：模块的收尾日志（如队列 pump）在 close 之后仍可能写日志，
     // 提前 end() 会让它们抛 SonicBoom destroyed；进程退出时 SonicBoom 自行 flush。
     try {
       logDest?.flushSync();

@@ -32,6 +32,20 @@ const extraResources = [
     filter: ['tts-model.js'],
   },
   {
+    // 内置 transmission-daemon（Windows 官方 MSI 里取出的二进制 + 4 个 DLL）：
+    // 内核会拉起它当默认下载器，见 src/modules/pt/daemon.ts
+    from: 'vendor/transmission-win',
+    to: 'transmission-daemon',
+    filter: ['**/*'],
+  },
+  {
+    // 内置 transmission 官方 Web UI（见 vendor/transmission-web/NOTICE.md）：
+    // 只托管静态文件 + 内核反代 RPC，不打包 daemon 二进制。
+    from: 'vendor/transmission-web',
+    to: 'transmission-web',
+    filter: ['**/*'],
+  },
+  {
     // 记忆页 / 地图的省市区与最近地名（开发态读 vendor/geo，安装态读 resources/geo）
     from: 'vendor/geo',
     to: 'geo',

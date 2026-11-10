@@ -1,34 +1,28 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**448 个路径 / 479 个操作 / 24 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**397 个路径 / 423 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
 - **子账号与权限**（`accounts`）· 21 个操作 · [跳转](#accounts)
 - **认证与账号**（`auth`）· 1 个操作 · [跳转](#auth)
-- **blog**（`blog`）· 19 个操作 · [跳转](#blog)
-- **书房**（`book`）· 39 个操作 · [跳转](#book)
-- **discover**（`discover`）· 18 个操作 · [跳转](#discover)
+- **blog**（`blog`）· 20 个操作 · [跳转](#blog)
+- **discover**（`discover`）· 23 个操作 · [跳转](#discover)
 - **events**（`events`）· 1 个操作 · [跳转](#events)
 - **文件**（`files`）· 18 个操作 · [跳转](#files)
 - **开放集成（Webhook / deliveries）**（`integration`）· 6 个操作 · [跳转](#integration)
-- **mediatool**（`mediatool`）· 10 个操作 · [跳转](#mediatool)
-- **站内消息**（`messages`）· 6 个操作 · [跳转](#messages)
-- **远程挂载**（`mount`）· 10 个操作 · [跳转](#mount)
-- **音乐**（`music`）· 34 个操作 · [跳转](#music)
-- **笔记**（`notes`）· 7 个操作 · [跳转](#notes)
+- **音乐**（`music`）· 35 个操作 · [跳转](#music)
 - **其他**（`other`）· 2 个操作 · [跳转](#other)
-- **相册**（`photo`）· 134 个操作 · [跳转](#photo)
+- **相册**（`photo`）· 131 个操作 · [跳转](#photo)
 - **player**（`player`）· 2 个操作 · [跳转](#player)
-- **pt**（`pt`）· 14 个操作 · [跳转](#pt)
-- **RSS 订阅**（`rss`）· 9 个操作 · [跳转](#rss)
-- **安全中心（备份 / 加密空间）**（`safety`）· 9 个操作 · [跳转](#safety)
-- **分享**（`share`）· 5 个操作 · [跳转](#share)
+- **pt**（`pt`）· 25 个操作 · [跳转](#pt)
+- **RSS 订阅**（`rss`）· 14 个操作 · [跳转](#rss)
 - **同步**（`sync`）· 17 个操作 · [跳转](#sync)
 - **系统监控**（`system`）· 20 个操作 · [跳转](#system)
 - **tasks**（`tasks`）· 5 个操作 · [跳转](#tasks)
-- **影视**（`video`）· 72 个操作 · [跳转](#video)
+- **transfer**（`transfer`）· 8 个操作 · [跳转](#transfer)
+- **影视**（`video`）· 74 个操作 · [跳转](#video)
 
 ## accounts
 
@@ -135,7 +129,7 @@
 
 编辑账号（用户名 / 密码 / 手机 / 备注） · `userUpdate`
 
-- 请求体：`id` string · **必填**<br>`username` string · 可选<br>`password` string · 可选<br>`phone` string · 可选<br>`remark` string · 可选
+- 请求体：`id` string · **必填**<br>`username` string · 可选<br>`password` string · 可选<br>`phone` string · 可选<br>`remark` string · 可选<br>`scopes` array<string> · 可选
 - 响应：200 object · 错误 400 / 404
 
 #### `GET /api/v1/auth/bootstrap`
@@ -210,7 +204,7 @@ IP 黑名单 · `securityIpList`
 
 已生成的节目（新的在前） · `blogEpisodes`
 
-- 参数：`limit` · 查询 · integer · 可选
+- 参数：`limit` · 查询 · integer · 可选<br>`offset` · 查询 · integer · 可选
 - 响应：200 `BlogEpisodeListResponse`
 
 #### `POST /api/v1/blog/generate`
@@ -253,6 +247,13 @@ IP 黑名单 · `securityIpList`
 
 - 请求体：（空对象）
 - 响应：200 `BlogResynthResponse` · 错误 400 / 404 / 409 / 503
+
+#### `GET /api/v1/blog/script`
+
+某一期的播报稿全文与引用链接 · `blogScript`
+
+- 参数：`id` · 查询 · string · **必填**
+- 响应：200 `BlogScriptResponse` · 错误 404
 
 #### `GET /api/v1/blog/settings`
 
@@ -318,279 +319,15 @@ AI 新闻设置 · `blogSettings`
 
 - 响应：200 `BlogWarmupResponse`
 
-## book
-
-### 书房
-
-#### `POST /api/v1/book/archive`
-
-归档 / 取消归档（按当前用户隔离） · `bookArchive`
-
-- 请求体：（空对象）
-- 响应：200 `BookOkResponse` · 错误 404
-
-#### `GET /api/v1/book/cache`
-
-封面 / PDF 页图缓存占用 · `bookCacheStats`
-
-- 响应：200 `BookCacheStatsResponse`
-
-#### `POST /api/v1/book/cache/clear`
-
-清空封面 / PDF 页图缓存 · `bookCacheClear`
-
-- 响应：200 `BookCacheClearResponse`
-
-#### `POST /api/v1/book/collection`
-
-设置 / 清除书籍所属合集与序号 · `bookCollectionSet`
-
-- 请求体：（空对象）
-- 响应：200 `BookOkResponse` · 错误 400 / 404
-
-#### `GET /api/v1/book/collections`
-
-合集列表（按合集名聚合，带书数与封面书 id） · `bookCollections`
-
-- 参数：`q` · 查询 · string · 可选<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
-- 响应：200 `BookCollectionsResponse` · 错误 400
-
-#### `GET /api/v1/book/collections/items`
-
-合集内的书（按序号、标题排序） · `bookCollectionItems`
-
-- 参数：`name` · 查询 · string · **必填**<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
-- 响应：200 `BookListResponse` · 错误 400 / 404
-
-#### `GET /api/v1/book/cover`
-
-封面（epub / cbz 内嵌图，首次访问提取并缓存） · `bookCover`
-
-- 参数：`id` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选
-- 响应：200 -
-
-#### `POST /api/v1/book/favorites/add`
-
-收藏 · `bookFavoriteAdd`
-
-- 请求体：（空对象）
-- 响应：200 `BookOkResponse` · 错误 404
-
-#### `POST /api/v1/book/favorites/remove`
-
-取消收藏 · `bookFavoriteRemove`
-
-- 请求体：（空对象）
-- 响应：200 `BookOkResponse` · 错误 404
-
-#### `GET /api/v1/book/file`
-
-阅读 / 下载（支持 Range / ETag） · `bookFile`
-
-- 参数：`id` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选
-- 响应：200 -
-
-#### `GET /api/v1/book/file-url`
-
-生成带短期令牌的阅读地址（可直接交给外部阅读器） · `bookFileUrl`
-
-- 参数：`id` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选
-- 响应：200 `BookFileUrlResponse` · 错误 404
-
-#### `GET /api/v1/book/history`
-
-阅读历史（最近读的在最前） · `bookHistory`
-
-- 参数：`limit` · 查询 · integer · 可选
-- 响应：200 `BookListResponse`
-
-#### `POST /api/v1/book/history/clear`
-
-清空当前用户的阅读历史（不影响阅读进度） · `bookHistoryClear`
-
-- 响应：200 `BookOkResponse`
-
-#### `GET /api/v1/book/item`
-
-书籍详情（含当前用户收藏与进度） · `bookItem`
-
-- 参数：`id` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选
-- 响应：200 `BookItem` · 错误 404
-
-#### `GET /api/v1/book/libraries`
-
-书库列表 · `bookLibraryList`
-
-- 响应：200 `BookLibraryListResponse`
-
-#### `POST /api/v1/book/libraries`
-
-新建书库（目录须在 files 根内） · `bookLibraryCreate`
-
-- 请求体：（空对象）
-- 响应：200 `BookLibraryItem` · 错误 400 / 409
-
-#### `POST /api/v1/book/libraries/remove`
-
-删除书库（级联清理收藏 / 进度 / 归档 / 列表条目） · `bookLibraryRemove`
-
-- 请求体：（空对象）
-- 响应：200 `BookOkResponse` · 错误 404
-
-#### `POST /api/v1/book/libraries/update`
-
-改名 / 切换书籍或漫画类型 · `bookLibraryUpdate`
-
-- 请求体：（空对象）
-- 响应：200 `BookLibraryItem` · 错误 404
-
-#### `GET /api/v1/book/list`
-
-书架（标题序 + 排序键 cursor；可按格式 / 收藏过滤） · `bookList`
-
-- 参数：`libraryId` · 查询 · string · 可选<br>`type` · 查询 · enum(book, comic) · 可选<br>`q` · 查询 · string · 可选<br>`format` · 查询 · string · 可选<br>`favorite` · 查询 · string · 可选<br>`archived` · 查询 · string · 可选<br>`listId` · 查询 · string · 可选<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
-- 响应：200 `BookListResponse` · 错误 400
-
-#### `GET /api/v1/book/lists`
-
-当前用户的自定义列表（按名称排序） · `bookLists`
-
-- 响应：200 `BookListsResponse`
-
-#### `POST /api/v1/book/lists`
-
-新建自定义列表（同用户重名 409） · `bookListCreate`
-
-- 请求体：（空对象）
-- 响应：200 `BookListItem` · 错误 400 / 409
-
-#### `POST /api/v1/book/lists/add`
-
-把书加入自定义列表（重复加入跳过） · `bookListAdd`
-
-- 请求体：（空对象）
-- 响应：200 `BookOkResponse` · 错误 404
-
-#### `GET /api/v1/book/lists/items`
-
-自定义列表内的书（按加入顺序） · `bookListItems`
-
-- 参数：`listId` · 查询 · string · **必填**
-- 响应：200 `BookListItemsResponse` · 错误 404
-
-#### `POST /api/v1/book/lists/items/remove`
-
-把书移出自定义列表 · `bookListRemoveItem`
-
-- 请求体：（空对象）
-- 响应：200 `BookOkResponse` · 错误 404
-
-#### `POST /api/v1/book/lists/remove`
-
-删除自定义列表（级联清条目） · `bookListRemove`
-
-- 请求体：（空对象）
-- 响应：200 `BookOkResponse` · 错误 404
-
-#### `POST /api/v1/book/lists/rename`
-
-重命名自定义列表 · `bookListRename`
-
-- 请求体：（空对象）
-- 响应：200 `BookListItem` · 错误 404 / 409
-
-#### `GET /api/v1/book/page`
-
-内置阅读器单页（文本页返回纯文本，图片页返回 base64） · `bookPage`
-
-- 参数：`id` · 查询 · string · **必填**<br>`index` · 查询 · integer · **必填**
-- 响应：200 `BookPageResponse` · 错误 400 / 404
-
-#### `GET /api/v1/book/progress`
-
-当前用户阅读进度（无记录返回 0） · `bookProgress`
-
-- 参数：`id` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选
-- 响应：200 `BookProgress` · 错误 404
-
-#### `POST /api/v1/book/progress/save`
-
-保存阅读进度 · `bookProgressSave`
-
-- 请求体：（空对象）
-- 响应：200 `BookProgress` · 错误 404
-
-#### `POST /api/v1/book/scan`
-
-扫描索引（epub/cbz 解析元数据；未变文件跳过） · `bookScan`
-
-- 请求体：（空对象）
-- 响应：200 `BookScanResponse` · 错误 404
-
-#### `GET /api/v1/book/search`
-
-全文检索（FTS5，返回片段） · `bookFulltextSearch`
-
-- 参数：`q` · 查询 · string · **必填**<br>`limit` · 查询 · integer · 可选
-- 响应：200 `BookFulltextResponse` · 错误 400
-
-#### `POST /api/v1/book/search/reindex`
-
-重建全文索引（书名 / 作者 + txt 正文） · `bookFulltextReindex`
-
-- 请求体：（空对象）
-- 响应：200 `BookFulltextReindexResponse`
-
-#### `GET /api/v1/book/stats`
-
-书库 / 藏书 / 当前用户收藏数 · `bookStats`
-
-- 响应：200 `BookStatsResponse`
-
-#### `GET /api/v1/book/toc`
-
-内置阅读器目录（epub spine / txt 分章 / cbz 图片页） · `bookToc`
-
-- 参数：`id` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选
-- 响应：200 `BookTocResponse` · 错误 400 / 404
-
-#### `GET /api/v1/book/user-collections`
-
-当前用户的图书合集（含书数与封面） · `bookUserCollectionList`
-
-- 响应：200 `BookUserCollectionListResponse`
-
-#### `POST /api/v1/book/user-collections`
-
-新建图书合集 · `bookUserCollectionCreate`
-
-- 请求体：（空对象）
-- 响应：200 `BookUserCollection` · 错误 400
-
-#### `GET /api/v1/book/user-collections/items`
-
-合集里的书 · `bookUserCollectionItems`
-
-- 参数：`id` · 查询 · string · **必填**<br>`limit` · 查询 · integer · 可选
-- 响应：200 `BookListResponse` · 错误 404
-
-#### `POST /api/v1/book/user-collections/remove`
-
-删除合集（不动书与索引） · `bookUserCollectionRemove`
-
-- 请求体：（空对象）
-- 响应：200 `BookOkResponse`
-
-#### `POST /api/v1/book/user-collections/update`
-
-改名 / 换目录 · `bookUserCollectionUpdate`
-
-- 请求体：（空对象）
-- 响应：200 `BookUserCollection` · 错误 404
-
 ## discover
 
 ### discover
+
+#### `GET /api/v1/discover/cache/stats`
+
+发现缓存统计（图片文件数 / 字节、评分数） · `discoverCacheStats`
+
+- 响应：200 object
 
 #### `GET /api/v1/discover/catalog`
 
@@ -625,6 +362,21 @@ AI 新闻设置 · `blogSettings`
 - 参数：`tag` · 查询 · string · 可选<br>`limit` · 查询 · string · 可选
 - 响应：200 object
 
+#### `POST /api/v1/discover/douban/catalogs/{kind}`
+
+豆瓣榜单（按 code 取豆瓣榜，TMDB 反查补卡片） · `discoverDoubanCatalogs`
+
+- 参数：`kind` · 路径 · string · **必填**
+- 请求体：`code` string · **必填**<br>`count` integer · 可选<br>`fast` boolean · 可选
+- 响应：200 object
+
+#### `POST /api/v1/discover/douban/enrich`
+
+批量补豆瓣评分（带缓存，缺的才联网） · `discoverDoubanEnrich`
+
+- 请求体：`mediaIds` array<integer> · **必填**<br>`mediaType` string · 可选
+- 响应：200 object
+
 #### `GET /api/v1/discover/douban/rating`
 
 按标题（+年份）查豆瓣评分 · `discoverDoubanRating`
@@ -647,15 +399,16 @@ AI 新闻设置 · `blogSettings`
 
 #### `POST /api/v1/discover/douban/test`
 
-测试豆瓣连通性（用当前 Cookie） · `discoverDoubanTest`
+测试豆瓣连通性（网站 / Cookie / TMDB 反查） · `discoverDoubanTest`
 
 - 请求体：`cookie` string · 可选
 - 响应：200 object
 
 #### `GET /api/v1/discover/favorites`
 
-当前账号的发现收藏（id + mediaType） · `discoverFavorites`
+当前账号的发现收藏（id + mediaType + state） · `discoverFavorites`
 
+- 参数：`state` · 查询 · string · 可选
 - 响应：200 `DiscoverFavoriteListResponse`
 
 #### `POST /api/v1/discover/favorites/set`
@@ -664,6 +417,13 @@ AI 新闻设置 · `blogSettings`
 
 - 请求体：（空对象）
 - 响应：200 `DiscoverFavoriteResponse` · 错误 400
+
+#### `GET /api/v1/discover/genres/{mediaType}`
+
+风格表（TMDB 官方 id + 中文名） · `discoverGenres`
+
+- 参数：`mediaType` · 路径 · string · **必填**
+- 响应：200 object
 
 #### `GET /api/v1/discover/image`
 
@@ -713,6 +473,12 @@ AI 新闻设置 · `blogSettings`
 - 请求体：（空对象）
 - 响应：200 `DiscoverSettings`
 
+#### `POST /api/v1/discover/settings/test`
+
+测试 TMDB 连通性（请求 /3/configuration） · `discoverSettingsTest`
+
+- 响应：200 object
+
 ## events
 
 ### events
@@ -739,7 +505,7 @@ AI 新闻设置 · `blogSettings`
 
 上传单个分片（application/octet-stream） · `filesChunk`
 
-- 参数：`path` · 查询 · string · **必填**<br>`index` · 查询 · integer · **必填**<br>`total` · 查询 · integer · 可选
+- 参数：`path` · 查询 · string · **必填**<br>`index` · 查询 · integer · **必填**<br>`total` · 查询 · integer · 可选<br>`sid` · 查询 · string · 可选
 - 响应：200 `FilesChunkResponse`
 
 #### `POST /api/v1/files/delete`
@@ -827,7 +593,7 @@ AI 新闻设置 · `blogSettings`
 
 图片缩略图（JPEG；懒生成 + 文件缓存，缺 ffmpeg 时 503） · `filesThumb`
 
-- 参数：`path` · 查询 · string · **必填**<br>`size` · 查询 · integer · 可选
+- 参数：`path` · 查询 · string · **必填**<br>`size` · 查询 · integer · 可选<br>`at` · 查询 · number · 可选
 - 响应：200 -
 
 #### `GET /api/v1/files/trash`
@@ -894,198 +660,6 @@ Webhook 列表（不含 secret） · `webhookList`
 
 - 请求体：`id` string · **必填**
 - 响应：200 object · 错误 404
-
-## mediatool
-
-### mediatool
-
-#### `GET /api/v1/media-tool/jobs`
-
-媒体工具任务列表（state / 进度 / 失败数） · `mediaToolJobs`
-
-- 参数：`status` · 查询 · enum(pending, running, done, failed, canceled) · 可选<br>`limit` · 查询 · integer · 可选
-- 响应：200 `MediaToolJobListResponse`
-
-#### `POST /api/v1/media-tool/jobs/cancel`
-
-取消任务（运行中的在下一批检查点停） · `mediaToolJobCancel`
-
-- 请求体：（空对象）
-- 响应：200 `MediaToolOkResponse` · 错误 404
-
-#### `GET /api/v1/media-tool/tasks`
-
-媒体工具任务列表（按账号隔离） · `mediaToolTaskList`
-
-- 参数：`kind` · 查询 · string · 可选<br>`status` · 查询 · string · 可选<br>`limit` · 查询 · string · 可选
-- 响应：200 `MediaToolTaskListResponse`
-
-#### `POST /api/v1/media-tool/tasks/delete`
-
-删除媒体任务（不动磁盘文件） · `mediaToolTaskDelete`
-
-- 请求体：（空对象）
-- 响应：200 `MediaToolTaskOkResponse` · 错误 403 / 404
-
-#### `GET /api/v1/media-tool/tasks/get`
-
-读取单个媒体任务 · `mediaToolTaskGet`
-
-- 参数：`id` · 查询 · string · **必填**
-- 响应：200 `MediaToolTaskItem` · 错误 404
-
-#### `POST /api/v1/media-tool/tasks/start`
-
-开始 / 续跑任务 · `mediaToolTaskStart`
-
-- 请求体：（空对象）
-- 响应：200 `MediaToolTaskOkResponse` · 错误 403 / 404
-
-#### `POST /api/v1/media-tool/tasks/stop`
-
-停止任务（运行中的在下一批检查点停） · `mediaToolTaskStop`
-
-- 请求体：（空对象）
-- 响应：200 `MediaToolTaskOkResponse` · 错误 403 / 404
-
-#### `POST /api/v1/media-tool/tasks/upsert`
-
-创建 / 编辑媒体任务（除单图压缩外需管理员） · `mediaToolTaskUpsert`
-
-- 请求体：（空对象）
-- 响应：200 `MediaToolTaskItem` · 错误 400 / 403 / 404 / 409
-
-#### `POST /api/v1/media-tool/thumbnails`
-
-批量生成缩略图（目录 → JPEG，保留子目录结构） · `mediaToolThumbnails`
-
-- 请求体：（空对象）
-- 响应：200 `MediaToolJobCreated` · 错误 400 / 503
-
-#### `POST /api/v1/media-tool/transcode`
-
-单文件转码（audio AAC / web720 / copy） · `mediaToolTranscode`
-
-- 请求体：（空对象）
-- 响应：200 `MediaToolJobCreated` · 错误 400 / 503
-
-## messages
-
-### 站内消息
-
-#### `GET /api/v1/messages`
-
-我的消息（可按未读过滤） · `messageList`
-
-- 参数：`unreadOnly` · 查询 · boolean · 可选<br>`limit` · 查询 · integer · 可选
-- 响应：200 object
-
-#### `POST /api/v1/messages/read`
-
-标记已读（仅自己的消息） · `messageRead`
-
-- 请求体：`id` string · **必填**
-- 响应：200 object
-
-#### `POST /api/v1/messages/read-all`
-
-全部已读 · `messageReadAll`
-
-- 响应：200 object
-
-#### `POST /api/v1/messages/remove`
-
-删除自己的消息 · `messageRemove`
-
-- 请求体：`id` string · **必填**
-- 响应：200 object
-
-#### `POST /api/v1/messages/send`
-
-发送站内消息 · `messageSend`
-
-- 请求体：`userId` string · 可选<br>`title` string · **必填**<br>`body` string · **必填**<br>`level` enum(info, warn, error) · 可选
-- 响应：200 object
-
-#### `GET /api/v1/messages/unread-count`
-
-未读数 · `messageUnread`
-
-- 响应：200 object
-
-## mount
-
-### 远程挂载
-
-#### `POST /api/v1/mount/delete`
-
-删除远程文件（不删目录） · `mountDelete`
-
-- 请求体：（空对象）
-- 响应：200 `MountOkResponse` · 错误 404
-
-#### `GET /api/v1/mount/download`
-
-下载远程文件（WebDAV 透传 Range） · `mountDownload`
-
-- 参数：`id` · 查询 · string · **必填**<br>`path` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选
-- 响应：200 -
-
-#### `GET /api/v1/mount/download-url`
-
-生成带短期令牌的下载地址（可直接交给外部下载器） · `mountDownloadUrl`
-
-- 参数：`id` · 查询 · string · **必填**<br>`path` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选
-- 响应：200 `MountDownloadUrlResponse` · 错误 404
-
-#### `GET /api/v1/mount/list`
-
-浏览远程目录（相对挂载根） · `mountBrowse`
-
-- 参数：`id` · 查询 · string · **必填**<br>`path` · 查询 · string · 可选
-- 响应：200 `MountBrowseResponse` · 错误 404
-
-#### `POST /api/v1/mount/mkdir`
-
-新建远程目录 · `mountMkdir`
-
-- 请求体：（空对象）
-- 响应：200 `MountOkResponse` · 错误 404
-
-#### `GET /api/v1/mount/mounts`
-
-挂载列表（不含密码） · `mountList`
-
-- 响应：200 `MountListResponse`
-
-#### `POST /api/v1/mount/mounts`
-
-新建远程挂载（WebDAV / rclone） · `mountCreate`
-
-- 请求体：（空对象）
-- 响应：200 `MountItem` · 错误 400 / 409
-
-#### `POST /api/v1/mount/mounts/remove`
-
-删除挂载（只删配置，不动远程数据） · `mountRemove`
-
-- 请求体：（空对象）
-- 响应：200 `MountOkResponse` · 错误 404
-
-#### `POST /api/v1/mount/mounts/test`
-
-连接测试（同时更新 status / lastError） · `mountTest`
-
-- 请求体：（空对象）
-- 响应：200 `MountItem` · 错误 404 / 502
-
-#### `POST /api/v1/mount/upload`
-
-上传（application/x-colanas-upload 原始流） · `mountUpload`
-
-- 参数：`id` · 查询 · string · **必填**<br>`path` · 查询 · string · **必填**<br>`size` · 查询 · integer · 可选
-- 请求体：（空对象）
-- 响应：200 `MountOkResponse` · 错误 404
 
 ## music
 
@@ -1183,6 +757,12 @@ Webhook 列表（不含 secret） · `webhookList`
 我的收藏（按收藏时间倒序，返回完整曲目） · `musicFavorites`
 
 - 响应：200 `MusicListResponse`
+
+#### `GET /api/v1/music/favorites/ids`
+
+我的收藏 id 列表（曲库页星标状态用，只回 id 不带曲目） · `musicFavoriteIds`
+
+- 响应：200 object
 
 #### `GET /api/v1/music/history`
 
@@ -1320,59 +900,6 @@ Webhook 列表（不含 secret） · `webhookList`
 
 - 参数：`id` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选<br>`format` · 查询 · string · 可选
 - 响应：200 `MusicStreamUrlResponse` · 错误 404
-
-## notes
-
-### 笔记
-
-#### `GET /api/v1/notes`
-
-笔记列表（关键词 / 标签 / 置顶优先） · `noteList`
-
-- 参数：`q` · 查询 · string · 可选<br>`tag` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
-- 响应：200 object
-
-#### `POST /api/v1/notes/create`
-
-新建笔记 · `noteCreate`
-
-- 请求体：`title` string · **必填**<br>`body` string · **必填**<br>`tags` array<string> · 可选
-- 响应：200 object
-
-#### `GET /api/v1/notes/get`
-
-笔记详情 · `noteGet`
-
-- 参数：`id` · 查询 · string · **必填**
-- 响应：200 object · 错误 404
-
-#### `POST /api/v1/notes/remove`
-
-软删除笔记 · `noteRemove`
-
-- 请求体：`id` string · **必填**
-- 响应：200 object
-
-#### `POST /api/v1/notes/restore`
-
-恢复到历史版本（生成新版本） · `noteRestore`
-
-- 请求体：`id` string · **必填**<br>`versionId` string · **必填**
-- 响应：200 object · 错误 404
-
-#### `POST /api/v1/notes/update`
-
-更新笔记（先存历史版本；baseVersion 不一致返回 409） · `noteUpdate`
-
-- 请求体：`id` string · **必填**<br>`title` string · 可选<br>`body` string · 可选<br>`tags` array<string> · 可选<br>`pinned` boolean · 可选<br>`baseVersion` integer · 可选
-- 响应：200 object · 错误 404 / 409
-
-#### `GET /api/v1/notes/versions`
-
-版本历史（新→旧） · `noteVersions`
-
-- 参数：`id` · 查询 · string · **必填**
-- 响应：200 object
 
 ## other
 
@@ -1555,6 +1082,13 @@ MCP 开放平台状态 · `photoMcpStatus`
 - 参数：`albumId` · 查询 · string · **必填**<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
 - 响应：200 `PhotoTimelineResponse` · 错误 400 / 404
 
+#### `POST /api/v1/photo/albums/reapply`
+
+按规则重算相册成员（只增不减，返回新增张数） · `photoAlbumReapply`
+
+- 请求体：（空对象）
+- 响应：200 `PhotoAlbum` · 错误 404
+
 #### `POST /api/v1/photo/albums/remove`
 
 从相册移出照片 · `photoAlbumRemove`
@@ -1571,10 +1105,17 @@ MCP 开放平台状态 · `photoMcpStatus`
 
 #### `POST /api/v1/photo/backup/check`
 
-备份前置比对：哪些文件库里已经有了（MD5 优先，其次同名同大小） · `photoBackupCheck`
+（兼容）备份前置比对；新客户端请用 /backup/check_content · `photoBackupCheck`
 
 - 请求体：（空对象）
 - 响应：200 `PhotoBackupCheckResponse`
+
+#### `POST /api/v1/photo/backup/check_content`
+
+备份内容去重：跨全部相册源查已有内容与一定不存在的 size · `photoBackupCheckContent`
+
+- 请求体：（空对象）
+- 响应：200 `PhotoBackupCheckContentResponse`
 
 #### `POST /api/v1/photo/backup/commit`
 
@@ -1642,47 +1183,6 @@ MCP 开放平台状态 · `photoMcpStatus`
 - 请求体：（空对象）
 - 响应：200 `PhotoCleanupUndoResponse` · 错误 404
 
-#### `GET /api/v1/photo/collections`
-
-集合列表 · `photoCollectionList`
-
-- 响应：200 `PhotoCollectionListResponse`
-
-#### `POST /api/v1/photo/collections`
-
-新建集合 · `photoCollectionCreate`
-
-- 请求体：（空对象）
-- 响应：200 `PhotoCollection` · 错误 400
-
-#### `POST /api/v1/photo/collections/add`
-
-把照片加入集合 · `photoCollectionAdd`
-
-- 请求体：（空对象）
-- 响应：200 `PhotoOkResponse` · 错误 404
-
-#### `POST /api/v1/photo/collections/delete`
-
-删除集合（只删集合关系，不动照片） · `photoCollectionDelete`
-
-- 请求体：（空对象）
-- 响应：200 `PhotoOkResponse` · 错误 404
-
-#### `GET /api/v1/photo/collections/items`
-
-集合里的照片（按加入时间倒序） · `photoCollectionItems`
-
-- 参数：`collectionId` · 查询 · string · **必填**<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
-- 响应：200 `PhotoTimelineResponse`
-
-#### `POST /api/v1/photo/collections/remove`
-
-把照片移出集合 · `photoCollectionRemove`
-
-- 请求体：（空对象）
-- 响应：200 `PhotoOkResponse`
-
 #### `POST /api/v1/photo/delete`
 
 批量删除（可选放入回收站） · `photoDelete`
@@ -1706,9 +1206,9 @@ MCP 开放平台状态 · `photoMcpStatus`
 
 #### `GET /api/v1/photo/faces`
 
-某个人脸簇下的照片 · `photoFaces`
+某个人脸簇下的照片（分页，按拍摄时间倒序） · `photoFaces`
 
-- 参数：`id` · 查询 · string · **必填**
+- 参数：`id` · 查询 · string · **必填**<br>`limit` · 查询 · integer · 可选<br>`cursor` · 查询 · integer · 可选
 - 响应：200 `PhotoFaceList`
 
 #### `POST /api/v1/photo/faces/backfill`
@@ -1720,10 +1220,17 @@ MCP 开放平台状态 · `photoMcpStatus`
 
 #### `GET /api/v1/photo/faces/clusters`
 
-人脸聚类列表（按人数倒序；少于 minCount 的碎片组不显示，具名组豁免） · `photoFaceClusters`
+人脸聚类列表（按人数倒序，分页；少于 minCount 的碎片组不显示，具名组豁免） · `photoFaceClusters`
 
-- 参数：`minCount` · 查询 · integer · 可选
+- 参数：`minCount` · 查询 · integer · 可选<br>`limit` · 查询 · integer · 可选<br>`cursor` · 查询 · integer · 可选
 - 响应：200 `PhotoFaceClusterList`
+
+#### `POST /api/v1/photo/faces/cover`
+
+把簇内某张照片设为人脸封面 · `photoFaceCover`
+
+- 请求体：（空对象）
+- 响应：200 `PhotoFaceCoverResponse` · 错误 400
 
 #### `POST /api/v1/photo/faces/dissolve`
 
@@ -1776,16 +1283,9 @@ MCP 开放平台状态 · `photoMcpStatus`
 
 #### `POST /api/v1/photo/faces/purge`
 
-清理误检人脸（低分 / 无归属） · `photoFacePurge`
+清理误检人脸（仅低检测置信度） · `photoFacePurge`
 
 - 响应：200 `PhotoAiOpResponse`
-
-#### `POST /api/v1/photo/faces/rebuild`
-
-全库重算人脸簇（先快照，可用 rollback 还原） · `photoFaceRebuild`
-
-- 请求体：（空对象）
-- 响应：200 `PhotoFaceRebuildResponse` · 错误 409
 
 #### `GET /api/v1/photo/faces/relations`
 
@@ -1813,12 +1313,12 @@ MCP 开放平台状态 · `photoMcpStatus`
 
 - 响应：200 `PhotoAiOpResponse`
 
-#### `POST /api/v1/photo/faces/rollback`
+#### `POST /api/v1/photo/faces/sweep`
 
-回滚一次全库重建 · `photoFaceRollback`
+二轮收割：把挂起脸与历史碎片簇按成员级相似度重新归位 · `photoFaceSweep`
 
 - 请求体：（空对象）
-- 响应：200 `PhotoFaceOk` · 错误 404
+- 响应：200 `PhotoFaceSweepResult`
 
 #### `POST /api/v1/photo/faces/tuning`
 
@@ -1960,6 +1460,13 @@ GPS 视觉候选生成进度 · `photoGeoVisionStatus`
 
 - 请求体：（空对象）
 - 响应：200 `PhotoLibraryItem` · 错误 400 / 404
+
+#### `GET /api/v1/photo/live`
+
+动态照片里的那段视频（支持 Range；非动态照片 404） · `photoLive`
+
+- 参数：`id` · 查询 · string · **必填**
+- 响应：200 -
 
 #### `GET /api/v1/photo/map/bounds`
 
@@ -2349,8 +1856,69 @@ GPS 视觉候选生成进度 · `photoGeoVisionStatus`
 
 暂停 / 恢复 / 移除下载任务（移除不删本地数据） · `ptDownloadAction`
 
-- 请求体：`id` string · **必填**<br>`action` enum(pause, resume, remove) · **必填**
+- 请求体：`id` string · **必填**<br>`action` enum(pause, resume, remove, retry) · **必填**
 - 响应：200 object · 错误 400 / 404
+
+#### `POST /api/v1/pt/downloads/preview`
+
+预览候选（搜索并落候选缓存，不建下载任务） · `ptDownloadPreview`
+
+- 请求体：`keyword` string · 可选<br>`title` string · 可选<br>`originalTitle` string · 可选<br>`year` string · 可选<br>`season` integer · 可选<br>`mediaId` integer · 可选<br>`mediaType` string · 可选
+- 响应：200 object
+
+#### `POST /api/v1/pt/downloads/submit`
+
+提交候选到 Transmission（幂等） · `ptDownloadSubmit`
+
+- 请求体：`candidateId` integer · 可选<br>`rssEntryId` string · 可选<br>`savePath` string · 可选<br>`paused` boolean · 可选<br>`season` integer · 可选
+- 响应：200 object · 错误 404
+
+#### `POST /api/v1/pt/downloads/sync-status`
+
+同步下载进度与完成状态 · `ptDownloadSyncStatus`
+
+- 响应：200 object
+
+#### `GET /api/v1/pt/favorites`
+
+收藏三态列表（watching/downloading/downloaded/owned） · `ptFavoriteList`
+
+- 参数：`state` · 查询 · string · 可选
+- 响应：200 object
+
+#### `POST /api/v1/pt/favorites/scan`
+
+扫描待下载收藏并自动提交 · `ptFavoriteScan`
+
+- 响应：200 object
+
+#### `POST /api/v1/pt/rules/add`
+
+新增择种规则 · `ptRuleAdd`
+
+- 请求体：`name` string · **必填**<br>`enabled` boolean · 可选<br>`priority` integer · 可选<br>`quality` string · 可选<br>`hdr` string · 可选<br>`resolutionOrder` array<string> · 可选<br>`audioLangs` array<string> · 可选<br>`minSeeders` integer · 可选<br>`maxSizeBytes` integer · 可选<br>`excludedKeywords` array<string> · 可选
+- 响应：200 object
+
+#### `POST /api/v1/pt/rules/delete`
+
+删除择种规则 · `ptRuleDelete`
+
+- 请求体：`id` string · **必填**
+- 响应：200 object
+
+#### `POST /api/v1/pt/rules/list`
+
+择种规则列表 · `ptRuleList`
+
+- 请求体：（空对象）
+- 响应：200 object
+
+#### `POST /api/v1/pt/rules/update`
+
+修改择种规则 · `ptRuleUpdate`
+
+- 请求体：`id` string · **必填**<br>`name` string · 可选<br>`enabled` boolean · 可选<br>`priority` integer · 可选<br>`quality` string · 可选<br>`hdr` string · 可选<br>`resolutionOrder` array<string> · 可选<br>`audioLangs` array<string> · 可选<br>`minSeeders` integer · 可选<br>`maxSizeBytes` integer · 可选<br>`excludedKeywords` array<string> · 可选
+- 响应：200 object · 错误 404
 
 #### `POST /api/v1/pt/search`
 
@@ -2383,8 +1951,15 @@ PT 站点列表（不返回 cookie 明文） · `ptSiteList`
 
 新增 / 更新 PT 站点（cookie 密文落库） · `ptSiteUpsert`
 
-- 请求体：`id` string · 可选<br>`name` string · **必填**<br>`baseUrl` string · **必填**<br>`enabled` boolean · 可选<br>`priority` integer · 可选<br>`timeoutMs` integer · 可选<br>`cookie` string · 可选<br>`kind` string · 可选<br>`apiKey` string · 可选<br>`userAgent` string · 可选
+- 请求体：`id` string · 可选<br>`name` string · 可选<br>`baseUrl` string · 可选<br>`enabled` boolean · 可选<br>`priority` integer · 可选<br>`timeoutMs` integer · 可选<br>`cookie` string · 可选<br>`kind` string · 可选<br>`apiKey` string · 可选<br>`userAgent` string · 可选
 - 响应：200 object · 错误 400 / 404
+
+#### `POST /api/v1/pt/sites/{id}/test`
+
+测试 PT 站点连通性（真搜一次，结果落库） · `ptSiteTest`
+
+- 参数：`id` · 路径 · string · **必填**
+- 响应：200 object · 错误 404
 
 #### `GET /api/v1/pt/subscriptions`
 
@@ -2410,7 +1985,13 @@ PT 站点列表（不返回 cookie 明文） · `ptSiteList`
 
 新增 / 更新订阅 · `ptSubscriptionUpsert`
 
-- 请求体：`id` string · 可选<br>`mediaTitle` string · **必填**<br>`mediaYear` string · 可选<br>`season` integer · 可选<br>`quality` string · 可选<br>`hdr` string · 可选<br>`audioLangs` array<string> · 可选<br>`resolutionOrder` array<string> · 可选<br>`minSeeders` integer · 可选<br>`maxSizeBytes` integer · 可选<br>`excludedKeywords` array<string> · 可选<br>`enabled` boolean · 可选
+- 请求体：`id` string · 可选<br>`mediaId` integer · 可选<br>`mediaType` string · 可选<br>`ruleId` string · 可选<br>`posterPath` string · 可选<br>`mediaTitle` string · 可选<br>`mediaYear` string · 可选<br>`season` integer · 可选<br>`quality` string · 可选<br>`hdr` string · 可选<br>`audioLangs` array<string> · 可选<br>`resolutionOrder` array<string> · 可选<br>`minSeeders` integer · 可选<br>`maxSizeBytes` integer · 可选<br>`excludedKeywords` array<string> · 可选<br>`enabled` boolean · 可选
+- 响应：200 object
+
+#### `GET /api/v1/pt/torrents`
+
+Transmission 实时任务（下载中 / 暂停 / 做种） · `ptTorrents`
+
 - 响应：200 object
 
 #### `POST /api/v1/pt/transmission/test`
@@ -2423,6 +2004,33 @@ PT 站点列表（不返回 cookie 明文） · `ptSiteList`
 
 ### RSS 订阅
 
+#### `GET /api/v1/rss/downloaded`
+
+永久下载台账（按账号隔离） · `rssDownloadedList`
+
+- 参数：`keyword` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
+- 响应：200 object
+
+#### `POST /api/v1/rss/downloaded/clear`
+
+清空当前账号的下载台账 · `rssDownloadedClear`
+
+- 响应：200 object
+
+#### `POST /api/v1/rss/downloaded/delete`
+
+删除一条下载台账 · `rssDownloadedDelete`
+
+- 请求体：`id` string · **必填**
+- 响应：200 object
+
+#### `POST /api/v1/rss/entries/action`
+
+确认 / 拒绝 RSS 条目（兼容 guid 或 feedId:guid） · `rssEntryAction`
+
+- 请求体：`id` string · **必填**<br>`action` enum(confirm, reject) · **必填**
+- 响应：200 object
+
 #### `GET /api/v1/rss/feeds`
 
 订阅列表 · `rssListFeeds`
@@ -2433,8 +2041,15 @@ PT 站点列表（不返回 cookie 明文） · `ptSiteList`
 
 添加订阅（url 或直接给 xml） · `rssAddFeed`
 
-- 请求体：`url` string · 可选<br>`xml` string · 可选<br>`title` string · 可选
+- 请求体：`url` string · 可选<br>`xml` string · 可选<br>`title` string · 可选<br>`savePath` string · 可选<br>`immediate` boolean · 可选
 - 响应：200 object · 错误 400
+
+#### `POST /api/v1/rss/feeds/auto-download`
+
+设置 feed 级自动下载开关 · `rssFeedAutoDownload`
+
+- 请求体：`id` string · **必填**<br>`enabled` boolean · **必填**
+- 响应：200 object
 
 #### `POST /api/v1/rss/feeds/refresh`
 
@@ -2454,7 +2069,7 @@ PT 站点列表（不返回 cookie 明文） · `ptSiteList`
 
 条目列表（发布时间倒序） · `rssItems`
 
-- 参数：`feedId` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
+- 参数：`feedId` · 查询 · string · 可选<br>`state` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
 - 响应：200 object
 
 #### `GET /api/v1/rss/rules`
@@ -2483,110 +2098,6 @@ RSS 自动下载规则（按账号隔离） · `rssRuleList`
 
 - 请求体：`id` string · 可选<br>`feedId` string · **必填**<br>`titleRegex` string · **必填**<br>`enabled` boolean · 可选
 - 响应：200 object · 错误 400 / 404
-
-## safety
-
-### 安全中心（备份 / 加密空间）
-
-#### `GET /api/v1/backup/list`
-
-列出备份 · `backupList`
-
-- 响应：200 object
-
-#### `POST /api/v1/backup/restore`
-
-从备份恢复（先校验 sha256） · `backupRestore`
-
-- 请求体：`id` string · **必填**<br>`target` string · **必填**
-- 响应：200 object · 错误 400 / 404
-
-#### `POST /api/v1/backup/run`
-
-备份一个目录（逐文件 sha256 清单） · `backupRun`
-
-- 请求体：`source` string · **必填**<br>`name` string · 可选
-- 响应：200 object · 错误 400 / 404
-
-#### `POST /api/v1/vault/create`
-
-创建加密空间 · `vaultCreate`
-
-- 请求体：`id` string · **必填**<br>`password` string · **必填**
-- 响应：200 object · 错误 400
-
-#### `POST /api/v1/vault/delete`
-
-删除加密空间条目 · `vaultDelete`
-
-- 请求体：`id` string · **必填**<br>`path` string · **必填**<br>`password` string · **必填**
-- 响应：200 object · 错误 403
-
-#### `POST /api/v1/vault/export`
-
-解密导出到 files 根内的目录（保留相对路径） · `vaultExport`
-
-- 请求体：`id` string · **必填**<br>`password` string · **必填**<br>`target` string · **必填**
-- 响应：200 object · 错误 400 / 403
-
-#### `POST /api/v1/vault/get`
-
-读取并解密一个文件 · `vaultGet`
-
-- 请求体：`id` string · **必填**<br>`path` string · **必填**<br>`password` string · **必填**
-- 响应：200 - · 错误 400 / 403 / 404
-
-#### `POST /api/v1/vault/list`
-
-列出加密空间条目 · `vaultList`
-
-- 请求体：`id` string · **必填**<br>`password` string · **必填**
-- 响应：200 object · 错误 403
-
-#### `POST /api/v1/vault/put`
-
-写入一个文件（AES-256-GCM） · `vaultPut`
-
-- 请求体：`id` string · **必填**<br>`path` string · **必填**<br>`data` string · **必填**<br>`password` string · **必填**
-- 响应：200 object · 错误 400 / 403
-
-## share
-
-### 分享
-
-#### `POST /api/v1/share/create`
-
-创建分享链接（可选过期与密码） · `shareCreate`
-
-- 请求体：`path` string · **必填**<br>`expiresInSec` integer · 可选<br>`password` string · 可选
-- 响应：200 object · 错误 400 / 404
-
-#### `GET /api/v1/share/download`
-
-通过分享链接下载（公开，支持 Range） · `shareDownload`
-
-- 参数：`id` · 查询 · string · **必填**<br>`password` · 查询 · string · 可选
-- 响应：200 - · 错误 403 / 404 / 410
-
-#### `GET /api/v1/share/info`
-
-查看分享链接信息（公开） · `shareInfo`
-
-- 参数：`id` · 查询 · string · **必填**
-- 响应：200 object · 错误 404 / 410
-
-#### `GET /api/v1/share/list`
-
-列出分享链接 · `shareList`
-
-- 响应：200 object
-
-#### `POST /api/v1/share/revoke`
-
-撤销分享链接 · `shareRevoke`
-
-- 请求体：`id` string · **必填**
-- 响应：200 object · 错误 400
 
 ## sync
 
@@ -2752,9 +2263,9 @@ RSS 自动下载规则（按账号隔离） · `rssRuleList`
 
 #### `GET /api/v1/system/logs`
 
-服务端日志尾部（logs/kernel.log，按时间正序返回最后 N 行） · `systemLogs`
+服务端日志分页（logs/kernel.log，时间倒序；第 1 页为最新） · `systemLogs`
 
-- 参数：`lines` · 查询 · integer · 可选<br>`file` · 查询 · string · 可选<br>`level` · 查询 · enum(all, warn, error, info) · 可选
+- 参数：`limit` · 查询 · integer · 可选<br>`offset` · 查询 · integer · 可选<br>`lines` · 查询 · integer · 可选<br>`file` · 查询 · string · 可选<br>`level` · 查询 · enum(all, warn, error, info) · 可选
 - 响应：200 `SystemLogsResponse`
 
 #### `GET /api/v1/system/monitor`
@@ -2874,6 +2385,65 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 - 参数：`id` · 路径 · string · **必填**
 - 响应：200 -
 
+## transfer
+
+### transfer
+
+#### `POST /api/v1/transfer/begin`
+
+开启或续传一个传输会话（同路径活跃会话直接复用） · `transferBegin`
+
+- 请求体：（空对象）
+- 响应：200 `TransferBeginResponse`
+
+#### `POST /api/v1/transfer/cancel`
+
+取消传输（已传分片保留，可再次续传） · `transferCancel`
+
+- 请求体：（空对象）
+- 响应：200 `TransferOkResponse`
+
+#### `POST /api/v1/transfer/finish`
+
+标记会话完成（幂等） · `transferFinish`
+
+- 请求体：（空对象）
+- 响应：200 `TransferOkResponse`
+
+#### `POST /api/v1/transfer/pause`
+
+暂停传输 · `transferPause`
+
+- 请求体：（空对象）
+- 响应：200 `TransferOkResponse`
+
+#### `POST /api/v1/transfer/prune`
+
+清理已结束的旧会话记录（不碰磁盘文件） · `transferPrune`
+
+- 响应：200 -
+
+#### `POST /api/v1/transfer/resume`
+
+恢复传输 · `transferResume`
+
+- 请求体：（空对象）
+- 响应：200 `TransferOkResponse`
+
+#### `GET /api/v1/transfer/sessions`
+
+传输会话列表（全部来源：本机 / 其他设备 / 其他用户） · `transferSessions`
+
+- 参数：`state` · 查询 · string · 可选<br>`direction` · 查询 · string · 可选<br>`owner` · 查询 · string · 可选<br>`q` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选<br>`offset` · 查询 · integer · 可选
+- 响应：200 `TransferSessionsResponse`
+
+#### `GET /api/v1/transfer/sessions/{id}`
+
+单个传输会话 · `transferSessionGet`
+
+- 参数：`id` · 路径 · string · **必填**
+- 响应：200 -
+
 ## video
 
 ### 影视
@@ -2961,11 +2531,18 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 - 参数：`libraryId` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选<br>`excludeActors` · 查询 · string · 可选
 - 响应：200 `VideoDuplicatesResponse`
 
+#### `GET /api/v1/video/facets`
+
+筛选面板选项：来源 / 标签 / 分辨率计数 + NFO 题材前 30（排除单体作品） · `videoFacets`
+
+- 参数：`libraryId` · 查询 · string · 可选
+- 响应：200 `VideoFacetsResponse`
+
 #### `GET /api/v1/video/favorites`
 
 我收藏的影片 · `videoFavorites`
 
-- 参数：`libraryId` · 查询 · string · 可选<br>`q` · 查询 · string · 可选<br>`mediaType` · 查询 · string · 可选<br>`series` · 查询 · string · 可选<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选<br>`sortBy` · 查询 · string · 可选<br>`sortOrder` · 查询 · string · 可选<br>`years` · 查询 · string · 可选<br>`genres` · 查询 · string · 可选<br>`regions` · 查询 · string · 可选<br>`actor` · 查询 · string · 可选<br>`director` · 查询 · string · 可选<br>`watched` · 查询 · string · 可选<br>`scraped` · 查询 · string · 可选<br>`flag` · 查询 · string · 可选<br>`folderPath` · 查询 · string · 可选<br>`folderMode` · 查询 · string · 可选<br>`letter` · 查询 · string · 可选
+- 参数：`libraryId` · 查询 · string · 可选<br>`q` · 查询 · string · 可选<br>`mediaType` · 查询 · string · 可选<br>`series` · 查询 · string · 可选<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选<br>`sortBy` · 查询 · string · 可选<br>`sortOrder` · 查询 · string · 可选<br>`years` · 查询 · string · 可选<br>`genres` · 查询 · string · 可选<br>`regions` · 查询 · string · 可选<br>`actor` · 查询 · string · 可选<br>`director` · 查询 · string · 可选<br>`watched` · 查询 · string · 可选<br>`scraped` · 查询 · string · 可选<br>`flag` · 查询 · string · 可选<br>`folderPath` · 查询 · string · 可选<br>`folderMode` · 查询 · string · 可选<br>`letter` · 查询 · string · 可选<br>`resolution` · 查询 · string · 可选<br>`jpTag` · 查询 · string · 可选<br>`sourceId` · 查询 · string · 可选
 - 响应：200 `VideoListResponse`
 
 #### `POST /api/v1/video/favorites/set`
@@ -3034,7 +2611,7 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 演员列表（影片数 / 未看数 / 热度 / 封面片 / 收藏 / 档案） · `videoJpActorList`
 
-- 参数：`libraryId` · 查询 · string · 可选<br>`limit` · 查询 · string · 可选
+- 参数：`libraryId` · 查询 · string · 可选<br>`limit` · 查询 · string · 可选<br>`resolution` · 查询 · string · 可选<br>`jpTag` · 查询 · string · 可选<br>`genre` · 查询 · string · 可选<br>`sourceId` · 查询 · string · 可选
 - 响应：200 object
 
 #### `POST /api/v1/video/jp_actor/profile`
@@ -3055,7 +2632,7 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 某演员在库的作品（未看优先，再按入库时间倒序） · `videoJpActorWorks`
 
-- 参数：`key` · 查询 · string · 可选<br>`name` · 查询 · string · 可选<br>`limit` · 查询 · string · 可选
+- 参数：`key` · 查询 · string · 可选<br>`name` · 查询 · string · 可选<br>`limit` · 查询 · string · 可选<br>`libraryId` · 查询 · string · 可选<br>`resolution` · 查询 · string · 可选<br>`jpTag` · 查询 · string · 可选<br>`genre` · 查询 · string · 可选<br>`sourceId` · 查询 · string · 可选
 - 响应：200 object
 
 #### `POST /api/v1/video/jp_rank/actor`
@@ -3123,7 +2700,7 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 影片列表（标题序 + 排序键 cursor） · `videoList`
 
-- 参数：`libraryId` · 查询 · string · 可选<br>`q` · 查询 · string · 可选<br>`mediaType` · 查询 · string · 可选<br>`series` · 查询 · string · 可选<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选<br>`sortBy` · 查询 · string · 可选<br>`sortOrder` · 查询 · string · 可选<br>`years` · 查询 · string · 可选<br>`genres` · 查询 · string · 可选<br>`regions` · 查询 · string · 可选<br>`actor` · 查询 · string · 可选<br>`director` · 查询 · string · 可选<br>`watched` · 查询 · string · 可选<br>`scraped` · 查询 · string · 可选<br>`flag` · 查询 · string · 可选<br>`folderPath` · 查询 · string · 可选<br>`folderMode` · 查询 · string · 可选<br>`letter` · 查询 · string · 可选
+- 参数：`libraryId` · 查询 · string · 可选<br>`q` · 查询 · string · 可选<br>`mediaType` · 查询 · string · 可选<br>`series` · 查询 · string · 可选<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选<br>`sortBy` · 查询 · string · 可选<br>`sortOrder` · 查询 · string · 可选<br>`years` · 查询 · string · 可选<br>`genres` · 查询 · string · 可选<br>`regions` · 查询 · string · 可选<br>`actor` · 查询 · string · 可选<br>`director` · 查询 · string · 可选<br>`watched` · 查询 · string · 可选<br>`scraped` · 查询 · string · 可选<br>`flag` · 查询 · string · 可选<br>`folderPath` · 查询 · string · 可选<br>`folderMode` · 查询 · string · 可选<br>`letter` · 查询 · string · 可选<br>`resolution` · 查询 · string · 可选<br>`jpTag` · 查询 · string · 可选<br>`sourceId` · 查询 · string · 可选
 - 响应：200 `VideoListResponse` · 错误 400
 
 #### `GET /api/v1/video/list/count`
@@ -3275,6 +2852,13 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 - 参数：`key` · 查询 · string · **必填**<br>`libraryId` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
 - 响应：200 `VideoListResponse` · 错误 400
+
+#### `POST /api/v1/video/source/list`
+
+影视库源目录（发现页下载目录下拉用） · `videoSourceList`
+
+- 请求体：（空对象）
+- 响应：200 object
 
 #### `POST /api/v1/video/sources/probe`
 

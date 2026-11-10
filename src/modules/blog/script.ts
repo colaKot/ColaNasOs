@@ -28,7 +28,12 @@ import type { BlogCounts, BlogSettings, CountKey } from './settings';
  * 没有 Key 或开关关闭时退化成「标题 + 摘要」拼接：**没有 Key 也必须能出稿**。
  */
 
-/** 每条正文的目标字数（用户方案：230~270；校验放宽一点，避免为 1 个字反复重试） */
+/**
+ * 每条的目标字数 = **一句话总结 + 正文**合计（用户方案：230~270）。
+ *
+ * 校验放宽到 210~285，避免为 1 个字反复重试；加了总结之后正文相应缩短，
+ * 所以总时长和以前一致，不会因为多一句总结变长。
+ */
 const MIN_CHARS = 210;
 const MAX_CHARS = 285;
 /** 单类最多重试一次，且只对「空结果 / JSON 解析失败」生效 */
@@ -104,6 +109,18 @@ const SYSTEM_PROMPT = `你是一名资深新闻主编、播客朗读稿撰稿人
 3. 所有新闻事件必须发生在给定时间窗口内；素材时间不在窗口内的不得使用。
 4. 同一事件只能出现一次，不得跨类复用。
 
+【地域口径（最高优先级，先看这一条）】
+- 「国内」= **中国国内（含港澳台地区）**；「国际 / 国外」= 中国境外。
+- 分类名带「国内」的（国内综合 / 国内科技 / 国内人工智能 / 国内财经）：
+  **只写核心事件发生在中国、或核心主体为中国机构 / 中国企业 / 中国市场的新闻**。
+- 素材里核心是境外事件、外国政府、外国企业、外国市场的（例如埃及列车脱轨、胡塞武装打击沙特、
+  苹果换 CEO、美联储官员表态、美股 / 日经行情），**一律剔除**，在 gaps 里说明「境外素材已剔除」，
+  不得改写后塞进国内类，也不得用它凑条数。
+- 例外：境外主体但核心新闻点在中国（例如「某外企在华建厂」「中国市场贡献其营收」）可以写，
+  但必须把中国这条主线写成新闻点。
+- 国内财经不写美联储 / 美股 / 特朗普 / 海外央行这类境外市场动态；
+  国内科技不写苹果、微软、OpenAI 等外国公司的产品发布（除非核心是中国产业链或中国市场）。
+
 【分类规则】
 - 国内综合/国际综合是**兜底分类**：收政策、民生、社会事件、灾害、交通、外交、司法、教育、医疗、突发事件；凡是不属于下面更具体分类的新闻，都放这里。
 - 国内科技/国外科技：**科技产业与技术**——芯片、通信、航天、量子、生物、物理、能源、材料、计算硬件、消费电子、平台技术、科研成果。不收大模型 / AI 应用 / AI 公司融资（归 AI 类）。
@@ -112,14 +129,19 @@ const SYSTEM_PROMPT = `你是一名资深新闻主编、播客朗读稿撰稿人
 - 一条素材同时沾边两类时，按**核心新闻点**归类；实在拿不准就归综合类，并在 notes 里说明。
 
 【重要】不要把素材"筛空"：只要有一条素材与本类沾边，就按核心新闻点写进本类。
+但**地域不符的素材不算沾边**（见上面的地域口径），该剔就剔，不要用境外新闻凑数。
 素材不够指定条数时，写够现有条数并在 gaps 说明缺口；只有确实一条都不沾边时，articles 才允许为空。
 
 【每条正文格式与字数】
-1. 每条正文严格控制在 230—270 字（按汉字、数字、英文缩写计，不计标点、空格与"//"）。
+1. 每条拆成两个字段："summary"（一句话总结，15—25 字）和 "text"（正文）。
+   **两者合计**严格控制在 230—270 字（按汉字、数字、英文缩写计，不计标点、空格与"//"）。
+   加了总结之后正文相应缩短，**总字数不要变多**。
    **宁多勿少，下限 240 字**；写完自己数字数，不到 230 就补背景、数据或影响，不要用一句话交差。
-2. 结构：一句导语概括事件 + 2—3 句关键事实（时间、主体、数据/结果）+ 一句简短意义或影响收束。
-3. 不得用短句堆砌凑字数，也不得压缩成一句话新闻。
-4. 禁止出现 URL、"来源："、"本报讯"、"记者获悉"。
+2. "summary" 要能独立成句：听这一句就知道这条新闻讲了什么（谁 + 发生了什么 + 关键结果/数字），
+   但**不要照抄正文第一句**，也不要和正文重复叙述。
+3. "text" 结构：一句导语概括事件 + 2—3 句关键事实（时间、主体、数据/结果）+ 一句简短意义或影响收束。
+4. 不得用短句堆砌凑字数，也不得压缩成一句话新闻。
+5. 禁止出现 URL、"来源："、"本报讯"、"记者获悉"。
 
 【朗读稿要求】
 1. 用"//"标记停顿点；每句不超过 40 字。
@@ -130,7 +152,7 @@ const SYSTEM_PROMPT = `你是一名资深新闻主编、播客朗读稿撰稿人
 只输出一个 JSON 对象（不要 markdown 代码块、不要解释）：
 {
   "articles": [
-    { "index": 1, "text": "带//停顿标记的正文", "char_count": 248, "source": "素材里的媒体名", "event_date": "YYYY-MM-DD" }
+    { "index": 1, "summary": "一句话总结", "text": "带//停顿标记的正文", "char_count": 248, "source": "素材里的媒体名", "event_date": "YYYY-MM-DD" }
   ],
   "gaps": ["素材不足的说明，没有就空数组"],
   "notes": ""
@@ -325,6 +347,8 @@ function readChoice(json: unknown): ChatResult {
 
 interface Article {
   index: number;
+  /** 一句话总结（15—25 字）：播在正文前，让人一听就知道换新闻了 */
+  summary: string;
   text: string;
   charCount: number;
   source: string;
@@ -346,10 +370,15 @@ function parseArticles(raw: unknown): { articles: Article[]; gaps: string[] } {
     const a = (item || {}) as Record<string, unknown>;
     const text = String(a.text ?? '').trim();
     if (!text) continue;
+    // 总结是可选的：模型偶尔会漏，漏了也不算错（字数校验会只用正文兜底），
+    // 只是那一条听感上少了一句导语。
+    const summary = String(a.summary ?? '').trim();
     articles.push({
       index: Number(a.index) || i + 1,
+      summary,
       text,
-      charCount: countChars(text),
+      // 字数口径：总结 + 正文合计（用户要求总字数不变，加了总结正文就相应缩短）
+      charCount: countChars(`${summary}${text}`),
       source: String(a.source ?? '').slice(0, 40),
       eventDate: String(a.event_date ?? '').slice(0, 10),
     });
@@ -424,8 +453,8 @@ function categoryPrompt(
     '【新闻素材】（唯一事实来源）',
     materialOf(items),
     '',
-    '【输出】只输出 JSON：{"articles":[{"index":1,"text":"……","char_count":248,"source":"媒体名","event_date":"YYYY-MM-DD"}],"gaps":[],"notes":""}',
-    `每条正文 230—270 字（宁多勿少，目标 250 字），用"//"标停顿；条数不超过 ${want}。`,
+    '【输出】只输出 JSON：{"articles":[{"index":1,"summary":"一句话总结","text":"……","char_count":248,"source":"媒体名","event_date":"YYYY-MM-DD"}],"gaps":[],"notes":""}',
+    `summary 15—25 字，text 是正文；**两者合计** 230—270 字（宁多勿少，目标 250 字），用"//"标停顿；条数不超过 ${want}。`,
   ].join('\n');
 }
 
@@ -567,13 +596,18 @@ async function composeCommentary(
 export function composeFallbackScript(items: NewsItem[], now = new Date()): string {
   const parts: string[] = [`${todayLabel(now)}，欢迎收听今天的 AI 新闻播报。`];
   let currentKey = '';
+  // 和正式稿件同一套播报头：先报序号，再用标题当一句话总结，最后才是摘要。
+  // 兜底稿没有模型写总结，标题本身就承担「一听知道是哪条」的作用。
+  let no = 0;
   for (const item of items) {
     if (item.key !== currentKey) {
       currentKey = item.key;
       parts.push(`下面是${item.spoken}。`);
     }
+    no += 1;
+    parts.push(`第${cnNumber(no)}，${item.title.replace(/[。！？；，、\s]+$/g, '')}。`);
     const summary = item.summary.replace(/\s+/g, ' ').slice(0, 220);
-    parts.push(summary ? `${item.title}。${summary}` : `${item.title}。`);
+    if (summary) parts.push(summary);
   }
   parts.push('以上就是今天的全部内容，感谢收听，我们明天见。');
   return parts.join('\n\n');
@@ -590,16 +624,48 @@ function speakable(text: string): string {
     .trim();
 }
 
-function renderScript(
+const CN_DIGITS = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+
+/** 1 → 一，11 → 十一，23 → 二十三（播报序号用，1~99 足够） */
+export function cnNumber(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return '零';
+  const v = Math.trunc(n);
+  if (v < 10) return CN_DIGITS[v];
+  if (v < 20) return `十${v % 10 ? CN_DIGITS[v % 10] : ''}`;
+  if (v < 100) return `${CN_DIGITS[Math.floor(v / 10)]}十${v % 10 ? CN_DIGITS[v % 10] : ''}`;
+  return String(v);
+}
+
+/**
+ * 一条新闻的播报头：`第一，<一句话总结>。`
+ *
+ * 以前整篇只有「下面是国内科技。」分段，同一分类下连着好几条，听众根本分不清
+ * 什么时候换了一条新闻（2026-11-08 用户反馈）。现在每条前面先报序号 + 一句总结，
+ * 再进正文；总结的字数算在每条 230—270 之内，所以总时长不变。
+ */
+function leadOf(no: number, summary: string): string {
+  // 总结末尾的标点先去掉，避免拼出「。，」
+  const s = speakable(summary).replace(/[。！？；，、\s]+$/g, '');
+  const ord = `第${cnNumber(no)}`;
+  return s ? `${ord}，${s}。` : `${ord}条。`;
+}
+
+export function renderScript(
   categories: CategoryResult[],
   commentary: string | null,
   target: string,
 ): string {
   const parts: string[] = [`${target}，欢迎收听今天的 AI 新闻播报。`];
+  // 序号全篇连续（不按分类重置）：跨分类也数得下去，才知道「今天一共听了多少条」
+  let no = 0;
   for (const cat of categories) {
     if (cat.articles.length === 0) continue;
     parts.push(`下面是${cat.spoken}。`);
-    for (const a of cat.articles) parts.push(speakable(a.text));
+    for (const a of cat.articles) {
+      no += 1;
+      parts.push(leadOf(no, a.summary));
+      parts.push(speakable(a.text));
+    }
   }
   if (commentary) {
     parts.push('最后是今天的点评。');

@@ -105,6 +105,10 @@ function startKernel(): void {
     const geoDir = path.join(process.resourcesPath, 'geo');
     env.COLANAS_GEONAMES = path.join(geoDir, 'geonames.sqlite');
     env.COLANAS_CHINA_DIVISIONS = path.join(geoDir, 'china-divisions.json');
+    // 内置 transmission-daemon：内核在没配置外部下载器时直接拉起它
+    env.COLANAS_TRANSMISSION_BIN_DIR = path.join(process.resourcesPath, 'transmission-daemon');
+    // 内置 transmission Web UI（静态）：内核 /transmission/web/* 从这里读
+    env.COLANAS_TRANSMISSION_WEB_DIR = path.join(process.resourcesPath, 'transmission-web');
     const modelsDir = path.join(process.resourcesPath, 'models');
     if (fs.existsSync(modelsDir)) env.COLANAS_MODEL_DIR = modelsDir;
   }

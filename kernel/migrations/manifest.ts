@@ -16,31 +16,21 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   // 内核
   '001_config',
   // 基础域
-  '001_share_links',
-  '002_backup_jobs',
-  '003_vaults',
   '004_rss_feeds',
   '005_sync_jobs',
   '006_users',
   '007_webhooks',
-  '008_messages',
-  '009_notes',
   '010_files_meta',
   '020_index_progress',
   // 媒体域
   '030_photo',
   '031_video',
   '032_music',
-  '033_book',
-  // 挂载与检索
-  '034_remote_mounts',
+  // 影视库扩展
   '035_video_series',
   '036_video_progress',
-  '037_book_organize',
   // 工具与播放
-  '040_media_tool',
   '041_player_sessions',
-  '042_book_fulltext',
   '043_music_state',
   '044_video_meta',
   // 相册 AI 与地理
@@ -72,6 +62,8 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '069_pt',
   '070_pt_mteam',
   // 相册集合（照片聚合分组）
+  // 071 保留登记：迁移定义仍在（历史库靠它建过表），169 负责把表删掉并清掉执行记录。
+  // 从清单里摘掉会让 checkMigrationOrder 报「磁盘有而未登记」。
   '071_photo_collections',
   // 相册记忆（确认 / 忽略 / 备注）
   '072_photo_memories',
@@ -81,8 +73,6 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '075_video_media_flags',
   // 影视自定义合集（每用户）
   '076_video_collections',
-  // 笔记乐观锁版本号（多人编辑冲突检测）
-  '077_notes_version',
   // 剧集级收藏（每用户，按 series + 库）
   '078_video_series_favorites',
   // 相册智能规则（自定义条件组合，每用户）
@@ -121,8 +111,6 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '095_sync_task_name',
   // 同步任务的结构化过滤与策略（冲突/删除传播/间隔）
   '096_sync_task_config',
-  // 媒体工具统一任务表（uid/统计/启停；旧 jobs 复制进来）
-  '097_media_tool_tasks',
   // 账号资料（手机 / 备注 / 最近登录）
   '098_auth_user_profile',
   // 登录记录与用户管理审计
@@ -143,10 +131,6 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '106_video_scrape_stats',
   // 音乐合集（用户自建的音乐目录分组，按 owner 隔离）
   '107_music_collections',
-  // 书库类型（书籍 / 漫画）+ 阅读历史 + 用户自建图书合集
-  '108_book_type_history',
-  // 书库来源级扫描策略（启动 / 变更 / 定时）
-  '109_book_scan_schedule',
   // 转码会话音轨选择 + HDR→SDR（audio_index / force_sdr / hdr_to_sdr）
   '129_player_audio_index',
   // FTS5 trigram 全文索引（>=3 字符走 MATCH，1-2 字回退 LIKE）
@@ -173,6 +157,52 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '146_photo_ai_done_mask',
   // 人脸认领护栏元数据（quality / pose），老库按 score 回填
   '147_photo_faces_claim_guard',
+  // AI 播客每期的素材清单（文稿弹窗底部的引用链接）
+  '148_blog_episode_news',
+  // 相册从「只收图片」扩到「图片 + 视频」，并记录动态照片尾部视频的位置
+  '148_photo_media_kind',
+  // 媒体解析版本号：老行 media_ver=0，升级后第一次扫描自动重读文件头补 live_* 字段
+  '149_photo_media_ver',
+  // 动态照片多品牌识别：视频起点 / 来源 / 配对路径
+  '150_photo_live_span',
+  // 手机备份判重：固化「上传时那份原始内容」的字节数（补 GPS / 重编码后 size 会变）
+  '151_photo_orig_size',
+  // 在 NAS 上删过的照片留指纹墓碑，清空回收站后也不再被手机重新上传
+  '152_photo_deleted_fp',
+  // 影视发现 1:1 移植：PT 下载闭环 / 收藏三态 / RSS 台账与条目状态
+  '153_pt_download_idem',
+  '154_discover_favorite_state',
+  '155_rss_compat',
+  // 评分体系 TMDB↔豆瓣：豆瓣评分/榜单缓存；择种规则 + 订阅按 media_id + 站点连通性留痕
+  '156_douban_rating_cache',
+  '157_pt_rules_sub_media',
+  // 音乐来源的「启动时扫描 / 有变动时扫描 / 间隔扫描」三个开关落成真列
+  '158_music_library_scan_policy',
+  // 传输中心：上传 / 下载会话（谁、哪一端、传到哪）
+  '159_transfer_sessions',
+  // 清理已移除的六个模块（书房 / 笔记 / 挂载 / 分享 / 安全 / 消息）遗留的表
+  '160_drop_removed_modules',
+  // 人脸重建的「前快照」两张表从没被任何代码读写过，清掉 18.5 万行死数据
+  '161_drop_dead_face_snapshot',
+  // 收藏表主键列序修正：(item_id, owner_id) → (owner_id, item_id)，让 where owner_id=? 能走索引
+  '162_music_favorites_owner_first',
+  // 音乐库归属列（与 photo_libraries 对齐；NULL = 所有人可见，不改现有可见性）
+  '163_music_library_owner',
+  // 影视库归属列（同上）
+  '164_video_library_owner',
+  // 裁掉 photo_items 上三个查询计划永远命中不到的索引（纯写放大）
+  '166_photo_items_drop_unused_indexes',
+  // FTS 增量同步触发器由「AFTER UPDATE」收紧为「AFTER UPDATE OF 被索引列」，
+  // 避免改 sub_fetch_state / jp_hot_votes 这类字段也重建 trigram（实测占该次更新 97%）
+  '167_video_fts_update_scope',
+  // 媒体工具整块移除，清掉两张从没被写过的任务表
+  '168_drop_media_tool',
+  // 集合并入相册（集合表全库 0 行），同时给相册加规则列
+  '169_photo_album_rules',
+  // 音乐键值设置（Last.fm 的 Key / Secret）+ 在线热度缓存 + 每用户 Last.fm 绑定
+  '170_music_settings_lastfm',
+  '171_discover_favorite_meta',
+  '172_rss_feed_download_target',
 ]);
 
 export interface OrderCheck {

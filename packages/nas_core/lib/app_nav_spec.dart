@@ -145,7 +145,6 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         icon: 'collections_bookmark_outlined',
         items: <NavItemSpec>[
           NavItemSpec(id: 'album', labelKey: 'ui.photo.053', icon: 'photo_album_outlined'),
-          NavItemSpec(id: 'collection', labelKey: 'photo.nav.collection', icon: 'collections_outlined'),
         ],
       ),
       NavSectionSpec(
@@ -163,7 +162,6 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
           NavItemSpec(id: 'search', labelKey: 'common.search', icon: 'search'),
           NavItemSpec(id: 'gps', labelKey: 'photo.nav.gps', icon: 'gps_fixed_outlined'),
           NavItemSpec(id: 'cleanup', labelKey: 'photo.nav.similarCleanup', icon: 'cleaning_services_outlined'),
-          NavItemSpec(id: 'discovery', labelKey: 'photo.nav.discovery', icon: 'explore_outlined'),
           NavItemSpec(id: 'duplicateInsight', labelKey: 'photo.nav.duplicateInsight', icon: 'content_copy_outlined'),
         ],
       ),
@@ -277,7 +275,6 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         icon: 'queue_music',
         items: <NavItemSpec>[
           NavItemSpec(id: 'playlists', labelKey: 'ui.music.030', icon: 'queue_music_outlined'),
-          NavItemSpec(id: 'collections', labelKey: 'music.nav.collections', icon: 'collections_bookmark_outlined'),
         ],
       ),
       NavSectionSpec(
@@ -307,43 +304,6 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         ],
       ),
     ],
-  ),
-  'book': AppNavSpec(
-    appId: 'book',
-    style: NavStyle.side,
-    sections: <NavSectionSpec>[
-      NavSectionSpec(
-        id: 'library',
-        titleKey: 'book.nav.library',
-        icon: 'local_library_outlined',
-        items: <NavItemSpec>[
-          NavItemSpec(id: 'books', labelKey: 'book.nav.books', icon: 'book_outlined'),
-          NavItemSpec(id: 'comics', labelKey: 'book.nav.comics', icon: 'auto_stories_outlined'),
-          NavItemSpec(id: 'favorites', labelKey: 'nav.favorites', icon: 'favorite_outline'),
-          NavItemSpec(id: 'history', labelKey: 'book.nav.history', icon: 'history'),
-          NavItemSpec(id: 'files', labelKey: 'nav.filesView', icon: 'folder_outlined'),
-        ],
-      ),
-      NavSectionSpec(
-        id: 'lists',
-        titleKey: 'book.nav.lists',
-        icon: 'playlist_play_outlined',
-        items: <NavItemSpec>[
-          NavItemSpec(id: 'lists', labelKey: 'book.nav.myLists', icon: 'playlist_add_outlined'),
-          NavItemSpec(id: 'collections', labelKey: 'book.nav.collections', icon: 'collections_bookmark_outlined'),
-        ],
-      ),
-      NavSectionSpec(
-        id: 'settings',
-        titleKey: 'ui.settings.017',
-        icon: 'settings_outlined',
-        items: <NavItemSpec>[
-          NavItemSpec(id: 'settings.source', labelKey: 'book.nav.sources', icon: 'folder_special_outlined'),
-          NavItemSpec(id: 'settings.cache', labelKey: 'book.nav.cache', icon: 'download_for_offline_outlined'),
-        ],
-      ),
-    ],
-    mobileTabs: <String>['books', 'comics', 'favorites', '@more'],
   ),
   'sync': AppNavSpec(
     appId: 'sync',

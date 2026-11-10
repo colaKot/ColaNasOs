@@ -43,12 +43,15 @@ export const CATEGORIES: CategoryDef[] = [
     key: 'domesticGeneral',
     spoken: '国内综合新闻',
     sources: [
-      { name: '中国新闻网', url: 'https://www.chinanews.com.cn/rss/importnews.xml' },
+      // 「国内」= 中国国内。importnews.xml 是中新网要闻（大量国际稿），
+      // 实测 10 条里 6 条是埃及 / 美国 / 俄乌 / 日本——不能用它当国内源。
+      // 改用中新网两个中国频道：时政 + 社会民生（均为当天更新的 RSS）。
+      { name: '中新网国内', url: 'https://www.chinanews.com.cn/rss/china.xml' },
+      { name: '中新网社会', url: 'https://www.chinanews.com.cn/rss/society.xml' },
       // 修复：OPML 的 /rss 是 404，官方 RSS 入口在 a 子域
       { name: '界面新闻', url: 'https://a.jiemian.com/index.php?m=article&a=rss' },
-      // 保留原地址：实测返回 HTML（澎湃 / 环球已无公开 RSS），恢复后自动生效
+      // 保留原地址：实测返回 HTML（澎湃已无公开 RSS），恢复后自动生效
       { name: '澎湃新闻', url: 'https://www.thepaper.cn/rss', optional: true },
-      { name: '环球网', url: 'https://www.huanqiu.com/rss', optional: true },
     ],
   },
   {
@@ -108,6 +111,9 @@ export const CATEGORIES: CategoryDef[] = [
     key: 'domesticFinance',
     spoken: '国内财经新闻',
     sources: [
+      // 国内财经优先用中新网财经频道（国债 / 消费 / 国内政策），
+      // 华尔街见闻放后面且只留中国相关条目（它默认满是美联储 / 特朗普 / 美股）。
+      { name: '中新网财经', url: 'https://www.chinanews.com.cn/rss/finance.xml' },
       // 修复：wallstreetcn.com/rss 是 404，实际 XML 在 dedicated 子域
       { name: '华尔街见闻', url: 'https://dedicated.wallstreetcn.com/rss.xml' },
       { name: '界面新闻（财经）', url: 'https://a.jiemian.com/index.php?m=article&a=rss' },
@@ -228,6 +234,28 @@ async function fetchFeed(url: string): Promise<string> {
   }
 }
 
+/**
+ * 国内类的地域粗筛：境外事件 / 外国主体且没有中国锚点的一律不进国内素材池。
+ *
+ * 为什么需要：IT之家会报苹果、华尔街见闻会报美联储、中新网要闻会报埃及事故，
+ * 光靠「这个源属于国内类」判断会把国外新闻播进「国内 XX」里（2026-11-10 反馈）。
+ * 只做粗筛，模糊的留给模型按核心新闻点判断。
+ */
+const FOREIGN_MARKER =
+  /(美国|白宫|特朗普|美联储|FBI|五角大楼|美众议院|美参议院|俄罗斯|乌克兰|以色列|巴勒斯坦|伊朗|伊拉克|埃及|沙特|也门|胡塞|土耳其|日本|韩国|朝鲜|印度|越南|菲律宾|英国|法国|德国|意大利|西班牙|加拿大|澳大利亚|新西兰|巴西|智利|阿根廷|南非|欧盟|北约|联合国|苹果|微软|谷歌|OpenAI|英伟达|特斯拉|Meta|亚马逊|三星|索尼|英特尔|高通|AMD|Anthropic|SpaceX|Gartner|Airbnb|彭博社|华尔街日报|路透社|法新社|CNN|BBC|CNBC|MarketWatch)/i;
+const CHINA_ANCHOR =
+  /(中国|我国|国内|内地|大陆|中方|国务院|中央|发改委|央行|人民银行|工信部|证监会|商务部|财政部|外交部|教育部|公安部|新华社|央视|中共|北京|上海|广东|浙江|江苏|山东|四川|湖北|湖南|河南|河北|福建|安徽|陕西|辽宁|重庆|天津|深圳|广州|杭州|成都|武汉|南京|苏州|香港|澳门|台湾|华为|小米|阿里|腾讯|字节|百度|比亚迪|格力|美的|中芯|大疆|京东|美团|拼多多|快手|滴滴|科大讯飞|商汤|旷视|蚂蚁|网易|联想|中兴|海尔|宁德|吉利|蔚来|小鹏|理想|中新网|省|市|县)/;
+
+function domesticCandidate(title: string, summary: string): boolean {
+  const head = title.slice(0, 80);
+  if (FOREIGN_MARKER.test(head) && !CHINA_ANCHOR.test(head)) return false;
+  // 标题没点明、摘要通篇境外时才丢
+  if (!CHINA_ANCHOR.test(head) && FOREIGN_MARKER.test(summary) && !CHINA_ANCHOR.test(summary)) {
+    return false;
+  }
+  return true;
+}
+
 /** 标题归一化去重：同一条新闻在多个源里可能只差标点 / 空格 */
 function titleKey(title: string): string {
   return title.replace(/[\s\p{P}\p{S}]/gu, '').slice(0, 60);
@@ -284,11 +312,20 @@ export async function fetchNews(
     }
     if (stale > 0) log?.(`[blog] ${cat.spoken} 丢弃 ${stale} 条过期素材`);
 
+    // 国内类：先把明显境外的素材剔掉，别让「国内 XX」栏目播国外新闻
+    const domestic = cat.key.startsWith('domestic');
+    const regional = domestic
+      ? fresh.filter((e) => domesticCandidate(e.title, e.summary))
+      : fresh;
+    if (regional.length < fresh.length) {
+      log?.(`[blog] ${cat.spoken} 地域粗筛剔除 ${fresh.length - regional.length} 条境外素材`);
+    }
+
     // 发布时间缺失的排在最后（不要因为没 pubDate 就丢掉）
-    fresh.sort((a, b) => (b.published ?? 0) - (a.published ?? 0));
+    regional.sort((a, b) => (b.published ?? 0) - (a.published ?? 0));
 
     let taken = 0;
-    for (const e of fresh) {
+    for (const e of regional) {
       if (taken >= want) break;
       const k = titleKey(e.title);
       if (!k) continue;
