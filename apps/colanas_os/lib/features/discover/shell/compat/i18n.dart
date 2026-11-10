@@ -263,3 +263,33 @@ const Map<String, String> kCompatZhCN = <String, String>{
 extension CompatTr on String {
   String get tr => kCompatZhCN[this] ?? this;
 }
+
+/// 服务端「被筛选规则排除」的原因码 → 中文说明。
+///
+/// 服务端只回机器可读的码（QUALITY_TOO_LOW 之类），直接显示出来用户看不懂，
+/// 也不知道该调哪个筛选条件。
+const Map<String, String> kPtExcludedReasons = <String, String>{
+  'QUALITY_UNKNOWN': '分辨率无法识别',
+  'QUALITY_TOO_LOW': '画质低于要求',
+  'HDR_TOO_LOW': 'HDR 等级低于要求',
+  'AUDIO_MISSING': '音轨语言不符',
+  'SIZE_EXCEEDED': '体积超过上限',
+  'SEEDERS_UNKNOWN': '做种数未知',
+  'SEEDERS_TOO_LOW': '做种数不足',
+  'SEASON_MISMATCH': '季数不匹配',
+  'TITLE_MISMATCH': '标题不匹配',
+  'EXCLUDED_KEYWORD': '命中排除关键词',
+  'missing_api_key': '缺少 API Key',
+};
+
+/// 把 `EXCLUDED_KEYWORD:xxx` 这类带明细的原因码翻成中文
+String ptExcludedReasonText(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) return '';
+  final idx = text.indexOf(':');
+  final code = idx < 0 ? text : text.substring(0, idx).trim();
+  final detail = idx < 0 ? '' : text.substring(idx + 1).trim();
+  final label = kPtExcludedReasons[code];
+  if (label == null) return text;
+  return detail.isEmpty ? label : '$label（$detail）';
+}

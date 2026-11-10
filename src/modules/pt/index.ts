@@ -11,6 +11,8 @@ import {
   buildKeywordVariants,
   hardFilter,
   selectBest,
+  titleMatchScore,
+  TITLE_MATCH_THRESHOLD,
   type PtCandidate,
   type PtMedia,
   type PtRule,
@@ -435,9 +437,29 @@ export const pt: ServerModule = {
       return probed;
     };
 
-/** 下载目录 / 筛选设置（单键存储；未配置时用 DEFAULT_DOWNLOAD） */
+    /** 下载目录 / 筛选设置（单键存储；未配置时用 DEFAULT_DOWNLOAD） */
     const readDownload = (): typeof DEFAULT_DOWNLOAD =>
       normalizeDownload(k.config.get<Record<string, unknown>>(DOWNLOAD_KEY));
+
+    /**
+     * 「参与自动下载的站点」默认值兜底。
+     *
+     * 这个列表同时决定**搜索哪些站**和**自动下载从哪些站取种**。新装/刚加站点时它是空的，
+     * 用户不加站点勾选就会觉得「搜索什么都没有」——所以：
+     *  - 加站点时，如果还没选过站点（或原来选的站点都被删了），自动把第一个站点选上；
+     *  - 删站点时，把它从列表里摘掉，别留死 id 让搜索永远空转。
+     */
+    const syncDefaultSite = async (): Promise<void> => {
+      const dl = readDownload();
+      const alive = (
+        await sql<{ id: string }>`select id from pt_sites order by created_at asc`.execute(k.db)
+      ).rows.map((r) => r.id);
+      const kept = dl.siteIds.filter((id) => alive.includes(id));
+      // 已经选过（且都还在）就尊重用户的选择；否则默认用「第一个站点」
+      const nextIds = kept.length > 0 ? kept : alive.slice(0, 1);
+      if (nextIds.join(',') === dl.siteIds.join(',')) return; // 没变化就不写库
+      await k.config.set(DOWNLOAD_KEY, { ...dl, siteIds: nextIds });
+    };
 
     /** 影视库根 → 绝对路径（transmission 可见路径）；库不存在或越界返回空串 */
     const libraryDir = async (id: string): Promise<string> => {
@@ -455,7 +477,51 @@ export const pt: ServerModule = {
       }
     };
 
-    /** 串行搜索所有启用站点；结果落 pt_candidates 并返回 */
+    /**
+     * 关键词 → TMDB 反查（中文名 → 英文原名 + 年份）。
+     *
+     * PT 站点的种子标题基本是英文（"Resident Evil 2026"），拿中文关键词去搜，
+     * 搜回来的标题和媒体名对不上 → 全被判 TITLE_MISMATCH 排除，
+     * 页面表现就是「搜索什么都没有」。补上原名就好办了。
+     */
+    const tmdbLookup = async (
+      keyword: string,
+      mediaType: string,
+    ): Promise<{ originalTitle: string; year: string } | null> => {
+      try {
+        const cfg = normalizeConfig(k.config.get('discover.tmdb'));
+        if (!cfg.apiKey) return null;
+        const apiPath = mediaType === 'tv' ? '/search/tv' : '/search/movie';
+        const data = await tmdbGet(cfg, apiPath, { query: keyword, language: 'zh-CN' });
+        const list = Array.isArray(data?.results) ? (data.results as any[]) : [];
+        const hit = list[0];
+        if (!hit) return null;
+        return {
+          originalTitle: String(hit.original_name || hit.original_title || '').trim(),
+          year: String(hit.release_date || hit.first_air_date || '').slice(0, 4),
+        };
+      } catch {
+        return null;
+      }
+    };
+
+    /**
+     * 搜索结果的短 TTL 缓存（进程内）。
+     *
+     * 发现页「搜索」经常被连点 / 换个筛选条件又点一次，每次都去敲站点网络（单次 1~3s），
+     * 体感就是「点了搜索特别卡」。同一个关键词 90 秒内直接复用上次结果。
+     * 缓存只在内存里，进程重启即失效；站点集合变了 key 也变，不会串味。
+     */
+    const searchCache = new Map<string, { at: number; items: Array<PtCandidate & { siteId: string; siteName: string }> }>();
+    const SEARCH_CACHE_TTL_MS = 90_000;
+
+    /**
+     * 搜索所有启用站点；结果落 pt_candidates 并返回。
+     *
+     * 并发策略：**M-Team（JSON API）之间并发，NexusPHP（HTML）之间串行**。
+     * 之前全部串行时总耗时=各家相加，一个慢站（默认超时 12s）能把整次搜索拖住十几秒；
+     * 但 NexusPHP 站点实测并发会被打成 403/空结果（见文件头注释），不能一起并发。
+     */
     const searchAll = async (
       media: PtMedia,
       season: number,
@@ -464,46 +530,96 @@ export const pt: ServerModule = {
     ): Promise<Array<PtCandidate & { siteId: string; siteName: string }>> => {
       const keywords = buildKeywordVariants(media, season).slice(0, 3);
       if (keywords.length === 0) return [];
-      const list = (await sites()).filter((s) => Number(s.enabled));
+      const enabled = (await sites()).filter((s) => Number(s.enabled));
       const wanted = new Set(readDownload().siteIds);
-      const results: Array<PtCandidate & { siteId: string; siteName: string }> = [];
+      // 选中的站点可能已被删除/停用。这时**不能**把站点全过滤掉（结果会永远是空），
+      // 退化成搜全部启用站点。
+      const picked = enabled.filter((s) => wanted.has(s.id));
+      const list = wanted.size > 0 && picked.length > 0 ? picked : enabled;
+
+      const cacheKey = [
+        media.title,
+        media.originalTitle ?? '',
+        media.year ?? '',
+        season,
+        list.map((s) => s.id).join(','),
+      ].join('|');
+      const cached = searchCache.get(cacheKey);
+      if (cached && Date.now() - cached.at < SEARCH_CACHE_TTL_MS) {
+        if (statuses) {
+          for (const site of list) statuses.push({ site_id: site.id, site_name: site.name, error: '' });
+        }
+        return cached.items;
+      }
+
       const note = (site: { id: string; name: string }, error: string) => {
         if (statuses) {
           statuses.push({ site_id: site.id, site_name: site.name, error });
         }
       };
-      for (const site of list) {
-        if (wanted.size > 0 && !wanted.has(site.id)) continue;
+
+      // M-Team 专用关键词顺序：**纯标题优先**。
+      // 带年份的查询（"Resident Evil 2026"）在 M-Team 上又慢（单次 ~2.5s）又少，
+      // 纯标题（"Resident Evil"）一次就能命中，年份留给筛选环节兜。
+      const mteamKeywords = (() => {
+        const out: string[] = [];
+        const push = (v: unknown) => {
+          const s = String(v || '').trim();
+          if (s && !out.includes(s)) out.push(s);
+        };
+        push(media.originalTitle);
+        push(media.title);
+        if (season > 0) {
+          const pad = String(season).padStart(2, '0');
+          push(`${media.originalTitle || media.title} S${pad}`);
+        } else if (media.year) {
+          push(`${media.originalTitle || media.title} ${media.year}`);
+        }
+        return out.slice(0, 3);
+      })();
+
+      type Found = Array<PtCandidate & { siteId: string; siteName: string }>;
+      const searchOne = async (
+        site: (typeof list)[number],
+      ): Promise<{ items: Found; error: string }> => {
+        const out: Found = [];
         // M-Team 走专有 JSON API（api-key），其余走 NexusPHP HTML
         if (site.kind === 'mteam') {
           const apiKey = cookieOf(site.api_key_enc);
-          if (!apiKey) {
-            note(site, 'missing_api_key');
-            continue;
-          }
-          const found = await searchMTeam({
-            baseUrl: site.base_url,
-            apiKey,
-            keyword: keywords[0],
-            timeoutMs: Number(site.timeout_ms) || undefined,
-          });
-          note(site, found.items.length > 0 ? '' : (found.reason || 'empty'));
-          for (const item of found.items) {
-            results.push({
-              siteId: site.id,
-              siteName: site.name,
-              torrentId: item.torrentId,
-              infoHash: item.infoHash,
-              title: item.title,
-              sizeBytes: item.sizeBytes,
-              seeders: item.seeders,
-              leechers: item.leechers,
-              resolution: resolutionOf(item.title),
-              publishedAt: item.publishedAt,
-              downloadUrl: item.downloadUrl,
+          if (!apiKey) return { items: out, error: 'missing_api_key' };
+          // 站点种子标题基本是英文：中文关键词常常搜不到，
+          // 所以多个关键词变体依次试，直到出现「标题对得上」的结果为止。
+          const seen = new Set<string>();
+          let lastReason = 'empty';
+          for (const keyword of mteamKeywords) {
+            const found = await searchMTeam({
+              baseUrl: site.base_url,
+              apiKey,
+              keyword,
+              timeoutMs: Number(site.timeout_ms) || undefined,
             });
+            lastReason = found.reason || lastReason;
+            for (const item of found.items) {
+              if (seen.has(item.torrentId)) continue;
+              seen.add(item.torrentId);
+              out.push({
+                siteId: site.id,
+                siteName: site.name,
+                torrentId: item.torrentId,
+                infoHash: item.infoHash,
+                title: item.title,
+                sizeBytes: item.sizeBytes,
+                seeders: item.seeders,
+                leechers: item.leechers,
+                resolution: resolutionOf(item.title),
+                publishedAt: item.publishedAt,
+                downloadUrl: item.downloadUrl,
+              });
+            }
+            // 已经有对得上标题的结果就别再打这个站了（省一次网络往返）
+            if (out.some((o) => titleMatchScore(o.title, media) >= TITLE_MATCH_THRESHOLD)) break;
           }
-          continue;
+          return { items: out, error: out.length > 0 ? '' : lastReason };
         }
 
         let siteError = '';
@@ -519,7 +635,7 @@ export const pt: ServerModule = {
             siteError = found.reason;
           }
           for (const item of found.items) {
-            results.push({
+            out.push({
               siteId: site.id,
               siteName: site.name,
               torrentId: item.torrentId,
@@ -539,25 +655,66 @@ export const pt: ServerModule = {
             break;
           }
         }
-        note(site, siteError);
-      }
+        return { items: out, error: siteError };
+      };
 
-      // 落库（只留最近候选，避免无限膨胀）
-      for (const c of results) {
+      // M-Team（JSON API）之间并发；NexusPHP（HTML）实测并发会被打成 403，
+      // 必须一个一个来。
+      const apiSites = list.filter((s) => s.kind === 'mteam');
+      const htmlSites = list.filter((s) => s.kind !== 'mteam');
+      const results: Found = [];
+      const errors = new Map<string, string>();
+
+      const apiSettled = await Promise.allSettled(apiSites.map(searchOne));
+      apiSettled.forEach((r, i) => {
+        const site = apiSites[i];
+        if (r.status === 'fulfilled') {
+          results.push(...r.value.items);
+          errors.set(site.id, r.value.error);
+        } else {
+          errors.set(site.id, String((r.reason as Error)?.message ?? r.reason ?? 'error').slice(0, 80));
+        }
+      });
+      for (const site of htmlSites) {
+        try {
+          const r = await searchOne(site);
+          results.push(...r.items);
+          errors.set(site.id, r.error);
+        } catch (err) {
+          errors.set(site.id, String((err as Error)?.message ?? err).slice(0, 80));
+        }
+      }
+      // 按站点原始顺序回报状态，页面上的「站点异常」顺序才稳定
+      for (const site of list) note(site, errors.get(site.id) ?? '');
+
+      // 落库：拼成多行 values 一条语句写。一条条 await 时 50 条要走 50 次
+      // prepare+commit，搜索一慢就顶在这里。
+      const seenAt = now();
+      for (let i = 0; i < results.length; i += 40) {
+        const group = results.slice(i, i + 40);
+        const values = group.map(
+          (c) => sql`(${c.siteId}, ${c.torrentId}, ${c.infoHash ?? null}, ${c.title},
+                     ${c.sizeBytes ?? null}, ${c.seeders ?? null}, ${c.leechers ?? null},
+                     ${c.resolution ?? null}, ${c.publishedAt ?? null}, ${c.downloadUrl ?? null},
+                     ${null}, ${seenAt})`,
+        );
         await sql`
           insert into pt_candidates
             (site_id, torrent_id, info_hash, title, size_bytes, seeders, leechers,
              resolution, published_at, download_url, detail_url, last_seen_at)
-          values (${c.siteId}, ${c.torrentId}, ${c.infoHash ?? null}, ${c.title},
-                  ${c.sizeBytes ?? null}, ${c.seeders ?? null}, ${c.leechers ?? null},
-                  ${c.resolution ?? null}, ${c.publishedAt ?? null}, ${c.downloadUrl ?? null},
-                  ${null}, ${now()})
+          values ${sql.join(values, sql`, `)}
           on conflict(site_id, torrent_id) do update set
             title = excluded.title, size_bytes = excluded.size_bytes,
             seeders = excluded.seeders, leechers = excluded.leechers,
             resolution = excluded.resolution, download_url = excluded.download_url,
             last_seen_at = excluded.last_seen_at
         `.execute(k.db);
+      }
+      searchCache.set(cacheKey, { at: Date.now(), items: results });
+      // 只留最近 20 条，防止长时间运行把内存吃满
+      if (searchCache.size > 20) {
+        const oldest = [...searchCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+        if (oldest) searchCache.delete(oldest[0]);
       }
       return results;
     };
@@ -816,6 +973,8 @@ export const pt: ServerModule = {
                   ${Number(body.priority ?? 100)}, ${Number(body.timeoutMs ?? 12000)},
                   'transmission', ${ts}, ${ts})
         `.execute(k.db);
+        // 新站默认接管「搜索站点 / 自动下载站点」，否则用户勾选前搜索是空的
+        await syncDefaultSite();
         return { ok: true };
       },
     );
@@ -834,6 +993,8 @@ export const pt: ServerModule = {
       async (req: FastifyRequest) => {
         const body = (req.body || {}) as { id?: string };
         await sql`delete from pt_sites where id = ${body.id ?? ''}`.execute(k.db);
+        // 顺手把死 id 从「搜索/自动下载站点」里摘掉，并兜底选上仍存在的第一个站点
+        await syncDefaultSite();
         return { ok: true };
       },
     );
@@ -883,11 +1044,22 @@ export const pt: ServerModule = {
           year?: string;
           season?: number;
         };
+        const title = String(body.title || '').trim();
+        let originalTitle = body.originalTitle;
+        let year = body.year;
+        // 中文标题 → 英文原名（PT 站点种子标题基本都是英文）
+        if (!originalTitle && title) {
+          const hit = await tmdbLookup(title, 'movie');
+          if (hit?.originalTitle) {
+            originalTitle = hit.originalTitle;
+            if (!year && hit.year) year = hit.year;
+          }
+        }
         const items = await searchAll(
           {
-            title: body.title ?? '',
-            originalTitle: body.originalTitle ?? null,
-            year: body.year ?? null,
+            title,
+            originalTitle: originalTitle ?? null,
+            year: year ?? null,
           },
           Number(body.season) || 0,
         );
@@ -1829,6 +2001,15 @@ export const pt: ServerModule = {
         if (!keyword) {
           return { items: [], excluded: [], sites: [], keyword: '', selected: null, reason: 'keyword required' };
         }
+        // 只给了中文关键词时，用 TMDB 反查英文原名 + 年份：
+        // 没有原名的话，搜回来的英文标题会被判 TITLE_MISMATCH 全排除（= 搜不到）。
+        if (!b.originalTitle) {
+          const hit = await tmdbLookup(keyword, b.mediaType === 'tv' ? 'tv' : 'movie');
+          if (hit?.originalTitle) {
+            b.originalTitle = hit.originalTitle;
+            if (!b.year && hit.year) b.year = hit.year;
+          }
+        }
         const started = now();
         const siteStatus: Array<{ site_id: string; site_name: string; error: string }> = [];
         const results = await searchAll(
@@ -1836,13 +2017,17 @@ export const pt: ServerModule = {
           Number(b.season) || 0,
           siteStatus,
         );
-        const rows = (
-          await sql<any>`
-            select rowid as candidate_id, c.* from pt_candidates c
-             where c.last_seen_at >= ${started - 2}
-             order by c.last_seen_at desc limit 500
-          `.execute(k.db)
-        ).rows;
+        // 候选 id 按 (站点, 种子) 精确查：早先按「最近 N 秒」窗口查，
+        // 命中搜索缓存时查不到行，下载按钮就没有 candidate_id。
+        const keyRows = results.map((c) => sql`(${c.siteId}, ${c.torrentId})`);
+        const rows = keyRows.length
+          ? (
+              await sql<any>`
+                select rowid as candidate_id, c.* from pt_candidates c
+                 where (c.site_id, c.torrent_id) in (${sql.join(keyRows, sql`, `)})
+              `.execute(k.db)
+            ).rows
+          : [];
         const byKey = new Map<string, any>();
         for (const r of rows) byKey.set(`${r.site_id}:${r.torrent_id}`, r);
         const items = results.map((c) => {

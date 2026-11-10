@@ -91,10 +91,18 @@ export async function searchMTeam(
         'x-api-key': opts.apiKey,
         'user-agent': 'Mozilla/5.0 (compatible; ColaNasOs/1.0)',
       },
+      // ⚠️ 关键词字段是 `keyword`，不是 `searchEntry`。
+      // 早先写成 searchEntry 时接口**不报错**、只是忽略关键词，直接回最新 50 条，
+      // 于是「搜生化危机」拿到一堆无关种子 → 全被判 TITLE_MISMATCH 排除 →
+      // 页面表现为「搜索什么都没有」。
+      // 分页字段各版本叫法不同（page/size 与 pageNumber/pageSize 都出现过），一起带上，
+      // 多传的字段接口会忽略。
       body: JSON.stringify({
         mode: 'normal',
         categories: categoryIds(kind),
-        searchEntry: keyword,
+        keyword,
+        page: 1,
+        size: 50,
         pageNumber: 1,
         pageSize: 50,
         visible: 1,
@@ -102,6 +110,14 @@ export async function searchMTeam(
     });
     if (!res.ok) return { items: [], reason: `http_${res.status}` };
     const json = await res.json();
+    // M-Team 用 `{code, message, data}` 包一层：code!==0（0 或 1 视版本）都是业务错误，
+    // 直接把 message 带回去，页面「站点异常」区块能显示「key無效」这种真实原因，
+    // 而不是含糊的 empty。
+    const root = json as { code?: number | string; message?: string; data?: unknown } | null;
+    const apiCode = Number(root?.code ?? 0);
+    if (apiCode !== 0 && !root?.data) {
+      return { items: [], reason: `api_${apiCode}:${String(root?.message || '').slice(0, 60)}` };
+    }
     const items = parseMTeam(json, base, opts.apiKey);
     return { items, reason: items.length > 0 ? 'ok' : 'empty' };
   } catch (err) {

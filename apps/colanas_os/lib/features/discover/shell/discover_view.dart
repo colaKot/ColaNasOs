@@ -694,6 +694,7 @@ class _BrowseCard extends StatelessWidget {
     this.onSearch,
     this.subscribed = false,
     this.rating,
+    this.compact = false,
   });
 
   final Map<String, dynamic> item;
@@ -705,6 +706,8 @@ class _BrowseCard extends StatelessWidget {
   final bool subscribed;
   /// 当前评分体系下的展示分（TMDB 或豆瓣，由 DiscoverController.ratingOf 决定）
   final double? rating;
+  /// 紧凑版（待下载列表用）：更小的字号、只留海报角上的收藏星，去掉类型/评分角标
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -738,14 +741,15 @@ class _BrowseCard extends StatelessWidget {
                             ), headers: compatAuthHeaders,),
                   ),
                 ),
-                // 左上：类型角标
-                Positioned(
-                  left: 4,
-                  top: 4,
-                  child: _pill(isTv ? 'discover_tv'.tr : 'discover_movie'.tr, Colors.black54),
-                ),
+                // 左上：类型角标（紧凑版省掉，卡片小的时候角标会盖住海报）
+                if (!compact)
+                  Positioned(
+                    left: 4,
+                    top: 4,
+                    child: _pill(isTv ? 'discover_tv'.tr : 'discover_movie'.tr, Colors.black54),
+                  ),
                 // 右上：评分
-                if (rating != null && rating! > 0)
+                if (!compact && rating != null && rating! > 0)
                   Positioned(
                     right: 4,
                     top: 4,
@@ -770,7 +774,11 @@ class _BrowseCard extends StatelessWidget {
                   bottom: 2,
                   child: IconButton(
                     visualDensity: VisualDensity.compact,
-                    iconSize: 20,
+                    iconSize: compact ? 17 : 20,
+                    padding: compact ? EdgeInsets.zero : null,
+                    constraints: compact
+                        ? const BoxConstraints.tightFor(width: 26, height: 26)
+                        : null,
                     icon: Icon(
                       item['favorited'] == true ? Icons.star : Icons.star_border,
                       color: item['favorited'] == true ? Colors.amber : Colors.white,
@@ -781,18 +789,22 @@ class _BrowseCard extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 5),
+          SizedBox(height: compact ? 3 : 5),
           Text(
             (item['title'] ?? '') as String,
-            maxLines: 2,
+            maxLines: compact ? 1 : 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, height: 1.18),
+            style: TextStyle(
+              fontSize: compact ? 12.5 : 15,
+              fontWeight: FontWeight.w600,
+              height: 1.18,
+            ),
           ),
           if ((item['release_date'] ?? '').toString().isNotEmpty)
             Text(
               (item['release_date'] as String).split('-').first,
               style: TextStyle(
-                fontSize: 12.5,
+                fontSize: compact ? 10.5 : 12.5,
                 fontWeight: FontWeight.w600,
                 color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.92),
               ),
@@ -1088,7 +1100,7 @@ class _PtTab extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      '· ${(r['title'] ?? '').toString()} · ${r['site_name'] ?? ''} · ${_fmtSize(r['size_bytes'])} · ${r['excluded_reason'] ?? ''}',
+                      '· ${(r['title'] ?? '').toString()} · ${r['site_name'] ?? ''} · ${_fmtSize(r['size_bytes'])} · ${ptExcludedReasonText((r['excluded_reason'] ?? '').toString())}',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall,
@@ -1185,19 +1197,18 @@ class _PtResultCard extends StatelessWidget {
   }
 }
 
-/// 收藏列表条目卡片（待下载 / 已下载共用；一行两列布局）
+/// 收藏列表条目卡片（下载中 / 已下载共用；一行两列布局）
+///
+/// 待下载不用这张卡了 —— 那里和发现页一样走海报卡（见 `_BrowseCard` 的 compact 模式）。
 class _FavItemCard extends StatelessWidget {
   const _FavItemCard({
     required this.f,
-    this.onStar,
     this.showDownloadInfo = false,
     this.action,
     this.statusText,
   });
 
   final Map<String, dynamic> f;
-  /// 非空时右侧显示「取消收藏」星标
-  final Future<void> Function()? onStar;
   final bool showDownloadInfo;
   /// 右侧自定义操作（任务卡用 ⋮ 菜单，避免一行两列里挤三个按钮）
   final Widget? action;
@@ -1240,15 +1251,7 @@ class _FavItemCard extends StatelessWidget {
                 ],
               ),
             ),
-            if (action != null)
-              action!
-            else if (onStar != null)
-              IconButton(
-                tooltip: 'discover_reset'.tr,
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.star, color: Colors.amber, size: 20),
-                onPressed: () async => await onStar!(),
-              ),
+            if (action != null) action!,
           ],
         ),
       ),
@@ -1913,26 +1916,45 @@ class _TasksTabState extends State<_TasksTab> {
                     child: Text('discover_fav_empty'.tr,
                         style: Theme.of(context).textTheme.bodySmall),
                   ),
-                // 一行两列（按需求）
+                // 和发现页同一套海报卡（紧凑版）：一行多列、点开影片详情就能搜种下载
                 if (c.favWatching.isNotEmpty)
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisExtent: 104,
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      // 比发现页的 170 小一档：一行能多放几张，列表更紧凑
+                      maxCrossAxisExtent: 124,
+                      childAspectRatio: 0.66,
                       crossAxisSpacing: 8,
                       mainAxisSpacing: 8,
                     ),
                     itemCount: c.favWatching.length,
                     itemBuilder: (_, i) {
                       final f = c.favWatching[i];
-                      return _FavItemCard(
-                        f: f,
-                        onStar: () async {
-                          final id = f['media_id'];
-                          if (id is int) await c.unFavorite(id);
+                      final mediaId = f['id'] is int ? f['id'] as int : null;
+                      final item = <String, dynamic>{...f, 'favorited': true};
+                      return _BrowseCard(
+                        compact: true,
+                        item: item,
+                        onTap: () => _showMediaDetail(context, c, item),
+                        onToggleFav: () async {
+                          if (mediaId != null) await c.unFavorite(mediaId);
                         },
+                        // 右键：订阅 / 搜 PT（待下载里最常用的两个动作）
+                        subscribed: mediaId != null && c.isSubscribed(mediaId),
+                        onSubscribe: mediaId == null
+                            ? null
+                            : () {
+                                final subId = c.subscriptionIdOf(mediaId);
+                                if (subId != null) {
+                                  c.unsubscribe(subId);
+                                } else {
+                                  c.subscribe(mediaId);
+                                }
+                              },
+                        onSearch: mediaId == null
+                            ? null
+                            : () => _showPtResults(context, c, mediaId: mediaId),
                       );
                     },
                   ),
