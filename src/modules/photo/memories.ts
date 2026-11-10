@@ -4,6 +4,7 @@ import { sql } from 'kysely';
 import { secured } from '../../../kernel/route';
 import type { KernelApi } from '../../../kernel/types';
 import { describePlace } from './geo/place-label';
+import { coverRanker } from './cover';
 import type { FastifyRequest } from 'fastify';
 
 /**
@@ -97,6 +98,12 @@ const Ticket = Type.Object(
     fromStation: Type.String(),
     toStation: Type.String(),
     code: Type.String(),
+    /** 席别 / 舱位（二等座、硬卧、经济舱…），OCR 没提到就是空串 */
+    seatClass: Type.Optional(Type.String()),
+    /** 座位号（08车12F / 32A） */
+    seat: Type.Optional(Type.String()),
+    /** 票价原值（553.00），不带货币符号 */
+    price: Type.Optional(Type.String()),
     evidence: Type.Array(Type.String()),
   },
   { $id: 'PhotoTicket' },
@@ -165,6 +172,17 @@ const YearReport = Type.Object(
     busiestDays: Type.Array(Type.Ref(LabelCount)),
     earliest: Type.Union([Type.Integer(), Type.Null()]),
     latest: Type.Union([Type.Integer(), Type.Null()]),
+    /** 年度代表作：保证「照片最多的 5 个已命名人物」各一张，其余按时间等分补齐 */
+    picks: Type.Optional(
+      Type.Array(
+        Type.Object({
+          photoId: Type.String(),
+          path: Type.String(),
+          takenAt: Type.Integer(),
+          reason: Type.String({ description: '入选原因（人物名）；空串=按时间分散' }),
+        }),
+      ),
+    ),
   },
   { $id: 'PhotoYearReport' },
 );
@@ -219,6 +237,9 @@ interface PhotoRow {
   latitude: number | null;
   longitude: number | null;
   camera: string | null;
+  /** 封面挑图要用：横屏优先，缺这两个字段就无法判断 */
+  width: number | null;
+  height: number | null;
 }
 
 function pad2(v: number): string {
@@ -340,7 +361,7 @@ async function photosBetween(
 ): Promise<PhotoRow[]> {
   return (
     await sql<PhotoRow>`
-      select id, rel_path, taken_at, geohash5, latitude, longitude, camera
+      select id, rel_path, taken_at, geohash5, latitude, longitude, camera, width, height
         from photo_items
        where in_trash = 0 and taken_at >= ${from} and taken_at < ${to}
          and (${uid} = '' or library_id in (select id from photo_libraries where owner_id = ${uid}))
@@ -441,6 +462,8 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
         k.db,
         rows.map((r) => r.id),
       );
+      // 一次请求只查一次：前 5 大簇 + 任意人脸 + 横竖屏，统一走 coverRanker
+      const coverOf = await coverRanker(k, rows.map((r) => r.id));
 
       const byDay = new Map<string, PhotoRow[]>();
       for (const r of rows) {
@@ -466,10 +489,12 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
           }))
           .sort((a, b) => b.score - a.score);
 
-        // 封面优先挑「有人脸」的那张：记忆卡片是给人看的，一张有人的照片
-        // 比构图最好的风景更像「回忆」。AI 没跑（无 people 数据）时自然退回最高分。
-        const cover = scored.find((s) => (labels.people.get(s.row.id) || []).length > 0)?.row
-          ?? scored[0].row;
+        // 封面：严格按 6 级优先序，横屏在同一人脸档内硬优先。
+        // 六档都参与排序，没跑过人脸也能落到「横屏 > 竖屏」，不会掉回构图分。
+        const best = scored
+          .map((s) => ({ s, cover: coverOf(s.row.id) }))
+          .sort((a, b) => b.cover - a.cover || b.s.score - a.s.score);
+        const cover = best[0].s.row;
         const picks = scored.slice(0, 7).map((s) => ({
           id: s.row.id,
           path: s.row.rel_path,
@@ -610,8 +635,19 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
       const trainNo = /(?:^|[^0-9A-Za-z])([GDCKTZ][1-9]\d{0,3})(?!\d)/;
       const flightNo = /((?:CZ|CA|MU|MF|HU|ZH|SC|FM|HO|3U)[1-9]\d{2,3})(?!\d)/;
       const dateRe = /(20\d{2})[-年/.]?(\d{1,2})[-月/.]?(\d{1,2})/;
-      const timeRe = /(?:^|\D)(\d{1,2})[:：](\d{1,2})(?!\d)/;
+      // 前置边界不能用 `\D`：OCR 归一后「2026-09-1209:52」日期和时间是粘着的，
+      // 冒号本身已经是强特征，去掉边界才能抽到发车时间。
+      const timeRe = /(\d{1,2})[:：](\d{1,2})(?!\d)/;
       const stationRe = /([\u4e00-\u9fa5]{2,4})(站|机场)/g;
+      // 票面基本信息：OCR 归一后没有空格，所以这些正则都按「紧贴着」的形态写。
+      // 席别命中即用（关键词明确）；座位优先「08车12F」这种带车厢的写法，
+      // 机票退到「座位/登机口 32A」；票价优先「票价」，再退「¥」。
+      const seatClassRe =
+        /(商务座|特等座|一等座|二等座|动卧|软卧|硬卧|软座|硬座|无座|超级经济舱|经济舱|公务舱|头等舱)/;
+      const trainSeatRe = /(\d{1,2}车\d{1,3}[A-F]?)/;
+      const flightSeatRe = /(?:座位号?|登机口)[:：]?(\d{1,2}[A-F])/;
+      const priceLabelRe = /票价[:：]?(\d+(?:\.\d{1,2})?)/;
+      const priceSignRe = /[¥￥](\d+(?:\.\d{1,2})?)/;
       const NOISE = /[车线铁网接改经客观供安全中到本该台]/;
       const norm = (s: string): string => String(s || '').replace(/[\s\u3000]+/g, '');
 
@@ -672,6 +708,11 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
 
         const dm = dateRe.exec(text);
         const tm = timeRe.exec(text);
+        const seatClass = seatClassRe.exec(text)?.[1] ?? '';
+        const seat =
+          trainSeatRe.exec(text)?.[1] ?? flightSeatRe.exec(text)?.[1] ?? '';
+        const price =
+          priceLabelRe.exec(text)?.[1] ?? priceSignRe.exec(text)?.[1] ?? '';
         let hhmm = '';
         if (tm) {
           const h = Number(tm[1]);
@@ -690,6 +731,9 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
           fromStation: stations[0] || '',
           toStation: stations[1] || '',
           code: matched.code,
+          seatClass,
+          seat,
+          price,
           evidence: matched.hits.slice(0, 8),
         });
         if (tickets.length >= limit) break;
@@ -816,6 +860,56 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
         });
       }
 
+      // 九张代表作：先保「照片最多的 5 个已命名人物」各一张，剩余名额按时间等分补齐，
+      // 这样既有人的故事、又铺满全年；同分优先横屏（观感）。
+      const picks: Array<{ photoId: string; path: string; takenAt: number; reason: string }> = [];
+      const landscapeOf = (r: PhotoRow): number =>
+        Number(r.width) > 0 && Number(r.height) > 0 && Number(r.width) > Number(r.height)
+          ? 1
+          : 0;
+      if (rows.length > 0) {
+        const covered = new Set<string>();
+        for (const person of topLabels(peopleCount, 5)) {
+          if (person.count <= 0) continue;
+          const candidates = rows.filter(
+            (r) => !covered.has(r.id) && (labels.people.get(r.id) || []).includes(person.label),
+          );
+          if (candidates.length === 0) continue;
+          candidates.sort(
+            (a, b) =>
+              landscapeOf(b) - landscapeOf(a) || Number(b.taken_at) - Number(a.taken_at),
+          );
+          const pick = candidates[0];
+          covered.add(pick.id);
+          picks.push({
+            photoId: pick.id,
+            path: pick.rel_path,
+            takenAt: Number(pick.taken_at),
+            reason: person.label,
+          });
+        }
+        const need = Math.max(0, 9 - picks.length);
+        if (need > 0) {
+          const rest = rows.filter((r) => !covered.has(r.id));
+          for (let i = 0; i < need && rest.length > 0; i += 1) {
+            const from = Math.floor((rest.length * i) / need);
+            const to = Math.max(from + 1, Math.floor((rest.length * (i + 1)) / need));
+            const bucket = rest.slice(from, to);
+            if (bucket.length === 0) continue;
+            bucket.sort((a, b) => landscapeOf(b) - landscapeOf(a));
+            const pick = bucket.find((r) => !covered.has(r.id));
+            if (!pick) continue;
+            covered.add(pick.id);
+            picks.push({
+              photoId: pick.id,
+              path: pick.rel_path,
+              takenAt: Number(pick.taken_at),
+              reason: '',
+            });
+          }
+        }
+      }
+
       return {
         year,
         totalPhotos: rows.length,
@@ -829,6 +923,7 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
         busiestDays: topLabels(dayCount, 5).map((d) => ({ label: d.label, count: d.count })),
         earliest: rows.length ? Number(rows[0].taken_at) : null,
         latest: rows.length ? Number(rows[rows.length - 1].taken_at) : null,
+        picks,
       };
     },
   );
@@ -858,6 +953,8 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
         k.db,
         rows.map((r) => r.id),
       );
+      // 记忆卡片 / 年度章节的封面也用同一套 6 级优先序（只查一次库）
+      const coverOf = await coverRanker(k, rows.map((r) => r.id));
 
       const marked = new Map<string, { status: string; note: string; updated_at: number }>();
       const marks = (
@@ -878,7 +975,7 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
       const memories: any[] = [];
       const ignored: any[] = [];
       for (const [day, list] of byDay) {
-        const base = buildMemoryBase(day, list, labels, q.locale);
+        const base = buildMemoryBase(day, list, labels, q.locale, coverOf);
         const mark = marked.get(day);
         if (mark) {
           const item = {
@@ -921,21 +1018,34 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
         byYear.get(year)!.push(r);
       }
       const chapters = [...byYear.entries()]
-        .map(([year, list]) => ({
-          year,
-          coverPath: list[list.length - 1].rel_path,
-          photoCount: list.length,
-          start: dayOf(Number(list[0].taken_at)),
-          end: dayOf(Number(list[list.length - 1].taken_at)),
-        }))
+        .map(([year, list]) => {
+          // 原来直接取该年最后一张，跟那年今日的封面口径对不上
+          const cover = list.reduce(
+            (best, r) => (coverOf(r.id) > coverOf(best.id) ? r : best),
+            list[0],
+          );
+          return {
+            year,
+            coverPath: cover.rel_path,
+            photoCount: list.length,
+            start: dayOf(Number(list[0].taken_at)),
+            end: dayOf(Number(list[list.length - 1].taken_at)),
+          };
+        })
         .sort((a, b) => b.year - a.year);
 
       const desc = (a: any, b: any) => (a.date < b.date ? 1 : -1);
+      candidates.sort(desc);
+      memories.sort(desc);
+      ignored.sort(desc);
       return {
-        candidates: candidates.sort(desc).slice(0, limit),
-        memories: memories.sort(desc).slice(0, limit),
-        ignored: ignored.sort(desc).slice(0, limit),
+        candidates: candidates.slice(0, limit),
+        memories: memories.slice(0, limit),
+        ignored: ignored.slice(0, limit),
         chapters,
+        totalCandidates: candidates.length,
+        totalMemories: memories.length,
+        totalIgnored: ignored.length,
       };
     },
   );
@@ -1044,6 +1154,7 @@ function buildMemoryBase(
     people: Map<string, string[]>;
   },
   locale?: string,
+  coverOf?: (id: string) => number,
 ) {
   const scored = list
     .map((r) => ({
@@ -1057,9 +1168,15 @@ function buildMemoryBase(
       ),
     }))
     .sort((a, b) => b.score - a.score);
-  // 同列表页：有人脸的优先做封面
-  const cover = scored.find((s) => (labels.people.get(s.row.id) || []).length > 0)?.row
-    ?? scored[0].row;
+  // 封面与那年今日 / 首页新记忆共用 6 级优先序：
+  // 横屏+前5人脸 > 竖屏+前5人脸 > 横屏有人 > 竖屏有人 > 横屏 > 竖屏。
+  // 旧版只认「已命名的人脸」+ 构图分，会把横屏好图挤掉。
+  const cover = coverOf
+    ? [...scored].sort(
+        (a, b) => coverOf(b.row.id) - coverOf(a.row.id) || b.score - a.score,
+      )[0].row
+    : (scored.find((s) => (labels.people.get(s.row.id) || []).length > 0)?.row ??
+      scored[0].row);
 
   const cellCount = new Map<string, number>();
   for (const r of list) {

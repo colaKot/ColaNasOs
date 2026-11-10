@@ -23,8 +23,8 @@ class _FilesPageState extends State<FilesPage> {
   String? _error;
   List<FilesListItem> _items = const [];
 
-  /// 视图：`list` / `grid`
-  String _view = 'list';
+  /// 视图：`list` / `grid`；文件默认按网格看（缩略图更好认）
+  String _view = 'grid';
 
   /// 手机端底部 tab：`browse`（文件夹）/ `favorites` / `recent`。
   /// 桌面端不用它 —— 桌面有侧栏与面包屑，一屏就能看完。
@@ -414,7 +414,7 @@ class _FilesPageState extends State<FilesPage> {
           children: [
             _toolbar(compact),
             const SizedBox(height: NasTokens.spaceSm),
-            Expanded(child: _content(constraints.maxWidth)),
+            Expanded(child: _content()),
           ],
         );
         // 手机端：文件页是单页模块，需要自己的 56 顶栏（房子 + 标题）。
@@ -591,7 +591,7 @@ class _FilesPageState extends State<FilesPage> {
     );
   }
 
-  Widget _content(double width) {
+  Widget _content() {
     if (_loading) return const NasLoading();
     if (_error != null) {
       return NasErrorState(
@@ -609,14 +609,18 @@ class _FilesPageState extends State<FilesPage> {
     }
 
     if (_view == 'grid') {
-      final cols = gridColumns(width);
+      // 不再按断点算固定列数：`gridColumns` 在 expanded 下只有 6 列，
+      // 1390px 宽的窗格摊到每格 ~225px，而卡片内容（64 图标 + 两行字）只用得到 ~128px，
+      // 于是每格四周全是大片空白，看着就是「一个隔得老远」。
+      // 改成给每格一个**上限宽度 + 固定高度**：格子宽度稳定在 120 上下，
+      // 列数自动铺满，宽屏就是密一点，窄屏也不至于挤成一条。
       return GridView.builder(
         padding: const EdgeInsets.only(bottom: NasTokens.spaceLg),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: cols,
-          crossAxisSpacing: NasTokens.spaceSm,
-          mainAxisSpacing: NasTokens.spaceSm,
-          childAspectRatio: 0.92,
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 148,
+          mainAxisExtent: 134,
+          crossAxisSpacing: NasTokens.spaceXs + 2,
+          mainAxisSpacing: NasTokens.spaceXs + 2,
         ),
         itemCount: _items.length,
         itemBuilder: (context, i) {

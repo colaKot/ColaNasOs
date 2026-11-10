@@ -6089,6 +6089,15 @@
             "items": {
               "$ref": "#/components/schemas/PhotoMemoryChapter"
             }
+          },
+          "totalCandidates": {
+            "type": "integer"
+          },
+          "totalMemories": {
+            "type": "integer"
+          },
+          "totalIgnored": {
+            "type": "integer"
           }
         }
       },

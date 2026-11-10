@@ -1417,6 +1417,11 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/rss/feeds/auto-download', params, 'body');
   }
 
+  /** 修改 RSS 源设置（自动加种 / 立刻开始），立即生效 */
+  async rssFeedSettings(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/rss/feeds/settings', params, 'body');
+  }
+
   /** 条目列表（发布时间倒序） */
   async rssItems(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/rss/items', params, 'query');

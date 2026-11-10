@@ -62,14 +62,18 @@ Map<String, String> get _imageHeaders {
         ApiSession.instance.client.photoChapterBook(year: year, locale: 'zh-CN'),
         ApiSession.instance.client.photoChapterBook(year: year - 1, locale: 'zh-CN'),
       ]);
-      final picks = <PhotoChapterPage>[];
+      // 先把符合条件的日子全收齐，再每次打开随机换一批 —— 以前固定取
+      // 「今年最早的前 3 天」，服务端按日期升序返回，于是常年是同样三张。
+      final candidates = <PhotoChapterPage>[];
       for (final book in books) {
         for (final day in book.days) {
-          if (day.photoCount >= 6 && day.place.isNotEmpty && picks.length < 3) {
-            picks.add(day);
+          if (day.photoCount >= 6 && day.place.isNotEmpty) {
+            candidates.add(day);
           }
         }
       }
+      candidates.shuffle(math.Random(DateTime.now().microsecondsSinceEpoch));
+      final picks = candidates.take(3).toList();
       if (!mounted) return;
       setState(() {
         _summary = summary;
@@ -339,58 +343,63 @@ Map<String, String> get _imageHeaders {
   }
 
   Widget _onThisDay(List<PhotoHomeOnThisDay> days) {
-    Widget card(int index) {
-      if (index >= days.length) {
-        return _memoryTile(
-          path: '',
-          title: tr('photo.onThisDay.viewAll'),
-          subtitle: tr('photo.onThisDay.title'),
-          onTap: () => widget.onNavigate('onThisDay'),
-          height: 240,
+    // 只画真实存在的年份，不拿「查看全部年份」占位块去补格子：
+    // 往年的今天没照片就空着，全部年份走标题栏右上角那个「查看全部」。
+    final shown = days.take(3).toList(growable: false);
+    return LayoutBuilder(
+      builder: (context, c) {
+        // 按 3 列的宽度算格子宽，但**不拉伸**：只有 1 年时就是一个正常大小的卡片，
+        // 右边留白（用 Expanded 会把它撑成整行大图）。
+        final w = ((c.maxWidth - 24) / 3).clamp(150.0, double.infinity);
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < shown.length; i += 1) ...[
+              SizedBox(
+                width: w,
+                child: _memoryTile(
+                  height: 240,
+                  path: shown[i].items.isEmpty ? '' : shown[i].items.first.path,
+                  title: tr('photo.home.yearPhotos', {
+                    'year': '${shown[i].year}',
+                    'count': '${shown[i].photoCount}',
+                  }),
+                  subtitle: shown[i].date,
+                  onTap: () => widget.onNavigate('onThisDay'),
+                ),
+              ),
+              if (i < shown.length - 1) const SizedBox(width: 12),
+            ],
+          ],
         );
-      }
-      final day = days[index];
-      return _memoryTile(
-        height: 240,
-        path: day.items.isEmpty ? '' : day.items.first.path,
-        title: tr('photo.home.yearPhotos', {
-          'year': '${day.year}',
-          'count': '${day.photoCount}',
-        }),
-        subtitle: day.date,
-        onTap: () => widget.onNavigate('onThisDay'),
-      );
-    }
-
-    // 固定一行 3 列：不足 3 年时第 3 格给「查看全部年份」
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < 3; i += 1) ...[
-          Expanded(child: card(i)),
-          if (i < 2) const SizedBox(width: 12),
-        ],
-      ],
+      },
     );
   }
   Widget _newMemoryRow() {
-    return Row(
-      children: [
-        for (var i = 0; i < _newMemories.length; i += 1) ...[
-          Expanded(
-            child: _memoryTile(
-              path: _newMemories[i].cover.path,
-              title: _newMemories[i].date,
-              subtitle: tr('photo.home.memorySub', {
-                'count': '${_newMemories[i].photoCount}',
-                'place': _newMemories[i].place,
-              }),
-              onTap: () => widget.onNavigate('memory'),
-            ),
-          ),
-          if (i < _newMemories.length - 1) const SizedBox(width: 12),
-        ],
-      ],
+    // 与那年今日同一套格子宽度：不足 3 个时右侧留白，不把单张卡片拉成整行大图
+    return LayoutBuilder(
+      builder: (context, c) {
+        final w = ((c.maxWidth - 24) / 3).clamp(150.0, double.infinity);
+        return Row(
+          children: [
+            for (var i = 0; i < _newMemories.length; i += 1) ...[
+              SizedBox(
+                width: w,
+                child: _memoryTile(
+                  path: _newMemories[i].cover.path,
+                  title: _newMemories[i].date,
+                  subtitle: tr('photo.home.memorySub', {
+                    'count': '${_newMemories[i].photoCount}',
+                    'place': _newMemories[i].place,
+                  }),
+                  onTap: () => widget.onNavigate('memory'),
+                ),
+              ),
+              if (i < _newMemories.length - 1) const SizedBox(width: 12),
+            ],
+          ],
+        );
+      },
     );
   }
 

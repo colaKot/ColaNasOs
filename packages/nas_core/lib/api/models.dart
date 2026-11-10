@@ -5419,12 +5419,18 @@ class PhotoMemoryList {
   final List<PhotoMemoryItem> memories;
   final List<PhotoMemoryItem> ignored;
   final List<PhotoMemoryChapter> chapters;
+  final int? totalCandidates;
+  final int? totalMemories;
+  final int? totalIgnored;
 
   const PhotoMemoryList({
     required this.candidates,
     required this.memories,
     required this.ignored,
     required this.chapters,
+    this.totalCandidates,
+    this.totalMemories,
+    this.totalIgnored,
   });
 
   factory PhotoMemoryList.fromJson(Map<String, dynamic> json) => PhotoMemoryList(
@@ -5432,6 +5438,9 @@ class PhotoMemoryList {
         memories: (json['memories'] as List<dynamic>).map((e) => PhotoMemoryItem.fromJson(e as Map<String, dynamic>)).toList(),
         ignored: (json['ignored'] as List<dynamic>).map((e) => PhotoMemoryItem.fromJson(e as Map<String, dynamic>)).toList(),
         chapters: (json['chapters'] as List<dynamic>).map((e) => PhotoMemoryChapter.fromJson(e as Map<String, dynamic>)).toList(),
+        totalCandidates: json['totalCandidates'] == null ? null : json['totalCandidates'] as int,
+        totalMemories: json['totalMemories'] == null ? null : json['totalMemories'] as int,
+        totalIgnored: json['totalIgnored'] == null ? null : json['totalIgnored'] as int,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -5439,6 +5448,9 @@ class PhotoMemoryList {
         'memories': memories.map((e) => e.toJson()).toList(),
         'ignored': ignored.map((e) => e.toJson()).toList(),
         'chapters': chapters.map((e) => e.toJson()).toList(),
+        if (totalCandidates != null) 'totalCandidates': totalCandidates!,
+        if (totalMemories != null) 'totalMemories': totalMemories!,
+        if (totalIgnored != null) 'totalIgnored': totalIgnored!,
       };
 }
 

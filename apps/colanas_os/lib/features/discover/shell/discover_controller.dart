@@ -142,7 +142,6 @@ class DiscoverController extends GetxController {
       loadVideoSources();
     } else if (i == 2) {
       loadFeeds();
-      loadEntries();
       loadLedger();
     } else if (i == 3) {
       loadTasks();
@@ -491,7 +490,6 @@ class DiscoverController extends GetxController {
   Future<void> refreshFeed(int id) async {
     await _api.refreshFeed(id);
     await loadFeeds();
-    await loadEntries();
   }
 
   Future<void> setFeedAuto(int id, bool enabled) async {

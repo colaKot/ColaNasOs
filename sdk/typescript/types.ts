@@ -287,6 +287,7 @@ export type DiscoverMediaCard = {
   "posterUrl"?: string;
   "owned"?: boolean;
   "favorited"?: boolean;
+  "downloadState"?: string;
 };
 
 export type DiscoverCatalogQuery = {
@@ -1616,6 +1617,9 @@ export type PhotoMemoryList = {
   "memories": PhotoMemoryItem[];
   "ignored": PhotoMemoryItem[];
   "chapters": PhotoMemoryChapter[];
+  "totalCandidates"?: number;
+  "totalMemories"?: number;
+  "totalIgnored"?: number;
 };
 
 export type PhotoMemoryQuery = {

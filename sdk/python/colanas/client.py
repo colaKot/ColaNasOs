@@ -1143,6 +1143,10 @@ class ColanasClient:
         """设置 feed 级自动下载开关"""
         return self._request("POST", "/api/v1/rss/feeds/auto-download", params, "body")
 
+    def rss_feed_settings(self, **params):
+        """修改 RSS 源设置（自动加种 / 立刻开始），立即生效"""
+        return self._request("POST", "/api/v1/rss/feeds/settings", params, "body")
+
     def rss_items(self, **params):
         """条目列表（发布时间倒序）"""
         return self._request("GET", "/api/v1/rss/items", params, "query")

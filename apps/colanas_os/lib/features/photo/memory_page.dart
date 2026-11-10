@@ -5,6 +5,8 @@ import 'package:nas_media/nas_media.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
+import 'annual/photo_annual_report.dart';
+import 'photo_viewer_page.dart';
 
 /// 相册「记忆」：人生章节 + 候选记忆（确认 / 忽略）。
 ///
@@ -25,6 +27,9 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
   String? _error;
   PhotoMemoryList? _data;
   int _tab = 0;
+  // 人生章节直接在记忆页内容区展开，不再 push 一个盖住侧栏的全屏路由
+  int? _chapterYear;
+  String? _chapterDate;
 
   @override
   void initState() {
@@ -119,11 +124,17 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
   }
 
   void _openChapter(int year, {String? date}) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => PhotoChapterBookPage(year: year, initialDate: date),
-      ),
-    );
+    setState(() {
+      _chapterYear = year;
+      _chapterDate = date;
+    });
+  }
+
+  void _closeChapter() {
+    setState(() {
+      _chapterYear = null;
+      _chapterDate = null;
+    });
   }
 
   @override
@@ -141,11 +152,17 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
                 ),
               ],
             ),
-      body: _loading
-          ? const NasLoading()
-          : _error != null
-              ? NasErrorState(message: _error!, onRetry: _load)
-              : RefreshIndicator(onRefresh: _load, child: _body()),
+      body: _chapterYear != null
+          ? _ChapterTab(
+              initialYear: _chapterYear,
+              initialDate: _chapterDate,
+              onBack: _closeChapter,
+            )
+          : _loading
+              ? const NasLoading()
+              : _error != null
+                  ? NasErrorState(message: _error!, onRetry: _load)
+                  : RefreshIndicator(onRefresh: _load, child: _body()),
     );
   }
 
@@ -192,10 +209,11 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
                   2 => tr('photo.memory.tab.ignored'),
                   _ => tr('photo.memory.tab.mine'),
                 },
+                // 列表按 limit 截断过，这里显示服务端给的真实总数
                 count: switch (i) {
-                  1 => data?.candidates.length ?? 0,
-                  2 => data?.ignored.length ?? 0,
-                  _ => data?.memories.length ?? 0,
+                  1 => data?.totalCandidates ?? data?.candidates.length ?? 0,
+                  2 => data?.totalIgnored ?? data?.ignored.length ?? 0,
+                  _ => data?.totalMemories ?? data?.memories.length ?? 0,
                 },
                 selected: _tab == i,
                 onTap: () => setState(() => _tab = i),
@@ -398,11 +416,18 @@ class _MemoryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AspectRatio(
-            aspectRatio: 16 / 9,
-            child: item.coverPath.isEmpty
-                ? ColoredBox(color: scheme.surfaceContainerHighest)
-                : NasCoverImage(url: _thumb(item.coverPath), headers: _authHeaders(), fit: BoxFit.cover),
+          GestureDetector(
+            onTap: onOpen,
+            child: AspectRatio(
+              aspectRatio: 16 / 9,
+              child: item.coverPath.isEmpty
+                  ? ColoredBox(color: scheme.surfaceContainerHighest)
+                  : NasCoverImage(
+                      url: _thumb(item.coverPath),
+                      headers: _authHeaders(),
+                      fit: BoxFit.cover,
+                    ),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
@@ -528,23 +553,7 @@ class PhotoAnnualPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: embedded ? null : AppBar(title: Text(tr('photo.nav.year'))),
-      body: const _YearTab(),
-    );
-  }
-}
-
-/// 独立页：人生章节（对开书本）
-class PhotoChapterBookPage extends StatelessWidget {
-  const PhotoChapterBookPage({super.key, required this.year, this.initialDate});
-
-  final int year;
-  final String? initialDate;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(tr('photo.memory.chapters'))),
-      body: _ChapterTab(initialYear: year, initialDate: initialDate),
+      body: const PhotoAnnualReport(),
     );
   }
 }
@@ -559,6 +568,45 @@ Map<String, String> _authHeaders() {
 String _thumb(String path, {int size = 480}) =>
     _mediaUrls().thumbnail(path, size: size);
 
+/// 章节接口只给 id + path，没有 media_kind；视频按扩展名认，
+/// 交给查看器显示播放按钮 / 抽帧封面。
+bool _isVideoPath(String path) {
+  final p = path.toLowerCase();
+  return const <String>[
+    '.mp4', '.mov', '.m4v', '.mkv', '.avi', '.webm', '.3gp', '.ts',
+  ].any((ext) => p.endsWith(ext));
+}
+
+List<ViewerPhoto> _viewerPhotosOf(PhotoChapterPage page) {
+  // 封面不一定在 picks 里（两者排序口径不同），放首位再补其余，避免点大图找不到自己
+  final all = <PhotoMemoryPick>[
+    page.cover,
+    ...page.picks.where((p) => p.id != page.cover.id),
+  ];
+  return [
+    for (final p in all)
+      ViewerPhoto(
+        id: p.id,
+        path: p.path,
+        takenAt: p.takenAt,
+        mediaKind: _isVideoPath(p.path) ? 'video' : 'image',
+      ),
+  ];
+}
+
+/// 点书页大图 / 底部缩略图 → 统一查看器。
+/// 左右按钮、键盘左右键、手机滑动、视频播放都在查看器里，这里不重复实现。
+void _openPick(BuildContext context, PhotoChapterPage page, String id) {
+  final photos = _viewerPhotosOf(page);
+  final index = photos.indexWhere((p) => p.id == id);
+  openPhotoViewer(
+    context,
+    photos: photos,
+    initialIndex: index < 0 ? 0 : index,
+    title: page.date,
+  );
+}
+
 // ---------------------------------------------------------------- 一日一帧
 
 class _DayFramesTab extends StatefulWidget {
@@ -572,7 +620,7 @@ class _DayFramesTabState extends State<_DayFramesTab> {
   bool _loading = true;
   String? _error;
   List<PhotoDayFrame> _items = const [];
-  int _days = 30;
+  int _days = 90;
 
   @override
   void initState() {
@@ -630,7 +678,6 @@ class _DayFramesTabState extends State<_DayFramesTab> {
                 underline: SizedBox.shrink(),
                 items: [
                   DropdownMenuItem(value: 7, child: Text(tr('ui.photo.027'))),
-                  DropdownMenuItem(value: 30, child: Text(tr('ui.photo.028'))),
                   DropdownMenuItem(value: 90, child: Text(tr('ui.photo.029'))),
                   DropdownMenuItem(value: 365, child: Text(tr('ui.photo.030'))),
                 ],
@@ -732,10 +779,13 @@ class _DayFrameCard extends StatelessWidget {
 // ---------------------------------------------------------------- 人生章节
 
 class _ChapterTab extends StatefulWidget {
-  const _ChapterTab({this.initialYear, this.initialDate});
+  const _ChapterTab({this.initialYear, this.initialDate, this.onBack});
 
   final int? initialYear;
   final String? initialDate;
+
+  /// 嵌在记忆页里时给一个「返回记忆列表」；独立页为 null
+  final VoidCallback? onBack;
 
   @override
   State<_ChapterTab> createState() => _ChapterTabState();
@@ -814,6 +864,12 @@ class _ChapterTabState extends State<_ChapterTab> {
           ),
           child: Row(
             children: [
+              if (widget.onBack != null)
+                IconButton(
+                  tooltip: tr('common.back'),
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: widget.onBack,
+                ),
               IconButton(
                 tooltip: tr('ui.photo.032'),
                 icon: const Icon(Icons.chevron_left),
@@ -959,13 +1015,16 @@ class _LeftPage extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(NasTokens.radiusMd),
-            child: NasCoverImage(
-              url: _thumb(page.cover.path, size: 1200),
-              headers: _authHeaders(),
-              cacheWidth: 1200,
-              icon: Icons.broken_image_outlined,
+          child: GestureDetector(
+            onTap: () => _openPick(context, page, page.cover.id),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(NasTokens.radiusMd),
+              child: NasCoverImage(
+                url: _thumb(page.cover.path, size: 1200),
+                headers: _authHeaders(),
+                cacheWidth: 1200,
+                icon: Icons.broken_image_outlined,
+              ),
             ),
           ),
         ),
@@ -979,15 +1038,18 @@ class _LeftPage extends StatelessWidget {
                 const SizedBox(width: NasTokens.spaceXs),
             itemBuilder: (context, i) {
               final pick = page.picks[i];
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-                child: SizedBox(
-                  width: 72,
-                  child: NasCoverImage(
-                    url: _thumb(pick.path, size: 200),
-                    headers: _authHeaders(),
-                    cacheWidth: 200,
-                    icon: Icons.broken_image_outlined,
+              return GestureDetector(
+                onTap: () => _openPick(context, page, pick.id),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+                  child: SizedBox(
+                    width: 72,
+                    child: NasCoverImage(
+                      url: _thumb(pick.path, size: 200),
+                      headers: _authHeaders(),
+                      cacheWidth: 200,
+                      icon: Icons.broken_image_outlined,
+                    ),
                   ),
                 ),
               );
@@ -1097,6 +1159,7 @@ class _TicketsTabState extends State<_TicketsTab> {
   bool _loading = true;
   String? _error;
   PhotoTicketResponse? _data;
+  String _kind = 'all';
 
   @override
   void initState() {
@@ -1125,6 +1188,39 @@ class _TicketsTabState extends State<_TicketsTab> {
     }
   }
 
+  List<PhotoTicket> get _visible {
+    final all = _data?.tickets ?? const <PhotoTicket>[];
+    if (_kind == 'all') return all;
+    return all.where((t) => t.kind == _kind).toList();
+  }
+
+  /// 按「年-月」分组。date 来自 OCR，格式不对时退回拍摄时间。
+  Map<String, List<PhotoTicket>> _groups(List<PhotoTicket> list) {
+    final map = <String, List<PhotoTicket>>{};
+    for (final t in list) {
+      var key = t.date.length >= 7 ? t.date.substring(0, 7) : '';
+      if (!RegExp(r'^\d{4}-\d{2}$').hasMatch(key) && t.takenAt > 0) {
+        final d = DateTime.fromMillisecondsSinceEpoch(t.takenAt * 1000);
+        key = '${d.year}-${d.month.toString().padLeft(2, '0')}';
+      }
+      if (key.isEmpty) key = 'unknown';
+      map.putIfAbsent(key, () => <PhotoTicket>[]).add(t);
+    }
+    for (final v in map.values) {
+      v.sort((a, b) =>
+          '${b.date} ${b.time}'.compareTo('${a.date} ${a.time}'));
+    }
+    return map;
+  }
+
+  String _monthLabel(String key) {
+    if (!RegExp(r'^\d{4}-\d{2}$').hasMatch(key)) return tr('common.unknown');
+    return tr('photo.ticket.month', {
+      'year': key.substring(0, 4),
+      'month': '${int.parse(key.substring(5, 7))}',
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const NasLoading();
@@ -1140,351 +1236,291 @@ class _TicketsTabState extends State<_TicketsTab> {
       );
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(NasTokens.spaceMd),
+    final tickets = _visible;
+    final groups = _groups(tickets);
+    final keys = groups.keys.toList()..sort((a, b) => b.compareTo(a));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          tr('photo.memoryScan', {'scanned': '${data.scanned}', 'tickets': '${data.tickets.length}', 'trips': '${data.trips.length}'}),
-          style: TextStyle(
-            color: context.nasTextSecondary,
-            fontSize: NasTokens.fontCaption,
+        _kindTabs(),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(NasTokens.spaceMd),
+            children: [
+              Text(
+                tr('photo.memoryScan', {
+                  'scanned': '${data.scanned}',
+                  'tickets': '${data.tickets.length}',
+                  'trips': '${data.trips.length}',
+                }),
+                style: TextStyle(
+                  color: context.nasTextSecondary,
+                  fontSize: NasTokens.fontCaption,
+                ),
+              ),
+              const SizedBox(height: NasTokens.spaceMd),
+              if (tickets.isEmpty)
+                NasEmptyState(
+                  title: tr('ui.photo.040'),
+                  message: tr('ui.photo.he4d611'),
+                  icon: Icons.confirmation_number_outlined,
+                ),
+              for (final key in keys) ...[
+                Padding(
+                  padding: const EdgeInsets.only(
+                    top: NasTokens.spaceMd,
+                    bottom: NasTokens.spaceSm,
+                  ),
+                  child: Text(
+                    _monthLabel(key),
+                    style: const TextStyle(
+                      fontSize: NasTokens.fontSubtitle,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                LayoutBuilder(
+                  builder: (context, cons) {
+                    final cols = cons.maxWidth >= 900 ? 2 : 1;
+                    const gap = NasTokens.spaceSm;
+                    final cardW = (cons.maxWidth - gap * (cols - 1)) / cols;
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        for (final t in groups[key]!)
+                          SizedBox(width: cardW, child: _TicketCard(ticket: t)),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ],
           ),
         ),
-        const SizedBox(height: NasTokens.spaceMd),
-        for (final trip in data.trips)
-          _TripCard(trip: trip, tickets: data.tickets),
-        if (data.trips.isEmpty)
-          NasEmptyState(
-            title: tr('ui.photo.040'),
-            message: tr('ui.photo.he4d611'),
-            icon: Icons.confirmation_number_outlined,
-          ),
       ],
+    );
+  }
+
+  Widget _kindTabs() {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: Row(
+        children: [
+          for (final (value, key) in const [
+            ('all', 'photo.ticket.all'),
+            ('train', 'photo.ticket.train'),
+            ('flight', 'photo.ticket.flight'),
+          ])
+            InkWell(
+              onTap: () => setState(() => _kind = value),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: _kind == value ? scheme.primary : Colors.transparent,
+                      width: 2,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  tr(key),
+                  style: TextStyle(
+                    color: _kind == value ? scheme.primary : context.nasTextSecondary,
+                    fontWeight: _kind == value ? FontWeight.w700 : null,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
 
-class _TripCard extends StatelessWidget {
-  const _TripCard({required this.trip, required this.tickets});
+/// 单张票卡：缩略图 + 类型 + 起终点 + 车次时间 + 更多（参考主流票夹）
+class _TicketCard extends StatelessWidget {
+  const _TicketCard({required this.ticket});
 
-  final PhotoTrip trip;
-  final List<PhotoTicket> tickets;
+  final PhotoTicket ticket;
 
   @override
   Widget build(BuildContext context) {
-    final related = tickets.where(
-      (t) =>
-          t.date.compareTo(trip.start) >= 0 && t.date.compareTo(trip.end) <= 0,
-    );
+    final t = ticket;
+    final from = _stationShort(t.fromStation);
+    final to = _stationShort(t.toStation);
+    final route = from.isEmpty && to.isEmpty
+        ? (t.code.isEmpty ? t.date : t.code)
+        : '$from → $to';
+    // 票面基本信息压成一行：车次 · 席别座位 · 月/日 时间；票价单独放类型行右侧
+    final seatText = [t.seatClass ?? '', t.seat ?? '']
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .join(' ');
+    final when = [
+      if (t.date.isNotEmpty) _shortDate(t.date),
+      if (t.time.isNotEmpty) t.time,
+    ].join(' ');
+    final sub = <String>[
+      if (t.code.isNotEmpty) t.code,
+      if (seatText.isNotEmpty) seatText,
+      if (when.isNotEmpty) when,
+    ].join(' · ');
     return Card(
-      margin: const EdgeInsets.only(bottom: NasTokens.spaceSm),
-      child: Padding(
-        padding: const EdgeInsets.all(NasTokens.spaceSm),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    trip.title,
-                    style: Theme.of(context).textTheme.titleSmall,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+        onTap: () => _openTicketPhoto(context, t.path),
+        child: Padding(
+          padding: const EdgeInsets.all(NasTokens.spaceSm),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+                child: SizedBox(
+                  width: 76,
+                  height: 62,
+                  child: NasCoverImage(
+                    url: _thumb(t.path),
+                    headers: _authHeaders(),
+                    icon: Icons.receipt_long_outlined,
+                    cacheWidth: 240,
                   ),
                 ),
-                Text(
-                  '${trip.start}${trip.start == trip.end ? '' : ' → ${trip.end}'}',
-                  style: TextStyle(
-                    color: context.nasTextSecondary,
-                    fontSize: NasTokens.fontCaption,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              tr('photo.memoryTrip', {'count': '${trip.ticketCount}', 'kinds': trip.kinds.join(' / ')}),
-              style: TextStyle(
-                color: context.nasTextSecondary,
-                fontSize: NasTokens.fontCaption,
               ),
-            ),
-            const Divider(height: NasTokens.spaceLg),
-            for (final t in related.take(6))
-              Padding(
-                padding: const EdgeInsets.only(bottom: NasTokens.spaceXs),
-                child: Row(
+              const SizedBox(width: NasTokens.spaceSm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      t.kind == 'flight'
-                          ? Icons.flight_takeoff
-                          : Icons.train_outlined,
-                      size: 18,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            t.kindLabel,
+                            style: TextStyle(
+                              fontSize: NasTokens.fontCaption,
+                              color: context.nasTextSecondary,
+                            ),
+                          ),
+                        ),
+                        if ((t.price ?? '').isNotEmpty)
+                          Text(
+                            '¥${t.price}',
+                            style: TextStyle(
+                              fontSize: NasTokens.fontCaption,
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                      ],
                     ),
-                    const SizedBox(width: NasTokens.spaceXs),
-                    Expanded(
-                      child: Text(
-                        '${t.kindLabel}${t.code.isEmpty ? '' : ' ${t.code}'}'
-                        '${t.fromStation.isEmpty ? '' : ' · ${t.fromStation} → ${t.toStation}'}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: NasTokens.fontCaption),
+                    const SizedBox(height: 2),
+                    Text(
+                      route,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: NasTokens.fontBody,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
+                    const SizedBox(height: 2),
                     Text(
-                      t.time,
+                      sub,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: context.nasTextSecondary,
                         fontSize: NasTokens.fontCaption,
+                        color: context.nasTextSecondary,
                       ),
                     ),
                   ],
                 ),
               ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------- 年度
-
-class _YearTab extends StatefulWidget {
-  const _YearTab();
-
-  @override
-  State<_YearTab> createState() => _YearTabState();
-}
-
-class _YearTabState extends State<_YearTab> {
-  bool _loading = true;
-  String? _error;
-  PhotoYearReport? _report;
-  late int _year;
-
-  @override
-  void initState() {
-    super.initState();
-    _year = DateTime.now().year;
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final res = await ApiSession.instance.client.photoYearReport(
-        year: _year,
-        locale: 'zh-CN',
-      );
-      if (!mounted) return;
-      setState(() {
-        _report = res;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) return const NasLoading();
-    if (_error != null) return NasErrorState(message: _error!, onRetry: _load);
-    final r = _report;
-    if (r == null) return const SizedBox.shrink();
-
-    final maxMonth = r.months.fold<int>(1, (m, e) => e.count > m ? e.count : m);
-
-    return ListView(
-      padding: const EdgeInsets.all(NasTokens.spaceMd),
-      children: [
-        Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.chevron_left),
-              onPressed: () {
-                setState(() => _year -= 1);
-                _load();
-              },
-            ),
-            Text(
-              tr('photo.memoryYearRecord', {'year': '${r.year}'}),
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            IconButton(
-              icon: const Icon(Icons.chevron_right),
-              onPressed: () {
-                setState(() => _year += 1);
-                _load();
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: NasTokens.spaceSm),
-        Wrap(
-          spacing: NasTokens.spaceSm,
-          runSpacing: NasTokens.spaceSm,
-          children: [
-            _StatCard(label: tr('ui.photo.041'), value: '${r.totalPhotos}'),
-            _StatCard(label: tr('ui.photo.042'), value: '${r.placeCount}'),
-            _StatCard(label: tr('ui.photo.043'), value: '${r.people.length}'),
-            _StatCard(label: tr('ui.photo.044'), value: '${r.scenes.length}'),
-          ],
-        ),
-        const SizedBox(height: NasTokens.spaceLg),
-        Text(tr('ui.photo.045'), style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: NasTokens.spaceSm),
-        SizedBox(
-          height: 120,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              for (final m in r.months)
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(
-                          m.count == 0 ? '' : '${m.count}',
-                          style: TextStyle(
-                            color: context.nasTextSecondary,
-                            fontSize: 10,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Container(
-                          height:
-                              (m.count / maxMonth) * 80 +
-                              (m.count == 0 ? 0 : 4),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.primary
-                                .withValues(alpha: 0.7),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${m.month}',
-                          style: const TextStyle(fontSize: 10),
-                        ),
-                      ],
-                    ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_horiz, size: 18),
+                padding: EdgeInsets.zero,
+                onSelected: (v) {
+                  if (v == 'open') _openTicketPhoto(context, t.path);
+                  if (v == 'copy') _copyTicketPath(context, t.path);
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'open',
+                    child: Text(tr('common.open')),
                   ),
-                ),
+                  PopupMenuItem(
+                    value: 'copy',
+                    child: Text(tr('video.action.copyPath')),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
-        const SizedBox(height: NasTokens.spaceLg),
-        _LabelSection(title: tr('ui.photo.044'), items: r.scenes),
-        _LabelSection(title: tr('ui.photo.037'), items: r.activities),
-        _LabelSection(title: tr('ui.photo.038'), items: r.people),
-        _LabelSection(title: tr('ui.photo.046'), items: r.cameras),
-        const SizedBox(height: NasTokens.spaceMd),
-        Text(tr('ui.photo.047'), style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: NasTokens.spaceSm),
-        for (final p in r.places)
-          Padding(
-            padding: const EdgeInsets.only(bottom: NasTokens.spaceXs),
-            child: Row(
-              children: [
-                const Icon(Icons.place_outlined, size: 16),
-                const SizedBox(width: 4),
-                SizedBox(
-                  width: 120,
-                  child: Text(
-                    p.name.isEmpty ? p.geohash5 : p.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    p.years.map((y) => '${y.year}: ${y.count}').join('   '),
-                    style: TextStyle(
-                      color: context.nasTextSecondary,
-                      fontSize: NasTokens.fontCaption,
-                    ),
-                  ),
-                ),
-                Text(
-                  tr('photo.count', {'count': '${p.count}'}),
-                  style: const TextStyle(fontSize: NasTokens.fontCaption),
-                ),
-              ],
-            ),
-          ),
-      ],
+      ),
     );
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({required this.label, required this.value});
+/// 火车票站名去掉末尾「站」更接近票面写法（南宁东站 → 南宁东）；
+/// 「机场」保留，机场名去掉后缀会歧义。
+String _stationShort(String s) {
+  final t = s.trim();
+  if (t.length > 2 && t.endsWith('站')) return t.substring(0, t.length - 1);
+  return t;
+}
 
-  final String label;
-  final String value;
+String _shortDate(String d) {
+  final p = d.split('-');
+  if (p.length < 3) return d;
+  return '${int.tryParse(p[1]) ?? p[1]}/${p[2]}';
+}
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 120,
-      padding: const EdgeInsets.all(NasTokens.spaceSm),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(NasTokens.radiusMd),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+void _openTicketPhoto(BuildContext context, String path) {
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => Dialog(
+      backgroundColor: Colors.black87,
+      insetPadding: const EdgeInsets.all(NasTokens.spaceLg),
+      child: Stack(
         children: [
-          Text(value, style: Theme.of(context).textTheme.headlineSmall),
-          Text(
-            label,
-            style: TextStyle(
-              color: context.nasTextSecondary,
-              fontSize: NasTokens.fontCaption,
+          Positioned.fill(
+            child: NasCoverImage(
+              url: _thumb(path, size: 1600),
+              headers: _authHeaders(),
+              fit: BoxFit.contain,
+              icon: Icons.receipt_long_outlined,
+            ),
+          ),
+          Positioned(
+            right: 4,
+            top: 4,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white),
+              onPressed: () => Navigator.pop(ctx),
             ),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
 }
 
-class _LabelSection extends StatelessWidget {
-  const _LabelSection({required this.title, required this.items});
-
-  final String title;
-  final List<PhotoLabelCount> items;
-
-  @override
-  Widget build(BuildContext context) {
-    if (items.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: NasTokens.spaceSm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: NasTokens.spaceXs,
-            runSpacing: NasTokens.spaceXs,
-            children: [
-              for (final item in items)
-                Chip(label: Text('${item.label} · ${item.count}')),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+Future<void> _copyTicketPath(BuildContext context, String path) async {
+  final messenger = ScaffoldMessenger.of(context);
+  await Clipboard.setData(ClipboardData(text: path));
+  NasSnack.showOn(messenger, tr('common.copied'));
 }

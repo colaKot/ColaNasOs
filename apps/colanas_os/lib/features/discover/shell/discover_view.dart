@@ -1689,7 +1689,6 @@ class _RssTabState extends State<_RssTab> {
     super.initState();
     // 同上：侧栏直接渲染组件，不经过 setTab()，这里自己拉数据。
     unawaited(c.loadFeeds());
-    unawaited(c.loadEntries());
     unawaited(c.loadLedger());
     // 下载设置：RSS 源不填目录时用它，界面上也要把「默认下载目录」显示出来
     unawaited(c.loadFilter());
@@ -1717,7 +1716,6 @@ class _RssTabState extends State<_RssTab> {
             TextButton.icon(
               onPressed: () async {
                 await c.loadFeeds();
-                await c.loadEntries();
               },
               icon: const Icon(Icons.refresh),
               label: Text('discover_refresh'.tr),
@@ -1829,47 +1827,6 @@ class _RssTabState extends State<_RssTab> {
                                 ],
                               ),
                             ],
-                          ),
-                        );
-                      })
-                  .toList(),
-            )),
-        const SizedBox(height: 12),
-        Text('discover_rss_entries'.tr, style: Theme.of(context).textTheme.titleMedium),
-        Padding(
-          padding: const EdgeInsets.only(top: 2, bottom: 6),
-          child: Text('discover_rss_entries_hint'.tr,
-              style: Theme.of(context).textTheme.bodySmall),
-        ),
-        Obx(() => Column(
-              children: c.entries
-                  .map((e) {
-                        final state = (e['state'] ?? '').toString().toLowerCase();
-                        final pending = state == 'pending' || state.isEmpty;
-                        final id = e['id'];
-                        return Card(
-                          child: ListTile(
-                            dense: true,
-                            title: Text((e['title'] ?? '') as String,
-                                maxLines: 2, overflow: TextOverflow.ellipsis),
-                            subtitle: Text(
-                                '${e['feed_name'] ?? ''} · ${rssEntryStateLabel(state)}'),
-                            // 正常情况下条目会自动进下载器，这里只给「没加种」的
-                            // 留一个手动补下（比如当时自动加种失败 / 源关过自动加种）
-                            trailing: pending
-                                ? TextButton.icon(
-                                    onPressed: id is int
-                                        ? () async {
-                                            final messenger = ScaffoldMessenger.of(context);
-                                            await c.entryAction(id, 'confirm');
-                                            messenger.showSnackBar(SnackBar(
-                                                content: Text('discover_rss_added'.tr)));
-                                          }
-                                        : null,
-                                    icon: const Icon(Icons.download, size: 16),
-                                    label: Text('discover_rss_add_one'.tr),
-                                  )
-                                : null,
                           ),
                         );
                       })

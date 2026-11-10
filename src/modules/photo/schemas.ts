@@ -10,7 +10,7 @@ export const LibraryItem = Type.Object(
     id: Type.String(),
     name: Type.String(),
     path: Type.String({ description: '相对 files 根的 POSIX 路径' }),
-    items: Type.Integer({ description: '已索引图片数' }),
+    items: Type.Integer({ description: '已索引媒体数（图片 + 视频）' }),
     createdAt: Type.Integer(),
     lastScanAt: Type.Union([Type.Integer(), Type.Null()]),
   },
@@ -46,7 +46,7 @@ export const LibraryUpdateBody = Type.Object(
 export const ScanBody = Type.Object(
   {
     libraryId: Type.Optional(Type.String({ description: '缺省扫描全部库' })),
-    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20000 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 60000, description: '本次最多扫描的文件数（默认 60000）' })),
     prune: Type.Optional(
       Type.Boolean({ description: '清理磁盘上已不存在的图片（仅整库扫描生效，默认关闭）' }),
     ),
@@ -60,7 +60,7 @@ export const ScanBody = Type.Object(
 export const ScanResponse = Type.Object(
   {
     libraries: Type.Integer(),
-    images: Type.Integer(),
+    images: Type.Integer({ description: '本批扫描到的媒体数（图片 + 视频）' }),
     added: Type.Integer(),
     updated: Type.Integer(),
     skipped: Type.Integer(),
@@ -81,6 +81,15 @@ export const Item = Type.Object(
     height: Type.Union([Type.Integer(), Type.Null()]),
     mime: Type.String(),
     favorite: Type.Boolean({ description: '是否已收藏' }),
+    // 用 String 而不是 Literal 联合：契约生成器会把字面量联合映射成 Dart `dynamic`，
+    // 客户端还得做类型判断；这里保持和 mime 一样的宽松口径。
+    mediaKind: Type.String({ description: "媒体类型：image 静态图 / video 视频" }),
+    durationMs: Type.Union([Type.Integer(), Type.Null()], {
+      description: '视频时长（毫秒）；图片为 null',
+    }),
+    liveKind: Type.String({
+      description: "动态照片：'' 不是 / motion 尾部 mp4 / apple 配对 MOV",
+    }),
   },
   { $id: 'PhotoItem' },
 );
@@ -289,6 +298,7 @@ export const AiConfig = Type.Object(
     activityEnabled: Type.Boolean(),
     ocrEnabled: Type.Boolean(),
     similarEnabled: Type.Boolean(),
+    petEnabled: Type.Boolean(),
     faceMinShowCount: Type.Integer(),
     gpuPrefer: Type.Boolean(),
     paused: Type.Boolean(),
@@ -314,6 +324,8 @@ export const AiQueueJob = Type.Object(
   {
     key: Type.String(),
     label: Type.String(),
+    /** 该模块自己的真实产出数（人脸数 / 标签数 / 向量条数…），用来区分同批产出的几项 */
+    detail: Type.String(),
     status: Type.String({ description: 'running / idle / disabled' }),
     /** 剩余条数（= total - done），保留给旧客户端 */
     pending: Type.Integer(),
@@ -350,6 +362,7 @@ export const AiConfigBody = Type.Object(
     activityEnabled: Type.Optional(Type.Boolean()),
     ocrEnabled: Type.Optional(Type.Boolean()),
     similarEnabled: Type.Optional(Type.Boolean()),
+    petEnabled: Type.Optional(Type.Boolean()),
     faceMinShowCount: Type.Optional(Type.Integer({ minimum: 0, maximum: 1000 })),
     gpuPrefer: Type.Optional(Type.Boolean()),
     paused: Type.Optional(Type.Boolean()),
@@ -461,6 +474,11 @@ export const MemoryListResponse = Type.Object(
     memories: Type.Array(Type.Ref(MemoryItem)),
     ignored: Type.Array(Type.Ref(MemoryItem)),
     chapters: Type.Array(Type.Ref(MemoryChapter)),
+    // 三个数组都按 limit 截断过，tab 上要显示的是**截断前的真实总数**。
+    // 可选字段：别的复用该 schema 的 handler 不用跟着补（否则 fast-json-stringify 会 500）。
+    totalCandidates: Type.Optional(Type.Integer()),
+    totalMemories: Type.Optional(Type.Integer()),
+    totalIgnored: Type.Optional(Type.Integer()),
   },
   { $id: 'PhotoMemoryList' },
 );
@@ -573,6 +591,25 @@ export const GeoVisionRejectBody = Type.Object(
   { $id: 'PhotoGeoVisionRejectBody' },
 );
 
+/**
+ * 规则相册的一条命中条件。多条之间是 **OR**：命中任意一条就归入。
+ *
+ *   · `kind=face`  → `value` 是人脸聚类 id（`photo_face_clusters.id`）
+ *   · `kind=scene` → `value` 是场景标签（`photo_scenes.label`，如 海滩 / 夜景）
+ *   · `kind=date`  → `from` / `to` 是拍摄时间区间（秒，含端点；单边可省）
+ */
+export const AlbumRule = Type.Object(
+  {
+    kind: Type.Union([Type.Literal('face'), Type.Literal('scene'), Type.Literal('date')]),
+    value: Type.Optional(
+      Type.String({ maxLength: 128, description: 'face = 聚类 id；scene = 场景标签' }),
+    ),
+    from: Type.Optional(Type.Integer({ description: 'date 规则起始（秒，含）' })),
+    to: Type.Optional(Type.Integer({ description: 'date 规则结束（秒，含）' })),
+  },
+  { $id: 'PhotoAlbumRule' },
+);
+
 export const Album = Type.Object(
   {
     id: Type.String(),
@@ -587,6 +624,10 @@ export const Album = Type.Object(
       description: '用户手选的封面照片 id；null 表示回落到最早的成员',
     }),
     sortOrder: Type.Integer({ description: '手排顺序，小的在前；同值按创建时间倒序' }),
+    rules: Type.Array(Type.Ref('PhotoAlbumRule'), {
+      description: '规则相册的命中条件（OR 关系）；空数组 = 纯手工相册',
+    }),
+    ruleCount: Type.Integer({ description: '规则数量（客户端不解析 rules 时用它显示角标）' }),
   },
   { $id: 'PhotoAlbum' },
 );
@@ -600,6 +641,12 @@ export const AlbumCreateBody = Type.Object(
   {
     name: Type.String({ minLength: 1, maxLength: 64 }),
     itemIds: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { maxItems: 500 })),
+    coverItemId: Type.Optional(
+      Type.Union([Type.String({ minLength: 1 }), Type.Null()], {
+        description: '建相册时手选的封面，可以不给（回落到最早成员）',
+      }),
+    ),
+    rules: Type.Optional(Type.Array(Type.Ref('PhotoAlbumRule'), { maxItems: 20 })),
   },
   { $id: 'PhotoAlbumCreateBody' },
 );
@@ -642,6 +689,7 @@ export const AlbumUpdateBody = Type.Object(
       }),
     ),
     sortOrder: Type.Optional(Type.Integer({ minimum: 0, maximum: 99999 })),
+    rules: Type.Optional(Type.Array(Type.Ref('PhotoAlbumRule'), { maxItems: 20 })),
   },
   { $id: 'PhotoAlbumUpdateBody' },
 );
@@ -729,50 +777,6 @@ export const ErrorResponse = Type.Object(
   { $id: 'PhotoErrorResponse' },
 );
 
-
-/** 集合：把照片聚成一组（按用户隔离） */
-export const Collection = Type.Object(
-  {
-    id: Type.String(),
-    name: Type.String(),
-    items: Type.Integer(),
-    coverPath: Type.Union([Type.String(), Type.Null()]),
-    createdAt: Type.Integer(),
-  },
-  { $id: 'PhotoCollection' },
-);
-
-export const CollectionListResponse = Type.Object(
-  { items: Type.Array(Type.Ref(Collection)) },
-  { $id: 'PhotoCollectionListResponse' },
-);
-
-export const CollectionCreateBody = Type.Object(
-  { name: Type.String({ minLength: 1, maxLength: 64 }) },
-  { $id: 'PhotoCollectionCreateBody' },
-);
-
-export const CollectionDeleteBody = Type.Object(
-  { id: Type.String({ minLength: 1 }) },
-  { $id: 'PhotoCollectionDeleteBody' },
-);
-
-export const CollectionMembersBody = Type.Object(
-  {
-    collectionId: Type.String({ minLength: 1 }),
-    itemIds: Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 500 }),
-  },
-  { $id: 'PhotoCollectionMembersBody' },
-);
-
-export const CollectionItemsQuery = Type.Object(
-  {
-    collectionId: Type.String({ minLength: 1 }),
-    cursor: Type.Optional(Type.String()),
-    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200, default: 60 })),
-  },
-  { $id: 'PhotoCollectionItemsQuery' },
-);
 
 /** GPS 补全：给没有经纬度的照片手动打点 */
 export const GeoMissingQuery = Type.Object(
@@ -1088,6 +1092,7 @@ export const PHOTO_SCHEMAS = [
   HybridSearchQuery,
   HybridSearchResponse,
   StatsResponse,
+  AlbumRule,
   Album,
   AlbumListResponse,
   AlbumCreateBody,
@@ -1095,12 +1100,6 @@ export const PHOTO_SCHEMAS = [
   AlbumItemsQuery,
   AlbumDeleteBody,
   AlbumUpdateBody,
-  Collection,
-  CollectionListResponse,
-  CollectionCreateBody,
-  CollectionDeleteBody,
-  CollectionMembersBody,
-  CollectionItemsQuery,
   GeoMissingQuery,
   GeoSetBody,
   GeoSetResponse,

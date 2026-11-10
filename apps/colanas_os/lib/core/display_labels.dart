@@ -58,17 +58,6 @@ String subscriptionStatusLabel(String raw) =>
       _ => raw,
     };
 
-String rssEntryStateLabel(String raw) => switch (raw.trim().toLowerCase()) {
-      'new' || 'unread' => _pick(raw, '未读'),
-      'read' => _pick(raw, '已读'),
-      'downloaded' => _pick(raw, '已下载'),
-      // RSS 自动加种：服务端只存这三个值，以前直接吐英文（Pending / Confirmed）
-      'pending' => _pick(raw, '未加种'),
-      'confirmed' => _pick(raw, '已加进下载器'),
-      'rejected' => _pick(raw, '已忽略'),
-      _ => raw,
-    };
-
 /// 设置页日志区显示的级别标签（原本是 `INFO.toUpperCase()`）。
 String logLevelLabel(String raw) => switch (raw.trim().toLowerCase()) {
       'debug' || 'trace' => _pick(raw, '调试'),
