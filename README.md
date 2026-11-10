@@ -1,10 +1,12 @@
 # ColaNasOs
 
-> 个人 NAS 操作系统。在一台 Windows 主机上，把照片、影视、音乐、文件、下载、同步与本地 AI 收进同一个自托管服务；桌面 / Web / 平板 / 手机 / TV 共用一套 Flutter 界面。独立实现，代码、界面与数据模型均为自有。
+> **Windows NAS 系统 / WindowsNas** —— 在一台 Windows 主机上，把照片、影视、音乐、文件、下载、同步与本地 AI 收进同一个自托管 NAS OS；桌面 / Web / 平板 / 手机 / TV 共用一套 Flutter 界面。独立实现，代码、界面与数据模型均为自有。
+
+**检索关键词**：Windows NAS · WindowsNas · NAS 系统 · NAS OS · 自托管 NAS · 家庭 NAS · personal NAS · Flutter NAS · Electron NAS
 
 ## 项目亮点
 
-- **单机自托管，数据不出家门**：Fastify + SQLite 内核直接读写本机目录，不依赖云账号或额外数据库服务；一个 Electron 外壳 + `utilityProcess` 内核即可跑起来（Windows）。
+- **为 Windows NAS 而生**：面向单台 Windows 主机设计，装好即用；Fastify + SQLite 内核直接读写本机目录，不依赖云账号或额外数据库服务，一个 Electron 外壳 + `utilityProcess` 内核即可跑起来。
 - **契约驱动，改一处生成全链路**：`contracts/openapi.json` / `apps.json` / `i18n.json` 是唯一真源，`build → gen → gen:client → api:doc → sdk → gen:i18n → migrate:verify` 一条链生成 Dart `ApiClient` 与 DTO、TypeScript/Python SDK、API 文档和多语言骨架；另有破坏性变更检测、生成物一致性、迁移清单与菜单双向对账兜底。
 - **六端一套代码**：`desktop / tablet / mobile / tv / web / appleTv` 由同一份 Flutter 代码与同一份导航契约驱动，二级侧栏、页面栈、权限域在各端一致；Apple TV 另有原生壳。
 - **大规模媒体库也不卡**：日志倒读真分页、图片墙滚到底再加载、记忆列表每页 10 条、人脸结果渐进返回，数万到数十万张照片不会一次全量拉取。
