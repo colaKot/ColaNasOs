@@ -314,6 +314,11 @@ export async function registerPhotoGeo(
 /** 视觉候选生成进度（单进程内存态） */
 const visionState = { running: false, done: 0, total: 0, generated: 0 };
 
+/** 给 AI 设置页的队列卡用：扫描中读实时进度，不暴露可写引用 */
+export function visionScanState() {
+  return { ...visionState };
+}
+
 async function runVisionCandidates(k: KernelApi, uid: string): Promise<void> {
   try {
     const missing = (

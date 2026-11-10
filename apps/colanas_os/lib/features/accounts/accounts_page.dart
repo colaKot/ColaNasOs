@@ -5,12 +5,14 @@ import 'package:nas_ui/nas_ui.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../shell/app_widgets.dart';
 
+import '../../core/display_labels.dart';
 import '../../core/session.dart';
 import '../../shell/app_nav_shell.dart';
+import 'scope_picker.dart';
 
 /// 用户与权限（SP3-01）：主从布局（用户列表 + 详情工作台）。
 ///
-/// 参考实现是「左列表 + 右详情（信息卡 + 2FA / 登录记录 / 操作日志 / 权限）」；
+/// 既有实现是「左列表 + 右详情（信息卡 + 2FA / 登录记录 / 操作日志 / 权限）」；
 /// 操作日志默认展示文件操作（`/files/op-logs`），账号审计作为第二个子页保留。
 /// IP 黑名单保留为左下角弹窗，避免丢失现有能力。
 class AccountsPage extends StatefulWidget {
@@ -55,7 +57,7 @@ class _AccountsPageState extends State<AccountsPage> {
   String? _hint(Object e) {
     final text = e.toString();
     if (text.contains('403')) return tr('ui.accounts.hcaaca9');
-    return null;
+    return errorMessageOf(e);
   }
 
   List<Map<String, dynamic>> get _filteredUsers {
@@ -190,33 +192,42 @@ class _AccountsPageState extends State<AccountsPage> {
   Future<void> _createUser() async {
     final nameCtrl = TextEditingController();
     final passCtrl = TextEditingController();
-    final scopesCtrl = TextEditingController(text: 'files:read');
+    // 默认给最小可用权限：能看文件。用户不想配就至少进得去，不会建出一个空白账号。
+    var scopes = <String>[scopeRead('files')];
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(tr('ui.accounts.001')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: InputDecoration(labelText: tr('ui.accounts.002')),
-            ),
-            const SizedBox(height: NasTokens.spaceMd),
-            TextField(
-              controller: passCtrl,
-              obscureText: true,
-              decoration: InputDecoration(labelText: tr('ui.accounts.003')),
-            ),
-            const SizedBox(height: NasTokens.spaceMd),
-            TextField(
-              controller: scopesCtrl,
-              decoration: InputDecoration(
-                labelText: tr('ui.accounts.004'),
-                helperText: tr('ui.accounts.005'),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: InputDecoration(labelText: tr('ui.accounts.002')),
               ),
-            ),
-          ],
+              const SizedBox(height: NasTokens.spaceMd),
+              TextField(
+                controller: passCtrl,
+                obscureText: true,
+                decoration: InputDecoration(labelText: tr('ui.accounts.003')),
+              ),
+              const SizedBox(height: NasTokens.spaceMd),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  tr('accounts.scope.title'),
+                  style: Theme.of(ctx).textTheme.titleSmall,
+                ),
+              ),
+              const SizedBox(height: NasTokens.spaceXs),
+              ScopePicker(
+                value: scopes,
+                onChanged: (v) => scopes = v,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -232,11 +243,6 @@ class _AccountsPageState extends State<AccountsPage> {
     );
     if (ok != true) return;
 
-    final scopes = scopesCtrl.text
-        .split(',')
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty)
-        .toList();
     try {
       await ApiSession.instance.client.userCreate(
         body: {
@@ -272,13 +278,17 @@ class _AccountsPageState extends State<AccountsPage> {
     final passCtrl = TextEditingController();
     final phoneCtrl = TextEditingController(text: '${user['phone'] ?? ''}');
     final remarkCtrl = TextEditingController(text: '${user['remark'] ?? ''}');
+    // 编辑时也要能改权限：以前建号给了个空权限就只能删号重建
+    var scopes = normalizeScopes(
+      (user['scopes'] as List<dynamic>? ?? const []).map((e) => '$e'),
+    );
     try {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: Text(tr('accounts.editTitle')),
           content: SizedBox(
-            width: 420,
+            width: 460,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -302,6 +312,19 @@ class _AccountsPageState extends State<AccountsPage> {
                   controller: remarkCtrl,
                   decoration: InputDecoration(labelText: tr('accounts.remark')),
                 ),
+                const SizedBox(height: NasTokens.spaceMd),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    tr('accounts.scope.title'),
+                    style: Theme.of(ctx).textTheme.titleSmall,
+                  ),
+                ),
+                const SizedBox(height: NasTokens.spaceXs),
+                ScopePicker(
+                  value: scopes,
+                  onChanged: (v) => scopes = v,
+                ),
               ],
             ),
           ),
@@ -319,6 +342,11 @@ class _AccountsPageState extends State<AccountsPage> {
       );
       if (ok != true) return;
       if (!mounted) return;
+      // 服务端拒绝空权限（会把人锁在外面），这里先拦一次给出可读的提示
+      if (scopes.isEmpty) {
+        NasSnack.show(context, tr('accounts.scope.required'));
+        return;
+      }
       final messenger = ScaffoldMessenger.of(context);
       try {
         await ApiSession.instance.client.userUpdate(
@@ -328,6 +356,7 @@ class _AccountsPageState extends State<AccountsPage> {
             if (passCtrl.text.isNotEmpty) 'password': passCtrl.text,
             'phone': phoneCtrl.text.trim(),
             'remark': remarkCtrl.text.trim(),
+            'scopes': scopes,
           },
         );
         await _loadUsers();
@@ -1059,7 +1088,7 @@ class _AccountsPageState extends State<AccountsPage> {
 
 /// 操作日志页签：文件操作（默认，`file_op_logs`）+ 账号审计（`auth_events`）。
 ///
-/// 参考实现的「操作日志」就是文件操作日志（类型 / 状态 / 关键词 / 分页）；
+/// 既有实现的「操作日志」就是文件操作日志（类型 / 状态 / 关键词 / 分页）；
 /// 账号审计是本仓库额外能力，放在第二个子页，避免丢失。
 class _LogsTab extends StatefulWidget {
   const _LogsTab({super.key, required this.uid});

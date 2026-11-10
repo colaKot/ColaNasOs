@@ -2,10 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:colanas_os/core/session.dart';
-import 'package:colanas_os/features/book/book_shelf_page.dart';
 import 'package:colanas_os/features/files/files_page.dart';
 import 'package:colanas_os/features/music/music_page.dart';
-import 'package:colanas_os/features/notes/notes_page.dart';
 import 'package:colanas_os/features/photo/photo_page.dart';
 import 'package:colanas_os/features/video/video_page.dart';
 import 'package:flutter/material.dart';
@@ -49,9 +47,7 @@ void main() {
     'photo': () => const PhotoPage(),
     'video': () => const VideoPage(),
     'music': () => const MusicPage(),
-    'book': () => const BookShelfPage(type: 'book', embedded: false),
     'files': () => const FilesPage(),
-    'notes': () => const NotesPage(),
   };
 
   for (final entry in pages.entries) {

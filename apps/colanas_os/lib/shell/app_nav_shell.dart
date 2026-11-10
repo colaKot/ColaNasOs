@@ -5,6 +5,7 @@ import 'package:nas_ui/nas_ui.dart';
 import '../core/settings_store.dart';
 import 'app_visuals.dart';
 import 'nav_spec_adapter.dart';
+import 'shell_back.dart';
 
 /// 二级侧栏的两种宽度：收起（只留图标）56 / 展开（图标 + 4 个汉字）128。
 const double kAppNavCollapsedWidth = 56;
@@ -98,6 +99,13 @@ class _AppNavShellState extends State<AppNavShell> {
   /// 手机端「多选态」通道：内容页往上声明，底部 tab 让位给工具条
   final NasBulkController _bulk = NasBulkController();
 
+  /// 用户最后一次**通过菜单**选中的项。
+  ///
+  /// 页面内快捷入口（如首页「那年今日」卡片、`PhotoAiCenterPage` 的跳转）改选中项时
+  /// 不动它，外壳就能判断「现在不是菜单页」并在顶栏显示「返回上一层」。
+  /// 这是 2026-11-06「三级界面全都加返回按钮」的统一入口，不用每个页面自己注册。
+  String? _lastMenuKey;
+
   String get _collapsedKey => 'ui.nav.collapsed.${widget.appId}';
 
   String get _key => widget.selection?.key ?? _localKey;
@@ -106,6 +114,7 @@ class _AppNavShellState extends State<AppNavShell> {
   void initState() {
     super.initState();
     _localKey = widget.defaultKey;
+    _lastMenuKey = widget.defaultKey;
     _mobileTab = _tabOf(widget.defaultKey);
     widget.selection?.addListener(_onSelectionChanged);
   }
@@ -137,6 +146,7 @@ class _AppNavShellState extends State<AppNavShell> {
     final first = tabs.firstWhere((t) => t != kNavMoreTabId, orElse: () => '');
     if (first.isEmpty) return;
     _mobileTab = first;
+    _lastMenuKey = first;
     // 这里直接改字段而不 setState：didChangeDependencies 之后紧接着就会 build。
     final selection = widget.selection;
     if (selection != null) {
@@ -173,6 +183,7 @@ class _AppNavShellState extends State<AppNavShell> {
     // 换模块必须退出多选：否则工具条会挂在新页面上，点下去操作的是旧页面
     _bulk.hide();
     setState(() {
+      _lastMenuKey = id;
       if (tab.isNotEmpty) _mobileTab = tab;
       _fromMoreKey = null;
       if (selection == null) _localKey = id;
@@ -185,11 +196,26 @@ class _AppNavShellState extends State<AppNavShell> {
     final selection = widget.selection;
     _bulk.hide();
     setState(() {
+      _lastMenuKey = id;
       _fromMoreKey = id;
       _mobileTab = kNavMoreTabId;
       if (selection == null) _localKey = id;
     });
     if (selection != null) selection.select(id);
+  }
+
+  /// 顶栏「返回上一层」：回到用户最后一次点菜单选中的那一项。
+  /// 页面内下钻（人脸簇 / 文件夹 / 演员详情等）由 [SubPageScope] 自己压栈，
+  /// 优先级更高，所以多级下钻会一层一层退。
+  void _backToMenu() {
+    final target = _lastMenuKey;
+    if (target == null || target == _key) return;
+    final selection = widget.selection;
+    setState(() {
+      _fromMoreKey = null;
+      if (selection == null) _localKey = target;
+    });
+    if (selection != null) selection.select(target);
   }
 
   void _onMobileTabTap(String tabId) {
@@ -300,36 +326,61 @@ class _AppNavShellState extends State<AppNavShell> {
         onSelect: _selectFromMore,
       );
     }
-    return widget.content(_key);
+    return KeyedSubtree(
+      key: ValueKey('${widget.appId}:$_key'),
+      child: widget.content(_key),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // 顶栏返回统一在这里注册：用户从菜单选的项记在 _lastMenuKey，
+    // 页面内跳转 / 下钻导致的「当前项 ≠ 菜单项」就自动出现返回按钮。
+    // 页面内部再下钻时用 SubPageScope 压第二层，返回会一层层退。
+    return ShellBackScope(
+      appId: widget.appId,
+      child: SubPageScope(
+        active: _lastMenuKey != null && _key != _lastMenuKey,
+        onBack: _backToMenu,
+        child: _buildShell(context),
+      ),
+    );
+  }
+
+  Widget _buildShell(BuildContext context) {
     // 手机端：顶栏（房子）+ 内容 + 底部二级菜单。桌面端不受影响。
     if (layoutFor(MediaQuery.sizeOf(context).width) == LayoutMode.compact) {
-      final back = _fromMoreKey != null
-          ? () => setState(() => _fromMoreKey = null)
-          : null;
-      // 多选态由内容页往上声明（NasBulkScope），外壳只负责把底部 tab 换掉
-      return AnimatedBuilder(
-        animation: _bulk,
-        builder: (context, _) {
-          final bulk = _bulk.spec;
-          return NasBulkScope(
-            notifier: _bulk,
-            child: NasAppScaffold(
-              title: _showingMorePage ? tr('nav.more') : _title,
-              onHome: AppNavShell.onExitToHome,
-              homeTooltip: tr('nav.home'),
-              onBack: back,
-              items: _mobileTabItems,
-              selectedId: _key,
-              activeTabId: _mobileTab,
-              aliases: _spec.mobileTabAliases,
-              onSelect: _onMobileTabTap,
-              bulkBar: bulk == null ? null : NasBulkBar(spec: bulk),
-              body: _mobileBody(),
-            ),
+      // 桌面右上角由 AppShell 的 NasTopBar 渲染；手机左上角也读同一个 ShellBack，
+      // 这样同一套下钻逻辑在两端都有返回入口。
+      return ValueListenableBuilder<int>(
+        valueListenable: ShellBack.revision,
+        builder: (context, _, _) {
+          final back = ShellBack.handlerFor(widget.appId) ??
+              (_fromMoreKey != null
+                  ? () => setState(() => _fromMoreKey = null)
+                  : null);
+          // 多选态由内容页往上声明（NasBulkScope），外壳只负责把底部 tab 换掉
+          return AnimatedBuilder(
+            animation: _bulk,
+            builder: (context, _) {
+              final bulk = _bulk.spec;
+              return NasBulkScope(
+                notifier: _bulk,
+                child: NasAppScaffold(
+                  title: _showingMorePage ? tr('nav.more') : _title,
+                  onHome: AppNavShell.onExitToHome,
+                  homeTooltip: tr('nav.home'),
+                  onBack: back,
+                  items: _mobileTabItems,
+                  selectedId: _key,
+                  activeTabId: _mobileTab,
+                  aliases: _spec.mobileTabAliases,
+                  onSelect: _onMobileTabTap,
+                  bulkBar: bulk == null ? null : NasBulkBar(spec: bulk),
+                  body: _mobileBody(),
+                ),
+              );
+            },
           );
         },
       );
@@ -357,7 +408,14 @@ class _AppNavShellState extends State<AppNavShell> {
             debugLabel: widget.appId,
           ),
           const VerticalDivider(width: 1),
-          Expanded(child: widget.content(_key)),
+          Expanded(
+            // 换菜单项就换整棵内容子树：同类页面（PhotoSmartPage 的不同 section）
+            // 不会因为 runtimeType 相同而复用 State，把上一页的下钻态带过来。
+            child: KeyedSubtree(
+              key: ValueKey('${widget.appId}:$_key'),
+              child: widget.content(_key),
+            ),
+          ),
         ],
       ),
     );

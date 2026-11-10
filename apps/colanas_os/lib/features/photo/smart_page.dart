@@ -30,10 +30,14 @@ class PhotoSmartPage extends StatefulWidget {
 }
 
 class _PhotoRef {
-  const _PhotoRef(this.id, this.path);
+  const _PhotoRef(this.id, this.path, {this.faceId});
 
   final String id;
   final String path;
+
+  /// 人脸簇详情里才有：这张照片在该簇中对应的 faceId，
+  /// 「移出 / 移动到其他人脸」要按它调 /faces/move。
+  final String? faceId;
 }
 
 class _PhotoSmartPageState extends State<PhotoSmartPage> {
@@ -49,6 +53,10 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
   bool _gateConfidentOnly = false;
   List<_PhotoRef> _photos = const [];
   String? _title;
+
+  /// 当前打开的是哪个人脸簇。只有它非空时，照片网格才挂「设封面 / 移出 / 移动」菜单。
+  PhotoFaceClusterItem? _activeCluster;
+
   bool _loading = true;
   bool _analyzing = false;
   String? _error;
@@ -65,20 +73,19 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
 
   @override
   void dispose() {
-    ShellBack.unregister('photo', _backToGrid);
     _searchCtrl.dispose();
     super.dispose();
   }
 
   /// 下钻后顶栏的「返回上一层」：回到场景 / 活动 / 人脸 / 规则的列表页。
   ///
-  /// 嵌入相册导航时本页没有自己的 AppBar（`embedded=true`），此前进入某个簇或标签后
-  /// 只能靠切换左侧菜单才能出去 —— 2026-11-04 用户反馈「人脸无法返回上一层」。
+  /// 注册交给 build 里的 `SubPageScope(active: _title != null)`：
+  /// 页面销毁 / 退回列表都会自动注销，不用每个下钻入口再手动同步一次。
   void _backToGrid() {
-    ShellBack.unregister('photo', _backToGrid);
     if (!mounted) return;
     setState(() {
       _title = null;
+      _activeCluster = null;
       _photos = const [];
       _searchHint = '';
       _searchTags = const [];
@@ -87,19 +94,12 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
     });
   }
 
-  /// `_title` 非空 = 已下钻一层；同步给顶栏注册 / 注销返回动作。
-  void _syncBack() {
-    if (_title == null) {
-      ShellBack.unregister('photo', _backToGrid);
-    } else {
-      ShellBack.register('photo', _backToGrid);
-    }
-  }
-
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
+      // 渐进填充：每次刷新都从空开始，避免重复累加
+      _clusters = const [];
     });
     try {
       final c = ApiSession.instance.client;
@@ -107,13 +107,23 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
       final activities = await c.photoActivitySummary();
       // 不传 minCount：交给服务端按「AI 设置 → 人脸显示下限」过滤，
       // 否则这里写死 1 会让配置形同虚设（低于下限的碎片组仍全部铺出来）。
-      final clusters = await c.photoFaceClusters();
+      // 边拉边显示：簇可能上万个，等全量拉完才出画面会卡很久。
+      // 最终仍要完整列表 —— 合并 / 改封面 / 关系操作依赖完整候选集。
+      final clusters = await c.photoFaceClustersAll(
+        onPageItems: (page) {
+          if (!mounted) return;
+          setState(() {
+            _clusters = [..._clusters, ...page];
+            _loading = false; // 第一批到了就先出画面
+          });
+        },
+      );
       final rules = await c.photoSmartRuleList();
       if (!mounted) return;
       setState(() {
         _scenes = scenes.items;
         _activities = activities.items;
-        _clusters = clusters.items;
+        _clusters = clusters;
         _rules = rules.items;
         _loading = false;
       });
@@ -131,7 +141,6 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
       _title = label;
       _gateConfidentOnly = false;
     });
-    _syncBack();
     try {
       final res = await ApiSession.instance.client.photoSceneTags(
         label: label,
@@ -150,7 +159,6 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
 
   Future<void> _openActivity(String label) async {
     setState(() => _title = label);
-    _syncBack();
     try {
       final res = await ApiSession.instance.client.photoActivities(
         label: label,
@@ -167,16 +175,18 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
   }
 
   Future<void> _openCluster(PhotoFaceClusterItem cluster) async {
-    setState(
-      () => _title = cluster.name ?? tr('photo.faceCluster.unnamed', {'id': cluster.id.substring(0, 6)}),
-    );
-    _syncBack();
+    setState(() {
+      _title = cluster.name ??
+          tr('photo.faceCluster.unnamed', {'id': cluster.id.substring(0, 6)});
+      _activeCluster = cluster;
+      _photos = const [];
+    });
     try {
-      final res = await ApiSession.instance.client.photoFaces(id: cluster.id);
+      final faces = await ApiSession.instance.client.photoFacesAll(cluster.id);
       if (!mounted) return;
       setState(
-        () => _photos = res.items
-            .map((i) => _PhotoRef(i.photoId, i.path))
+        () => _photos = faces
+            .map((i) => _PhotoRef(i.photoId, i.path, faceId: i.id))
             .toList(),
       );
     } catch (e) {
@@ -185,9 +195,19 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
     }
   }
 
+  /// 只刷新簇列表（封面改完要立刻反映到头像墙），不碰 _loading，
+  /// 否则会把当前簇详情闪成整页 loading。
+  Future<void> _reloadClusters() async {
+    try {
+      final clusters = await ApiSession.instance.client.photoFaceClustersAll();
+      if (mounted) setState(() => _clusters = clusters);
+    } catch (_) {
+      // 刷新失败不影响刚做完的那一步
+    }
+  }
+
   Future<void> _openRule(PhotoSmartRule rule) async {
     setState(() => _title = rule.name);
-    _syncBack();
     try {
       final res = await ApiSession.instance.client.photoSmartRuleItems(
         id: rule.id,
@@ -734,7 +754,6 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
     final q = _searchCtrl.text.trim();
     if (q.isEmpty) return;
     setState(() => _title = tr('photo.searchTitle', {'q': q}));
-    _syncBack();
     try {
       final c = ApiSession.instance.client;
       final parsed = await c.photoSemanticParse(q: q);
@@ -993,7 +1012,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
   /// 长按：改名 / 合并 / 隐藏
   /// 人脸卡右键菜单（桌面 / Web）；移动端走长按 [_faceActions]。
   ///
-  /// 参考实现的人脸右键有「下载 / 重命名 / 显示隐藏 / 标记问题」，我们目前只有
+  /// 既有实现的人脸右键有「下载 / 重命名 / 显示隐藏 / 标记问题」，我们目前只有
   /// 重命名、合并、解散、管理这几个能力，就只给这些 —— 不造点了没反应的项。
   List<NasMenuEntry> _faceMenuEntries(PhotoFaceClusterItem c) => [
     NasMenuEntry(
@@ -1070,8 +1089,8 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
   Future<void> _manageFaces(PhotoFaceClusterItem cluster) async {
     List<PhotoFaceItem> faces;
     try {
-      final res = await ApiSession.instance.client.photoFaces(id: cluster.id);
-      faces = res.items;
+      final res = await ApiSession.instance.client.photoFacesAll(cluster.id);
+      faces = res;
     } catch (e) {
       _toast(tr('common.loadFailed', {'error': '$e'}));
       return;
@@ -1189,6 +1208,161 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
       if (!mounted) return;
       _toast(tr('photo.face.moved'));
       await _load();
+    } catch (e) {
+      if (!mounted) return;
+      _toast('$e');
+    }
+  }
+
+  // -------------------------------------------- 人脸簇内照片：长按 / 右键菜单
+
+  /// 既有实现的形态：三项都挂在照片本身，不塞进多选栏 ——
+  /// 为了设个封面还要先框选太绕。桌面 / Web 走右键，移动端走长按弹窗。
+  List<NasMenuEntry> _clusterPhotoMenuEntries(
+    PhotoFaceClusterItem cluster,
+    _PhotoRef ref,
+  ) => [
+    NasMenuEntry(
+      label: tr('photo.face.setCover'),
+      icon: Icons.image_outlined,
+      onSelected: () => _setClusterCover(cluster, ref),
+    ),
+    NasMenuEntry(
+      label: tr('photo.face.removeFromCluster'),
+      icon: Icons.person_off_outlined,
+      danger: true,
+      onSelected: () => _moveClusterPhoto(cluster, ref, moveOut: true),
+    ),
+    NasMenuEntry(
+      label: tr('photo.face.moveToCluster'),
+      icon: Icons.person_add_outlined,
+      onSelected: () => _moveClusterPhoto(cluster, ref, moveOut: false),
+    ),
+  ];
+
+  Future<void> _clusterPhotoActions(
+    PhotoFaceClusterItem cluster,
+    _PhotoRef ref,
+  ) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: Text(tr('photo.face.setCover')),
+              onTap: () => Navigator.pop(ctx, 'cover'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_off_outlined),
+              title: Text(tr('photo.face.removeFromCluster')),
+              onTap: () => Navigator.pop(ctx, 'out'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_add_outlined),
+              title: Text(tr('photo.face.moveToCluster')),
+              onTap: () => Navigator.pop(ctx, 'to'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    switch (action) {
+      case 'cover':
+        await _setClusterCover(cluster, ref);
+      case 'out':
+        await _moveClusterPhoto(cluster, ref, moveOut: true);
+      case 'to':
+        await _moveClusterPhoto(cluster, ref, moveOut: false);
+    }
+  }
+
+  Future<void> _setClusterCover(
+    PhotoFaceClusterItem cluster,
+    _PhotoRef ref,
+  ) async {
+    try {
+      await ApiSession.instance.client.photoFaceCover(
+        body: PhotoFaceCoverBody(clusterId: cluster.id, photoId: ref.id),
+      );
+      if (!mounted) return;
+      _toast(tr('photo.face.coverSet'));
+      await _reloadClusters();
+    } catch (e) {
+      if (!mounted) return;
+      _toast('$e');
+    }
+  }
+
+  /// moveOut=true 时 toClusterId 传 null（移出成未分组，照片不再属于这个人脸）；
+  /// 否则先挑目标簇再搬。两者都复用已有的 /faces/move。
+  Future<void> _moveClusterPhoto(
+    PhotoFaceClusterItem cluster,
+    _PhotoRef ref, {
+    required bool moveOut,
+  }) async {
+    final faceId = ref.faceId;
+    if (faceId == null || faceId.isEmpty) {
+      _toast(tr('photo.face.noFaces'));
+      return;
+    }
+    String? target;
+    if (moveOut) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(tr('common.confirm')),
+          content: Text(tr('photo.face.removeFromClusterConfirm')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('common.ok')),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    } else {
+      final others = _clusters.where((c) => c.id != cluster.id).toList();
+      if (others.isEmpty) {
+        _toast(tr('photo.face.noOtherCluster'));
+        return;
+      }
+      final picked = await showDialog<PhotoFaceClusterItem>(
+        context: context,
+        builder: (ctx) => SimpleDialog(
+          title: Text(tr('photo.face.moveToCluster')),
+          children: [
+            for (final t in others.take(40))
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, t),
+                child: Text(
+                  '${t.name ?? tr('photo.faceCluster.unnamed', {'id': t.id.substring(0, 6)})}'
+                  ' · ${tr('photo.count', {'count': '${t.size}'})}',
+                ),
+              ),
+          ],
+        ),
+      );
+      if (picked == null || !mounted) return;
+      target = picked.id;
+    }
+    try {
+      await ApiSession.instance.client.photoFaceMove(
+        body: PhotoFaceMoveBody(faceId: faceId, toClusterId: target),
+      );
+      if (!mounted) return;
+      _toast(tr('photo.face.moved'));
+      await _openCluster(cluster);
+      await _reloadClusters();
     } catch (e) {
       if (!mounted) return;
       _toast('$e');
@@ -1494,24 +1668,41 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
               crossAxisSpacing: NasTokens.spaceSm,
             ),
             itemCount: visible.length,
-            itemBuilder: (context, i) => GestureDetector(
-              // 点开大图：**只传当前这一份列表**（人脸簇 / 场景 / 规则 / 搜索各自独立），
-              // 从哪个列表打开就在哪个列表里左右翻页，不会串到相册时间轴去。
-              onTap: () => openPhotoViewer(
+            itemBuilder: (context, i) {
+              final ref = visible[i];
+              final cluster = _activeCluster;
+              // 只有人脸簇详情里的照片带 faceId，才能做「设封面 / 移出 / 移动」；
+              // 场景 / 活动 / 规则 / 搜索的结果仍然是纯查看。
+              final canMenu = cluster != null && ref.faceId != null;
+              void openViewer() => openPhotoViewer(
                 context,
+                // 点开大图：只传当前这一份列表（人脸簇 / 场景 / 规则各自独立），
+                // 从哪个列表打开就在哪个列表里左右翻页，不会串到时间轴去。
                 photos: [
                   for (final p in visible)
                     ViewerPhoto(id: p.id, path: p.path),
                 ],
                 initialIndex: i,
                 title: _title,
-              ),
-              child: NasCoverImage(
-                url: _media.thumbnail(visible[i].path, size: 320),
-                headers: ApiSession.instance.authHeaders,
-                icon: Icons.image_outlined,
-              ),
-            ),
+              );
+              final tile = GestureDetector(
+                onTap: openViewer,
+                onLongPress: canMenu
+                    ? () => _clusterPhotoActions(cluster, ref)
+                    : null,
+                child: NasCoverImage(
+                  url: _media.thumbnail(ref.path, size: 320),
+                  headers: ApiSession.instance.authHeaders,
+                  icon: Icons.image_outlined,
+                ),
+              );
+              if (!canMenu) return tile;
+              // Web / PC 右键；移动端由上面的 onLongPress 出底部弹窗。
+              return NasContextMenuRegion(
+                entries: _clusterPhotoMenuEntries(cluster, ref),
+                child: tile,
+              );
+            },
           ),
         ),
       ],
@@ -1555,6 +1746,14 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
 
   @override
   Widget build(BuildContext context) {
+    return SubPageScope(
+      active: _title != null,
+      onBack: _backToGrid,
+      child: _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     final showingPhotos = _title != null;
     return Scaffold(
       appBar: widget.embedded ? null : AppBar(

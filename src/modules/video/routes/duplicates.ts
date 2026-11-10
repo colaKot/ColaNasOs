@@ -887,6 +887,10 @@ export async function deleteVideoItems(
         await sql`delete from video_watch where item_id in (${list})`.execute(trx);
         await sql`delete from video_progress where item_id in (${list})`.execute(trx);
         await sql`delete from video_favorites where item_id in (${list})`.execute(trx);
+        // 演员关联也要清：留着孤儿行会让演员列表的影片数 / 封面 / 重建逻辑对不上。
+        // 只删这次被删条目的关联，绝不 delete from jp_actors —— 演员档案、
+        // 她的收藏关系、以及不符合当前筛选的影片全部原样保留。
+        await sql`delete from jp_actor_items where item_id in (${list})`.execute(trx);
       }
       if (imageDone.length > 0) {
         const list = sql.join(imageDone.map((v) => sql`${v}`), sql`, `);

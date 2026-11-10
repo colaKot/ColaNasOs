@@ -389,29 +389,17 @@ export const PHOTO_MIGRATIONS: Migration[] = [
     },
     {
       id: '071_photo_collections',
-      async up(db) {
-        // 集合：把照片聚成一组（介于「相册」和「临时挑选」之间），按用户隔离
-        await sql`
-          create table if not exists photo_collections (
-            id text primary key,
-            name text not null,
-            owner_id text not null default '',
-            created_at integer not null,
-            updated_at integer not null
-          )
-        `.execute(db);
-        await sql`
-          create index if not exists idx_photo_collections_owner
-            on photo_collections(owner_id, created_at)
-        `.execute(db);
-        await sql`
-          create table if not exists photo_collection_items (
-            collection_id text not null,
-            item_id text not null,
-            added_at integer not null,
-            primary key (collection_id, item_id)
-          )
-        `.execute(db);
+      async up() {
+        // 空操作（同 072_photo_memories 的处置方式）。
+        //
+        // 集合已经并入相册，建表语句移到 `169_photo_album_rules` 里负责删除。
+        // 这里必须留一个空壳而不是直接删条目：
+        //   · 老库 `_migrations` 里已有这条记录，删条目会让 checkMigrationOrder 报孤儿；
+        //   · 更重要的是**不能靠「169 删掉 071 的记录」来达成清理** —— 迁移器按 id
+        //     字典序执行、`done` 快照在循环前取，071 的记录一旦没了，下一轮启动
+        //     就会重新把集合表建回来（实测 071 比 169 晚了 0.3s 落地）。
+        // 建表逻辑留在这里只对「从未升级过的全新库」有意义，而那种库跑完 071
+        // 紧接着就会被 169 删掉，纯属白做一次 DDL，不如干脆不建。
       },
     },
     {
@@ -741,7 +729,7 @@ export const PHOTO_MIGRATIONS: Migration[] = [
       // - quality：0..100，= 检测置信度 × 100。老行按 score 回填；
       //   sidecar 早已按 0.55 过滤，所以 55 以下都是历史遗留，重建时会踢出分组。
       // - pose_*：从 faceLandMark 的 5 点 kpss 算的姿态代理量。老数据没有关键点，
-      //   留空即「放行」（与参考实现 `yaw 缺失时不判姿态门` 同一口径），不重跑模型。
+      //   留空即「放行」（与既有实现 `yaw 缺失时不判姿态门` 同一口径），不重跑模型。
       id: '147_photo_faces_claim_guard',
       async up(db) {
         const cols = (
@@ -763,6 +751,202 @@ export const PHOTO_MIGRATIONS: Migration[] = [
         await sql`
           create index if not exists idx_photo_faces_quality on photo_faces(quality)
         `.execute(db);
+      },
+    },
+    {
+      // 相册从「只收图片」扩到「图片 + 视频」，并记录动态照片（Motion Photo /
+      // Live Photo）里那段视频的位置。三件事共用一次迁移，避免反复改这张大表。
+      //
+      // media_kind:
+      //   image  —— 普通静态图（默认值，老数据不用回填）
+      //   video  —— 相册里直接放的视频文件
+      // live_kind:
+      //   ''     —— 不是动态照片
+      //   motion —— JPEG/HEIC 壳 + 尾部 mp4（Google Container 新格式，
+      //             荣耀/Pixel/三星；XMP 里 GCamera:MotionPhoto=1）
+      //   apple  —— Live Photo：同名 .mov 配一个静态图
+      // live_size: motion 类型时，尾部那段视频的字节数（从文件末尾倒数）
+      // live_ms:   那段视频的时长，面板显示用
+      id: '148_photo_media_kind',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(photo_items)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        const add = async (name: string, ddl: string) => {
+          if (cols.includes(name)) return;
+          await sql.raw(`alter table photo_items add column ${name} ${ddl}`).execute(db);
+        };
+        await add('media_kind', `text not null default 'image'`);
+        await add('duration_ms', 'integer');
+        await add('live_kind', `text not null default ''`);
+        await add('live_size', 'integer');
+        await add('live_ms', 'integer');
+        // 时间线要按「图片 / 视频」切换 tab，走这个组合索引
+        await sql`
+          create index if not exists idx_photo_items_media
+            on photo_items(library_id, media_kind, taken_at desc)
+        `.execute(db);
+      },
+    },
+    {
+      // 增量扫描靠 size/mtime 跳过没变的文件，但老行（本次升级前入的）里
+      // live_kind/live_size 一定是空的，跟「确实是普通图片」无法区分。
+      // media_ver 是「这行是按第几版媒体解析逻辑扫的」：
+      // 扫描时写入 MEDIA_VER，跳过条件要求 prev.media_ver >= MEDIA_VER，
+      // 于是升级后第一次扫描会自动把这些老行重读一遍（只读 256KB 文件头，不慢）。
+      id: '149_photo_media_ver',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(photo_items)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        if (!cols.includes('media_ver')) {
+          await sql.raw(`alter table photo_items add column media_ver integer not null default 0`).execute(
+            db,
+          );
+        }
+      },
+    },
+    {
+      // 动态照片识别扩到多品牌后，视频不一定贴在文件末尾，配对视频也不再靠运行时探测：
+      // live_offset —— 内嵌视频在原文件里的起点（老行留空，读取时回落到 size - live_size）
+      // live_vendor —— 识别来源（google/samsung/huawei/heic/generic），无视频时为 ''
+      // live_path   —— 双文件配对时视频的绝对路径，无配对时留空
+      // 三列都允许旧库缺列，故用 pragma 判存在再 add。
+      id: '150_photo_live_span',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(photo_items)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        const add = async (name: string, ddl: string) => {
+          if (cols.includes(name)) return;
+          await sql.raw(`alter table photo_items add column ${name} ${ddl}`).execute(db);
+        };
+        await add('live_offset', 'integer');
+        await add('live_vendor', `text not null default ''`);
+        await add('live_path', `text not null default ''`);
+      },
+    },
+    {
+      // 手机备份判重要用「原始字节数」：NAS 上的照片之后可能被补充 GPS /
+      // 旋转 / 重编码，文件真实 size 会变，但手机手里仍是原图 size。
+      // orig_size 记的是首次入库（或首次发现文件被改写）时的字节数，
+      // 一旦写入永不覆盖；0 表示「没被改写过」，判重时回落用 size。
+      id: '151_photo_orig_size',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(photo_items)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        if (!cols.includes('orig_size')) {
+          await sql.raw(
+            'alter table photo_items add column orig_size integer not null default 0',
+          ).execute(db);
+        }
+        await sql`
+          create index if not exists idx_photo_items_orig_size
+            on photo_items(orig_size, size)
+        `.execute(db);
+      },
+    },
+    {
+      id: '152_photo_deleted_fp',
+      async up(db) {
+        // 「删过的照片」墓碑：用户在 NAS 上删掉的照片，手机备份以后不能再传一遍。
+        //
+        // 为什么不能只靠 photo_items.in_trash：回收站里的行还在，判重能命中；
+        // 但「清空回收站」是 `delete from photo_items`，行一没，判重就彻底失去依据，
+        // 用户下次备份手机又会把那些照片重新传上来 —— 这正是要避免的。
+        // 所以删除动作发生时，把内容指纹单独记一份，且只增不删。
+        await sql`
+          create table if not exists photo_deleted_fp (
+            id integer primary key autoincrement,
+            owner_id text not null,
+            size integer not null,
+            orig_size integer not null default 0,
+            content_md5 text not null default '',
+            created_at integer not null
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_photo_deleted_fp_size
+            on photo_deleted_fp(owner_id, size)
+        `.execute(db);
+        // 同一张照片删两次不能堆重复行：写入侧统一用 `insert or ignore`。
+        await sql`
+          create unique index if not exists idx_photo_deleted_fp_uq
+            on photo_deleted_fp(owner_id, size, content_md5)
+        `.execute(db);
+      },
+    },
+    {
+      // 人脸「重建前快照」这套表是在 052 / 053 建起来的，本意是让重建可回滚。
+      // 回滚功能后来没做（`photo_face_rebuild_runs.rolled_back_at` 永远是 null），
+      // 但建表语句留了下来 —— 结果每次重建都往里灌一份全量快照，谁也不清理：
+      // 真库里 `photo_face_prev_map` 涨到 175,493 行、`photo_face_clusters_prev`
+      // 涨到 10,239 行，而全仓库 grep 只有建表处，**没有任何读写方**。
+      //
+      // 保留的只有 `photo_face_rebuild_runs`（`ai/settings.ts` 还在读它算覆盖率）。
+      id: '161_drop_dead_face_snapshot',
+      async up(db) {
+        await sql`drop table if exists ${sql.table('photo_face_prev_map')}`.execute(db);
+        await sql`drop table if exists ${sql.table('photo_face_clusters_prev')}`.execute(db);
+      },
+    },
+    {
+      // 裁掉三个「建了但查询计划永远用不上」的索引。
+      //
+      // 判断依据不是拍脑袋，是对真库跑 `explain query plan` 逐条验的：
+      //   · idx_photo_items_ai_mask（ai_done_mask）
+      //     全部查询都是位运算 `(ai_done_mask & X) <> X`，B-tree 索引对位运算无效，
+      //     计划恒为 `SCAN photo_items`。
+      //   · idx_photo_items_ai_pending（ai_skip_at）
+      //     `ai_skip_at = 0` 覆盖几乎全表，选择性为零；带 owner 子查询的待办查询
+      //     同样走 `SCAN`。
+      //   · idx_photo_items_orig_size（orig_size, size）
+      //     唯一用途是备份去重的 `(size in (...) or orig_size in (...))`，而 OR 优化
+      //     要求每个分支都可索引 —— `size` 单列没有索引，所以整条 OR 退化，
+      //     计划用 `idx_photo_items_library`。
+      //
+      // 这三条都是「纯写放大」：每次照片入库都要多维护三棵 B-tree。
+      // 保留的 13 个索引全部在计划里被真实命中（timeline / library / media /
+      // trash / md5 / phash / delete_batch / geohash2~7）。
+      id: '166_photo_items_drop_unused_indexes',
+      async up(db) {
+        for (const name of [
+          'idx_photo_items_ai_mask',
+          'idx_photo_items_ai_pending',
+          'idx_photo_items_orig_size',
+        ]) {
+          await sql`drop index if exists ${sql.table(name)}`.execute(db);
+        }
+      },
+    },
+    {
+      // 「集合」并入「相册」。
+      //
+      // photo_collections 和 photo_albums 是同一件事的两套实现：都是「把照片挑成一组、
+      // 按用户隔离」，差别只有集合少一个封面字段、也没有简介和排序。用户面对两个并列的
+      // 入口无从选择 —— 真库两张表都是 0 行，说明确实没人用。
+      //
+      // 同一次迁移把相册升级成「规则相册」：rules_json 里存命中条件
+      // （头像 / 场景 / 日期区间），命中即自动归入，后续新照片也自动收。
+      //
+      // ⚠️ 这里**不能**清 `071_photo_collections` 的执行记录。
+      // 071 的迁移定义和 manifest 登记都还在（空操作），一旦记录被删，下次启动
+      // 迁移器按 id 排序会重新执行它 —— 表现就是「表删了，重启又回来了」。
+      // 160 / 168 之所以能清记录，是因为那批 id 连同迁移定义一起从清单里移除了。
+      id: '169_photo_album_rules',
+      async up(db) {
+        await sql`drop table if exists ${sql.table('photo_collection_items')}`.execute(db);
+        await sql`drop table if exists ${sql.table('photo_collections')}`.execute(db);
+
+        const cols = (
+          (await sql`pragma table_info(photo_albums)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        if (!cols.includes('rules_json')) {
+          await sql.raw(`alter table photo_albums add column rules_json text not null default '[]'`).execute(
+            db,
+          );
+        }
       },
     },
 ];

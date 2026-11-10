@@ -1,5 +1,5 @@
 import { sql } from 'kysely';
-import type { ServerModule } from '../../../kernel/types';
+import type { KernelApi, ServerModule } from '../../../kernel/types';
 import { writeCover, isAudioFile } from './ffmpeg';
 import { MUSIC_SCHEMAS } from './schemas';
 import { scanMusicLibrary, type MusicLibraryRow } from './scan';
@@ -15,6 +15,7 @@ import { registerMusicPlayback } from './routes/playback';
 import { registerMusicPlaylists } from './routes/playlists';
 import { registerMusicAutoPlaylists } from './routes/auto-playlists';
 import { registerMusicCollections } from './routes/collections';
+import { registerMusicCompat } from './routes/compat';
 
 /**
  * SP3-04 music：库 / 索引 / 列表 / 搜索 / 内嵌封面 / 播放 / 自建播放列表（一期）。
@@ -42,6 +43,26 @@ import { registerMusicCollections } from './routes/collections';
  * 二期：客户端常驻播放服务（后台播放 + Web Media Session）、桌面端均衡器、
  * Web 端按需 AAC 转码（stream-url?format=auto）。
  */
+/**
+ * 启动时把「开了启动扫描」的来源各入队一次。
+ *
+ * 必须等 `registerMusicLibrary` 里 `k.tasks.register('music.scan')` 跑完才能入队，
+ * 所以调用点在它之后；这里自己吞异常，扫描失败不能影响内核启动。
+ */
+async function enqueueStartupScan(k: KernelApi): Promise<void> {
+  try {
+    const rows = await sql<{ id: string }>`
+      select id from music_libraries where coalesce(scan_when_start, 1) <> 0
+    `.execute(k.db);
+    for (const r of rows.rows) {
+      const t = await k.tasks.enqueueIfIdle('music.scan', { libraryId: r.id }, { maxAttempts: 1 });
+      k.log.info({ libraryId: r.id, taskId: t.id, reused: t.reused }, 'music.scan.startup');
+    }
+  } catch (err) {
+    k.log.warn({ error: String(err) }, 'music.scan.startup.enqueue failed');
+  }
+}
+
 export const music: ServerModule = {
   id: 'music',
   prefix: '/api/v1/music',
@@ -66,14 +87,25 @@ export const music: ServerModule = {
       load: async () => (await sql<MusicLibraryRow>`select * from music_libraries`.execute(k.db)).rows,
       scan: (lib, subDir) => scanMusicLibrary(k.db, lib, undefined, subDir),
       accept: isAudioFile,
+      // 每库「间隔扫描」的周期；0 表示跟随全局 6 小时校验
+      intervalOf: (lib) => Number(lib.scan_interval_ms ?? 0),
     });
+    // bindLibraryWatch 只建空壳 + 定时校验，订阅关系要 refresh() 才建立。
+    // 不调的话「内核起来后往来源目录丢新歌」永远不会触发增量扫描（要等人工
+    // 增删改一次来源才对齐），用户看到的就是「新歌死活搜不到」。
+    await libWatch.refresh();
     await registerMusicState(app, k);
     const h = makeMusicHelpers(k, libWatch);
     await registerMusicLibrary(app, k, h);
+    // 「启动时扫描」：这个开关以前是假的（表里没列，列表接口硬编码 1）。
+    // 现在按库配置在内核起来后**异步**入队一次，不挡启动；已在扫描的直接复用任务。
+    void enqueueStartupScan(k);
     await registerMusicItems(app, k, h);
     await registerMusicPlayback(app, k, h);
     await registerMusicPlaylists(app, k, h);
     await registerMusicAutoPlaylists(app, k, h);
     await registerMusicCollections(app, k, h);
+    // 既有实现 形状的兼容适配层（前端音乐模块整页搬过来，只认这套形状）
+    await registerMusicCompat(app, k, h);
   },
 };

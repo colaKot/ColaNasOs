@@ -8,6 +8,7 @@ import { filesRoot, resolveInRoot } from '../files/fs-root';
 import type { ServerModule } from '../../../kernel/types';
 import { Err } from '../../../kernel/errors';
 import { registerSystemSettings } from './settings';
+import { registerDevClientLog } from './dev-log';
 import { gpuProbe } from '../../../kernel/gpu-probe';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 
@@ -418,5 +419,15 @@ export const system: ServerModule = {
 
     // 全局设置 / 缓存清理 / 重启 / 更新检查（配置中心）
     registerSystemSettings(app, k);
+
+    // 开发期客户端日志批量上报：与 kernel/index.ts 的 devTokenEnabled 同款判断，
+    // 正式服务端不注册这个路由；hide:true 保证它也不进契约 / 不生成 client。
+    // （tool/gen.js 会强制置 COLANAS_DEV_TOKEN=1，gen 时也会注册，但被 swagger 过滤。）
+    if (
+      process.env.COLANAS_DEV_TOKEN === '1' &&
+      process.env.NODE_ENV !== 'production'
+    ) {
+      registerDevClientLog(app, k);
+    }
   },
 };

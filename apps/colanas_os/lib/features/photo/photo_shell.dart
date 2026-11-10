@@ -12,11 +12,9 @@ import 'photo_on_this_day_page.dart';
 import 'photo_ai_settings_page.dart';
 import 'photo_ai_center_page.dart';
 import 'photo_assistant_page.dart';
-import 'photo_discover_page.dart';
 import 'photo_duplicate_insight_page.dart';
 import 'photo_journey_page.dart';
 import 'photo_time_contrast_page.dart';
-import 'photo_collection_page.dart';
 import 'photo_folders_page.dart';
 import 'photo_home_page.dart';
 import 'photo_face_relations_page.dart';
@@ -31,7 +29,7 @@ import 'smart_page.dart';
 
 /// 相册主页：左侧二级导航 + 右侧内容区。
 ///
-/// 分组顺序与参考实现一致：照片 / 回忆 / 相册 / AI / 设置。
+/// 分组顺序与既有实现一致：照片 / 回忆 / 相册 / AI / 设置。
 /// 导航本身由 [AppNavShell] 统一实现，菜单内容来自 `contracts/apps.json#nav`；
 /// 这里只剩「菜单项 id → 页面」。
 class PhotoShellPage extends StatefulWidget {
@@ -81,8 +79,6 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
         return const PhotoTimeContrastPage();
       case 'journey':
         return const PhotoJourneyPage();
-      case 'discovery':
-        return PhotoDiscoverPage(onNavigate: _selection.select);
       case 'duplicateInsight':
         return PhotoDuplicateInsightPage(onNavigate: _selection.select);
       case 'smartRules':
@@ -105,8 +101,6 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
         return const PhotoTrashPage();
       case 'source':
         return const PhotoSourcePage();
-      case 'collection':
-        return const PhotoCollectionPage();
       case 'gps':
         return const PhotoGeoPage();
       case 'folders':

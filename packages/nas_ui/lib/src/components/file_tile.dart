@@ -126,13 +126,15 @@ class NasFileTile extends StatelessWidget {
     final radius = BorderRadius.circular(spec.cardRadius * 0.8);
 
     final iconBlock = Container(
-      width: grid ? 64 : 36,
-      height: grid ? 64 : 36,
+      // 网格模式原来是 64×64 / padding 12：格子被拉伸到 200+ px 时空白全堆在四周，
+      // 收成 60 + padding 8 之后，134px 高的格子刚好容下「图标 + 两行文字」，不再浮空。
+      width: grid ? 60 : 36,
+      height: grid ? 60 : 36,
       decoration: BoxDecoration(
         color: visual.color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(grid ? 16 : 10),
+        borderRadius: BorderRadius.circular(grid ? 14 : 10),
       ),
-      child: Icon(visual.icon, size: grid ? 32 : 20, color: visual.color),
+      child: Icon(visual.icon, size: grid ? 30 : 20, color: visual.color),
     );
 
     return NasHoverBuilder(

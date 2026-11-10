@@ -2,7 +2,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { sql } from 'kysely';
 import { filesRoot, resolveAnyPath, resolveInRoot } from '../files/fs-root';
-import { walkFiles } from '../files/walk';
+import { walkFilesStream } from '../files/walk';
 import { mapLimit } from '../media/concurrency';
 import { isAudioFile, probeAudio, titleOf } from './ffmpeg';
 
@@ -11,7 +11,7 @@ import { isAudioFile, probeAudio, titleOf } from './ffmpeg';
  *
  * - 增量：size/mtime 未变直接跳过
  * - 元数据由 jellyfin-ffmpeg `-i` 解析（tags / 时长 / 采样率 / 内嵌封面标记）
- * - probe 并发 4，写库 100 条/事务
+ * - probe 并发 4，写库 100 条/事务；**流式遍历 + 每 200 条落库**，不封顶也不爆内存
  */
 export interface MusicLibraryRow {
   id: string;
@@ -20,6 +20,12 @@ export interface MusicLibraryRow {
   created_at: number;
   last_scan_at: number | null;
   items: number;
+  /** 启动时自动扫描（1/0，缺省 1） */
+  scan_when_start?: number | null;
+  /** 目录有变动时自动扫描（1/0，缺省 1） */
+  scan_when_change?: number | null;
+  /** 每库独立的间隔扫描周期（毫秒，0 = 跟随全局 6 小时校验） */
+  scan_interval_ms?: number | null;
 }
 
 interface ExistingRow {
@@ -42,6 +48,8 @@ export interface MusicScanResult {
 
 const UPSERT_BATCH = 100;
 const PROBE_CONCURRENCY = 4;
+/** 每攒够这么多待探测曲目就先 probe + 落库一次，几万首也不会全压在内存里 */
+const SCAN_CHUNK = 200;
 
 interface Candidate {
   rel: string;
@@ -54,7 +62,7 @@ interface Candidate {
 export async function scanMusicLibrary(
   db: any,
   lib: MusicLibraryRow,
-  limit = 20000,
+  limit = 0,
   subDir?: string,
   opts: { prune?: boolean } = {},
 ): Promise<MusicScanResult> {
@@ -79,8 +87,6 @@ export async function scanMusicLibrary(
     }
   }
 
-  const files = await walkFiles(baseAbs, Math.max(1, Math.min(limit, 20000)), isAudioFile);
-
   const existing = new Map<string, ExistingRow>();
   const rows = await sql<ExistingRow>`
     select rel_path, size, mtime from music_tracks where library_id = ${lib.id}
@@ -88,7 +94,7 @@ export async function scanMusicLibrary(
   for (const r of rows.rows) existing.set(r.rel_path, r);
 
   const result: MusicScanResult = {
-    tracks: files.length,
+    tracks: 0,
     added: 0,
     updated: 0,
     skipped: 0,
@@ -98,70 +104,84 @@ export async function scanMusicLibrary(
   };
   const nowSec = Math.floor(Date.now() / 1000);
   const seen = new Set<string>();
+  /** `limit > 0` 才封顶（冒烟用小值），缺省扫到底 */
+  const capped = limit > 0;
+  let buffer: Candidate[] = [];
 
-  const needs: Candidate[] = [];
-  for (const scanned of files) {
+  /** 把攒下的待探测曲目 probe + 落库，然后清空（内存在这里回落） */
+  const flush = async (): Promise<void> => {
+    if (buffer.length === 0) return;
+    const batch = buffer;
+    buffer = [];
+    const probed = await mapLimit(batch, PROBE_CONCURRENCY, async (c) => {
+      const meta = await probeAudio(c.abs);
+      return { ...c, meta };
+    });
+    for (const p of probed) if (p.meta.durationMs !== null) result.probed += 1;
+
+    for (let i = 0; i < probed.length; i += UPSERT_BATCH) {
+      const chunk = probed.slice(i, i + UPSERT_BATCH);
+      await db.transaction().execute(async (trx: any) => {
+        for (const p of chunk) {
+          const m = p.meta;
+          await sql`
+            insert into music_tracks
+              (id, library_id, rel_path, title, artist, album, album_artist, genre, track_no,
+               year, duration, bitrate, sample_rate, channels, codec, has_cover, size, mtime, created_at)
+            values
+              (${`${lib.id}_${Buffer.from(p.rel).toString('base64url')}`}, ${lib.id}, ${p.fullRel},
+               ${m.title || titleOf(p.rel)}, ${m.artist}, ${m.album}, ${m.albumArtist}, ${m.genre},
+               ${m.trackNo}, ${m.year}, ${m.durationMs}, ${m.bitrate}, ${m.sampleRate}, ${m.channels},
+               ${m.codec}, ${m.hasCover ? 1 : 0}, ${p.size}, ${p.mtime}, ${nowSec})
+            on conflict(library_id, rel_path) do update set
+              title = excluded.title,
+              artist = excluded.artist,
+              album = excluded.album,
+              album_artist = excluded.album_artist,
+              genre = excluded.genre,
+              track_no = excluded.track_no,
+              year = excluded.year,
+              duration = excluded.duration,
+              bitrate = excluded.bitrate,
+              sample_rate = excluded.sample_rate,
+              channels = excluded.channels,
+              codec = excluded.codec,
+              has_cover = excluded.has_cover,
+              size = excluded.size,
+              mtime = excluded.mtime
+          `.execute(trx);
+        }
+      });
+    }
+  };
+
+  // 流式遍历：以前是 `walkFiles(limit)` 一次性取出（默认封顶 20000），
+  // 库超过 2 万首就永远只索引前 2 万，怎么点扫描都补不进来。
+  await walkFilesStream(baseAbs, isAudioFile, async (scanned) => {
+    if (capped && seen.size >= limit) return false;
     const rel = prefix ? `${prefix}/${scanned}` : scanned;
     const abs = path.join(rootAbs, rel.split('/').join(path.sep));
     let st;
     try {
       st = await fsp.stat(abs);
     } catch {
-      continue;
+      return;
     }
     const mtime = Math.floor(st.mtimeMs);
     const fullRel = `${lib.root_path}/${rel}`.replace(/^\/+/, '');
     seen.add(fullRel);
+    result.tracks += 1;
     const prev = existing.get(fullRel);
     if (prev && prev.size === st.size && prev.mtime === mtime) {
       result.skipped += 1;
-      continue;
+      return;
     }
     if (prev) result.updated += 1;
     else result.added += 1;
-    needs.push({ rel, fullRel, abs, size: st.size, mtime });
-  }
-
-  const probed = await mapLimit(needs, PROBE_CONCURRENCY, async (c) => {
-    const meta = await probeAudio(c.abs);
-    return { ...c, meta };
+    buffer.push({ rel, fullRel, abs, size: st.size, mtime });
+    if (buffer.length >= SCAN_CHUNK) await flush();
   });
-  for (const p of probed) if (p.meta.durationMs !== null) result.probed += 1;
-
-  for (let i = 0; i < probed.length; i += UPSERT_BATCH) {
-    const chunk = probed.slice(i, i + UPSERT_BATCH);
-    await db.transaction().execute(async (trx: any) => {
-      for (const p of chunk) {
-        const m = p.meta;
-        await sql`
-          insert into music_tracks
-            (id, library_id, rel_path, title, artist, album, album_artist, genre, track_no,
-             year, duration, bitrate, sample_rate, channels, codec, has_cover, size, mtime, created_at)
-          values
-            (${`${lib.id}_${Buffer.from(p.rel).toString('base64url')}`}, ${lib.id}, ${p.fullRel},
-             ${m.title || titleOf(p.rel)}, ${m.artist}, ${m.album}, ${m.albumArtist}, ${m.genre},
-             ${m.trackNo}, ${m.year}, ${m.durationMs}, ${m.bitrate}, ${m.sampleRate}, ${m.channels},
-             ${m.codec}, ${m.hasCover ? 1 : 0}, ${p.size}, ${p.mtime}, ${nowSec})
-          on conflict(library_id, rel_path) do update set
-            title = excluded.title,
-            artist = excluded.artist,
-            album = excluded.album,
-            album_artist = excluded.album_artist,
-            genre = excluded.genre,
-            track_no = excluded.track_no,
-            year = excluded.year,
-            duration = excluded.duration,
-            bitrate = excluded.bitrate,
-            sample_rate = excluded.sample_rate,
-            channels = excluded.channels,
-            codec = excluded.codec,
-            has_cover = excluded.has_cover,
-            size = excluded.size,
-            mtime = excluded.mtime
-        `.execute(trx);
-      }
-    });
-  }
+  await flush();
 
   // 只有整库扫描才能判定「索引里有、磁盘上已经没有」；子目录扫描的数据不完整，不能据此删行
   const missing = prefix ? [] : [...existing.keys()].filter((p) => !seen.has(p));

@@ -644,7 +644,7 @@ Future<VideoLibraryForm?> showVideoLibraryDialog(
                 children: [
                   TextField(
                     controller: nameCtrl,
-                    decoration: InputDecoration(labelText: tr('ui.book.004')),
+                    decoration: InputDecoration(labelText: tr('common.name')),
                   ),
                   const SizedBox(height: NasTokens.spaceSm),
                   NasDropdown<String>(
@@ -828,7 +828,7 @@ Widget _sourceRow(
                     controller: d.pathCtrl,
                     readOnly: true,
                     decoration: InputDecoration(
-                      labelText: tr('ui.book.005'),
+                      labelText: tr('common.dirRelativeRoot'),
                       hintText: tr('video.library.pathHint'),
                       isDense: true,
                     ),

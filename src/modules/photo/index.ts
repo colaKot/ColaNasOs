@@ -4,12 +4,13 @@ import { PHOTO_SCHEMAS } from './schemas';
 import { registerPhotoAi } from './ai';
 import { enqueueScanOnce } from './ai/vision';
 import { registerPhotoBackup } from './backup';
+import { startContentMd5Backfill } from './content-md5-backfill';
 import { registerPhotoCleanup } from './curation';
 import { registerPhotoMap } from './map';
 import { registerPhotoMemories } from './memories';
 import { registerPhotoRetrieval } from './retrieval';
 import { scanLibrary, type LibraryRow } from './scan';
-import { isImageFile } from './exif';
+import { isMediaFile } from './exif';
 import { bindLibraryWatch } from '../library-watch';
 import { registerExtraRoot } from '../files/fs-root';
 
@@ -18,9 +19,9 @@ import { makePhotoHelpers } from './helpers';
 import { registerPhotoLibrary } from './routes/library';
 import { registerPhotoTimeline } from './routes/timeline';
 import { registerPhotoAlbums } from './routes/albums';
-import { registerPhotoCollections } from './routes/collections';
 import { registerPhotoSmartRules } from './routes/smart-rules';
 import { registerPhotoDelete } from './routes/delete';
+import { registerPhotoLive } from './routes/live';
 import { purgeExpiredTrash } from './delete';
 import { registerPhotoGeo } from './routes/geo';
 import { registerPhotoHome } from './routes/home';
@@ -77,7 +78,8 @@ export const photo: ServerModule = {
       domain: 'photo',
       load: async () => (await sql<LibraryRow>`select * from photo_libraries`.execute(k.db)).rows,
       scan: (lib, subDir) => scanLibrary(k.db, lib, undefined, subDir),
-      accept: (name) => isImageFile(name) && !shouldSkipName(k, name),
+      // 增量重扫同样要认视频：只判图片的话，往相册目录里丢个 mp4 永远不会被索引
+      accept: (name) => isMediaFile(name) && !shouldSkipName(k, name),
       policy: () => watchPolicyOf(k),
     });
     await registerPhotoAi(app, k);
@@ -90,7 +92,6 @@ export const photo: ServerModule = {
     await registerPhotoLibrary(app, k, h);
     await registerPhotoTimeline(app, k, h);
     await registerPhotoAlbums(app, k, h);
-    await registerPhotoCollections(app, k, h);
     await registerPhotoSmartRules(app, k, h);
     await registerPhotoGeo(app, k, h);
     await registerPhotoHome(app, k, h);
@@ -100,6 +101,7 @@ export const photo: ServerModule = {
     await registerPhotoUpload(app, k);
     await registerPhotoMapTile(app, k);
     await registerPhotoDelete(app, k, h);
+    await registerPhotoLive(app, k, h);
 
     // 重启后自动接着识别：还有没识别的照片就入队一次。
     // 开关关着 / 已暂停 / 已经全部识别完 都直接跳过（判断在 enqueueScanOnce 里）。
@@ -108,6 +110,10 @@ export const photo: ServerModule = {
     void enqueueScanOnce(k)
       .then((r) => k.log.info({ ...r }, 'photo.ai autostart'))
       .catch((err) => k.log.warn({ err: String(err) }, 'photo.ai autostart failed'));
+
+    // 全库内容指纹回填：老库 content_md5 基本都是 NULL，不补的话手机备份
+    // 会把已经备份过的照片全部重新传一遍。启动即跑、限速分批、重启自动续跑。
+    startContentMd5Backfill(k);
 
     // 回收站保留 30 天：启动先清一次，之后每小时一次（unref 不阻止进程退出）
     void purgeExpiredTrash(k).catch(() => null);

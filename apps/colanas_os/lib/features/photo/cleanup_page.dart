@@ -5,6 +5,7 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_media/nas_media.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/display_labels.dart';
 import '../../core/session.dart';
 
 /// 重复与相似清理：**先预演、再执行、可撤销**。
@@ -395,7 +396,7 @@ class _PhotoCleanupPageState extends State<PhotoCleanupPage> {
               ListTile(
                 dense: true,
                 leading: Icon(b.undoneAt == null ? Icons.history : Icons.undo),
-                title: Text('${b.kind} · ${b.summary}'),
+                title: Text('${cleanupKindLabel(b.kind)} · ${b.summary}'),
                 subtitle: Text(
                   b.undoneAt == null ? tr('ui.photo.019') : tr('ui.photo.020'),
                 ),

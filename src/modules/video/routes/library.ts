@@ -564,6 +564,12 @@ export async function registerVideoLibrary(
       if (!lib) return reply.code(404).send({ error: Err.notFound, message: 'library not found' });
 
       await k.db.transaction().execute(async (trx: any) => {
+        // 先清演员关联：留着指向已删条目的孤儿行，会让 pruneOrphanActors 一直
+        // 误以为这些演员还有作品。只删关联，不删 jp_actors（演员档案要留）。
+        await sql`
+          delete from jp_actor_items
+           where item_id in (select id from video_items where library_id = ${lib.id})
+        `.execute(trx);
         await sql`delete from video_items where library_id = ${lib.id}`.execute(trx);
         await sql`delete from image_items where library_id = ${lib.id}`.execute(trx);
         await sql`delete from video_library_sources where library_id = ${lib.id}`.execute(trx);

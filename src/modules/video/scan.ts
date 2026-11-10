@@ -727,6 +727,11 @@ async function pruneMissingVideo(
       delete from video_progress
        where item_id in (select id from video_items where library_id = ${libraryId} and rel_path in (${list}))
     `.execute(db);
+    // 文件被移走时同样要清演员关联，别留指向已删条目的孤儿行
+    await sql`
+      delete from jp_actor_items
+       where item_id in (select id from video_items where library_id = ${libraryId} and rel_path in (${list}))
+    `.execute(db);
     const res = await sql`
       delete from video_items where library_id = ${libraryId} and rel_path in (${list})
     `.execute(db);

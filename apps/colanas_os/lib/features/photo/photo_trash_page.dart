@@ -3,6 +3,7 @@ import 'package:nas_media/nas_media.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
+import '../../shell/shell_back.dart';
 
 /// 回收站：**按删除批次分组**（一次删除 = 一组），可整批还原或整批清空。
 ///
@@ -180,6 +181,14 @@ class _PhotoTrashPageState extends State<PhotoTrashPage> {
 
   @override
   Widget build(BuildContext context) {
+    return SubPageScope(
+      active: _openBatch != null,
+      onBack: () => setState(() => _openBatch = null),
+      child: _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     if (_loading) return const NasLoading();
     if (_error != null) return NasErrorState(message: _error!, onRetry: _load);
     return Column(

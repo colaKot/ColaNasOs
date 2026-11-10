@@ -7,7 +7,8 @@ import '../tokens.dart';
 /// 统一入口：页内顶部/底部 Tab 一律上移到左侧栏；宽度 128（图标 + 4 字），
 /// 收起态 56（只留图标，且**不渲染文字**，避免固定占位溢出）。
 class NasNavEntry {
-  const NasNavEntry({required this.id, required this.label, required this.icon});
+  const NasNavEntry(
+      {required this.id, required this.label, required this.icon});
 
   final String id;
   final String label;
@@ -60,7 +61,8 @@ class NasSideNav extends StatelessWidget {
   final String? debugLabel;
 
   /// 某个菜单项的稳定 key。测试遍历「全部 app × 菜单项」时靠它点到条目。
-  static Key keyOf(String scope, String id) => ValueKey<String>('nav:$scope/$id');
+  static Key keyOf(String scope, String id) =>
+      ValueKey<String>('nav:$scope/$id');
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +90,9 @@ class NasSideNav extends StatelessWidget {
                   ),
                   child: Text(
                     group.title.toUpperCase(),
+                    // 一级栏收窄到「图标 + 2 字」后，较长的分组名要截断而不是换行
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: NasTokens.fontMicro,
                       letterSpacing: 1.1,
@@ -144,13 +149,13 @@ extension _SideNavHeader on NasSideNav {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                style:
+                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
               ),
             ),
           IconButton(
-            tooltip: collapsed
-                ? (expandTooltip ?? '')
-                : (collapseTooltip ?? ''),
+            tooltip:
+                collapsed ? (expandTooltip ?? '') : (collapseTooltip ?? ''),
             // M3 的 IconButton 只看 style 里的 minimumSize / tapTargetSize：
             // 只给 `constraints` 时仍会按 40 的最小点击区绘制，折叠态（可用宽度 36）
             // 就溢出了 4px。这里显式压到 32×32，别退回只写 constraints 的写法。
@@ -192,9 +197,8 @@ class _Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final fg = selected
-        ? scheme.onSurface
-        : scheme.onSurface.withValues(alpha: 0.78);
+    final fg =
+        selected ? scheme.onSurface : scheme.onSurface.withValues(alpha: 0.78);
     final tile = InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(NasTokens.radiusSm),
@@ -208,12 +212,14 @@ class _Tile extends StatelessWidget {
           color: selected ? scheme.primary.withValues(alpha: 0.10) : null,
           borderRadius: BorderRadius.circular(NasTokens.radiusSm),
           border: selected
-              ? const Border(left: BorderSide(width: 2.5, color: Colors.transparent))
+              ? const Border(
+                  left: BorderSide(width: 2.5, color: Colors.transparent))
               : null,
         ),
         foregroundDecoration: selected
             ? BoxDecoration(
-                border: Border(left: BorderSide(width: 2.5, color: scheme.primary)),
+                border:
+                    Border(left: BorderSide(width: 2.5, color: scheme.primary)),
               )
             : null,
         child: iconOnly
@@ -240,7 +246,8 @@ class _Tile extends StatelessWidget {
                       style: TextStyle(
                         fontSize: NasTokens.fontBody,
                         color: fg,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w500,
                       ),
                     ),
                   ),

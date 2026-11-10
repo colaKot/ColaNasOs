@@ -31,7 +31,7 @@ const check = (name, ok, detail) => {
 };
 
 /** 1. 结构完整 */
-const expectedCapIds = ['files', 'photo', 'video', 'music', 'book', 'terminal', 'editor', 'system'];
+const expectedCapIds = ['files', 'photo', 'video', 'music', 'terminal', 'system'];
 check(
   'contract_shape',
   endpoints.length === 6 && items.length === expectedCapIds.length,

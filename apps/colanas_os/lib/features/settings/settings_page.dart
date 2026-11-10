@@ -10,6 +10,7 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/app_settings.dart';
+import '../../core/display_labels.dart';
 import '../../core/i18n_setup.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
@@ -21,7 +22,7 @@ import '../../shell/app_nav_shell.dart';
 /// 设置（配置中心）：左侧二级导航分四组 —— 服务器（服务器配置 + 服务与账号）、
 /// 外观（外观 + 语言）、日志（服务端日志）、其他（索引维护 + 关于）。
 ///
-/// 媒体库管理已按参考实现移到各模块（相册来源 / 影视库管理 / 音乐库管理 / 书房），
+/// 媒体库管理已按既有实现移到各模块（相册来源 / 影视库管理 / 音乐库管理 / 书房），
 /// 设置页不再放「媒体库」栏目。
 /// 服务器相关区块需要 `system:read` / `system:write`，无权限时显示明确提示。
 class SettingsPage extends StatefulWidget {
@@ -87,23 +88,11 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _logsAuto = false;
   Timer? _logsTimer;
 
-  /// 日志级别筛选：errorWarn（默认）/ error / warn / info
+  /// 日志级别筛选：errorWarn（默认）/ error / warn / info（由服务端过滤）
   String _logsLevel = 'errorWarn';
-
-  bool _levelVisible(String level) {
-    final isError = level == 'error' || level == 'fatal';
-    final isWarn = level == 'warn';
-    switch (_logsLevel) {
-      case 'error':
-        return isError;
-      case 'warn':
-        return isWarn;
-      case 'info':
-        return !isError && !isWarn;
-      default:
-        return isError || isWarn;
-    }
-  }
+  /// 分页：第 1 页是最新日志，往后翻是更旧的内容
+  int _logPage = 0;
+  int _logPageSize = 50;
 
   @override
   void initState() {
@@ -128,7 +117,7 @@ class _SettingsPageState extends State<SettingsPage> {
   String? _hint(Object e) {
     final text = e.toString();
     if (text.contains('403')) return tr('settings.needAdmin');
-    return null;
+    return errorMessageOf(e);
   }
 
   Future<void> _loadServer() async {
@@ -297,17 +286,18 @@ class _SettingsPageState extends State<SettingsPage> {
     SettingsStore.instance.setBool('ui.nav.collapsed.settings', _navCollapsed);
   }
 
-  Future<void> _loadLogs() async {
+  Future<void> _loadLogs({bool resetPage = false}) async {
     if (!mounted) return;
     setState(() {
+      if (resetPage) _logPage = 0;
       _logsLoading = true;
       _logsError = null;
     });
     try {
-      // 级别过滤交给服务端做（在截断之前筛）：请求日志一秒几十条，
-      // 只取最后 200 行再在前端筛，错误几乎全被 info 挤出窗口
+      // 服务端倒读分页 + 逐行级别过滤：一次只拿本页，不再把 200 行全铺开
       final res = await ApiSession.instance.client.systemLogs(
-        lines: 200,
+        limit: _logPageSize,
+        offset: _logPage * _logPageSize,
         level: switch (_logsLevel) {
           'error' => 'error',
           'info' => 'info',
@@ -328,15 +318,26 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  void _goLogPage(int page) {
+    final next = page < 0 ? 0 : page;
+    if (next == _logPage) return;
+    // 不动 timer：_startLogsTimer 里按 _logPage == 0 判断，翻回第 1 页会自动恢复追新
+    setState(() => _logPage = next);
+    _loadLogs();
+  }
+
   void _startLogsTimer() {
     _logsTimer?.cancel();
-    _logsTimer = Timer.periodic(const Duration(seconds: 5), (_) => _loadLogs());
+    _logsTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      // 只在第 1 页追最新日志；历史页冻结，避免内容在眼前跳
+      if (_logPage == 0) _loadLogs();
+    });
   }
 
   void _setLogsAuto(bool on) {
     setState(() => _logsAuto = on);
     if (on) {
-      _loadLogs();
+      _loadLogs(resetPage: true);
       _startLogsTimer();
     } else {
       _logsTimer?.cancel();
@@ -1107,17 +1108,6 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ],
       ),
-      const SizedBox(height: NasTokens.spaceMd),
-      OutlinedButton.icon(
-        onPressed: _reindexBook,
-        icon: const Icon(Icons.manage_search),
-        label: Text(tr('ui.settings.015')),
-      ),
-      const SizedBox(height: NasTokens.spaceXs),
-      Text(
-        tr('ui.settings.h6536fe'),
-        style: TextStyle(color: context.nasTextSecondary),
-      ),
     ]);
   }
 
@@ -1156,7 +1146,7 @@ class _SettingsPageState extends State<SettingsPage> {
           SizedBox(
             width: 46,
             child: Text(
-              level.toUpperCase(),
+              logLevelLabel(level),
               style: TextStyle(
                 fontSize: NasTokens.fontMicro,
                 fontWeight: FontWeight.w600,
@@ -1176,10 +1166,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _logsSection() {
-    final all = _logs?.lines ?? const <Map<String, dynamic>>[];
-    final entries = all
-        .where((e) => _levelVisible('${e['level'] ?? 'info'}'))
-        .toList();
+    // 服务端已经按级别过滤过，这里直接渲染本页，不再做二次筛选
+    final entries = _logs?.lines ?? const <Map<String, dynamic>>[];
     return _section(tr('settings.nav.logs'), [
       Row(
         children: [
@@ -1196,7 +1184,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           if (_logs?.truncated == true)
             Text(
-              tr('settings.logsTruncated', {'lines': '${all.length}'}),
+              tr('settings.logsTruncated', {'lines': '${entries.length}'}),
               style: TextStyle(
                 fontSize: NasTokens.fontCaption,
                 color: context.nasTextSecondary,
@@ -1233,7 +1221,9 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ],
           onChanged: (v) {
-            if (v != null) setState(() => _logsLevel = v);
+            if (v == null) return;
+            setState(() => _logsLevel = v);
+            _loadLogs(resetPage: true);
           },
         ),
       ),
@@ -1244,6 +1234,49 @@ class _SettingsPageState extends State<SettingsPage> {
         title: Text(tr('settings.logsAutoRefresh')),
         value: _logsAuto,
         onChanged: _setLogsAuto,
+      ),
+      const SizedBox(height: NasTokens.spaceSm),
+      Row(
+        children: [
+          SizedBox(
+            width: 180,
+            child: NasDropdown<int>(
+              value: _logPageSize,
+              isDense: true,
+              decoration: InputDecoration(
+                labelText: tr('photo.preview.pageSize'),
+                isDense: true,
+              ),
+              items: [
+                for (final n in const [20, 50, 100, 200])
+                  DropdownMenuItem<int>(
+                    value: n,
+                    child: Text(tr('blog.episodes.perPage', {'count': '$n'})),
+                  ),
+              ],
+              onChanged: (v) {
+                if (v == null || v == _logPageSize) return;
+                setState(() => _logPageSize = v);
+                _loadLogs(resetPage: true);
+              },
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: tr('accounts.fileLog.prev'),
+            icon: const Icon(Icons.chevron_left),
+            onPressed:
+                _logPage > 0 && !_logsLoading ? () => _goLogPage(_logPage - 1) : null,
+          ),
+          Text('${_logPage + 1}'),
+          IconButton(
+            tooltip: tr('accounts.fileLog.next'),
+            icon: const Icon(Icons.chevron_right),
+            onPressed: (_logs?.hasMore ?? false) && !_logsLoading
+                ? () => _goLogPage(_logPage + 1)
+                : null,
+          ),
+        ],
       ),
       const Divider(height: 1),
       if (_logsLoading)
@@ -1281,26 +1314,6 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
     ]);
-  }
-
-  Future<void> _reindexBook() async {
-    try {
-      final res = await ApiSession.instance.client.bookFulltextReindex(
-        body: const BookFulltextReindexBody(),
-      );
-      if (!mounted) return;
-      NasSnack.show(context, 
-            tr('settings.reindexDone', {
-              'indexed': '${res.indexed}',
-              'skipped': '${res.skipped}',
-            }),
-          );
-    } catch (e) {
-      if (!mounted) return;
-      NasSnack.show(context, 
-            tr('settings.rebuildFailed', {'error': '${_hint(e) ?? e}'}),
-          );
-    }
   }
 
   Widget _about() {

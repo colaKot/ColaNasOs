@@ -55,6 +55,20 @@ export interface WorkerOptions {
 const RETRY_BASE_MS = 15_000;
 const RETRY_MAX_MS = 5 * 60_000;
 
+/**
+ * 任务历史保留天数（默认 30 天，`COLANAS_TASK_RETENTION_DAYS` 可覆盖）。
+ *
+ * 为什么需要：这张表以前**永不清理**。实测 6.9 天产生 1,751 行（其中
+ * `video.subtitle.fetch` 一项 1,422 行），外推约 9.2 万行 / 3 MB 每年 ——
+ * 单一库文件只增不减，VACUUM 白做。任务面板只展示最近 50 条，30 天历史完全够用。
+ */
+const TASK_RETENTION_DAYS = Math.max(
+  1,
+  Number(process.env.COLANAS_TASK_RETENTION_DAYS) || 30,
+);
+/** 清理间隔：一天一次（启动时先跑一次，老库不用等一天） */
+const PRUNE_INTERVAL_MS = 24 * 60 * 60_000;
+
 /** 重试基数可覆盖（冒烟用小值，避免测试等 15 s） */
 function retryBaseMs(): number {
   const raw = Number(process.env.COLANAS_TASK_RETRY_BASE_MS);
@@ -74,7 +88,12 @@ export class TaskQueue {
   private handlers = new Map<string, TaskHandler>();
   private running = 0;
   private stopped = true;
+  /** db 已关（`stop()` 后置真）。注意别和 `stopped` 混：`stopped` 表示 loop 未启动，这是「已终结」 */
+  private closed = false;
   private loopTimer: NodeJS.Timeout | null = null;
+  private janitorTimer: NodeJS.Timeout | null = null;
+  /** 启动时的首次清理延时器（stop 时必须一起清，否则会在 db 关闭后落地） */
+  private janitorKick: NodeJS.Timeout | null = null;
   private draining: Promise<void> = Promise.resolve();
   private options: Required<WorkerOptions> = { concurrency: 1, pollMs: 500 };
 
@@ -173,6 +192,7 @@ export class TaskQueue {
 
   start(opts: WorkerOptions = {}): void {
     if (!this.stopped) return;
+    this.closed = false;
     this.options.concurrency = Math.max(1, Math.min(opts.concurrency ?? 1, 8));
     this.options.pollMs = Math.max(50, opts.pollMs ?? 500);
     this.stopped = false;
@@ -180,20 +200,75 @@ export class TaskQueue {
       concurrency: this.options.concurrency,
       handlers: this.registered(),
     });
+    this.startJanitor();
     this.tick();
+  }
+
+  /** 任务历史清理定时器（启动即跑一次，之后每天一次） */
+  private startJanitor(): void {
+    if (this.janitorTimer || this.janitorKick) return;
+    // 延后 3 秒：让启动流程先跑完，别让一次大 DELETE 拖慢首屏
+    this.janitorKick = setTimeout(() => {
+      this.janitorKick = null;
+      void this.prune().catch((err) => {
+        this.log?.('warn', 'task prune failed', { error: String(err) });
+      });
+    }, 3_000);
+    this.janitorKick.unref?.();
+    this.janitorTimer = setInterval(() => {
+      void this.prune().catch((err) => {
+        this.log?.('warn', 'task prune failed', { error: String(err) });
+      });
+    }, PRUNE_INTERVAL_MS);
+    this.janitorTimer.unref?.();
   }
 
   /** 停止领取新任务，并等待正在执行的最多 10 s（超时后交由 recover 在下次启动重投） */
   async stop(): Promise<void> {
     this.stopped = true;
+    this.closed = true;
     if (this.loopTimer) {
       clearTimeout(this.loopTimer);
       this.loopTimer = null;
+    }
+    if (this.janitorKick) {
+      clearTimeout(this.janitorKick);
+      this.janitorKick = null;
+    }
+    if (this.janitorTimer) {
+      clearInterval(this.janitorTimer);
+      this.janitorTimer = null;
     }
     const deadline = Date.now() + 10_000;
     while (this.running > 0 && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 50));
     }
+  }
+
+  /**
+   * 清理任务历史：只删**终态**（done / canceled / failed）且超过保留天数的行。
+   *
+   * 三个安全条件：
+   *   · `state` 只取终态 —— `pending` / `running` / `paused` 一律不动；
+   *   · `next_run_at is null` —— 正在等重试退避的行即便状态写成 failed 也不删；
+   *   · 时间用 `coalesce(finished_at, created_at)` —— 老数据可能没有 finished_at。
+   *
+   * 返回删除行数（启动日志和冒烟都靠它判断有没有生效）。
+   */
+  async prune(keepDays = TASK_RETENTION_DAYS): Promise<number> {
+    // stop() 与定时器可能同拍：db 已经关掉后再发 DELETE 会抛
+    // 「driver has already been destroyed」，纯噪音。
+    if (this.closed) return 0;
+    const cutoff = Date.now() - keepDays * 86_400_000;
+    const res: any = await sql`
+      delete from tasks
+       where state in ('done', 'canceled', 'failed')
+         and next_run_at is null
+         and coalesce(finished_at, created_at) < ${cutoff}
+    `.execute(this.db);
+    const removed = Number(res?.numAffectedRows || 0);
+    if (removed > 0) this.log?.('info', 'task history pruned', { removed, keepDays });
+    return removed;
   }
 
   private scheduleNext(delay: number): void {

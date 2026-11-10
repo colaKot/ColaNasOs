@@ -139,26 +139,6 @@ const TOOLS = [
       }),
   },
   {
-    name: 'book_list',
-    description: '书架列表（可关键词搜索，可按格式 / 收藏过滤）',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        q: { type: 'string', description: '标题 / 作者关键词' },
-        format: { type: 'string', description: 'epub / cbz / pdf / txt' },
-        favorite: { type: 'string', description: '1 = 只看收藏' },
-        limit: { type: 'integer', minimum: 1, maximum: 100, description: '默认 20' },
-      },
-    },
-    handler: (args) =>
-      api('/api/v1/book/list', {
-        q: args.q,
-        format: args.format,
-        favorite: args.favorite,
-        limit: num(args.limit, 20),
-      }),
-  },
-  {
     name: 'system_monitor',
     description: '整机监控：CPU 采样、内存、磁盘、负载、运行时长',
     inputSchema: { type: 'object', properties: {} },
@@ -166,16 +146,15 @@ const TOOLS = [
   },
   {
     name: 'media_libraries',
-    description: '各媒体库概况（相册 / 影视 / 音乐 / 书）',
+    description: '各媒体库概况（相册 / 影视 / 音乐）',
     inputSchema: { type: 'object', properties: {} },
     handler: async () => {
-      const [photo, video, music, book] = await Promise.all([
+      const [photo, video, music] = await Promise.all([
         api('/api/v1/photo/libraries'),
         api('/api/v1/video/libraries'),
         api('/api/v1/music/libraries'),
-        api('/api/v1/book/libraries'),
       ]);
-      return { photo: photo.items, video: video.items, music: music.items, book: book.items };
+      return { photo: photo.items, video: video.items, music: music.items };
     },
   },
 ];

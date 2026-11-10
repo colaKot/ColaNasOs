@@ -3,7 +3,10 @@ import { sql } from 'kysely';
 import { secured } from '../../../../kernel/route';
 import type { KernelApi } from '../../../../kernel/types';
 import { filesRoot, resolveAnyPath } from '../../files/fs-root';
+import { extractFrames } from '../media-frames';
+import { applyAlbumRulesForItems } from '../album-rules';
 import { assignCluster, fromBuffer } from './face';
+import { invalidatePhotoVectorIndex, searchPhotoVectors } from './vector-index';
 import { aiAvailable, ensureSidecar, ffmpegPath } from './sidecar';
 import {
   aiConfig,
@@ -19,24 +22,50 @@ import { EMB_DIM, now, ref } from './schemas';
 import { Err } from '../../../../kernel/errors';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 
-/** 余弦（相似检索用；人脸自带归一化，这里通用实现） */
-function cosine(a: Float32Array | number[], b: Float32Array | number[]): number {
-  let dot = 0;
-  let na = 0;
-  let nb = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    dot += a[i] * b[i];
-    na += a[i] * a[i];
-    nb += b[i] * b[i];
-  }
-  return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
-}
-
 const toBuffer = (vec: number[]): Buffer => Buffer.from(new Float32Array(vec).buffer);
+
+/** sidecar `analyze` 的返回结构 */
+interface AnalyzeOut {
+  faces: Array<{
+    score: number;
+    quality?: number;
+    pose?: { yaw: number | null; roll: number | null; iod?: number } | null;
+    emb: number[];
+    box?: { left: number; top: number; width: number; height: number } | null;
+    imgWidth?: number;
+    imgHeight?: number;
+  }>;
+  scenes: Array<{ label: string; score: number }>;
+  sceneGate?: {
+    exit: 'confident' | 'ambiguous' | 'unknown';
+    reason: string;
+    score: number;
+    margin: number;
+    scorable: boolean | null;
+  } | null;
+  embedding: number[];
+  ocr?: { text: string; lines: unknown[] } | null;
+  activity?: {
+    labels: Array<{ key: string; label: string; score: number }>;
+    topScore: number;
+    hasActivity: boolean;
+  } | null;
+}
 
 interface PendingRow {
   id: string;
   rel_path: string;
+  media_kind?: string | null;
+  duration_ms?: number | null;
+}
+
+/** 分析一批时需要的媒体信息（视频要抽帧、动态照片要切尾部视频） */
+interface AnalyzeRow extends PendingRow {
+  ai_done_mask: number;
+  media_kind: string | null;
+  live_kind: string | null;
+  live_size: number | null;
+  duration_ms: number | null;
 }
 
 /** 挑出「还没做某一项」的照片（force = 全量重算） */
@@ -50,7 +79,7 @@ async function pickPending(
   if (body.libraryId) {
     return (
       await sql<PendingRow>`
-        select i.id, i.rel_path from photo_items i
+        select i.id, i.rel_path, i.media_kind, i.duration_ms from photo_items i
          where i.library_id = ${body.libraryId} and i.in_trash = 0
            ${doneSql(force)}
          order by i.taken_at desc limit ${limit}
@@ -59,12 +88,27 @@ async function pickPending(
   }
   return (
     await sql<PendingRow>`
-      select i.id, i.rel_path from photo_items i
+      select i.id, i.rel_path, i.media_kind, i.duration_ms from photo_items i
        where i.in_trash = 0
          ${doneSql(force)}
        order by i.taken_at desc limit ${limit}
     `.execute(k.db)
   ).rows;
+}
+
+/** 视频要先抽一帧才能给 sidecar：返回可分析的临时路径 + 清理函数 */
+async function analyzeSource(
+  k: KernelApi,
+  abs: string,
+  row: PendingRow,
+): Promise<{ src: string; cleanup: () => Promise<void> }> {
+  if (row.media_kind !== 'video') return { src: abs, cleanup: async () => undefined };
+  const fr = await extractFrames(k, abs, { durationMs: Number(row.duration_ms) || null, count: 1 });
+  if (fr.files.length === 0) {
+    await fr.cleanup();
+    return { src: abs, cleanup: async () => undefined };
+  }
+  return { src: fr.files[0], cleanup: fr.cleanup };
 }
 
 /**
@@ -122,14 +166,18 @@ export async function runAnalyzeBatch(
     : sql`and i.ai_skip_at = 0 and (i.ai_done_mask & ${needMask}) <> ${needMask}`;
   const rows = (
     opts.libraryId
-      ? await sql<{ id: string; rel_path: string; ai_done_mask: number }>`
-          select i.id, i.rel_path, i.ai_done_mask from photo_items i
+      ? await sql<AnalyzeRow>`
+          select i.id, i.rel_path, i.ai_done_mask, i.media_kind, i.live_kind, i.live_size,
+                 i.duration_ms
+          from photo_items i
           where i.library_id = ${opts.libraryId} and i.in_trash = 0
             ${pendingCond}
           order by i.taken_at desc limit ${limit}
         `.execute(k.db)
-      : await sql<{ id: string; rel_path: string; ai_done_mask: number }>`
-          select i.id, i.rel_path, i.ai_done_mask from photo_items i
+      : await sql<AnalyzeRow>`
+          select i.id, i.rel_path, i.ai_done_mask, i.media_kind, i.live_kind, i.live_size,
+                 i.duration_ms
+          from photo_items i
           where i.in_trash = 0
             ${pendingCond}
           order by i.taken_at desc limit ${limit}
@@ -159,44 +207,51 @@ export async function runAnalyzeBatch(
     const needBase = force || (doneMask & AI_DONE_BASE) === 0;
     const doOcr = wantOcr && (force || (doneMask & AI_DONE_OCR) === 0);
     const doActivity = wantActivity && (force || (doneMask & AI_DONE_ACTIVITY) === 0);
+    const isVideo = row.media_kind === 'video';
+    const liveSize = Number(row.live_size) || 0;
+    const isMotion = row.live_kind === 'motion' && liveSize > 0;
+
+    // 视频不能直接喂 analyze（它只解一帧静态图，而且首帧多半是黑场，
+    // 抽出来是「一片黑」照样会被判成场景）。先抽中段一帧成临时 JPEG 再分析。
+    let analyzeSrc = abs;
+    let frameCleanup: (() => Promise<void>) | null = null;
+    if (isVideo) {
+      const fr = await extractFrames(k, abs, {
+        durationMs: Number(row.duration_ms) || null,
+        count: 1,
+      });
+      frameCleanup = fr.cleanup;
+      if (fr.files.length === 0) {
+        // 抽不出帧（损坏 / 不支持的编码）：记账跳过，别每轮重新挑中打热循环
+        await sql`
+          update photo_items
+             set ai_skip_at = ${now()}, ai_skip_reason = 'video frame extract failed'
+           where id = ${row.id}
+        `.execute(k.db);
+        skipped += 1;
+        continue;
+      }
+      analyzeSrc = fr.files[0];
+    }
+
     try {
-      const out = await s.request<{
-        faces: Array<{
-          score: number;
-          quality?: number;
-          pose?: { yaw: number | null; roll: number | null; iod?: number } | null;
-          emb: number[];
-          box?: { left: number; top: number; width: number; height: number } | null;
-          imgWidth?: number;
-          imgHeight?: number;
-        }>;
-        scenes: Array<{ label: string; score: number }>;
-        sceneGate?: {
-          exit: 'confident' | 'ambiguous' | 'unknown';
-          reason: string;
-          score: number;
-          margin: number;
-          scorable: boolean | null;
-        } | null;
-        embedding: number[];
-        ocr?: { text: string; lines: unknown[] } | null;
-        activity?: {
-          labels: Array<{ key: string; label: string; score: number }>;
-          topScore: number;
-          hasActivity: boolean;
-        } | null;
-      }>(
-        'analyze',
-        {
-          src: abs,
-          faces: needBase && cfg.faceEnabled,
-          scenes: needBase && cfg.placeEnabled,
-          embed: needBase,
-          ocr: doOcr,
-          activity: doActivity,
-        },
-        600_000,
-      );
+      let out: AnalyzeOut;
+      try {
+        out = await s.request<AnalyzeOut>(
+          'analyze',
+          {
+            src: analyzeSrc,
+            faces: needBase && cfg.faceEnabled,
+            scenes: needBase && cfg.placeEnabled,
+            embed: needBase,
+            ocr: doOcr,
+            activity: doActivity,
+          },
+          600_000,
+        );
+      } finally {
+        if (frameCleanup) await frameCleanup();
+      }
 
       if (force && needBase) {
         await sql`delete from photo_faces where photo_id = ${row.id}`.execute(k.db);
@@ -206,7 +261,7 @@ export async function runAnalyzeBatch(
         const usedClusterIds = new Set<string>();
         for (const face of out.faces) {
           // 小脸门：面积占比过小的脸多半是背景路人，进了库只会把簇搅浑。
-          // 阈值按参考实现的口径（box_width / photo_width），可用环境变量覆盖。
+          // 阈值按既有实现的口径（box_width / photo_width），可用环境变量覆盖。
           const iw = face.imgWidth ?? 0;
           if (face.box && iw > 0 && face.box.width / iw < FACE_MIN_WIDTH_RATIO) {
             smallFacesSkipped += 1;
@@ -264,6 +319,9 @@ export async function runAnalyzeBatch(
           on conflict(photo_id) do update set
             dim = excluded.dim, vec = excluded.vec, updated_at = excluded.updated_at
         `.execute(k.db);
+        // 新向量立刻可被以图搜图命中（否则要等索引 30 秒的行数检查）。
+        // 只是一句 `state = null`，批量识别时不会拖慢写入；真正的重建发生在下一次查询。
+        invalidatePhotoVectorIndex(k.db);
       }
 
       if (doOcr && out.ocr) {
@@ -339,6 +397,17 @@ export async function runAnalyzeBatch(
       );
       skipped += 1;
     }
+  }
+
+  // 规则相册：本批打了场景 / 人脸的片子，命中的自动收进相册。
+  // 放在批结束后统一做一次（不是每张一次），避免 N 次查 albums 表。
+  try {
+    await applyAlbumRulesForItems(
+      k.db,
+      rows.map((r: any) => String(r.id)),
+    );
+  } catch (err) {
+    k.log.warn({ err: String((err as Error)?.message || err) }, 'album rules apply failed');
   }
 
   const remainingRows = (
@@ -539,10 +608,11 @@ export async function registerPhotoVision(app: any, k: KernelApi): Promise<void>
           skipped += 1;
           continue;
         }
+        const src = await analyzeSource(k, abs, row);
         try {
           const out = await s.request<{ text: string; lines: unknown[] }>(
             'ocr',
-            { src: abs },
+            { src: src.src },
             600_000,
           );
           const text = String(out.text || '').trim();
@@ -632,12 +702,13 @@ export async function registerPhotoVision(app: any, k: KernelApi): Promise<void>
           skipped += 1;
           continue;
         }
+        const src = await analyzeSource(k, abs, row);
         try {
           const out = await s.request<{
             labels: Array<{ key: string; label: string; score: number }>;
             topScore: number;
             hasActivity: boolean;
-          }>('activity', { src: abs }, 600_000);
+          }>('activity', { src: src.src }, 600_000);
 
           if (body.force === true) {
             await sql`delete from photo_activities where photo_id = ${row.id}`.execute(k.db);
@@ -1000,32 +1071,51 @@ export async function registerPhotoVision(app: any, k: KernelApi): Promise<void>
         return reply.code(404).send({ error: Err.notFound, message: 'embedding not found' });
 
       const baseVec = fromBuffer(base.vec);
-      // 相似检索是内存线性扫描：默认只看最近 5000 条，可用 COLANAS_VECTOR_SCAN_LIMIT 调大。
-      // 超过上限时召回会受限（不是全库最近邻），因此命中上限要留一条告警，别让用户以为已是全库结果。
-      const scanLimit = Math.max(
-        100,
-        Math.min(Number(process.env.COLANAS_VECTOR_SCAN_LIMIT) || 5000, 50_000),
-      );
-      const rows = (
-        await sql<{ photo_id: string; vec: Buffer }>`
-          select e.photo_id, e.vec from photo_embeddings e
-            join photo_items i on i.id = e.photo_id
-           where e.photo_id != ${q.id ?? ''} and i.in_trash = 0
-           limit ${scanLimit}
-        `.execute(k.db)
-      ).rows;
-      if (rows.length >= scanLimit) {
-        k.log.warn(
-          { scanLimit, photo: q.id },
-          'photo.similar: scan limit reached, recall may be incomplete',
-        );
-      }
+      const uid = String((req as any).user?.sub || '');
 
-      const scored = rows
-        .map((r) => ({ photoId: r.photo_id, score: cosine(baseVec, fromBuffer(r.vec)) }))
-        .filter((s) => minScore == null || s.score >= minScore)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, limit);
+      // 可见库：先取一次库 id（通常 1~5 个），后面回表过滤直接内联，
+      // 比 `library_id in (select ...)` 让 SQLite 每次重算子查询更稳。
+      const libIds = (
+        await sql<{ id: string }>`
+          select id from photo_libraries where owner_id = ${uid}
+        `.execute(k.db)
+      ).rows.map((r) => String(r.id));
+      if (libIds.length === 0) return { items: [] };
+      const libIn = sql.join(
+        libIds.map((id) => sql`${id}`),
+        sql`, `,
+      );
+
+      // 打分走内存常驻索引（全库 100% 覆盖，14ms 量级），不再有 scanLimit 的召回缺口。
+      //
+      // 索引只负责打分，权限过滤放在回表：先多取一些候选（limit × 20，最少 200），
+      // 过滤回收站 / 非本人库之后如果不够 limit，就扩大候选重试。这样多用户场景下
+      // 「别人库里的高分照片」不会占掉名额。
+      const excluded = String(q.id ?? '');
+      let want = Math.min(Math.max(limit * 20, 200), 20_000);
+      let scored: Array<{ photoId: string; score: number }> = [];
+      let scanned!: number;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const res = await searchPhotoVectors(k.db, baseVec, want, excluded);
+        scanned = res.scanned;
+        const cand = res.hits.filter((h) => minScore == null || h.score >= minScore);
+        if (cand.length === 0) return { items: [] };
+        const okIds = (
+          await sql<{ id: string }>`
+            select id from photo_items
+             where id in (${sql.join(
+               cand.map((c) => sql`${c.photoId}`),
+               sql`, `,
+             )})
+               and in_trash = 0
+               and library_id in (${libIn})
+          `.execute(k.db)
+        ).rows;
+        const ok = new Set(okIds.map((r) => String(r.id)));
+        scored = cand.filter((c) => ok.has(c.photoId)).slice(0, limit);
+        if (scored.length >= limit || want >= scanned) break;
+        want = Math.min(scanned, want * 4);
+      }
       if (scored.length === 0) return { items: [] };
 
       const ids = scored.map((s) => s.photoId);

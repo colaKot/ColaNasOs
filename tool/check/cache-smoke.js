@@ -91,7 +91,9 @@ const check = (n, c, d) => (c ? ok(n) : bad(n, d));
   const thumbSize = 64;
   const key = crypto
     .createHash('sha1')
-    .update(`${rel}|${thumbSize}|${srcStat.size}|${Math.floor(srcStat.mtimeMs)}`)
+    // 缓存 key 末位是抽帧位置 atSec：图片恒为 0，视频才是 posterSeekOf() 给的秒数。
+    // 少了这一段，预置的缓存文件永远命中不了，用例会退化成「真的去跑 ffmpeg」。
+    .update(`${rel}|${thumbSize}|${srcStat.size}|${Math.floor(srcStat.mtimeMs)}|0`)
     .digest('hex');
   const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
   fs.mkdirSync(path.join(dataDir, 'thumbs'), { recursive: true });

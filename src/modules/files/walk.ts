@@ -47,3 +47,44 @@ export async function walkFiles(
 
   return out;
 }
+
+/**
+ * 流式版本：逐文件回调，**不累积结果**。
+ *
+ * `walkFiles` 的 `limit` 是「到量即停」，超大库（>2 万首音乐）会永远只索引前 N 个，
+ * 而且中途攒一个几万长度的数组。扫描这种「每个文件都要 stat + probe」的场景
+ * 走本函数：内存恒定，只有 `onFile` 返回 `false` 才提前中止。
+ */
+export async function walkFilesStream(
+  rootAbs: string,
+  accept: (name: string) => boolean,
+  onFile: (rel: string) => Promise<boolean | void> | boolean | void,
+): Promise<void> {
+  const stack: Array<{ abs: string; rel: string; depth: number }> = [
+    { abs: rootAbs, rel: '', depth: 0 },
+  ];
+
+  while (stack.length > 0) {
+    const cur = stack.pop()!;
+    let entries;
+    try {
+      entries = await fsp.readdir(cur.abs, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const e of entries) {
+      const rel = cur.rel ? `${cur.rel}/${e.name}` : e.name;
+      if (e.isSymbolicLink()) continue;
+      if (e.isDirectory()) {
+        if (IGNORED_DIR_NAMES.has(e.name.toLowerCase())) continue;
+        if (cur.depth + 1 <= MAX_DEPTH) {
+          stack.push({ abs: path.join(cur.abs, e.name), rel, depth: cur.depth + 1 });
+        }
+      } else if (e.isFile() && !IGNORED_FILE_NAMES.has(e.name.toLowerCase()) && accept(e.name)) {
+        const go = await onFile(rel);
+        if (go === false) return;
+      }
+    }
+  }
+}

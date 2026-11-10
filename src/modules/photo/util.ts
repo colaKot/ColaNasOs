@@ -12,6 +12,16 @@ export interface PhotoItemRow {
   height: number | null;
   mime: string;
   favorite: number | null;
+  // 148_photo_media_kind 起（老查询可能没 select 这几列，故为可选）
+  media_kind?: string | null;
+  duration_ms?: number | null;
+  live_kind?: string | null;
+  live_size?: number | null;
+  live_ms?: number | null;
+  // 150_photo_live_span 起（老查询可能没 select 这几列，故为可选）
+  live_offset?: number | null;
+  live_vendor?: string | null;
+  live_path?: string | null;
 }
 export interface AlbumRow {
   id: string;
@@ -24,6 +34,8 @@ export interface AlbumRow {
   description?: string | null;
   cover_item_id?: string | null;
   sort_order?: number | null;
+  // 169 起：规则相册的命中条件（JSON 文本，缺列时为 undefined）
+  rules_json?: string | null;
 }
 export function newId(): string {
   return crypto.randomBytes(9).toString('base64url');
@@ -39,6 +51,12 @@ export function toItem(r: PhotoItemRow) {
     height: r.height,
     mime: r.mime,
     favorite: Number(r.favorite) === 1,
+    mediaKind: r.media_kind === 'video' ? ('video' as const) : ('image' as const),
+    durationMs: r.duration_ms == null ? null : Number(r.duration_ms),
+    liveKind: (r.live_kind === 'motion' || r.live_kind === 'apple' ? r.live_kind : '') as
+      | 'motion'
+      | 'apple'
+      | '',
   };
 }
 /** 排序键 cursor：`taken_at|id`（禁止 offset 深翻，见 03-契约与接口 §58） */
@@ -62,6 +80,16 @@ export function likePattern(q: string): string {
   return `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 export function albumFrom(r: AlbumRow) {
+  // 规则解析失败一律当空数组（脏 JSON 不该让整个相册列表打不开）
+  let rules: Array<Record<string, unknown>> = [];
+  if (typeof r.rules_json === 'string' && r.rules_json.trim() !== '') {
+    try {
+      const parsed = JSON.parse(r.rules_json);
+      if (Array.isArray(parsed)) rules = parsed;
+    } catch {
+      rules = [];
+    }
+  }
   return {
     id: r.id,
     name: r.name,
@@ -71,5 +99,7 @@ export function albumFrom(r: AlbumRow) {
     description: r.description ?? null,
     coverItemId: r.cover_item_id ?? null,
     sortOrder: Number(r.sort_order) || 0,
+    rules,
+    ruleCount: rules.length,
   };
 }

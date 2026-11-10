@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 import '../../shell/app_widgets.dart';
+import '../../shell/shell_back.dart';
 
 import '../../core/session.dart';
 import 'video_page.dart';
@@ -192,6 +193,14 @@ class _VideoMediaBrowserPageState extends State<VideoMediaBrowserPage> {
 
   @override
   Widget build(BuildContext context) {
+    return SubPageScope(
+      active: _path.isNotEmpty,
+      onBack: _up,
+      child: _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     if (_libLoading) return const NasLoading();
     if (_libraries.isEmpty) {
       return ListView(

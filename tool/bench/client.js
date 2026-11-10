@@ -60,11 +60,7 @@ const ENDPOINTS = [
   ['music', '/api/v1/music/stats'],
   ['music', '/api/v1/music/libraries'],
   ['music', '/api/v1/music/playlists'],
-  ['book', '/api/v1/book/list?limit=60'],
-  ['book', '/api/v1/book/stats'],
-  ['book', '/api/v1/book/libraries'],
   ['files', '/api/v1/files/list?path=/'],
-  ['notes', '/api/v1/notes?limit=60'],
 ];
 
 function touch(file, bytes) {
@@ -235,7 +231,6 @@ function writeReport(rows, rtt, meta) {
     ['photo', 'Photos', 'photos'],
     ['video', 'Videos', 'videos'],
     ['music', 'Music', 'music'],
-    ['book', 'Books', 'books'],
   ]) {
     const r = await call('POST', `/api/v1/${domain}/libraries`, { name, path: rel });
     if (r.statusCode !== 200) console.warn(`[bench:client] ${domain} 建库 ${r.statusCode}`);

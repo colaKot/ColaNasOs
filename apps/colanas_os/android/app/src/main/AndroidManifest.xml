@@ -1,8 +1,31 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- 连 NAS 内核：release 构建不会像 debug 那样自动补 INTERNET -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- 息屏后继续播音频 / 传完未完成的转码任务 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- 后台续播：前台服务 + 通知栏 / 锁屏控制（Android 14+ 必须声明服务类型） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <!-- 相册备份前台服务（dataSync）：Android 14+ 必须按类型声明并申请对应权限 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <!-- Android 13+ 不申请这一条，通知栏看不到备份进度（服务仍会保活） -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- 手机相册备份（photo_manager）：插件自己只声明了 maxSdk=32 的
+         READ_EXTERNAL_STORAGE，Android 13+ 不补这两条就永远拿不到相册权限。
+         ACCESS_MEDIA_LOCATION 用于读取原图 EXIF 里的 GPS。 -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION"/>
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
     <application
         android:label="ColaNasOs"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -25,6 +48,31 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- audio_service：前台服务（进程在后台 / 熄屏时不被冻结）+ 媒体键广播。
+             MainActivity 必须继承 AudioServiceActivity，点通知才能回到 App。 -->
+        <service
+            android:name="com.ryanheise.audioservice.AudioService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="true"
+            tools:ignore="Instantiatable">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService"/>
+            </intent-filter>
+        </service>
+        <receiver
+            android:name="com.ryanheise.audioservice.MediaButtonReceiver"
+            android:exported="true"
+            tools:ignore="Instantiatable">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON"/>
+            </intent-filter>
+        </receiver>
+        <!-- 相册备份前台服务：进程切后台 / 熄屏时保活，通知栏显示「备份中」+ 进度。
+             与上面的音频服务分开，避免抢同一个 MediaSession 通知。 -->
+        <service
+            android:name=".BackupForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

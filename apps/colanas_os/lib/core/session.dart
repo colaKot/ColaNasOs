@@ -30,18 +30,29 @@ class ApiSession {
       if (base.hasScheme &&
           base.host.isNotEmpty &&
           base.scheme.startsWith('http')) {
-        final loopback = base.host == '127.0.0.1' || base.host == 'localhost';
-        if (!loopback) {
-          // 从局域网/其它设备打开时，dart-define 里的 127.0.0.1 指的是**访问设备自己**。
-          // 换成页面所在主机 + 内核端口，这样 192.168.2.199:5173 也能连到 7788。
-          final port = configured.isNotEmpty ? Uri.parse(configured).port : 7788;
-          return '${base.scheme}://${base.host}:$port';
+        // 只有 Flutter dev 的 5173 页面是「纯静态壳」，API 得另打到内核端口。
+        // 其它情况页面本身就是内核提供的（直连 7788，或经 lucky 反代到 23788/443），
+        // **端口必须照抄页面自己的** —— API 与页面同源才连得上。
+        //
+        // 旧实现不管从哪个口打开，一律改成 7788。于是用 lucky 反代访问
+        // https://home.gexuan.net:23788 时，登录框预填成了 https://home.gexuan.net:7788，
+        // 而 7788 是内核的**明文 HTTP** 口，浏览器 TLS 握手直接失败，
+        // 表现为「Failed to fetch」，看着像服务挂了。
+        const flutterDevPort = 5173;
+        if (base.port != flutterDevPort && base.port != 0) {
+          return base.origin;
         }
-        if (configured.isNotEmpty) return configured;
-        return base.origin;
+        final port = configured.isNotEmpty ? Uri.parse(configured).port : 7788;
+        return '${base.scheme}://${base.host}:$port';
       }
     }
     if (configured.isNotEmpty) return configured;
+    // 手机上 127.0.0.1 指向手机自己，填了必然连不上，还会让人以为「服务没起」。
+    // 留空让用户点登录页的「扫描局域网」（见 server_discovery.dart），选一下就填好。
+    if (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      return '';
+    }
     return 'http://127.0.0.1:7788';
   }
 
@@ -113,31 +124,103 @@ class ApiSession {
     return enabled;
   }
 
-  /// 启动时恢复会话；返回是否已登录
+  /// 启动时恢复会话；返回是否已登录。
+  ///
+  /// 两级兜底（**所有客户端统一**，Web / 桌面 / Android / iOS）：
+  /// 1. 存档里的 token 还在有效期内且服务端认 → 直接进桌面；
+  /// 2. token 过期，或被服务端作废（内核换过密钥、账号改过密码、token 被吊销）
+  ///    → 用记住的密码**自动登录一次**再进桌面。
+  ///
+  /// 勾了自动登录就不该再让人手输密码。旧实现只做第 1 步，token 一失效
+  /// 就停在登录页，用户每次开客户端都要重新输一遍。
   Future<bool> restore() async {
     if (autoLoginDisabled) return false;
-    final url = SettingsStore.instance.getString('auth.server');
+    final url = currentServerUrl();
+    if (url.isEmpty) return false;
+
     final saved = SettingsStore.instance.getString('auth.token');
-    if (url == null || url.isEmpty || saved == null || saved.isEmpty) {
+    if (saved != null && saved.isNotEmpty) {
+      final exp = expiryOf(saved);
+      final expired = exp != null && DateTime.now().millisecondsSinceEpoch >= exp;
+      if (!expired) {
+        autoLoginChecking.value = true;
+        try {
+          configure(url);
+          token = saved;
+          username = SettingsStore.instance.getString('auth.username');
+          authState.value = true;
+          // 探一次：token 可能还在有效期内但已被服务端作废。
+          // 401 会被 Transport 清掉，这里据此决定要不要走密码兜底。
+          if (await _probeSession()) {
+            await loadServerInfo();
+            events.start();
+            return true;
+          }
+          token = null;
+          authState.value = false;
+        } finally {
+          autoLoginChecking.value = false;
+        }
+      } else {
+        // token 过期只清 token：记住的账号与密码要留着，用户不必重输
+        await _clearToken();
+      }
+    }
+    return _autoLoginWithPassword(url);
+  }
+
+  /// 当前应该连的服务器地址。
+  ///
+  /// Web 端以**地址栏**为准：页面本身就是服务（可能经 lucky 反代换过端口），
+  /// API 必须与页面同源，否则登录框会填一个连不上的地址。
+  /// 原生端没有地址栏可用，读存档；没有存档才退回默认地址。
+  static String currentServerUrl() {
+    if (kIsWeb) {
+      final base = Uri.base;
+      if (base.hasScheme &&
+          base.host.isNotEmpty &&
+          base.scheme.startsWith('http')) {
+        const flutterDevPort = 5173;
+        if (base.port != flutterDevPort && base.port != 0) return base.origin;
+      }
+    }
+    final saved = SettingsStore.instance.getString('auth.server');
+    if (saved != null && saved.isNotEmpty) return saved;
+    return defaultBaseUrl();
+  }
+
+  /// 用当前 token 探一次服务端。
+  ///
+  /// 返回 true = token 有效。**要区分 401 与网络不通**：
+  /// 401 说明 token 作废，该走密码兜底；网络不通说明服务端没起来，
+  /// 这时反复登录只会报错，应当停在登录页让用户看到真实原因。
+  Future<bool> _probeSession() async {
+    try {
+      await client.healthCheck();
+      return true;
+    } on ApiError catch (e) {
+      return e.statusCode != 401;
+    } catch (_) {
       return false;
     }
+  }
 
-    final exp = expiryOf(saved);
-    if (exp != null && DateTime.now().millisecondsSinceEpoch >= exp) {
-      // token 过期只清 token：记住的账号与密码要留着，用户不必重输
-      await _clearToken();
+  /// 用记住的密码自动登录一次。
+  /// 没有密码（用户关掉了自动登录 / 从没保存过）时返回 false，交回登录页。
+  Future<bool> _autoLoginWithPassword(String url) async {
+    final user = SettingsStore.instance.getString('auth.username');
+    final pass = SettingsStore.instance.getString('auth.password');
+    if (user == null || user.isEmpty || pass == null || pass.isEmpty) {
       return false;
     }
-
     autoLoginChecking.value = true;
     try {
       configure(url);
-      token = saved;
-      username = SettingsStore.instance.getString('auth.username');
-      authState.value = true;
-      await loadServerInfo();
-      events.start();
-      return true;
+      await login(user, pass);
+      return token != null;
+    } catch (_) {
+      // 密码变了 / 账号被锁 / 服务端拒绝：回登录页，页面会显示真实错误
+      return false;
     } finally {
       autoLoginChecking.value = false;
     }

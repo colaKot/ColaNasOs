@@ -82,6 +82,9 @@ class _PhotoSimilarPageState extends State<PhotoSimilarPage> {
           height: null,
           mime: 'image/*',
           favorite: false,
+          mediaKind: 'image',
+          durationMs: null,
+          liveKind: '',
         ),
       )
       .toList();

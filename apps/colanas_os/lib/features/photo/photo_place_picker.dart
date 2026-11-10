@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -85,11 +87,16 @@ class _PlacePickerDialogState extends State<_PlacePickerDialog> {
   @override
   Widget build(BuildContext context) {
     final picked = _point ?? (widget.initial == null ? null : _center);
+    // 写死 640×460 在手机上是「整行被裁掉」的根源：390 宽的屏装不下。
+    // 按屏幕尺寸收一档，桌面仍保持原来的大对话框。
+    final screen = MediaQuery.sizeOf(context);
+    final width = math.min(640.0, screen.width - 48).clamp(240.0, 640.0);
+    final height = math.min(460.0, screen.height - 200).clamp(260.0, 460.0);
     return AlertDialog(
       title: Text(tr('photo.placePicker.title')),
       content: SizedBox(
-        width: 640,
-        height: 460,
+        width: width,
+        height: height,
         child: Column(
           children: [
             Expanded(
@@ -102,6 +109,11 @@ class _PlacePickerDialogState extends State<_PlacePickerDialog> {
                     initialZoom: widget.initial == null ? 4 : 9,
                     minZoom: 2,
                     maxZoom: 18,
+                    // 双指缩放时顺带旋转是 flutter_map 默认行为；选点页只要
+                    // 平移 + 缩放，旋转会让「点在哪里」失去方向感，直接关掉。
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                    ),
                     onTap: (_, point) => setState(() => _point = point),
                   ),
                   children: [
@@ -131,7 +143,11 @@ class _PlacePickerDialogState extends State<_PlacePickerDialog> {
               ),
             ),
             const SizedBox(height: NasTokens.spaceSm),
-            Row(
+            // 半径 chip 用 Wrap：窄屏自动换行，不再靠 Spacer 硬挤导致溢出。
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
                   tr('photo.placePicker.radius'),
@@ -140,18 +156,13 @@ class _PlacePickerDialogState extends State<_PlacePickerDialog> {
                     color: context.nasTextSecondary,
                   ),
                 ),
-                const SizedBox(width: NasTokens.spaceXs),
                 for (final r in _radii)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: NasChip(
-                      visualDensity: VisualDensity.compact,
-                      label: Text('${r.toInt()}km'),
-                      selected: _radiusKm == r,
-                      onSelected: (_) => setState(() => _radiusKm = r),
-                    ),
+                  NasChip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text('${r.toInt()}km'),
+                    selected: _radiusKm == r,
+                    onSelected: (_) => setState(() => _radiusKm = r),
                   ),
-                const Spacer(),
                 if (picked != null)
                   Text(
                     '${_toPhotoCrs(picked).latitude.toStringAsFixed(4)}, '

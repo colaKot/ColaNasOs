@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/display_labels.dart';
 import '../../core/session.dart';
 import '../../shell/app_widgets.dart';
 
@@ -824,9 +825,10 @@ class _VideoAppSettingsPageState extends State<VideoAppSettingsPage> {
       final r = await ApiSession.instance.client.videoTmdbTest(
         body: {'apiKey': _keyCtrl.text.trim()},
       );
-      NasSnack.showOn(messenger, '${r['message'] ?? ''} (${r['latencyMs'] ?? 0} ms)');
+      NasSnack.showOn(messenger,
+          '${errorMessageOf(r['message'])} (${r['latencyMs'] ?? 0} ms)');
     } catch (e) {
-      NasSnack.showOn(messenger, '$e');
+      NasSnack.showOn(messenger, errorMessageOf(e));
     } finally {
       if (mounted) setState(() => _testing = false);
     }

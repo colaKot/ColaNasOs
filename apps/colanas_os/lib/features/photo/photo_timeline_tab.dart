@@ -86,35 +86,48 @@ class _PhotoTimelineTabState extends State<PhotoTimelineTab> {
       child: IndexedStack(index: _mode.index, children: pages),
     );
 
-    // 多选态：底部已经换成操作工具条了，胶囊必须让位（否则两个条叠在一起）
+    // 多选态：底部已经换成操作工具条了，胶囊必须让位（否则两个条叠在一起）。
+    //
+    // ⚠️ 这里**不能**在「有/无 bulk」之间切换子树根的类型（以前是
+    // `Stack` ↔ `Padding`）：两者 runtimeType 不同又都没有 key，Flutter 会把
+    // 整棵 IndexedStack → PhotoPage 子树销毁重建。新 State 的 _selecting=false、
+    // dispose() 又调 _bulkCtl?.hide()，于是「一点多选就回到页面初始态」，
+    // 底部工具条一闪就没，删除也点不到（2026-11-07 反馈）。
+    // 现在根永远是同一个 Stack，只把胶囊换成空盒子，Element 树完全复用。
     final bulk = NasBulkScope.maybeOf(context);
-    if (bulk == null) return _withChips(body);
+    if (bulk == null) return _withChips(body, showChips: true);
     return AnimatedBuilder(
       animation: bulk,
       builder: (context, _) =>
-          bulk.spec != null ? body : _withChips(body),
+          _withChips(body, showChips: bulk.spec == null),
     );
   }
 
-  Widget _withChips(Widget body) {
+  Widget _withChips(Widget body, {required bool showChips}) {
     return Stack(
       children: [
-        Positioned.fill(child: body),
+        Positioned.fill(
+          key: const ValueKey('timeline-body'),
+          child: body,
+        ),
         Positioned(
+          key: const ValueKey('timeline-chips'),
           left: NasTokens.spaceMd,
           right: NasTokens.spaceMd,
           bottom: 8,
-          child: NasFloatingChips(
-            labels: [
-              tr('photo.timeline.all'),
-              tr('photo.timeline.year'),
-              // 「那年今日」比「今天」说得准：这一栏列的是往年同一天
-              tr('photo.onThisDay.title'),
-              tr('nav.favorites'),
-            ],
-            selectedIndex: _mode.index,
-            onSelect: _select,
-          ),
+          child: showChips
+              ? NasFloatingChips(
+                  labels: [
+                    tr('photo.timeline.all'),
+                    tr('photo.timeline.year'),
+                    // 「那年今日」比「今天」说得准：这一栏列的是往年同一天
+                    tr('photo.onThisDay.title'),
+                    tr('nav.favorites'),
+                  ],
+                  selectedIndex: _mode.index,
+                  onSelect: _select,
+                )
+              : const SizedBox.shrink(),
         ),
       ],
     );

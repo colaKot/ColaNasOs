@@ -86,6 +86,8 @@ const STEPS = [
   { script: 'sbom.check', label: 'SBOM 与依赖一致', est: 530 },
   { script: 'i18n.glossary', label: 'i18n 占位符 / 术语', est: 520 },
   { script: 'i18n.keys.check', label: 'i18n 键存在（tr 不留裸键名）', est: 480 },
+  { script: 'compat.i18n.check', label: 'compat 中文表缺键（不留英文键名）', est: 300 },
+  { script: 'scope.catalog.check', label: '权限域清单（服务端 secured ↔ 客户端勾选项）', est: 260 },
   { script: 'smoke:abi', label: '原生模块 ABI', est: 570 },
   { script: 'smoke:db', label: 'DB / 迁移 / 队列', est: 720 },
   { script: 'smoke:task', label: '任务队列（执行 / 重试 / 去重 / 取消 / 恢复）', est: 4470 },
@@ -103,24 +105,24 @@ const STEPS = [
   { script: 'smoke:files-op', label: 'files 写操作（新建 / 改名 / 移动 / 回收站 / 越界拦截）', est: 3000 },
   { script: 'smoke:cache', label: '缓存命中统计（埋点 / 只读接口 / 权限）', est: 4270 },
   { script: 'smoke:bootstrap', label: '首次安装引导 / 开发令牌默认关闭', est: 4390 },
+  { script: 'smoke:auth-secret', label: 'JWT 密钥持久化（重启不踢客户端）', est: 400 },
   { script: 'smoke:ai', label: 'AI 推理（会话串行 / EP 白名单）', est: 1450 },
   { script: 'smoke:media', label: '缩略图 / 转码会话复用', est: 49400 },
   { script: 'smoke:updater', label: '版本目录 / 签名 / 防降级', est: 600 },
   { script: 'smoke:dart-pkgs', label: 'Dart 包 analyze / test', est: 86000 },
-  { script: 'smoke:share', label: '分享链接（公开下载 / 密码 / 过期）', est: 4580 },
-  { script: 'smoke:safety', label: '备份 / 加密空间', est: 5330 },
   { script: 'smoke:system', label: '系统监控 / 进程', est: 6150 },
   { script: 'smoke:https', label: 'HTTPS 入口（用户上传证书）', est: 8000 },
   { script: 'smoke:terminal', label: '交互式终端（PTY / 鉴权 / 会话回收）', est: 11980 },
   { script: 'smoke:rss', label: 'RSS 订阅 / 解析', est: 4090 },
+  { script: 'smoke:discover-shell', label: '影视发现移植（评分体系 / 站点测试 / 规则 / 订阅）', est: 4500 },
   { script: 'smoke:catalog', label: '榜单快照（TMDB / 日系共用落库 + 清理）', est: 5200 },
   { script: 'smoke:catalog-live', label: '榜单链路（假上游：抓取 → 落库 → 降级 / 回退）', est: 6500 },
   { script: 'smoke:sync', label: '同步 / 冲突策略', est: 4170 },
   { script: 'smoke:auth', label: '登录 / 2FA / IP 黑名单', est: 4530 },
   { script: 'smoke:webhook', label: 'Webhook 签名 / 重试', est: 4620 },
-  { script: 'smoke:message', label: '站内消息 / 用户隔离', est: 4420 },
-  { script: 'smoke:notes', label: '笔记 / 版本恢复', est: 4500 },
   { script: 'smoke:photo', label: '相册库 / 时间轴 / 相册', est: 4540 },
+  { script: 'smoke:photo-media', label: '动态照片 / 视频元数据与 Range', est: 2100 },
+  { script: 'smoke:photo-backup-dedup', label: '备份内容去重 / 原始指纹 / GPS 改写不重传', est: 2200 },
   { script: 'smoke:watch', label: '文件监控（自动增量入库 / 忽略规则 / 不误删）', est: 6780 },
   { script: 'smoke:video-duplicates', label: '影视查重（四钥匙分组 / 角标 / 删除进回收站）', est: 3000 },
   { script: 'smoke:video-image', label: '图片库 / 混合库（排序 / 文件夹 / 首页 / 删除）', est: 5000 },
@@ -129,13 +131,10 @@ const STEPS = [
   { script: 'smoke:video-progress', label: '观看进度（隔离 / 排序）', est: 4420 },
   { script: 'smoke:subtitles', label: '外挂字幕（发现 / srt·ass·vtt / WebVTT）', est: 4440 },
   { script: 'smoke:music', label: '音乐库 / tags / 封面 / 歌单', est: 5740 },
+  { script: 'smoke:music-compat', label: '音乐兼容层（既有实现 形状 / int id / 偏移分页）', est: 3200 },
+  { script: 'smoke:music-detail', label: '专辑/歌手详情 + Last.fm（热度 / 绑定 / Scrobble 签名）', est: 5200 },
   { script: 'smoke:lyrics', label: '歌词（LRC / ID3 / Vorbis / MP4）', est: 5650 },
   { script: 'smoke:blog', label: 'AI 播客（设置 / 文案 / 试听缓存降级）', est: 4200 },
-  { script: 'smoke:book', label: '书库 / epub·cbz 元数据 / 封面', est: 5160 },
-  { script: 'smoke:book-organize', label: '合集 / 归档 / 自定义列表', est: 5120 },
-  { script: 'smoke:book-reader', label: '内置阅读器（epub/txt/cbz 分章分页）', est: 5480 },
-  { script: 'smoke:mount', label: '远程挂载 / WebDAV / 凭据加密', est: 5100 },
-  { script: 'smoke:media-tool', label: '媒体工具（批量缩略图 / 转码 / 任务状态机）', est: 5490 },
   { script: 'smoke:player', label: 'HLS 转码会话 / 字幕烧录 / 分片访问', est: 6300 },
   { script: 'smoke:state', label: '书籍全文检索（FTS5）/ 音乐收藏与历史', est: 5150 },
   { script: 'smoke:extras', label: '离线刮削 / 加密空间导出 / 受限命令', est: 5630 },
@@ -157,27 +156,21 @@ const STEPS = [
  * 宁可多跑也不把真实回归漏掉。
  */
 const MODULE_RULES = [
-  { dir: 'auth', steps: ['smoke:api', 'smoke:auth', 'smoke:bootstrap'], domains: ['auth'] },
+  { dir: 'auth', steps: ['smoke:api', 'smoke:auth', 'smoke:bootstrap', 'smoke:auth-secret'], domains: ['auth'] },
   { dir: 'blog', steps: ['smoke:blog'], domains: [] },
-  { dir: 'book', steps: ['smoke:book', 'smoke:book-organize', 'smoke:book-reader', 'smoke:state'], domains: ['book'] },
-  { dir: 'discover', steps: ['smoke:pt', 'smoke:catalog', 'smoke:catalog-live'], domains: [] },
+  { dir: 'discover', steps: ['smoke:pt', 'smoke:catalog', 'smoke:catalog-live', 'smoke:discover-shell'], domains: [] },
   { dir: 'files', steps: ['smoke:upload', 'smoke:download', 'smoke:thumb', 'smoke:indexer', 'smoke:files-index', 'smoke:files-op', 'smoke:watch'], domains: [] },
   { dir: 'integrations', steps: ['smoke:webhook'], domains: ['webhook'] },
   { dir: 'media', steps: ['smoke:media', 'smoke:thumb'], domains: [] },
-  { dir: 'mediaTool', steps: ['smoke:media-tool'], domains: ['mediaTool'] },
-  { dir: 'messages', steps: ['smoke:message'], domains: ['message'] },
-  { dir: 'mount', steps: ['smoke:mount'], domains: ['mount'] },
-  { dir: 'music', steps: ['smoke:music', 'smoke:lyrics'], domains: ['music'] },
-  { dir: 'notes', steps: ['smoke:notes'], domains: ['notes'] },
-  { dir: 'photo', steps: ['smoke:photo', 'smoke:photo-ai', 'smoke:photo-retrieval'], domains: ['photo'] },
-  { dir: 'pt', steps: ['smoke:pt'], domains: [] },
+  { dir: 'music', steps: ['smoke:music', 'smoke:music-compat', 'smoke:music-detail', 'smoke:lyrics'], domains: ['music'] },
+  { dir: 'photo', steps: ['smoke:photo', 'smoke:photo-ai', 'smoke:photo-media', 'smoke:photo-retrieval', 'smoke:photo-backup-dedup'], domains: ['photo'] },
+  { dir: 'pt', steps: ['smoke:pt', 'smoke:discover-shell'], domains: [] },
   { dir: 'rss', steps: ['smoke:rss'], domains: ['rss'] },
-  { dir: 'safety', steps: ['smoke:safety', 'smoke:extras'], domains: ['safety'] },
-  { dir: 'share', steps: ['smoke:share'], domains: ['share'] },
   { dir: 'sync', steps: ['smoke:sync'], domains: ['sync'] },
   { dir: 'system', steps: ['smoke:system', 'smoke:https', 'smoke:terminal'], domains: ['system'] },
   { dir: 'video', steps: ['smoke:video-duplicates', 'smoke:video-image', 'smoke:video', 'smoke:video-series', 'smoke:video-progress', 'smoke:subtitles', 'smoke:player'], domains: ['video'] },
   { dir: 'videoPlayer', steps: ['smoke:player'], domains: ['video'] },
+  { dir: 'transfer', steps: ['smoke:transfer', 'smoke:upload', 'smoke:download'], domains: [] },
 ];
 
 const FULL_TRIGGERS = [
@@ -205,6 +198,8 @@ const CONTRACT_STEPS = [
   'sbom.check',
   'i18n.glossary',
   'i18n.keys.check',
+  'compat.i18n.check',
+  'scope.catalog.check',
   'version:check',
   'caps.check',
   'migrate:verify',
@@ -246,6 +241,13 @@ function selectSteps(files) {
   const pick = new Set(['build', 'lint', 'test']);
   const domains = new Set();
   let full = false;
+  // 退全量时把「是谁触发的」记下来：以前只打印一句「改动超出已知域」，
+  // 工作区堆了几十个未提交文件时根本看不出该提交哪个 / 该用 --base 跳过哪个。
+  const fullTriggers = [];
+  const markFull = (why) => {
+    full = true;
+    fullTriggers.push(why);
+  };
 
   if (files.length === 0) {
     CONTRACT_STEPS.forEach((s) => pick.add(s));
@@ -256,6 +258,9 @@ function selectSteps(files) {
     const p = f.replace(/\\/g, '/');
     if (/^(docs\/|mypic\/|\.arts\/|\.codegraph\/|\.workbuddy\/)/.test(p)) continue;
     if (/^(\.tmp-|\.merkle-snapshot\.json$|vr9\.txt$)/.test(p)) continue;
+    // 纯仓库元文件不被任何门禁步骤消费（`.gitignore` 加一行 tool/tmp/ 也
+    // 不该把 --fast 推成 80 步）。2026-11-07 实测踩过。
+    if (/^\.(gitignore|gitattributes|editorconfig|npmrc|prettierrc)(\.json)?$/.test(p)) continue;
     // kernel 里的「纯类型 / sidecar 桥 / 迁移清单」不写业务逻辑：
     // 编译 + lint + 全量单测 + 契约层 + 相关 smoke 已经覆盖，不必退全量。
     // 这条必须排在 FULL_TRIGGERS（含 /^kernel\//）之前，否则永远轮不到。
@@ -273,21 +278,29 @@ function selectSteps(files) {
     // 反查不到任何已登记步骤（例如改了脚本却没有对应门禁）仍保守退全量。
     if (/^tool\//.test(p)) {
       const rel = p.replace(/\\/g, '/');
+      // 改的是编排器自己：只影响「选哪些步」，不影响产物。
+      // 反查 package.json 只会命中 verify / verify:fast / verify:full，
+      // 它们都不在 STEPS 里 → 会被判成「反查不到」而退全量，等于改一次
+      // 脚本就把之后的 --fast 全废掉。这里显式放行到基础层 + 契约层。
+      if (rel === 'tool/verify.js') {
+        CONTRACT_STEPS.forEach((s) => pick.add(s));
+        continue;
+      }
       const known = new Set(STEPS.map((s) => s.script));
       const hits = Object.entries(commands)
         .filter(([, cmd]) => typeof cmd === 'string' && cmd.includes(rel))
         .map(([name]) => name)
         .filter((name) => known.has(name));
       if (hits.length === 0) {
-        full = true;
-        break;
+        markFull(`${p} → tool/ 反查不到对应门禁步骤`);
+        continue;
       }
       hits.forEach((s) => pick.add(s));
       continue;
     }
     if (FULL_TRIGGERS.some((re) => re.test(p))) {
-      full = true;
-      break;
+      markFull(`${p} → FULL_TRIGGERS（内核实现 / 脚本注册表，按设计全量）`);
+      continue;
     }
     // `test/` 下的单测由基础 `test` 步骤（`node --test test/*.test.ts`）全量执行，
     // 新增 / 改一个单测不该让整条门禁退回全量。以前没这条规则，
@@ -297,8 +310,8 @@ function selectSteps(files) {
     if (mod) {
       const rule = MODULE_RULES.find((r) => r.dir === mod[1]);
       if (!rule) {
-        full = true;
-        break;
+        markFull(`${p} → MODULE_RULES 未登记模块 ${mod[1]}`);
+        continue;
       }
       rule.steps.forEach((s) => pick.add(s));
       rule.domains.forEach((d) => domains.add(d));
@@ -329,17 +342,29 @@ function selectSteps(files) {
       domains.add('video');
       continue;
     }
+    // photo-ai sidecar 之前没映射，落进 `^sidecars/` 的保守分支 → 改一个
+    // OCR 脚本就退全量。它只影响 AI 识别链路，跑 photo 域即可。
+    if (/^sidecars\/photo-ai\//.test(p)) {
+      ['smoke:photo-ai', 'smoke:photo'].forEach((s) => pick.add(s));
+      domains.add('photo');
+      continue;
+    }
     if (/^src\//.test(p) || /^sidecars\//.test(p)) {
-      full = true;
-      break;
+      markFull(`${p} → src/sidecars 未识别路径`);
+      continue;
     }
     // 未识别路径：保守全量
-    full = true;
-    break;
+    markFull(`${p} → 未识别路径`);
   }
 
   if (full) {
-    return { steps: STEPS.slice(), domains: null, reason: '改动超出已知域，退回全量' };
+    const shown = fullTriggers.slice(0, 6).join('；');
+    const more = fullTriggers.length > 6 ? `；…另 ${fullTriggers.length - 6} 个` : '';
+    return {
+      steps: STEPS.slice(),
+      domains: null,
+      reason: `改动超出已知域，退回全量（触发：${shown}${more}）`,
+    };
   }
   // src / contracts 改动都要校验契约层
   if (files.some((f) => /^(src|contracts)\//.test(f.replace(/\\/g, '/')))) {

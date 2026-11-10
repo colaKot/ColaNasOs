@@ -13,6 +13,16 @@ import type { Migration } from '../../../kernel/migrator';
  */
 export const BLOG_MIGRATIONS: Migration[] = [
   {
+    id: '148_blog_episode_news',
+    async up(db) {
+      // 本期素材清单（标题 / 原文链接 / 来源 / 分类）：文稿弹窗底部要列引用链接。
+      // 老期次是空数组，接口会用 headlines_json 兜底成「只有标题、没有链接」的条目。
+      await sql`
+        alter table blog_episodes add column news_json text not null default '[]'
+      `.execute(db);
+    },
+  },
+  {
     id: '145_blog_llm_usage',
     async up(db) {
       // 每期节目的云端模型用量：出账后能直接按 episode_id 对账，不用再猜「钱花在哪」。

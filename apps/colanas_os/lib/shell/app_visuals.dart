@@ -22,16 +22,8 @@ class AppVisuals {
     'auto_stories_outlined': Icons.auto_stories_outlined,
     'backup': Icons.shield_outlined,
     'bar_chart': Icons.bar_chart,
-    'bell': Icons.notifications_none,
-    'book': Icons.menu_book_outlined,
-    'book_outlined': Icons.book_outlined,
-    'local_library_outlined': Icons.local_library_outlined,
-    'playlist_play_outlined': Icons.playlist_play_outlined,
-    'playlist_add_outlined': Icons.playlist_add_outlined,
-    'download_for_offline_outlined': Icons.download_for_offline_outlined,
     'camera': Icons.videocam_outlined,
     'cleaning_services_outlined': Icons.cleaning_services_outlined,
-    'cloud': Icons.cloud_outlined,
     'cloud_upload_outlined': Icons.cloud_upload_outlined,
     'collections_bookmark_outlined': Icons.collections_bookmark_outlined,
     'collections_outlined': Icons.collections_outlined,
@@ -95,7 +87,6 @@ class AppVisuals {
     'tune': Icons.tune,
     'users': Icons.manage_accounts_outlined,
     'video_library_outlined': Icons.video_library_outlined,
-    'wand': Icons.auto_fix_high_outlined,
   };
 
   /// 图标名 → IconData；名字不在白名单里时返回 null（调用方决定兜底成什么）

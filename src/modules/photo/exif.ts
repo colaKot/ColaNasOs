@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { detectEmbeddedVideo, hasLiveHint, TAIL_SCAN_BYTES } from './live-photo';
 
 /**
  * 最小图片元数据读取（零依赖）：
@@ -36,6 +37,20 @@ export interface ImageMeta {
   exposureTime: number | null;
   /** 焦距（毫米） */
   focalLength: number | null;
+  /** 相册媒体类型 */
+  mediaKind: 'image' | 'video';
+  /** 视频时长（毫秒）；图片为 null */
+  durationMs: number | null;
+  /** 动态照片类型：'' 不是 / 'motion' JPEG 尾部带 mp4 / 'apple' 配对同名 MOV */
+  liveKind: '' | 'motion' | 'apple';
+  /** motion 类型时，那段视频的字节数 */
+  liveSize: number | null;
+  /** motion 类型时，视频在原文件里的起始字节；null 表示由调用方回落到 fileSize - liveSize */
+  liveOffset: number | null;
+  /** 识别来源（google/samsung/huawei/heic/generic），无视频时为 '' */
+  liveVendor: string;
+  /** apple/双文件配对时视频的绝对路径；无配对时为 '' */
+  livePath: string;
 }
 
 const HEAD_BYTES = 256 * 1024;
@@ -52,9 +67,49 @@ const MIME_BY_EXT: Record<string, string> = {
   heic: 'image/heic',
   heif: 'image/heif',
   avif: 'image/avif',
+  mp4: 'video/mp4',
+  m4v: 'video/x-m4v',
+  mov: 'video/quicktime',
+  mkv: 'video/x-matroska',
+  webm: 'video/webm',
+  avi: 'video/x-msvideo',
+  wmv: 'video/x-ms-wmv',
+  flv: 'video/x-flv',
+  '3gp': 'video/3gpp',
+  mpg: 'video/mpeg',
+  mpeg: 'video/mpeg',
+  mts: 'video/mp2t',
+  m2ts: 'video/mp2t',
+  ogv: 'video/ogg',
 };
 
-export const IMAGE_EXTENSIONS = new Set(Object.keys(MIME_BY_EXT));
+/**
+ * 相册收纳的视频扩展名。
+ *
+ * 刻意**不含** `.insv` / `.lrv`：Insta360 的原始容器（双鱼眼）和低码率代理，
+ * ffmpeg 解不开也播不了，收进来只会变成两个打不开的条目；同目录里导出的 `.mp4`
+ * 才是能播的那份，索引它就够了。
+ */
+const VIDEO_EXTENSIONS = new Set([
+  'mp4',
+  'm4v',
+  'mov',
+  'mkv',
+  'webm',
+  'avi',
+  'wmv',
+  'flv',
+  '3gp',
+  'mpg',
+  'mpeg',
+  'mts',
+  'm2ts',
+  'ogv',
+]);
+
+export const IMAGE_EXTENSIONS = new Set(
+  Object.keys(MIME_BY_EXT).filter((e) => !VIDEO_EXTENSIONS.has(e)),
+);
 
 export function extensionOf(file: string): string {
   const base = file.split(/[\\/]/).pop() || '';
@@ -64,6 +119,16 @@ export function extensionOf(file: string): string {
 
 export function isImageFile(file: string): boolean {
   return IMAGE_EXTENSIONS.has(extensionOf(file));
+}
+
+export function isVideoFile(file: string): boolean {
+  return VIDEO_EXTENSIONS.has(extensionOf(file));
+}
+
+/** 相册收纳的媒体：图片 + 视频 */
+export function isMediaFile(file: string): boolean {
+  const ext = extensionOf(file);
+  return IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext);
 }
 
 export function mimeOf(file: string): string {
@@ -262,11 +327,12 @@ function tiffRational(buf: Buffer, v: TiffView, entry: number, tiffStart: number
 }
 
 /** 照片属性面板需要的扩展 EXIF（品牌 / 镜头 / 软件 / 方向 / ISO / 光圈 / 快门 / 焦距） */
-function readTiffDetails(
-  buf: Buffer,
-  tiffStart: number,
-  ifd0Offset: number,
-): Omit<ImageMeta, 'width' | 'height' | 'takenAt' | 'mime' | 'latitude' | 'longitude' | 'camera'> | null {
+type TiffDetails = Pick<
+  ImageMeta,
+  'make' | 'lens' | 'software' | 'orientation' | 'iso' | 'fNumber' | 'exposureTime' | 'focalLength'
+>;
+
+function readTiffDetails(buf: Buffer, tiffStart: number, ifd0Offset: number): TiffDetails | null {
   const v = tiffView(buf, tiffStart);
   if (!v) return null;
   const ifd0 = tiffStart + ifd0Offset;
@@ -397,14 +463,29 @@ export function parseFileNameDate(file: string): number | null {
 }
 
 /** 读取图片元数据；解析失败只降级，不抛错（扫描不能因此中断） */
-export async function readImageMeta(file: string): Promise<ImageMeta> {
+export async function readImageMeta(file: string, fileSize?: number): Promise<ImageMeta> {
   let head: Buffer;
+  let tail: Buffer | null = null;
+  let size = fileSize ?? 0;
   try {
     const handle = await fs.open(file, 'r');
     try {
       const buf = Buffer.alloc(HEAD_BYTES);
       const { bytesRead } = await handle.read(buf, 0, HEAD_BYTES, 0);
       head = buf.subarray(0, bytesRead);
+      if (size === 0) size = (await handle.stat()).size;
+      // 疑似动态照片才回看尾部：ftyp 兜底需要在文件尾部找视频起点。
+      // 头部窗口已覆盖整个文件时直接复用 head，避免重复读。
+      if (hasLiveHint(head.toString('latin1'), file)) {
+        if (size > HEAD_BYTES) {
+          const tailLen = Math.min(size, TAIL_SCAN_BYTES);
+          const tb = Buffer.alloc(tailLen);
+          const { bytesRead: rb } = await handle.read(tb, 0, tailLen, size - tailLen);
+          tail = tb.subarray(0, rb);
+        } else {
+          tail = head;
+        }
+      }
     } finally {
       await handle.close();
     }
@@ -425,6 +506,13 @@ export async function readImageMeta(file: string): Promise<ImageMeta> {
       fNumber: null,
       exposureTime: null,
       focalLength: null,
+      mediaKind: isVideoFile(file) ? 'video' : 'image',
+      durationMs: null,
+      liveKind: '',
+      liveSize: null,
+      liveOffset: null,
+      liveVendor: '',
+      livePath: '',
     };
   }
 
@@ -437,6 +525,9 @@ export async function readImageMeta(file: string): Promise<ImageMeta> {
   } else if (isPng) {
     parsed = parsePng(head);
   }
+
+  // 动态照片判定委托给统一模块：head + 可选 tail（ftyp 兜底）+ 真实文件大小。
+  const live = detectMotionPhoto(head, size, tail, ext);
 
   return {
     width: parsed.width ?? null,
@@ -454,5 +545,27 @@ export async function readImageMeta(file: string): Promise<ImageMeta> {
     fNumber: parsed.fNumber ?? null,
     exposureTime: parsed.exposureTime ?? null,
     focalLength: parsed.focalLength ?? null,
+    mediaKind: 'image',
+    durationMs: null,
+    liveKind: live.size ? 'motion' : '',
+    liveSize: live.size,
+    liveOffset: live.offset,
+    liveVendor: live.vendor,
+    livePath: '',
   };
+}
+
+/**
+ * 委托给统一识别模块。对外仍返回「视频字节数」，另附 offset / vendor 供入库。
+ * 保持 readImageMeta 的对外签名与返回结构不变。
+ */
+function detectMotionPhoto(
+  head: Buffer,
+  fileSize: number,
+  tail: Buffer | null,
+  ext: string,
+): { size: number | null; offset: number | null; vendor: string } {
+  const v = detectEmbeddedVideo(head, fileSize, tail, ext);
+  if (!v) return { size: null, offset: null, vendor: '' };
+  return { size: v.size, offset: v.offset, vendor: v.vendor };
 }

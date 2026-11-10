@@ -1,11 +1,12 @@
 import { sql } from 'kysely';
 import type { KernelApi } from '../../../kernel/types';
+import { recordDeletedFingerprints } from './deleted-fp';
 
 /**
  * 相册永久删除与回收站保留策略。
  *
  * 口径（与现有「清空回收站只删索引、不动磁盘文件」一致）：
- *   - 永久删除 = 删 `photo_items` + 所有派生数据（场景/活动/OCR/向量/人脸/相册成员/集合成员/GPS 候选），
+ *   - 永久删除 = 删 `photo_items` + 所有派生数据（场景/活动/OCR/向量/人脸/相册成员/GPS 候选），
  *     磁盘原图不动；
  *   - 回收站保留 **30 天**，超过后由定时任务按同一套级联逻辑清理。
  */
@@ -21,8 +22,12 @@ const PHOTO_ID_TABLES = [
   'photo_gps_candidates',
 ];
 
-/** 以 item_id 关联的表 */
-const ITEM_ID_TABLES = ['photo_album_items', 'photo_collection_items'];
+/** 以 item_id 关联的表。
+ *
+ * 集合并入相册后 `photo_collection_items` 已经不存在（迁移 169 删掉了）——
+ * 留在这里会让「彻底删除」在 `delete from` 一张不存在的表时直接抛错，
+ * 表现是清空回收站失败。 */
+const ITEM_ID_TABLES = ['photo_album_items'];
 
 function idList(ids: string[]) {
   return sql.join(
@@ -60,6 +65,9 @@ export async function deletePhotosPermanently(
     ).rows;
     const owned = rows.map((r) => r.id);
     if (owned.length === 0) return 0;
+    // 先留指纹再删行：删完就再也算不出这张照片原来是什么内容了，
+    // 手机下次备份会把它当新照片再传一遍。
+    await recordDeletedFingerprints(trx, owner, owned);
     await deleteRows(trx, owned);
     return owned.length;
   });
@@ -83,6 +91,8 @@ export async function purgeExpiredTrash(
     if (rows.length === 0) break;
     const ids = rows.map((r) => r.id);
     await k.db.transaction().execute(async (trx: any) => {
+      // 跨用户批处理：owner 传空串，按每条记录自己的 owner 落墓碑
+      await recordDeletedFingerprints(trx, '', ids);
       await deleteRows(trx, ids);
     });
     total += ids.length;

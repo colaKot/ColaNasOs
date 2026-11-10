@@ -130,7 +130,48 @@ const { TaskQueue } = require(path.join(root, 'dist', 'kernel', 'queue'));
     `recovered=${recovered} state=${rec.state} attempts=${rec.attempts}`,
   );
 
-  // 7. 优雅关闭
+  // 7. 任务历史清理：只删「终态 + 超过保留天数 + 不在重试退避中」的行
+  const oldDone = await queue.enqueue('noop', { n: 3 });
+  const freshDone = await queue.enqueue('noop', { n: 4 });
+  const retryPending = await queue.enqueue('noop', { n: 5 });
+  // 造三行历史：① 30 天前的 done ② 刚才的 done ③ 终态但 next_run_at 在未来的 failed
+  await db
+    .updateTable('tasks')
+    .set({ state: 'done', created_at: Date.now() - 40 * 86_400_000, finished_at: Date.now() - 40 * 86_400_000 })
+    .where('id', '=', oldDone)
+    .execute();
+  await db
+    .updateTable('tasks')
+    .set({ state: 'done', finished_at: Date.now() })
+    .where('id', '=', freshDone)
+    .execute();
+  await db
+    .updateTable('tasks')
+    .set({ state: 'failed', finished_at: Date.now() - 40 * 86_400_000, next_run_at: Date.now() + 60_000 })
+    .where('id', '=', retryPending)
+    .execute();
+  // 再加一行 40 天前的 pending：绝不能被删
+  const pendingRow = await queue.enqueue('noop', { n: 6 });
+  await db
+    .updateTable('tasks')
+    .set({ created_at: Date.now() - 40 * 86_400_000 })
+    .where('id', '=', pendingRow)
+    .execute();
+
+  const pruned = await queue.prune(30);
+  const left = new Set((await db.selectFrom('tasks').select('id').execute()).map((r) => r.id));
+
+  check(
+    'queue_prune',
+    pruned === 1 &&
+      !left.has(oldDone) &&
+      left.has(freshDone) &&
+      left.has(retryPending) &&
+      left.has(pendingRow),
+    `pruned=${pruned} old=${left.has(oldDone)} fresh=${left.has(freshDone)} retry=${left.has(retryPending)} pending=${left.has(pendingRow)}`,
+  );
+
+  // 8. 优雅关闭
   await closeDb(handle);
   check('close', true, '');
 

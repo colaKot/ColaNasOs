@@ -4,6 +4,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { PhotoHelpers } from '../helpers';
 import { aiConfig } from '../ai/config';
+import { coverRanker } from '../cover';
 import { TAG, toItem, type PhotoItemRow } from '../util';
 
 /** 相册首页看板：把统计 / 足迹 / 人物 / 那年今日聚合成一次请求 */
@@ -124,6 +125,13 @@ export async function registerPhotoHome(
          order by taken_at desc limit 120
       `.execute(k.db);
 
+      // 卡片封面：按 6 级优先序（横屏+前5人脸 → … → 竖屏），见 cover.ts。
+      // items 只回 3 张，所以这里按封面分重排，让客户端直接取 items.first 当封面。
+      const coverOf = await coverRanker(
+        k,
+        sameDay.rows.map((r) => r.id),
+      );
+
       const byYear = new Map<number, PhotoItemRow[]>();
       for (const r of sameDay.rows) {
         const y = new Date(Number(r.taken_at) * 1000).getFullYear();
@@ -172,7 +180,10 @@ export async function registerPhotoHome(
             date: `${year}-${mm}-${dd}`,
             year,
             photoCount: list.length,
-            items: list.slice(0, 3).map(toItem),
+            items: [...list]
+              .sort((a, b) => coverOf(b.id) - coverOf(a.id))
+              .slice(0, 3)
+              .map(toItem),
           })),
       };
     },
@@ -210,6 +221,10 @@ export async function registerPhotoHome(
          limit 4000
       `.execute(k.db);
 
+      // 只**重排**、不过滤：按封面 6 级优先序排（横屏+前5人脸 … 竖屏），
+      // 同档再按拍摄时间倒序。这样那年今日点进来第一眼就能看见人、且优先横着放。
+      const coverOf = await coverRanker(k, rows.rows.map((r) => r.id));
+
       const byYear = new Map<number, PhotoItemRow[]>();
       for (const row of rows.rows) {
         const year = Number(row.y);
@@ -224,7 +239,14 @@ export async function registerPhotoHome(
             year,
             date: `${year}-${mm}-${dd}`,
             photoCount: list.length,
-            items: list.slice(0, perYear).map(toItem),
+            items: [...list]
+              .sort(
+                (a, b) =>
+                  coverOf(b.id) - coverOf(a.id) ||
+                  Number(b.taken_at) - Number(a.taken_at),
+              )
+              .slice(0, perYear)
+              .map(toItem),
           })),
       };
     },

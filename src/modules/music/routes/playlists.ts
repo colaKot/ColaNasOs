@@ -129,22 +129,36 @@ export async function registerMusicPlaylists(app: FastifyInstance, k: KernelApi,
         if (!playlist) return reply.code(404).send({ error: Err.notFound, message: 'playlist not found' });
 
         const now = Math.floor(Date.now() / 1000);
+        // 去重后再批量写：原实现是「每首 1 次 SELECT + 1 次 INSERT」，
+        // 加 500 首要 1000 次往返；现在固定 3 次（查已存在 / 查最大位次 / multi-VALUES 插入）。
+        const wantIds = [...new Set((body.trackIds || []).slice(0, 500))];
         await k.db.transaction().execute(async (trx: any) => {
-          const maxRow = await sql<{ max_pos: number | null }>`
-            select coalesce(max(position), 0) as max_pos
-              from music_playlist_items where playlist_id = ${playlist.id}
-          `.execute(trx);
-          let position = Number(maxRow.rows[0]?.max_pos) || 0;
-          for (const trackId of (body.trackIds || []).slice(0, 500)) {
-            const exists = await sql<{ ok: number }>`
-              select 1 as ok from music_playlist_items
-               where playlist_id = ${playlist.id} and track_id = ${trackId}
+          const existing = new Set<string>();
+          if (wantIds.length > 0) {
+            const rows = await sql<{ track_id: string }>`
+              select track_id from music_playlist_items
+               where playlist_id = ${playlist.id}
+                 and track_id in (${sql.join(
+                   wantIds.map((id) => sql`${id}`),
+                   sql`, `,
+                 )})
             `.execute(trx);
-            if (exists.rows.length > 0) continue;
-            position += 1;
+            for (const r of rows.rows) existing.add(String(r.track_id));
+          }
+          const fresh = wantIds.filter((id) => !existing.has(id));
+          if (fresh.length > 0) {
+            const maxRow = await sql<{ max_pos: number | null }>`
+              select coalesce(max(position), 0) as max_pos
+                from music_playlist_items where playlist_id = ${playlist.id}
+            `.execute(trx);
+            let position = Number(maxRow.rows[0]?.max_pos) || 0;
+            const values = fresh.map((trackId) => {
+              position += 1;
+              return sql`(${playlist.id}, ${trackId}, ${position}, ${now})`;
+            });
             await sql`
               insert into music_playlist_items (playlist_id, track_id, position, added_at)
-              values (${playlist.id}, ${trackId}, ${position}, ${now})
+              values ${sql.join(values, sql`, `)}
             `.execute(trx);
           }
           await sql`update music_playlists set updated_at = ${now} where id = ${playlist.id}`.execute(
@@ -174,13 +188,24 @@ export async function registerMusicPlaylists(app: FastifyInstance, k: KernelApi,
         if (!playlist) return reply.code(404).send({ error: Err.notFound, message: 'playlist not found' });
 
         const now = Math.floor(Date.now() / 1000);
-        for (const trackId of (body.trackIds || []).slice(0, 500)) {
-          await sql`
-            delete from music_playlist_items
-             where playlist_id = ${playlist.id} and track_id = ${trackId}
-          `.execute(k.db);
-        }
-        await sql`update music_playlists set updated_at = ${now} where id = ${playlist.id}`.execute(k.db);
+        // 一条 `in (...)` 删完。原实现逐首 delete，而且是 500 次**独立隐式事务**
+        // （没有包 transaction），WAL 要落 500 次盘。
+        const ids = [...new Set((body.trackIds || []).slice(0, 500))];
+        await k.db.transaction().execute(async (trx: any) => {
+          if (ids.length > 0) {
+            await sql`
+              delete from music_playlist_items
+               where playlist_id = ${playlist.id}
+                 and track_id in (${sql.join(
+                   ids.map((id) => sql`${id}`),
+                   sql`, `,
+                 )})
+            `.execute(trx);
+          }
+          await sql`update music_playlists set updated_at = ${now} where id = ${playlist.id}`.execute(
+            trx,
+          );
+        });
 
         return { ok: true };
       },

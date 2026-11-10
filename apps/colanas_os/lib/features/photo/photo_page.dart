@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import '../../shell/app_widgets.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,12 +7,15 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_media/nas_media.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/display_labels.dart';
 import '../../core/scan_refresh.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import '../../core/task_poll.dart';
 import '../../shell/mobile_frame.dart';
+import 'photo_album_dialog.dart';
 import 'photo_download.dart';
+import 'photo_media.dart';
 import 'photo_place_picker.dart';
 import 'photo_similar_page.dart';
 import 'photo_viewer_page.dart';
@@ -26,6 +28,23 @@ import 'photo_year_view_page.dart';
 /// 窄屏（compact）：顶部分段切换时间轴与相册。
 /// 相册内容视图：由 `PhotoShellPage` 的二级导航决定显示哪一块。
 enum PhotoPageView { timeline, album }
+
+/// 筛选面板里的「类型」。
+///
+/// 服务端 `/photo/filter` 的 conditions 没有媒体类型字段，这一项在客户端按
+/// `PhotoItem.mediaKind / liveKind / mime / 宽高比` 过滤，不参与服务端查询，
+/// 分页游标仍按全量走。默认 [all]。
+enum _PhotoMediaType { all, image, video, live, panorama }
+
+extension _PhotoMediaTypeX on _PhotoMediaType {
+  String get labelKey => switch (this) {
+        _PhotoMediaType.all => 'photo.filter.typeAll',
+        _PhotoMediaType.image => 'photo.filter.typeImage',
+        _PhotoMediaType.video => 'photo.filter.typeVideo',
+        _PhotoMediaType.live => 'photo.filter.typeLive',
+        _PhotoMediaType.panorama => 'photo.filter.typePanorama',
+      };
+}
 
 class PhotoPage extends StatefulWidget {
   const PhotoPage({
@@ -75,12 +94,40 @@ class _PhotoPageState extends State<PhotoPage> {
   int? _fromSec;
   int? _toSec;
 
-  /// 交叉筛选条件（人物 / 场景 / 活动 / 地点 / 收藏）；非空时时间轴改走 /photo/filter
+  /// 交叉筛选条件（人物 / 活动 / 地点 / 收藏）；非空时时间轴改走 /photo/filter
   PhotoSmartRuleConditions? _filter;
   int? _filterTotal;
 
-  /// 生效条件的可读摘要（人物名 / 场景名 / 收藏 / 时间档），横幅直接用
+  /// 筛选面板里的媒体类型；只影响本地展示，不进服务端条件。
+  _PhotoMediaType _mediaType = _PhotoMediaType.all;
+
+  /// 生效条件的可读摘要（人物名 / 收藏 / 时间档），横幅直接用
   List<String> _filterSummary = const [];
+
+  /// 当前类型下真正要渲染的照片。其它 index 相关逻辑都走这份列表，
+  /// 保证「打开大图 / 长按菜单」拿到的下标与屏幕上一致。
+  List<PhotoItem> get _visibleItems {
+    if (_mediaType == _PhotoMediaType.all) return _items;
+    return _items.where(_matchesMediaType).toList(growable: false);
+  }
+
+  bool _matchesMediaType(PhotoItem e) {
+    final isVideo = e.mediaKind == 'video';
+    // 动图：动态照片（Live / Motion）与 GIF 都算
+    final isLive = e.liveKind.trim().isNotEmpty ||
+        e.mime.toLowerCase() == 'image/gif';
+    // 全景：库里没有专门字段，用超宽/超长宽高比近似（≥2.5:1）
+    final w = e.width ?? 0;
+    final h = e.height ?? 0;
+    final isPanorama = w > 0 && h > 0 && (w / h >= 2.5 || h / w >= 2.5);
+    return switch (_mediaType) {
+      _PhotoMediaType.all => true,
+      _PhotoMediaType.video => isVideo,
+      _PhotoMediaType.live => isLive,
+      _PhotoMediaType.panorama => isPanorama,
+      _PhotoMediaType.image => !isVideo && !isLive && !isPanorama,
+    };
+  }
 
   /// 当前滚动位置所在的年份（用于刻度高亮，不参与请求）
   int? _visibleYear;
@@ -238,27 +285,6 @@ class _PhotoPageState extends State<PhotoPage> {
     _loadTimeline();
   }
 
-  String _suggestKindLabel(String kind) {
-    switch (kind) {
-      case 'person':
-        return tr('photo.suggest.person');
-      case 'scene':
-        return tr('photo.suggest.scene');
-      case 'activity':
-        return tr('photo.suggest.activity');
-      case 'camera':
-        return tr('photo.suggest.camera');
-      case 'filename':
-        return tr('photo.suggest.filename');
-      case 'ocr':
-        return tr('photo.suggest.ocr');
-      case 'year':
-        return tr('photo.suggest.year');
-      default:
-        return kind;
-    }
-  }
-
   /// 「已识别：海边 / 沙滩 · 共 37 张」+「未识别：xx」+ 降级提示。
   ///
   /// 为什么要露这一行：语义搜索如果静默命中 0 条，用户只会觉得"搜索坏了"；
@@ -341,6 +367,10 @@ class _PhotoPageState extends State<PhotoPage> {
   String _thumbUrl(String path, {int size = 320}) =>
       _media.thumbnail(path, size: size);
 
+  /// 按条目出缩略图：视频要额外带抽帧位置（`at`），否则默认首帧常是黑场
+  String _thumbUrlOf(PhotoItem item, {int size = 320}) =>
+      _media.thumbnail(item.path, size: size, at: posterSeekOf(item));
+
   bool get _hasMore => _nextCursor != null || _nextOffset != null;
 
   void _onScroll() {
@@ -357,7 +387,11 @@ class _PhotoPageState extends State<PhotoPage> {
 
   /// 按网格几何估算当前可见的第一张照片，取其年份做刻度联动
   void _updateVisibleYear() {
-    if (!mounted || !_scroll.hasClients || _items.isEmpty) return;
+    if (!mounted || !_scroll.hasClients) return;
+    // 类型筛选后网格里是 _visibleItems，刻度必须按同一份列表算，
+    // 否则滚动位置和年份会对不上。
+    final items = _visibleItems;
+    if (items.isEmpty) return;
     final width =
         MediaQuery.sizeOf(context).width -
         _railWidth(context) -
@@ -366,9 +400,9 @@ class _PhotoPageState extends State<PhotoPage> {
     final cols = (width / cell).floor().clamp(1, 50);
     final pos = _scroll.position;
     final row = ((pos.pixels + pos.viewportDimension * 0.08) / cell).floor();
-    final index = (row * cols).clamp(0, _items.length - 1);
+    final index = (row * cols).clamp(0, items.length - 1);
     final year = DateTime.fromMillisecondsSinceEpoch(
-      _items[index].takenAt * 1000,
+      items[index].takenAt * 1000,
     ).year;
     if (year != _visibleYear) {
       setState(() => _visibleYear = year);
@@ -601,7 +635,8 @@ class _PhotoPageState extends State<PhotoPage> {
         return;
       }
       if ('${task['state']}' != 'done') {
-        NasSnack.showOn(messenger, '${task['error'] ?? task['state']}');
+        NasSnack.showOn(
+            messenger, errorMessageOf(task['error'] ?? task['state']));
         return;
       }
       await _bootstrap();
@@ -631,7 +666,7 @@ class _PhotoPageState extends State<PhotoPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('ui.book.001')),
+            child: Text(tr('common.clean')),
           ),
         ],
       ),
@@ -648,7 +683,8 @@ class _PhotoPageState extends State<PhotoPage> {
         return;
       }
       if ('${task['state']}' != 'done') {
-        NasSnack.showOn(messenger, '${task['error'] ?? task['state']}');
+        NasSnack.showOn(
+            messenger, errorMessageOf(task['error'] ?? task['state']));
         return;
       }
       await _bootstrap();
@@ -659,38 +695,60 @@ class _PhotoPageState extends State<PhotoPage> {
     }
   }
 
-  Future<void> _createAlbum() async {
-    final nameCtrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('ui.photo.050')),
-        content: TextField(
-          controller: nameCtrl,
-          decoration: InputDecoration(labelText: tr('ui.photo.051')),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(tr('common.cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('common.create')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || nameCtrl.text.trim().isEmpty) return;
+  /// 新建相册：名称 + 可选封面 + 可选自动收录规则。
+  ///
+  /// `seedItems` 是从「多选 → 加入相册 → 新建」带过来的照片，会一起进相册，
+  /// 同时作为封面候选（挑其中一张）。
+  Future<PhotoAlbum?> _createAlbum({List<PhotoItem> seedItems = const []}) async {
+    final draft = await showAlbumDialog(context, coverCandidates: seedItems);
+    if (draft == null || !mounted) return null;
     try {
-      await ApiSession.instance.client.photoAlbumCreate(
-        body: PhotoAlbumCreateBody(name: nameCtrl.text.trim()),
+      final created = await ApiSession.instance.client.photoAlbumCreate(
+        body: PhotoAlbumCreateBody(
+          name: draft.name,
+          itemIds: seedItems.isEmpty ? null : seedItems.map((e) => e.id).toList(),
+          coverItemId: draft.coverItemId,
+          rules: draft.rules.isEmpty ? null : draft.rules,
+        ),
+      );
+      if (!mounted) return created;
+      await _refreshAlbums();
+      return created;
+    } catch (e) {
+      if (!mounted) return null;
+      NasSnack.show(context, tr('common.createFailed', {'error': '$e'}));
+      return null;
+    }
+  }
+
+  /// 编辑相册：改名 / 封面 / 规则。规则改动后服务端会立刻回填命中的照片。
+  Future<void> _editAlbum(PhotoAlbum album) async {
+    // 封面候选取自相册现有成员（服务端只接受成员当封面）
+    final members = <PhotoItem>[];
+    try {
+      final res = await ApiSession.instance.client.photoAlbumItems(albumId: album.id, limit: 60);
+      members.addAll(res.items);
+    } catch (_) {
+      /* 拉不到成员就只改名字和规则 */
+    }
+    if (!mounted) return;
+    final draft = await showAlbumDialog(context, album: album, coverCandidates: members);
+    if (draft == null || !mounted) return;
+    try {
+      await ApiSession.instance.client.photoAlbumUpdate(
+        body: PhotoAlbumUpdateBody(
+          albumId: album.id,
+          name: draft.name,
+          description: draft.description,
+          coverItemId: draft.coverItemId,
+          rules: draft.rules,
+        ),
       );
       if (!mounted) return;
       await _refreshAlbums();
     } catch (e) {
       if (!mounted) return;
-      NasSnack.show(context, tr('common.createFailed', {'error': '$e'}));
+      NasSnack.show(context, tr('common.saveFailed', {'error': '$e'}));
     }
   }
 
@@ -731,66 +789,6 @@ class _PhotoPageState extends State<PhotoPage> {
   }
 
   /// 编辑相册：名称 + 一句简介（封面在相册详情里长按照片设置）
-  Future<void> _editAlbum(PhotoAlbum album) async {
-    final nameCtrl = TextEditingController(text: album.name);
-    final descCtrl = TextEditingController(text: album.description ?? '');
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('photo.album.edit')),
-        content: SizedBox(
-          width: 380,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                autofocus: true,
-                decoration: InputDecoration(labelText: tr('photo.album.name')),
-              ),
-              const SizedBox(height: NasTokens.spaceSm),
-              TextField(
-                controller: descCtrl,
-                maxLength: 200,
-                maxLines: 3,
-                minLines: 1,
-                decoration: InputDecoration(
-                  labelText: tr('photo.album.description'),
-                  hintText: tr('photo.album.descriptionHint'),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(tr('common.cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('common.save')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    final name = nameCtrl.text.trim();
-    if (name.isEmpty) return;
-    try {
-      await ApiSession.instance.client.photoAlbumUpdate(
-        body: PhotoAlbumUpdateBody(
-          albumId: album.id,
-          name: name,
-          description: descCtrl.text.trim(),
-        ),
-      );
-      await _refreshAlbums();
-    } catch (e) {
-      if (!mounted) return;
-      NasSnack.show(context, tr('common.saveFailed', {'error': '$e'}));
-    }
-  }
 
   /// 手排顺序：与相邻相册交换 sortOrder。
   /// 两边的 sortOrder 可能相同（都还是默认 0），所以按「索引 × 10」重排一次再交换，
@@ -915,32 +913,43 @@ if (ok != true) return;
     }
   }
 
-  Future<void> _addSelectedToCollection() async {
-    final res = await ApiSession.instance.client.photoCollectionList();
-    if (!mounted) return;
-    if (res.items.isEmpty) {
-      NasSnack.show(context, tr('photo.timeline.noCollection'));
+  /// 多选 → 加入相册。没有相册时也能现场新建（列表末尾有入口）。
+  Future<void> _addSelectedToAlbum() async {
+    final selectedItems = _visibleItems
+        .where((p) => _selected.contains(p.id))
+        .toList(growable: false);
+    if (selectedItems.isEmpty) return;
+
+    final List<PhotoAlbum> albums;
+    try {
+      albums = (await ApiSession.instance.client.photoAlbumList()).items;
+    } catch (e) {
+      if (!mounted) return;
+      NasSnack.show(context, e.toString());
       return;
     }
-    final picked = await showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: Text(tr('photo.timeline.addToCollection')),
-        children: [
-          for (final c in res.items)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, c.id),
-              child: Text('${c.name} · ${c.items}'),
-            ),
-        ],
-      ),
-    );
-    if (picked == null) return;
+    if (!mounted) return;
+
+    final picked = await showAlbumPicker(context, albums: albums);
+    if (picked == null || !mounted) return;
+
+    if (picked == kAlbumPickerCreate) {
+      // 新建：把选中的这些照片直接带进去，建完就不用再点一次加入
+      final created = await _createAlbum(seedItems: selectedItems);
+      if (created == null || !mounted) return;
+      setState(() {
+        _selected.clear();
+        _selecting = false;
+      });
+      NasSnack.show(context, tr('photo.album.added', {'n': '${selectedItems.length}'}));
+      return;
+    }
+
     try {
-      await ApiSession.instance.client.photoCollectionAdd(
-        body: PhotoCollectionMembersBody(
-          collectionId: picked,
-          itemIds: _selected.toList(),
+      await ApiSession.instance.client.photoAlbumAdd(
+        body: PhotoAlbumMembersBody(
+          albumId: picked,
+          itemIds: selectedItems.map((e) => e.id).toList(),
         ),
       );
       if (!mounted) return;
@@ -948,7 +957,9 @@ if (ok != true) return;
         _selected.clear();
         _selecting = false;
       });
-      NasSnack.show(context, tr('photo.collection.added').replaceAll('{n}', '${_selected.length}'));
+      await _refreshAlbums();
+      if (!mounted) return;
+      NasSnack.show(context, tr('photo.album.added', {'n': '${selectedItems.length}'}));
     } catch (e) {
       if (!mounted) return;
       NasSnack.show(context, e.toString());
@@ -980,9 +991,9 @@ if (ok != true) return;
             label: Text(tr('photo.timeline.batchFavorite')),
           ),
           TextButton.icon(
-            onPressed: _selected.isEmpty ? null : _addSelectedToCollection,
-            icon: const Icon(Icons.collections_outlined, size: 18),
-            label: Text(tr('photo.timeline.addToCollection')),
+            onPressed: _selected.isEmpty ? null : _addSelectedToAlbum,
+            icon: const Icon(Icons.photo_album_outlined, size: 18),
+            label: Text(tr('photo.album.addTo')),
           ),
           TextButton.icon(
             onPressed: _selected.isEmpty ? null : _deleteSelected,
@@ -999,10 +1010,11 @@ if (ok != true) return;
   }
 
   Future<void> _openViewer(int index) async {
-    if (_items.isEmpty) return;
+    final visible = _visibleItems;
+    if (visible.isEmpty) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => PhotoViewerPage(items: _items, initialIndex: index),
+        builder: (_) => PhotoViewerPage(items: visible, initialIndex: index),
       ),
     );
   }
@@ -1135,10 +1147,10 @@ if (ok != true) return;
               onPressed: () => _batchFavorite(true),
             ),
             NasBulkAction(
-              icon: Icons.collections_outlined,
-              tooltip: tr('photo.timeline.addToCollection'),
+              icon: Icons.photo_album_outlined,
+              tooltip: tr('photo.album.addTo'),
               enabled: any,
-              onPressed: _addSelectedToCollection,
+              onPressed: _addSelectedToAlbum,
             ),
             NasBulkAction(
               icon: Icons.delete_outline,
@@ -1279,15 +1291,20 @@ if (ok != true) return;
   Future<void> _openFilterSheet() async {
     final outcome = await showDialog<_FilterOutcome>(
       context: context,
-      builder: (_) => _PhotoFilterSheet(initial: _filter),
+      builder: (_) => _PhotoFilterSheet(
+        initial: _filter,
+        initialMediaType: _mediaType,
+      ),
     );
     if (outcome == null || !mounted) return;
     setState(() {
       _filter = outcome.conditions;
       _filterSummary = outcome.summary;
+      _mediaType = outcome.mediaType;
       _filterTotal = null;
       _items = const [];
       _nextCursor = null;
+      _selected.clear();
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
     await _loadTimeline();
@@ -1297,9 +1314,11 @@ if (ok != true) return;
     setState(() {
       _filter = null;
       _filterSummary = const [];
+      _mediaType = _PhotoMediaType.all;
       _filterTotal = null;
       _items = const [];
       _nextCursor = null;
+      _selected.clear();
     });
     if (_scroll.hasClients) _scroll.jumpTo(0);
     await _loadTimeline();
@@ -1309,10 +1328,14 @@ if (ok != true) return;
   /// 没有它的话，用户只看到"照片变少了"却找不到原因。
   Widget _filterChips() {
     final total = _filterTotal;
+    final parts = <String>[
+      if (_mediaType != _PhotoMediaType.all) tr(_mediaType.labelKey),
+      ..._filterSummary,
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(
-        NasTokens.spaceMd,
-        NasTokens.spaceXs,
+        NasTokens.spaceSm,
+        2,
         NasTokens.spaceSm,
         0,
       ),
@@ -1322,7 +1345,7 @@ if (ok != true) return;
           const SizedBox(width: 4),
           Expanded(
             child: Text(
-              _filterSummary.join(' · '),
+              parts.join(' · '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -1331,7 +1354,8 @@ if (ok != true) return;
               ),
             ),
           ),
-          if (total != null)
+          // 类型是客户端本地过滤，服务端 total 是全量，显示出来会误导
+          if (total != null && _mediaType == _PhotoMediaType.all)
             Text(
               tr('photo.filter.count', {'n': '$total'}),
               style: TextStyle(
@@ -1350,7 +1374,7 @@ if (ok != true) return;
 
   /// 长按单张：菜单而不是直接进多选。直接进多选会让"只想收藏这一张"多两步。
   Future<void> _longPressPhoto(int index) async {
-    final item = _items[index];
+    final item = _visibleItems[index];
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -1496,53 +1520,21 @@ if (ok != true) return;
     }
   }
 
-  /// 手机端工具栏只留「筛选 / 多选 / 更多」。
+  /// 时间轴工具栏：只保留「筛选 / 多选」两个动作。
   ///
-  /// 原来这一行摆了 8 个 IconButton（排序/缩放×2/年视图/扫描/多选/筛选/刷新），
-  /// 390 宽的屏上实测 `RenderFlex overflowed by 4.0 pixels`，所以低频动作收进菜单；
-  /// 缩放单独不放进来 —— 手机端固定 3 列（见网格 delegate），缩放已经没有意义。
-  Widget _moreMenu() {
-    return PopupMenuButton<String>(
-      tooltip: tr('common.more'),
-      icon: const Icon(Icons.more_vert),
-      onSelected: (v) {
-        switch (v) {
-          case 'sort':
-            setState(() => _asc = !_asc);
-            _loadTimeline();
-          case 'year':
-            _openYearView();
-          case 'scan':
-            _scan();
-          case 'prune':
-            _pruneMissing();
-        }
-      },
-      itemBuilder: (_) => [
-        PopupMenuItem(
-          value: 'sort',
-          child: Text(
-            _asc
-                ? tr('photo.timeline.sortAsc')
-                : tr('photo.timeline.sortDesc'),
-          ),
-        ),
-        PopupMenuItem(value: 'year', child: Text(tr('photo.yearView.title'))),
-        PopupMenuItem(value: 'scan', child: Text(tr('common.scan'))),
-        PopupMenuItem(value: 'prune', child: Text(tr('ui.photo.048'))),
-      ],
-    );
-  }
-
+  /// 「更多」菜单（排序 / 年视图 / 扫描 / 清理缺失）和刷新按钮在时间轴上
+  /// 用不上，还把 390 宽的屏挤到溢出；低频动作在桌面端仍有自己的一排按钮。
+  /// 手机端固定 3 列，缩放也没有意义。
   Widget _timelinePane() {
     final stats = _stats;
+    final visible = _visibleItems;
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(
-            NasTokens.spaceMd,
             NasTokens.spaceSm,
-            NasTokens.spaceMd,
+            2,
+            NasTokens.spaceSm,
             0,
           ),
           child: Row(
@@ -1614,6 +1606,9 @@ if (ok != true) return;
                   _filter == null ? Icons.filter_alt_outlined : Icons.filter_alt,
                   color: _filter == null ? null : Theme.of(context).colorScheme.primary,
                 ),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 38, height: 38),
                 onPressed: _openFilterSheet,
               ),
               if (!isCompactWidth(context))
@@ -1627,6 +1622,9 @@ if (ok != true) return;
                 icon: Icon(
                   _selecting ? Icons.check_circle : Icons.check_circle_outline,
                 ),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 38, height: 38),
                 onPressed: () => setState(() {
                   _selecting = !_selecting;
                   _selected.clear();
@@ -1651,44 +1649,31 @@ if (ok != true) return;
                     ),
                   ],
                 ),
-              if (isCompactWidth(context)) _moreMenu(),
-              NasRefreshButton(onPressed: _bootstrap),
             ],
           ),
         ),
-        if (_filter != null) _filterChips(),
+        if (_filter != null || _mediaType != _PhotoMediaType.all) _filterChips(),
         if (_query.isNotEmpty && _hybridTags.isNotEmpty) _hybridInfoBar(),
         if (_query.isNotEmpty && _hybridTags.isEmpty && _hybridUnmatched.isNotEmpty)
           _hybridInfoBar(),
-        if (_suggestions.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(NasTokens.spaceMd, 6, NasTokens.spaceMd, 2),
-            child: Text(
-              _suggestIsHot
-                  ? tr('photo.suggest.recommend')
-                  : tr('photo.suggest.suggestions'),
-              style: TextStyle(
-                fontSize: NasTokens.fontCaption,
-                color: context.nasTextSecondary,
-              ),
-            ),
-          ),
+        // 「推荐 / 联想」这行标题占掉一整行却没信息量，去掉；
+        // 剩下的 chip 行一并压矮，把垂直空间让给照片网格。
         if (_suggestIsHot && _recentSearches.isNotEmpty) ...[
           Padding(
-            padding: const EdgeInsets.fromLTRB(NasTokens.spaceMd, 4, NasTokens.spaceMd, 2),
+            padding: const EdgeInsets.fromLTRB(NasTokens.spaceSm, 2, NasTokens.spaceSm, 0),
             child: Text(
               tr('photo.suggest.recent'),
               style: TextStyle(
-                fontSize: NasTokens.fontCaption,
+                fontSize: NasTokens.fontMicro,
                 color: context.nasTextSecondary,
               ),
             ),
           ),
           SizedBox(
-            height: 34,
+            height: 30,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: NasTokens.spaceMd),
+              padding: const EdgeInsets.symmetric(horizontal: NasTokens.spaceSm),
               itemCount: _recentSearches.length,
               separatorBuilder: (_, _) => const SizedBox(width: NasTokens.spaceXs),
               itemBuilder: (context, i) => ActionChip(
@@ -1701,23 +1686,22 @@ if (ok != true) return;
         ],
         if (_suggestions.isNotEmpty)
           SizedBox(
-            height: 38,
+            height: 32,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(
-                horizontal: NasTokens.spaceMd,
+                horizontal: NasTokens.spaceSm,
               ),
               itemCount: _suggestions.length,
               separatorBuilder: (_, _) =>
                   const SizedBox(width: NasTokens.spaceXs),
               itemBuilder: (context, i) {
                 final s = _suggestions[i];
+                // 只显示名字：「人物 · 老婆 (2489)」→「老婆」。
+                // 顶部一行本来就该是入口，不是统计报表。
                 return ActionChip(
                   visualDensity: VisualDensity.compact,
-                  label: Text(
-                    '${_suggestKindLabel('${s['kind']}')} · ${s['value']}'
-                    '${s['count'] == null ? '' : ' (${s['count']})'}',
-                  ),
+                  label: Text('${s['value']}'),
                   onPressed: () => _applySuggestion('${s['value']}'),
                 );
               },
@@ -1728,7 +1712,7 @@ if (ok != true) return;
               ? const NasLoading()
               : _error != null
               ? NasErrorState(message: _error!, onRetry: _bootstrap)
-              : _items.isEmpty
+              : visible.isEmpty
               ? NasEmptyState(
                   title: _query.isEmpty
                       ? tr('ui.photo.058')
@@ -1755,14 +1739,14 @@ if (ok != true) return;
                         crossAxisSpacing: 3,
                         mainAxisSpacing: 3,
                       ),
-                      itemCount: _items.length + (_loadingMore ? 1 : 0),
+                      itemCount: visible.length + (_loadingMore ? 1 : 0),
                       itemBuilder: (context, i) {
-                        if (i >= _items.length) {
+                        if (i >= visible.length) {
                           return const Center(
                             child: CircularProgressIndicator(),
                           );
                         }
-                        final item = _items[i];
+                        final item = visible[i];
                         if (_selecting) {
                           final picked = _selected.contains(item.id);
                           return Stack(
@@ -1770,7 +1754,7 @@ if (ok != true) return;
                               children: [
                                 _PhotoTile(
                                   item: item,
-                                  url: _thumbUrl(item.path),
+                                  url: _thumbUrlOf(item),
                                   headers: _imageHeaders,
                                   favorite: _isFavorite(item),
                                   onToggleFavorite: () => _toggleFavorite(item),
@@ -1785,19 +1769,24 @@ if (ok != true) return;
                                   }),
                                 ),
                                 if (picked)
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.black38,
-                                      border: Border.all(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
-                                        width: 2,
+                                  // 遮罩只是视觉标记，不能吃掉点击：
+                                  // 否则再点一下已选中的照片，onTap 到不了
+                                  // _PhotoTile，就永远取消不了选择。
+                                  IgnorePointer(
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Colors.black38,
+                                        border: Border.all(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
+                                          width: 2,
+                                        ),
                                       ),
-                                    ),
-                                    child: const Icon(
-                                      Icons.check_circle,
-                                      color: Colors.white,
+                                      child: const Icon(
+                                        Icons.check_circle,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ),
                               ],
@@ -1808,7 +1797,7 @@ if (ok != true) return;
                           entries: _photoMenuEntries(item, i),
                           child: _PhotoTile(
                             item: item,
-                            url: _thumbUrl(item.path),
+                            url: _thumbUrlOf(item),
                             headers: _imageHeaders,
                             favorite: _isFavorite(item),
                             onToggleFavorite: () => _toggleFavorite(item),
@@ -1889,7 +1878,24 @@ if (ok != true) return;
                       icon: Icons.broken_image_outlined,
                     ),
                   ),
-            title: Text(album.name),
+            title: Row(
+              children: [
+                Flexible(child: Text(album.name, overflow: TextOverflow.ellipsis)),
+                // 规则相册打个角标：不然用户分不清「这册是我一张张挑的」还是「它自己长的」
+                if (album.ruleCount > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(left: NasTokens.spaceXs),
+                    child: Tooltip(
+                      message: tr('photo.album.rulesHint'),
+                      child: Icon(
+                        Icons.auto_awesome,
+                        size: 14,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
             subtitle: Text(
               [
                 tr('photo.count', {'count': '${album.items}'}),
@@ -2085,6 +2091,56 @@ class _PhotoTile extends StatelessWidget {
                         color: favorite ? Colors.redAccent : Colors.white,
                       ),
                     ),
+                  ),
+                ),
+              ),
+            // 视频：中央播放标 + 右下角时长
+            if (isVideoItem(item)) ...[
+              const Center(
+                child: Icon(Icons.play_circle_fill, size: 34, color: Colors.white70),
+              ),
+              if (formatDurationMs(item.durationMs ?? 0).isNotEmpty)
+                Positioned(
+                  right: 4,
+                  bottom: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      formatDurationMs(item.durationMs ?? 0),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        height: 1.1,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+            // 动态照片：左上角「动态」角标（在收藏按钮左边，不抢位置）
+            if (isLiveItem(item))
+              Positioned(
+                top: 4,
+                left: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.motion_photos_on, size: 10, color: Colors.white),
+                      const SizedBox(width: 2),
+                      Text(
+                        tr('photo.media.live'),
+                        style: const TextStyle(fontSize: 9, height: 1.1, color: Colors.white),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -2365,20 +2421,25 @@ class _AlbumDetailPageState extends State<_AlbumDetailPage> {
 
 /// 交叉筛选的结果：`conditions == null` 表示"清除筛选"，返回 null 表示"取消"。
 class _FilterOutcome {
-  const _FilterOutcome(this.conditions, this.summary);
+  const _FilterOutcome(this.conditions, this.summary, this.mediaType);
 
   final PhotoSmartRuleConditions? conditions;
   final List<String> summary;
+
+  /// 类型是客户端本地过滤，与服务端 conditions 分开放。
+  final _PhotoMediaType mediaType;
 }
 
-/// 时间轴交叉筛选面板：人物 × 场景 × 收藏 × 时间，多条件是**与**关系。
+/// 时间轴交叉筛选面板：类型 × 人物 × 收藏 × 时间 × 地点，多条件是**与**关系。
 ///
 /// 条件判据走服务端 `/photo/filter`（与智能规则同一套 where），
 /// 这里只负责收集条件 —— 不在客户端拼 SQL 语义，避免两边结果对不上。
+/// 「类型」是唯一例外：契约里没有这个字段，按 PhotoItem 本地过滤。
 class _PhotoFilterSheet extends StatefulWidget {
-  const _PhotoFilterSheet({this.initial});
+  const _PhotoFilterSheet({this.initial, this.initialMediaType});
 
   final PhotoSmartRuleConditions? initial;
+  final _PhotoMediaType? initialMediaType;
 
   @override
   State<_PhotoFilterSheet> createState() => _PhotoFilterSheetState();
@@ -2387,12 +2448,11 @@ class _PhotoFilterSheet extends StatefulWidget {
 class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
   bool _loading = true;
   List<PhotoFaceClusterItem> _clusters = const [];
-  List<PhotoSceneTagSummaryItem> _scenes = const [];
   String? _person;
   String? _personName;
-  String? _scene;
   bool _favorite = false;
   PhotoSmartRulePlace? _place;
+  late _PhotoMediaType _mediaType;
 
   /// 0 = 全部，1 = 近一年，3 = 近三年
   int _timePreset = 0;
@@ -2402,9 +2462,15 @@ class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
     super.initState();
     final init = widget.initial;
     _person = init?.faceClusterId;
-    _scene = init?.scene;
     _favorite = init?.favorite == true;
     _place = init?.place;
+    _mediaType = widget.initialMediaType ?? _PhotoMediaType.all;
+    if (init?.from != null) {
+      final yearsAgo = (DateTime.now().millisecondsSinceEpoch ~/ 1000 -
+              init!.from!) ~/
+          31536000;
+      _timePreset = yearsAgo >= 3 ? 3 : (yearsAgo >= 1 ? 1 : 0);
+    }
     _load();
   }
 
@@ -2412,38 +2478,28 @@ class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
     final client = ApiSession.instance.client;
     try {
       // 不传 minCount：跟随「AI 设置 → 人脸显示下限」，避免碎片组铺满筛选面板
-      final clusters = await client.photoFaceClusters();
-      if (mounted) setState(() => _clusters = clusters.items);
+      final clusters = await client.photoFaceClustersAll();
+      if (mounted) {
+        setState(() {
+          // 只显示有命名的人物：未命名簇没有可辨识的名字，点了也不知道筛的是谁。
+          _clusters = clusters
+              .where((c) => (c.name ?? '').trim().isNotEmpty)
+              .toList(growable: false);
+        });
+      }
     } catch (_) {
       // 人脸模型没跑过：这一栏空着即可，不影响其它条件
-    }
-    try {
-      final scenes = await client.photoSceneTagSummary();
-      if (mounted) setState(() => _scenes = scenes.items);
-    } catch (_) {
-      // 同上
     }
     if (!mounted) return;
     setState(() {
       _loading = false;
       // 已知人物：把名字回填到摘要里（服务端返回的是 id，界面要给人看）
       final matched = _clusters.where((c) => c.id == _person);
-      if (matched.isNotEmpty) {
-        final c = matched.first;
-        _personName =
-            (c.name ?? '').trim().isNotEmpty
-                ? c.name
-                : tr('photo.faceCluster.unnamed', {'id': c.id.substring(0, 6)});
-      }
+      if (matched.isNotEmpty) _personName = matched.first.name;
     });
   }
 
-  String _clusterLabel(PhotoFaceClusterItem c) {
-    final named = (c.name ?? '').trim();
-    return named.isNotEmpty
-        ? named
-        : tr('photo.faceCluster.unnamed', {'id': c.id.substring(0, 6)});
-  }
+  String _clusterLabel(PhotoFaceClusterItem c) => (c.name ?? '').trim();
 
   void _apply() {
     final now = DateTime.now();
@@ -2453,14 +2509,18 @@ class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
     } else if (_timePreset == 3) {
       from = DateTime(now.year - 3, now.month, now.day).millisecondsSinceEpoch ~/ 1000;
     }
-    final any = _person != null || _scene != null || _favorite || from != null || _place != null;
+    final typed = _mediaType != _PhotoMediaType.all;
+    final any = _person != null || _favorite || from != null || _place != null || typed;
     if (!any) {
-      Navigator.pop(context, const _FilterOutcome(null, []));
+      Navigator.pop(
+        context,
+        const _FilterOutcome(null, [], _PhotoMediaType.all),
+      );
       return;
     }
     final summary = <String>[
+      if (typed) tr(_mediaType.labelKey),
       ?_personName,
-      ?_scene,
       if (_favorite) tr('photo.filter.chipFavorite'),
       if (from != null)
         tr(_timePreset == 1 ? 'photo.filter.lastYear' : 'photo.filter.last3Years'),
@@ -2474,12 +2534,12 @@ class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
       _FilterOutcome(
         PhotoSmartRuleConditions(
           faceClusterId: _person,
-          scene: _scene,
           favorite: _favorite ? true : null,
           from: from,
           place: _place,
         ),
         summary,
+        _mediaType,
       ),
     );
   }
@@ -2498,15 +2558,34 @@ class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // 固定 520 宽在手机上会把底部「地图选点 / 距离」整行裁掉，按屏幕收一档。
+    final screen = MediaQuery.sizeOf(context);
+    final width = (screen.width - 48).clamp(240.0, 520.0);
+    final height = (screen.height - 200).clamp(260.0, 440.0);
     return AlertDialog(
       title: Text(tr('photo.filter.title')),
       content: SizedBox(
-        width: 520,
-        height: 440,
+        width: width,
+        height: height,
         child: _loading
             ? const NasLoading()
             : ListView(
                 children: [
+                  // 类型放最上面，默认「全部」
+                  _sectionTitle(tr('photo.filter.type')),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 2,
+                    children: [
+                      for (final t in _PhotoMediaType.values)
+                        NasChip(
+                          visualDensity: VisualDensity.compact,
+                          label: Text(tr(t.labelKey)),
+                          selected: _mediaType == t,
+                          onSelected: (_) => setState(() => _mediaType = t),
+                        ),
+                    ],
+                  ),
                   _sectionTitle(tr('photo.filter.person')),
                   if (_clusters.isEmpty)
                     Text(
@@ -2530,30 +2609,6 @@ class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
                               _person = v ? c.id : null;
                               _personName = v ? _clusterLabel(c) : null;
                             }),
-                          ),
-                      ],
-                    ),
-                  _sectionTitle(tr('photo.filter.scene')),
-                  if (_scenes.isEmpty)
-                    Text(
-                      tr('photo.filter.noneScene'),
-                      style: TextStyle(
-                        fontSize: NasTokens.fontCaption,
-                        color: context.nasTextSecondary,
-                      ),
-                    )
-                  else
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 2,
-                      children: [
-                        for (final s in _scenes.take(16))
-                          NasChip(
-                            visualDensity: VisualDensity.compact,
-                            label: Text('${s.label} (${s.count})'),
-                            selected: _scene == s.label,
-                            onSelected: (v) =>
-                                setState(() => _scene = v ? s.label : null),
                           ),
                       ],
                     ),
@@ -2582,7 +2637,12 @@ class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
                     ],
                   ),
                   const SizedBox(height: NasTokens.spaceSm),
-                  Row(
+                  // 地图选点 / 距离这一行原来用 Row + 固定 520 宽的对话框，
+                  // 手机上直接被裁到屏幕外；改 Wrap + 自适应宽度。
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       OutlinedButton.icon(
                         onPressed: () async {
@@ -2623,7 +2683,10 @@ class _PhotoFilterSheetState extends State<_PhotoFilterSheet> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context, const _FilterOutcome(null, [])),
+          onPressed: () => Navigator.pop(
+            context,
+            const _FilterOutcome(null, [], _PhotoMediaType.all),
+          ),
           child: Text(tr('photo.filter.clear')),
         ),
         TextButton(

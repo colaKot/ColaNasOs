@@ -97,7 +97,7 @@ export async function registerMusicState(app: any, k: KernelApi): Promise<void> 
         await sql`
           insert into music_favorites (item_id, owner_id, created_at)
           values (${body.id}, ${owner}, ${now()})
-          on conflict(item_id, owner_id) do nothing
+          on conflict(owner_id, item_id) do nothing
         `.execute(k.db);
       } else {
         await sql`delete from music_favorites where item_id = ${body.id} and owner_id = ${owner}`.execute(
@@ -105,6 +105,29 @@ export async function registerMusicState(app: any, k: KernelApi): Promise<void> 
         );
       }
       return { ok: true };
+    },
+  );
+
+  app.get(
+    '/api/v1/music/favorites/ids',
+    secured('music:read', {
+      schema: {
+        operationId: 'musicFavoriteIds',
+        tags: ['music'],
+        summary: '我的收藏 id 列表（曲库页星标状态用，只回 id 不带曲目）',
+        response: {
+          200: Type.Object({ ids: Type.Array(Type.String()) }),
+        },
+      },
+    }),
+    async (req: FastifyRequest) => {
+      const owner = req.user?.sub ?? '';
+      const rows = (
+        await sql<{ item_id: string }>`
+          select item_id from music_favorites where owner_id = ${owner}
+        `.execute(k.db)
+      ).rows;
+      return { ids: rows.map((r) => String(r.item_id)) };
     },
   );
 

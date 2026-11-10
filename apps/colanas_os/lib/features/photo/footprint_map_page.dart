@@ -427,6 +427,11 @@ class _FootprintMapPageState extends State<FootprintMapPage> {
                     initialZoom: 5,
                     minZoom: 2,
                     maxZoom: 18,
+                    // 关掉旋转：双指放大时地图跟着转是误触重灾区，
+                    // 足迹只需要「拖动 + 缩放」两个手势。
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                    ),
                     // 首屏必须自己取一次：`onPositionChanged` 只在位置**真的变了**
                     // 时回调，刚进页面不动鼠标就永远没有数据（2026-11-04 反馈）。
                     onMapReady: () => _onMapChanged(_map.camera, false),
@@ -802,6 +807,9 @@ class _ClusterSheetState extends State<_ClusterSheet> {
             height: null,
             mime: '',
             favorite: false,
+            mediaKind: 'image',
+            durationMs: null,
+            liveKind: '',
           ),
         )
         .toList();

@@ -133,7 +133,6 @@ function startMcp(baseUrl, token) {
     'photo:read',
     'video:read',
     'music:read',
-    'book:read',
     'system:read',
   ];
   const token = (
@@ -171,7 +170,7 @@ function startMcp(baseUrl, token) {
     check(
       'tools_list',
       tools.length >= 7 &&
-        ['files_list', 'video_list', 'music_list', 'book_list', 'system_monitor'].every((n) =>
+        ['files_list', 'video_list', 'music_list', 'system_monitor'].every((n) =>
           names.includes(n),
         ),
       names.join(','),
@@ -217,7 +216,7 @@ function startMcp(baseUrl, token) {
     const libs = JSON.parse(r.result.content[0].text);
     check(
       'call_media_libraries',
-      ['photo', 'video', 'music', 'book'].every((key) => Array.isArray(libs[key])),
+      ['photo', 'video', 'music'].every((key) => Array.isArray(libs[key])),
       Object.keys(libs).join(','),
     );
 

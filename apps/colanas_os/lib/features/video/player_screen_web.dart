@@ -34,7 +34,10 @@ Future<void> enterPlayerFullscreen({
 ///
 /// `document.fullscreenElement` 为 null 说明用户已经用 Esc 退掉了，
 /// 这时再调 `exitFullscreen()` 会抛 InvalidStateError，所以先判断再调。
-Future<void> exitPlayerFullscreen() async {
+///
+/// [portrait] 在 Web 上没意义（锁朝向只在全屏态被允许，退出全屏后锁不了），
+/// 保留这个参数只是为了和原生实现签名一致。
+Future<void> exitPlayerFullscreen({bool portrait = true}) async {
   try {
     if (web.document.fullscreenElement != null) {
       await web.document.exitFullscreen().toDart;

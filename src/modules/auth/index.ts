@@ -61,6 +61,9 @@ const UpdateBody = Type.Object({
   password: Type.Optional(Type.String({ minLength: 6, maxLength: 256 })),
   phone: Type.Optional(Type.String({ maxLength: 32 })),
   remark: Type.Optional(Type.String({ maxLength: 200 })),
+  // 建号时可以先不配权限，之后再回来改 —— 之前 UpdateBody 没有这一项，
+  // 建出来的空权限账号就只能删了重建。
+  scopes: Type.Optional(Type.Array(Type.String({ maxLength: 32 }))),
 });
 
 const EventItem = Type.Object({
@@ -878,6 +881,7 @@ export const accounts: ServerModule = {
           password?: string;
           phone?: string;
           remark?: string;
+          scopes?: string[];
         };
         const row = body.id ? await loadUser(body.id) : null;
         if (!row) return reply.code(404).send({ error: Err.notFound, message: 'user not found' });
@@ -912,6 +916,32 @@ export const accounts: ServerModule = {
             update auth_users set remark = ${String(body.remark).trim().slice(0, 200)} where id = ${row.id}
           `.execute(k.db);
           changes.push('remark');
+        }
+        if (body.scopes !== undefined) {
+          // 去重 + 去空，顺序保持用户勾选的先后（前端按域顺序提交，读起来更顺）
+          const scopes = [
+            ...new Set(
+              (Array.isArray(body.scopes) ? body.scopes : [])
+                .map((s) => String(s).trim())
+                .filter(Boolean),
+            ),
+          ].slice(0, 64);
+          // 拦住「改成空权限」：空权限账号登录后什么页都打不开，等于把自己锁死，
+          // 却不会报任何错。要收回权限就删号，不要留一个看不见东西的空壳。
+          if (scopes.length === 0) {
+            return reply
+              .code(400)
+              .send({ error: Err.badRequest, message: 'scopes must not be empty' });
+          }
+          const prev = JSON.parse(row.scopes || '[]') as string[];
+          const same =
+            prev.length === scopes.length && scopes.every((s) => prev.includes(s));
+          if (!same) {
+            await sql`
+              update auth_users set scopes = ${JSON.stringify(scopes)} where id = ${row.id}
+            `.execute(k.db);
+            changes.push('scopes');
+          }
         }
         if (changes.length > 0) {
           await writeEvent(

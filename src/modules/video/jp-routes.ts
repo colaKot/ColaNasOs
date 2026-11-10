@@ -14,7 +14,8 @@ import {
   syncActorLinks,
 } from './jp-links';
 import { toItem, type MediaRow } from './util';
-import { offlineCond, offlineSmbPrefixes } from './sources';
+import { offlineCond, offlineSmbPrefixes, sourceRootCond } from './sources';
+import { jpTagCond, resolutionCond } from './jp-filter';
 import { clearRankSnapshots, fetchJpRank, type JpRankKind, type JpRankPeriod } from './jp-rank';
 import { fetchSubtitle, SUB_STATE, writeSubtitleBeside } from './subtitle-fetch';
 import { fetchNormalSubtitle, findSubtitleBeside } from './subtitle-normal';
@@ -71,6 +72,12 @@ const ActorProfileResponse = Type.Object(
 const ActorListQuery = Type.Object({
   libraryId: Type.Optional(Type.String()),
   limit: Type.Optional(Type.String()),
+  // 演员页筛选：口径与影片列表完全一致（共用 jp-filter 的判断），
+  // 只是作用在「演员 × 作品」的关系行上 —— 命中任一部影片，这个演员才留下。
+  resolution: Type.Optional(Type.String({ description: '4k / 1080' })),
+  jpTag: Type.Optional(Type.String({ description: 'uncensored / cracked / ltx' })),
+  genre: Type.Optional(Type.String({ description: 'NFO 题材名' })),
+  sourceId: Type.Optional(Type.String({ description: '来源 id（多来源库）' })),
 });
 
 const ActorListItem = Type.Object(
@@ -109,6 +116,12 @@ const ActorWorksQuery = Type.Object({
   key: Type.Optional(Type.String({ description: '演员身份键（actorKey）' })),
   name: Type.Optional(Type.String({ description: '演员名；没有 key 时用它算 key' })),
   limit: Type.Optional(Type.String()),
+  // 与演员列表 / 影片列表同一套筛选：列表里筛剩几部，进来就只能看到几部。
+  libraryId: Type.Optional(Type.String({ description: '限定影库（与演员列表一致）' })),
+  resolution: Type.Optional(Type.String({ description: '4k / 1080' })),
+  jpTag: Type.Optional(Type.String({ description: 'uncensored / cracked / ltx' })),
+  genre: Type.Optional(Type.String({ description: 'NFO 题材名' })),
+  sourceId: Type.Optional(Type.String({ description: '来源 id（多来源库）' })),
 });
 
 const ActorWorksResponse = Type.Object(
@@ -151,6 +164,53 @@ const RankResponse = Type.Object(
   },
   { additionalProperties: true },
 );
+
+/**
+ * 演员页 / 演员作品 / 影片列表 共用的筛选口径。
+ *
+ * 以前只有「演员列表」带了这段条件，作品接口是裸查关联表 —— 于是列表写着
+ * 「1 部」，点进去却是她的全部影片。现在 list 与 works 都调这里，
+ * 保证「筛完剩几部，进去就只有几部」，删片时也能用同一份条件圈定范围。
+ *
+ * `alias` 是 SQL 里 video_items 的表别名（list 用 i，works 用 v）。
+ */
+interface JpActorFilterQuery {
+  libraryId?: string;
+  resolution?: string;
+  jpTag?: string;
+  genre?: string;
+  sourceId?: string;
+}
+
+async function jpActorFilterCond(
+  db: any,
+  q: JpActorFilterQuery,
+  alias: 'i' | 'v' = 'i',
+): Promise<ReturnType<typeof sql>> {
+  let cond = sql`1 = 1`;
+  if (q.sourceId) {
+    const rows = await sql<{ id: string; root_path: string }>`
+      select id, root_path from video_library_sources where id = ${String(q.sourceId)}
+    `.execute(db);
+    const src = rows.rows[0];
+    // 来源 id 失效时宁可显示空，也不能悄悄退化成「没筛」—— 用户看到的数量
+    // 必须和筛选条件对得上，否则删片时范围就不可控了。
+    cond = src
+      ? sql`${cond} and ${sourceRootCond(src.root_path, `${alias}.rel_path`)}`
+      : sql`${cond} and 1 = 0`;
+  }
+  const res = resolutionCond(q.resolution, alias);
+  if (res) cond = sql`${cond} and ${res}`;
+  const tag = jpTagCond(q.jpTag, `${alias}.rel_path`, `${alias}.uncensored`);
+  if (tag) cond = sql`${cond} and ${tag}`;
+  const genre = String(q.genre || '').trim();
+  if (genre) {
+    // 与影片列表同一套口径：NFO 题材是 JSON 数组文本，用「带引号的精确包含」
+    const needle = `%"${genre.replace(/[%_\\]/g, (c) => `\\${c}`)}"%`;
+    cond = sql`${cond} and coalesce(${sql.raw(`${alias}.nfo_genres`)}, '') like ${needle} escape '\\'`;
+  }
+  return cond;
+}
 
 const VIDEO_ROOT = () => filesRoot();
 const now = () => Math.floor(Date.now() / 1000);
@@ -293,9 +353,28 @@ export async function registerJpRoutes(app: any, k: KernelApi): Promise<void> {
       },
     }),
     async (req: FastifyRequest) => {
-      const q = (req.query || {}) as { libraryId?: string; limit?: string };
+      const q = (req.query || {}) as {
+        libraryId?: string;
+        limit?: string;
+        resolution?: string;
+        jpTag?: string;
+        genre?: string;
+        sourceId?: string;
+      };
       const limit = Math.max(1, Math.min(Number(q.limit) || 500, 2000));
       const owner = uidOf(req);
+
+      // ⓪ 离线来源要先算：主查询就得排除离线影片。
+      //    以前只在「② 补封面片」那一步过滤，结果离线影片照旧计入 count ——
+      //    一部都读不到的演员照样挂在列表里（点进去全空），正是「SMB 没连上还看得见人」的原因。
+      //    这里过滤后，全员离线的演员在 ① 里就没有任何关系行，聚合时自然不会出现。
+      const offline = await offlineSmbPrefixes(k.db);
+      const offlineFilter =
+        offline.length > 0 ? sql`and ${offlineCond(offline, 'i.rel_path')}` : sql``;
+
+      // ⓪' 演员页筛选：命中任意一部符合条件的影片，这个演员才算「有片」。
+      //    与作品接口共用 jpActorFilterCond，两处口径不可能漂移。
+      const filterCond = await jpActorFilterCond(k.db, q, 'i');
 
       // ① 轻量投影：一条「演员 × 作品」的关系行。判重 / 收藏 / 排序都在内存里做，
       //    一次捞完再聚合（注意 limit 20000 的上限）。
@@ -322,6 +401,8 @@ export async function registerJpRoutes(app: any, k: KernelApi): Promise<void> {
             join video_items i on i.id = ai.item_id
            where i.media_type = 'video'
              ${q.libraryId ? sql`and i.library_id = ${q.libraryId}` : sql``}
+             ${offlineFilter}
+             and ${filterCond}
            limit 60000
         `.execute(k.db)
       ).rows;
@@ -399,7 +480,6 @@ export async function registerJpRoutes(app: any, k: KernelApi): Promise<void> {
       // ② 封面片补全：网格要的是「影片列表同构的一行」，前端才能直接按
       //    海报 / 剧照两套 URL 取值（封面图 ⇄ 缩略图切换天然支持）。
       const coverIds = [...map.values()].map((g) => g.coverId).filter(Boolean) as string[];
-      const offline = await offlineSmbPrefixes(k.db);
       const covers = new Map<string, ReturnType<typeof toItem>>();
       if (coverIds.length > 0) {
         const full = (
@@ -552,12 +632,22 @@ export async function registerJpRoutes(app: any, k: KernelApi): Promise<void> {
       },
     }),
     async (req: FastifyRequest) => {
-      const q = (req.query || {}) as { key?: string; name?: string; limit?: string };
-      const limit = Math.max(1, Math.min(Number(q.limit) || 120, 500));
+      const q = (req.query || {}) as JpActorFilterQuery & {
+        key?: string;
+        name?: string;
+        limit?: string;
+      };
+      // 作品要能一次取全（删片时按这份名单圈定范围），上限与演员列表对齐
+      const limit = Math.max(1, Math.min(Number(q.limit) || 120, 2000));
       const owner = uidOf(req);
       const key = String(q.key || '').trim() || actorKey(String(q.name || ''));
       const name = String(q.name || '').trim();
       const offline = await offlineSmbPrefixes(k.db);
+      // 与演员列表同一份筛选条件：列表写着 1 部，这里就只返回这 1 部
+      const filterCond = await jpActorFilterCond(k.db, q, 'v');
+      const libraryCond = q.libraryId
+        ? sql`and v.library_id = ${String(q.libraryId)}`
+        : sql``;
 
       const selectItems = async (where: any) =>
         (
@@ -570,6 +660,8 @@ export async function registerJpRoutes(app: any, k: KernelApi): Promise<void> {
                              and f.media_type = 'video') as favorite
               from video_items v
              where v.media_type = 'video' and ${where}
+               ${libraryCond}
+               and ${filterCond}
                ${offline.length > 0 ? sql`and ${offlineCond(offline, 'v.rel_path')}` : sql``}
              -- 综合排序（收藏 → 未看 → 热度 → 评分 → 年份 → 入库 → id）
              -- ⚠️ 热度/评分必须在年份前面：用户要的是「同一女优内部按热度口碑排」，
@@ -593,15 +685,22 @@ export async function registerJpRoutes(app: any, k: KernelApi): Promise<void> {
           `.execute(k.db)
         ).rows;
 
-      // 优先走关联表；关联表可能是老库（还没重建过），此时退回 nfo_actors 模糊匹配
+      // 优先走关联表；关联表可能是老库（还没重建过），此时退回 nfo_actors 模糊匹配。
+      // ⚠️ 筛选状态下不能「查不到就兜底」：筛完本来就是 0 部，模糊匹配会把名字里
+      //    含同样字样的别的演员的片捞出来。只有确认关联表里压根没这个演员才兜底。
       let rows: MediaRow[] = [];
       if (key) {
         rows = await selectItems(
           sql`v.id in (select item_id from jp_actor_items where actor_id = ${key})`,
         );
-      }
-      if (rows.length === 0 && name) {
-        rows = await selectItems(sql`v.nfo_actors like ${'%' + name + '%'}`);
+        if (rows.length === 0 && name) {
+          const linked = await sql<{ n: number }>`
+            select count(*) as n from jp_actor_items where actor_id = ${key}
+          `.execute(k.db);
+          if (Number(linked.rows[0]?.n || 0) === 0) {
+            rows = await selectItems(sql`v.nfo_actors like ${'%' + name + '%'}`);
+          }
+        }
       }
       return { items: rows.map(toItem), total: rows.length };
     },

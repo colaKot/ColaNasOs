@@ -1,10 +1,11 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
+import 'detail/video_detail_router.dart';
+import 'video_item_actions.dart';
 import 'video_page.dart';
 
 /// 智能合集（预设规则）：最近添加 / 未看 / 继续观看 / 4K / HDR / 全景声 / 长片。
@@ -61,9 +62,24 @@ class _VideoSmartAlbumsPageState extends State<VideoSmartAlbumsPage> {
   }
 
   void _open(String key, String labelKey) {
+    final title = tr(labelKey);
+    final router = VideoDetailRouter.instance;
+    if (router.embeddableFrom(context)) {
+      router.open(
+        VideoDetailEntry(
+          tag: 'smart:$key',
+          build: (_) => _SmartAlbumItemsPage(
+            albumKey: key,
+            title: title,
+            embedded: true,
+          ),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => _SmartAlbumItemsPage(albumKey: key, title: tr(labelKey)),
+        builder: (_) => _SmartAlbumItemsPage(albumKey: key, title: title),
       ),
     );
   }
@@ -170,10 +186,17 @@ class _VideoSmartAlbumsPageState extends State<VideoSmartAlbumsPage> {
 
 /// 智能合集里的条目：海报墙，点开详情。
 class _SmartAlbumItemsPage extends StatefulWidget {
-  const _SmartAlbumItemsPage({required this.albumKey, required this.title});
+  const _SmartAlbumItemsPage({
+    required this.albumKey,
+    required this.title,
+    this.embedded = false,
+  });
 
   final String albumKey;
   final String title;
+
+  /// true = 三级页（顶栏交给外壳，标题做成页内页头）
+  final bool embedded;
 
   @override
   State<_SmartAlbumItemsPage> createState() => _SmartAlbumItemsPageState();
@@ -214,72 +237,76 @@ class _SmartAlbumItemsPageState extends State<_SmartAlbumItemsPage> {
     }
   }
 
-  /// 右键菜单：智能合集里的条目也是影片，给的动作用详情页那套里最常用的三个，
-  /// 重型操作（刮削 / 改匹配）仍回详情页，避免这里塞一堆对话框。
-  List<NasMenuEntry> _itemMenuEntries(VideoItem item) => [
-    NasMenuEntry(
-      label: tr('common.open'),
-      icon: Icons.play_arrow_outlined,
-      onSelected: () => openVideoDetail(context, item),
-    ),
-    NasMenuEntry(
-      label: tr(
-        item.watched ? 'video.action.markUnwatched' : 'video.action.markWatched',
-      ),
-      icon: item.watched ? Icons.remove_done : Icons.done_all,
-      onSelected: () => _toggleWatched(item),
-    ),
-    NasMenuEntry(
-      label: tr('video.action.copyPath'),
-      icon: Icons.copy_all_outlined,
-      onSelected: item.path.isEmpty ? null : () => _copyPath(item.path),
-    ),
-  ];
-
-  Future<void> _toggleWatched(VideoItem item) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final next = !item.watched;
-    try {
-      await ApiSession.instance.client.videoWatchMark(
-        body: VideoWatchBody(ids: [item.id], watched: next),
-      );
-      if (!mounted) return;
-      setState(() {
-        _items = [
-          for (final it in _items)
-            if (it.id == item.id)
-              VideoItem.fromJson({...it.toJson(), 'watched': next})
-            else
-              it,
-        ];
-      });
-      // 智能合集的计数是按已看/未看筛出来的，改完要重拉否则和条目对不上
-      await _load();
-    } catch (e) {
-      NasSnack.showOn(messenger, '$e');
-    }
-  }
-
-  Future<void> _copyPath(String path) async {
-    final messenger = ScaffoldMessenger.of(context);
-    await Clipboard.setData(ClipboardData(text: path));
-    NasSnack.showOn(messenger, tr('common.copied'));
+  /// 与其它影视列表共用同一套影片动作（右键 + 长按）。
+  /// 智能合集是按已看/未看筛出来的，动作后一律重拉，避免条目和计数对不上。
+  Future<void> _runAction(VideoItem item, String action) async {
+    final changed = await runVideoItemAction(context, action, item);
+    if (changed && mounted) await _load();
   }
 
   @override
   Widget build(BuildContext context) {
+    final body = _body(context);
+    if (!widget.embedded) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(widget.title),
+          actions: [
+            NasRefreshButton(onPressed: _load),
+          ],
+        ),
+        body: body,
+      );
+    }
+
+    // 三级页：顶栏交给外壳，标题 + 刷新做成页内页头；底色必须自己铺
+    //（本项目 `scaffoldBackgroundColor` 是透明的，不铺会漏出下面的列表）
+    return Material(
+      color: Colors.transparent,
+      child: Stack(
+        children: [
+          Positioned.fill(child: context.nasStyle.background),
+          Positioned.fill(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    NasTokens.spaceMd,
+                    NasTokens.spaceSm,
+                    NasTokens.spaceXs,
+                    0,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.title,
+                          style: const TextStyle(
+                            fontSize: NasTokens.fontSubtitle,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      NasRefreshButton(onPressed: _load),
+                    ],
+                  ),
+                ),
+                Expanded(child: body),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context) {
     final base = ApiSession.instance.baseUrl;
     final token = ApiSession.instance.token;
     final headers =
         token == null ? const <String, String>{} : {'Authorization': 'Bearer $token'};
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        actions: [
-          NasRefreshButton(onPressed: _load),
-        ],
-      ),
-      body: _loading
+    return _loading
           ? const NasLoading()
           : _error != null
               ? NasErrorState(message: _error!, onRetry: _load)
@@ -308,44 +335,55 @@ class _SmartAlbumItemsPageState extends State<_SmartAlbumItemsPage> {
                           itemBuilder: (context, i) {
                             final item = _items[i];
                             return NasContextMenuRegion(
-                              entries: _itemMenuEntries(item),
-                              child: InkWell(
-                                onTap: () => openVideoDetail(context, item),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(
-                                          NasTokens.radiusSm,
-                                        ),
-                                        child: NasCoverImage(
-                                          url:
-                                              '$base/api/v1/video/poster?id=${Uri.encodeComponent(item.id)}',
-                                          headers: headers,
-                                          cacheWidth: 480,
-                                          icon: Icons.movie_outlined,
+                              entries: videoItemMenuEntries(
+                                item,
+                                onAction: (a) => _runAction(item, a),
+                              ),
+                              child: GestureDetector(
+                                onLongPress: () async {
+                                  final a =
+                                      await showVideoItemActionSheet(context, item);
+                                  if (a != null && mounted) {
+                                    await _runAction(item, a);
+                                  }
+                                },
+                                child: InkWell(
+                                  onTap: () => openVideoDetail(context, item),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            NasTokens.radiusSm,
+                                          ),
+                                          child: NasCoverImage(
+                                            url:
+                                                '$base/api/v1/video/poster?id=${Uri.encodeComponent(item.id)}',
+                                            headers: headers,
+                                            cacheWidth: 480,
+                                            icon: Icons.movie_outlined,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(height: NasTokens.spaceXs),
-                                    Text(
-                                      item.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontSize: NasTokens.fontBody,
+                                      const SizedBox(height: NasTokens.spaceXs),
+                                      Text(
+                                        item.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: NasTokens.fontBody,
+                                        ),
                                       ),
-                                    ),
-                                    MediaFlagsRow(item: item, compact: true),
-                                  ],
+                                      MediaFlagsRow(item: item, compact: true),
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
                           },
                         );
                       },
-                    ),
-    );
+                    );
   }
 }

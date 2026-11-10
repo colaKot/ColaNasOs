@@ -1,22 +1,16 @@
 import type { ServerModule } from './types';
 import { ModuleRegistry } from './registry';
 import { files } from '../src/modules/files';
-import { share } from '../src/modules/share';
-import { safety } from '../src/modules/safety';
+import { transfer } from '../src/modules/transfer';
 import { system } from '../src/modules/system';
 import { rss } from '../src/modules/rss';
 import { sync } from '../src/modules/sync';
 import { accounts } from '../src/modules/auth';
 import { integrations } from '../src/modules/integrations';
-import { messages } from '../src/modules/messages';
-import { notes } from '../src/modules/notes';
 import { photo } from '../src/modules/photo';
 import { video } from '../src/modules/video';
 import { music } from '../src/modules/music';
-import { book } from '../src/modules/book';
 import { blog } from '../src/modules/blog';
-import { mount } from '../src/modules/mount';
-import { mediaTool } from '../src/modules/mediaTool';
 import { videoPlayer } from '../src/modules/videoPlayer';
 import { discover } from '../src/modules/discover';
 import { pt } from '../src/modules/pt';
@@ -30,22 +24,16 @@ import { pt } from '../src/modules/pt';
 export function moduleList(): ServerModule[] {
   return [
     files,
-    share,
-    safety,
+    transfer,
     system,
     rss,
     sync,
     accounts,
     integrations,
-    messages,
-    notes,
     photo,
     video,
     music,
-    book,
     blog,
-    mount,
-    mediaTool,
     videoPlayer,
     discover,
     pt,

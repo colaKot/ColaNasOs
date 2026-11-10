@@ -7,6 +7,7 @@ import 'package:nas_ui/nas_ui.dart';
 import '../../core/session.dart';
 import 'photo_download.dart';
 import 'photo_similar_page.dart';
+import 'photo_video_page.dart';
 
 /// 大图查看器的输入单元：**只要 id + 路径**（其余字段都是可选的展示用）。
 ///
@@ -21,6 +22,9 @@ class ViewerPhoto {
     this.takenAt = 0,
     this.width,
     this.height,
+    this.mediaKind = 'image',
+    this.durationMs,
+    this.liveKind = '',
   });
 
   final String id;
@@ -29,12 +33,33 @@ class ViewerPhoto {
   final int? width;
   final int? height;
 
+  /// image / video（后端 `photo_items.media_kind`）
+  final String mediaKind;
+  final int? durationMs;
+
+  /// '' / motion / apple
+  final String liveKind;
+
+  bool get isVideo => mediaKind == 'video';
+  bool get isLive => liveKind.isNotEmpty;
+
+  /// 视频封面的抽帧位置（秒）；图片为 null
+  double? get posterAt {
+    if (!isVideo) return null;
+    final ms = durationMs ?? 0;
+    if (ms <= 0) return 0.5;
+    return (ms / 1000 * 0.1).clamp(0.5, 3.0);
+  }
+
   static ViewerPhoto ofItem(PhotoItem item) => ViewerPhoto(
     id: item.id,
     path: item.path,
     takenAt: item.takenAt,
     width: item.width,
     height: item.height,
+    mediaKind: item.mediaKind,
+    durationMs: item.durationMs,
+    liveKind: item.liveKind,
   );
 }
 
@@ -112,9 +137,27 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
     super.dispose();
   }
 
-  String _previewUrl(ViewerPhoto item) => _media.thumbnail(item.path, size: 1600);
+  String _previewUrl(ViewerPhoto item) =>
+      _media.thumbnail(item.path, size: 1600, at: item.posterAt);
 
   String _originalUrl(ViewerPhoto item) => _media.file(item.path);
+
+  /// 播放：视频放原文件，动态照片放服务端从 JPEG 尾部取出的那段视频
+  void _play(ViewerPhoto item) {
+    if (!item.isVideo && !item.isLive) return;
+    final url = item.isVideo ? _media.file(item.path) : _media.livePhoto(item.id);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PhotoVideoPage(
+          url: url,
+          title: item.path.split('/').last,
+          subtitle: item.isVideo
+              ? '${formatDurationMs(item.durationMs ?? 0)}  ·  ${item.width ?? '?'}×${item.height ?? '?'}'
+              : tr('photo.media.live'),
+        ),
+      ),
+    );
+  }
 
   void _precacheNeighbors() {
     for (final i in [_index - 1, _index + 1]) {
@@ -320,6 +363,12 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
           ],
         ),
         actions: [
+          if (item.isVideo || item.isLive)
+            IconButton(
+              tooltip: item.isVideo ? tr('photo.media.playVideo') : tr('photo.media.playLive'),
+              icon: Icon(item.isVideo ? Icons.play_circle_outline : Icons.motion_photos_on),
+              onPressed: () => _play(item),
+            ),
           IconButton(
             tooltip: tr('photo.info.title'),
             icon: const Icon(Icons.info_outline),
@@ -426,16 +475,45 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                     ),
                   );
                   final zoomed = i == _index && _zoomed;
+                  // 视频 / 动态照片：缩略图当海报，中间给一个明确的播放入口。
+                  // 视频不能靠双击缩放看，直接盖按钮更符合预期。
+                  final playable = current.isVideo || current.isLive;
                   return GestureDetector(
-                    onDoubleTap: () => setState(() => _zoomed = !_zoomed),
+                    onDoubleTap: playable ? null : () => setState(() => _zoomed = !_zoomed),
                     child: Center(
-                      child: zoomed
-                          ? InteractiveViewer(
-                              minScale: 1,
-                              maxScale: 5,
-                              child: image,
-                            )
-                          : image,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          zoomed && !playable
+                              ? InteractiveViewer(
+                                  minScale: 1,
+                                  maxScale: 5,
+                                  child: image,
+                                )
+                              : image,
+                          if (playable)
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: () => _play(current),
+                                child: Container(
+                                  width: 72,
+                                  height: 72,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black45,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    current.isVideo ? Icons.play_arrow : Icons.motion_photos_on,
+                                    color: Colors.white,
+                                    size: 38,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   );
                 },
@@ -470,6 +548,9 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                       item.path,
                       if (item.width != null && item.height != null)
                         '${item.width}×${item.height}',
+                      if (item.isVideo && formatDurationMs(item.durationMs ?? 0).isNotEmpty)
+                        formatDurationMs(item.durationMs ?? 0),
+                      if (item.isLive) tr('photo.media.live'),
                       _formatTime(item.takenAt),
                     ].join('  ·  '),
                     maxLines: 1,

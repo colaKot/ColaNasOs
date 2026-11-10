@@ -6,7 +6,8 @@ import { secured } from '../../../../kernel/route';
 import { libTypeOf, normalizeLibType } from '../media-type';
 import { missingEpisodes } from '../series';
 import { rankMarksOf } from '../jp-rank';
-import { effectiveSources, offlineCond, offlineSmbPrefixes } from '../sources';
+import { effectiveSources, offlineCond, offlineSmbPrefixes, sourceRootCond } from '../sources';
+import { jpTagCond, resolutionCond } from '../jp-filter';
 import { ONLINE_NO, normalizeConnType } from '../smb';
 import {
   FolderMode,
@@ -93,10 +94,16 @@ function applyFilters(
     watched?: string;
     scraped?: string;
     flag?: string;
+    resolution?: string;
+    jpTag?: string;
   },
   uid: string,
+  /** 来源筛选：已解析好的来源根（`rel_path` 前缀），null = 不限 */
+  sourceRoot?: string | null,
 ): ReturnType<typeof sql> {
   let w = where;
+
+  if (sourceRoot) w = sql`${w} and ${sourceRootCond(sourceRoot)}`;
 
   const years = csvList(q.years).filter((v) => /^\d{1,4}$/.test(v));
   if (years.length > 0) {
@@ -110,18 +117,31 @@ function applyFilters(
 
   // 类型 / 地区 / 人物都是 JSON 数组文本，用「带引号的精确包含」匹配，
   // 不用 json_each 是为了兼容没编 json1 扩展的老库；带引号能避免「科幻」命中「科幻片」。
-  const likeJson = (column: 'nfo_genres' | 'nfo_regions' | 'nfo_actors' | 'nfo_directors', values: string[]) => {
+  const likeJson = (
+    column: 'nfo_genres' | 'nfo_regions' | 'nfo_actors' | 'nfo_directors',
+    values: string[],
+    /**
+     * 人名容错：库里少数记录的演员/导演被写成了「名字 头像地址 TMDB-id」一整串
+     * （2026-11-09 实测 5 条，`nfo_directors` 形如 `["周星驰 https://... 57607"]`），
+     * 带引号的精确匹配会把它们漏掉 —— 点进导演页看到「暂无内容」。
+     * 这里额外放一条「名字 + 空格」的宽松匹配，只对人物启用，题材/地区不需要。
+     */
+    opts: { dirtyNames?: boolean } = {},
+  ) => {
     if (values.length === 0) return;
     const parts = values.map((v) => {
-      const needle = `%"${v.replace(/[%_\\]/g, (c) => `\\${c}`)}"%`;
-      return sql`coalesce(${sql.raw(column)}, '') like ${needle} escape '\\'`;
+      const escaped = v.replace(/[%_\\]/g, (c) => `\\${c}`);
+      const exact = sql`coalesce(${sql.raw(column)}, '') like ${`%"${escaped}"%`} escape '\\'`;
+      if (!opts.dirtyNames) return exact;
+      const loose = sql`coalesce(${sql.raw(column)}, '') like ${`%"${escaped} %`} escape '\\'`;
+      return sql`(${exact} or ${loose})`;
     });
     w = sql`${w} and (${sql.join(parts, sql` or `)})`;
   };
   likeJson('nfo_genres', csvList(q.genres));
   likeJson('nfo_regions', csvList(q.regions));
-  likeJson('nfo_actors', csvList(q.actor));
-  likeJson('nfo_directors', csvList(q.director));
+  likeJson('nfo_actors', csvList(q.actor), { dirtyNames: true });
+  likeJson('nfo_directors', csvList(q.director), { dirtyNames: true });
 
   const watched = String(q.watched ?? '').trim().toLowerCase();
   if (watched === 'true' || watched === '1') {
@@ -142,6 +162,12 @@ function applyFilters(
   else if (flag === 'hdr') w = sql`${w} and (hdr10 = 1 or hdr10plus = 1 or hlg = 1 or dolby_vision = 1)`;
   else if (flag === 'atmos') w = sql`${w} and dolby_atmos = 1`;
   else if (flag === 'long') w = sql`${w} and coalesce(duration, 0) >= 7200000`;
+
+  // 日本库的分辨率 / 标签：口径与 facets 面板共用 jp-filter 里的同一份判断
+  const resolution = resolutionCond(q.resolution);
+  if (resolution) w = sql`${w} and ${resolution}`;
+  const jpTag = jpTagCond(q.jpTag);
+  if (jpTag) w = sql`${w} and ${jpTag}`;
 
   return w;
 }
@@ -182,6 +208,9 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           folderPath?: string;
           folderMode?: string;
           letter?: string;
+          resolution?: string;
+          jpTag?: string;
+          sourceId?: string;
         };
         const cur = decodeCursor(q.cursor);
         const timeCursor = decodeTimeCursor(q.cursor);
@@ -403,7 +432,16 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
                        or coalesce(nfo_directors, '') like ${keyword} escape '\\')`;
         }
         if (offline.length > 0) where = sql`${where} and ${offlineCond(offline, 'rel_path')}`;
-        where = applyFilters(where, q, uid);
+        // 来源筛选：只认本库自己的来源。id 是客户端从 facets 拿的，正常不会越库，
+        // 但 id 可复制 —— 不校验就能拿它探测任意路径。无效 id 直接给空页，
+        // 不静默退化成「全部」（否则用户以为筛选生效了，其实看到的是整库）。
+        let sourceRoot: string | null = null;
+        if (q.sourceId) {
+          const src = sources.find((s) => s.id === q.sourceId);
+          if (!src) return { items: [], nextCursor: null };
+          sourceRoot = src.root_path;
+        }
+        where = applyFilters(where, q, uid, sourceRoot);
 
         // 排序表达式（与 SET 里列出的 SORT_KEYS 一一对应）
         const exprOf: Record<SortKey, ReturnType<typeof sql>> = {
@@ -540,8 +578,12 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
         if (!name) return reply.code(400).send({ error: Err.badRequest, message: 'name required' });
         const limit = h.limitOf(q.limit, 500, 2000);
 
+        // 剧集集数也要排掉离线来源：否则点进一部剧，SMB 没挂载时
+        // 整屏都是点不开的灰块，还以为是文件坏了。
+        const offline = await offlineSmbPrefixes(k.db);
         let where = sql`series = ${name}`;
         if (q.libraryId) where = sql`${where} and library_id = ${q.libraryId}`;
+        if (offline.length > 0) where = sql`${where} and ${offlineCond(offline, 'rel_path')}`;
 
         const res = await sql<VideoItemRow>`
           select * from video_items

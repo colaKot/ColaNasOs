@@ -3,6 +3,7 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_media/nas_media.dart';
 import 'package:nas_ui/nas_ui.dart';
 import '../../shell/app_widgets.dart';
+import '../../shell/mobile_frame.dart';
 
 import '../../core/session.dart';
 import 'photo_viewer_page.dart';
@@ -78,6 +79,9 @@ class _PhotoOnThisDayPageState extends State<PhotoOnThisDayPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 与「全部」视图对齐：手机端一行 3 个。以前写死 6 列，390 宽的屏上
+    // 每格只有 ~55dp，连人脸都看不清（2026-11-07 反馈）。
+    final columns = isCompactWidth(context) ? 3 : 6;
     return Scaffold(
       appBar: widget.embedded
           ? null
@@ -98,7 +102,7 @@ class _PhotoOnThisDayPageState extends State<PhotoOnThisDayPage> {
               icon: Icons.today_outlined,
             )
           : ListView(
-              padding: const EdgeInsets.all(NasTokens.spaceLg),
+              padding: const EdgeInsets.all(NasTokens.spaceSm),
               children: [
                 for (final year in _years) ...[
                   Row(
@@ -125,8 +129,8 @@ class _PhotoOnThisDayPageState extends State<PhotoOnThisDayPage> {
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 6,
+                        SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
                           crossAxisSpacing: 3,
                           mainAxisSpacing: 3,
                         ),

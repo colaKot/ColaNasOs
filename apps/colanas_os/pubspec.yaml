@@ -44,6 +44,14 @@ dependencies:
     path: ../../packages/nas_media
   file_selector: ^1.1.0
   path_provider: ^2.1.5
+  # 手机相册备份：枚举系统相册 / 取原文件（含实况视频分量）
+  photo_manager: ^3.9.0
+  # 仅 WiFi 守卫与网络回切自动续跑
+  connectivity_plus: ^7.3.2
+  # 「不熄屏备份」
+  wakelock_plus: ^1.4.0
+  # 内容去重用的 MD5（与服务端 photo_items.content_md5 同口径）
+  crypto: ^3.0.3
   # 跨平台 HTTP：桌面/移动走 IOClient，Web 走 BrowserClient。
   # nas_core 的 IoTransport 依赖 dart:io，在浏览器里会抛 Unsupported operation。
   http: ^1.6.0
@@ -52,7 +60,9 @@ dependencies:
   latlong2: ^0.10.1
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
+  # 原生库按平台分发：每个包只在自己平台生效，多写不影响其他端
   media_kit_libs_windows_video: ^1.0.11
+  media_kit_libs_android_video: ^1.3.8
   # Web 持久化（设置 / 自动登录 token 写 localStorage），条件导入只在 web 端编译
   web: ^1.1.2
   # 交互式终端（PTY）的 WebSocket 通道：桌面走 dart:io，Web 走浏览器实现
@@ -63,6 +73,15 @@ dependencies:
   tray_manager: ^0.8.2
   window_manager: ^0.6.0
   archive: ^4.6.0
+  # 后台续播（Android 前台服务 + MediaSession）：Web 用浏览器自带的实现，
+  # 桌面不需要；条件导入保证这两端完全不编译它。
+  audio_service: ^0.18.19
+  device_info_plus: ^13.3.0
+  # 影视发现 兼容适配（features/discover/shell）专用，其它模块不引用。
+  # 既有实现是 GetX + 右键菜单 + 外链，原样搬源码比逐控件重写更能保证界面/逻辑一致。
+  get: ^4.7.2
+  flutter_context_menu: ^0.4.0
+  url_launcher: ^6.3.2
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -89,6 +108,8 @@ flutter:
     - assets/branding/
     - assets/icons/
     - assets/i18n/
+    - assets/music/musicCover/
+    - assets/music/icons/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

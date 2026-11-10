@@ -1,4 +1,5 @@
 import { enqueueScanOnce } from '../ai/vision';
+import { kickContentMd5Backfill } from '../content-md5-backfill';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sql } from 'kysely';
@@ -70,6 +71,10 @@ export async function runPhotoScan(k: KernelApi, body: PhotoScanInput, uid: stri
     total.pruned += r.pruned;
   }
   k.log.info(total, 'photo.scan');
+  // 扫描会新增记录（真实库一次重扫就多了 1138 条），新行的 content_md5 是 NULL。
+  // 补码循环原来只在启动时跑一次、补完即停，这些新记录会永远没码，备份判重
+  // 只能退回「现场读盘」。扫完重新踢一次，幂等，已在跑则直接返回。
+  kickContentMd5Backfill(k);
   // 扫完就把新照片送去识别：开关开着就自动跑，不用人再点一次
   void enqueueScanOnce(k)
     .then((r) => k.log.info({ ...r }, 'photo.ai scan autostart'))

@@ -311,8 +311,54 @@ export const ListQuery = Type.Object(
     folderMode: Type.Optional(Type.String({ maxLength: 16 })),
     /** 首字母筛选（# / A-Z），图片库用 */
     letter: Type.Optional(Type.String({ maxLength: 2 })),
+    /** 日本库：分辨率档位 —— 4k（is_4k）/ 1080（非 4K 且高 >= 1080） */
+    resolution: Type.Optional(Type.String({ maxLength: 8, description: '4k / 1080' })),
+    /** 日本库：标签 —— uncensored（无码）/ cracked（破解，含 ltx）/ ltx */
+    jpTag: Type.Optional(
+      Type.String({ maxLength: 16, description: 'uncensored / cracked / ltx' }),
+    ),
+    /** 日本库：只看某个来源（`video_library_sources.id`，按 rel_path 前缀匹配） */
+    sourceId: Type.Optional(Type.String({ maxLength: 64 })),
   },
   { $id: 'VideoListQuery' },
+);
+
+export const FacetsQuery = Type.Object(
+  { libraryId: Type.Optional(Type.String({ description: '缺省为全部库合计' })) },
+  { $id: 'VideoFacetsQuery' },
+);
+
+export const FacetCount = Type.Object(
+  {
+    key: Type.String({ description: '筛选值（分辨率 4k/1080；标签 uncensored/cracked/ltx）' }),
+    count: Type.Integer(),
+  },
+  { $id: 'VideoFacetCount' },
+);
+
+export const SourceFacet = Type.Object(
+  {
+    id: Type.String({ description: '来源 id；展示序号由客户端按数组顺序（来源1..N）给' }),
+    count: Type.Integer(),
+  },
+  { $id: 'VideoSourceFacet' },
+);
+
+export const GenreFacet = Type.Object(
+  { name: Type.String(), count: Type.Integer() },
+  { $id: 'VideoGenreFacet' },
+);
+
+export const FacetsResponse = Type.Object(
+  {
+    sources: Type.Array(Type.Ref(SourceFacet)),
+    genres: Type.Array(Type.Ref(GenreFacet), {
+      description: 'NFO 题材按数量倒序，最多 30 个；已排除「单体作品」',
+    }),
+    tags: Type.Array(Type.Ref(FacetCount)),
+    resolutions: Type.Array(Type.Ref(FacetCount)),
+  },
+  { $id: 'VideoFacetsResponse' },
 );
 
 export const ListCountQuery = Type.Object(
@@ -1224,6 +1270,11 @@ export const VIDEO_SCHEMAS = [
   SmartAlbumItemsQuery,
   ListQuery,
   ListResponse,
+  FacetsQuery,
+  FacetCount,
+  SourceFacet,
+  GenreFacet,
+  FacetsResponse,
   ImageFolderQuery,
   ImageFolderNode,
   ImageFolderPathSegment,

@@ -9,7 +9,6 @@ import { checkMigrationOrder, orderMigrations } from '../kernel/migrations/manif
 import { appKeysForPath, checkAppAccess, checkPathAccess } from '../kernel/access-policy';
 import { buildPlan } from '../src/modules/sync/plan';
 import { WatchdogSupervisor } from '../kernel/watchdog-supervisor';
-import { DEFAULT_PARAMS, clusterSamples, validateParams } from '../src/modules/photo/ai/cluster-v2';
 import { buildUnc, normalizeScanPath, parseUnc } from '../src/modules/video/smb';
 import { parseJpTagsFromName } from '../src/modules/video/media-type';
 import { looksJunkTmdbMatch, pickExactCodeLink } from '../src/modules/video/jp-scrape';
@@ -364,63 +363,6 @@ test('watchdog supervisor: off 模式只记账；always 模式 CPU 持续也重�
   assert.equal(always.check(2500).action, 'restart');
 });
 
-test('face cluster v2: 两组近似向量分成两簇且可复现', () => {
-  const mk = (id: string, photoId: string, vec: number[], quality = 90, oldClusterId?: string) => ({
-    id,
-    photoId,
-    photoKey: photoId,
-    vec,
-    quality,
-    oldClusterId,
-  });
-  const samples = [
-    mk('a1', 'p1', [1, 0, 0, 0]),
-    mk('a2', 'p2', [0.99, 0.02, 0, 0]),
-    mk('a3', 'p3', [0.98, 0.03, 0.01, 0]),
-    mk('a4', 'p4', [0.97, 0.04, 0, 0.01]),
-    mk('b1', 'p5', [0, 1, 0, 0]),
-    mk('b2', 'p6', [0.02, 0.99, 0, 0]),
-    mk('b3', 'p7', [0.01, 0.98, 0.02, 0]),
-    mk('b4', 'p8', [0, 0.97, 0.03, 0]),
-  ];
-  const params = {
-    ...DEFAULT_PARAMS,
-    topK: 4,
-    consensusMinSupport: 1,
-    cwSeeds: [1, 7, 13],
-    centerEmbeddings: false,
-    maxClusterSize: 100,
-  };
-  const r1 = clusterSamples(samples, params);
-  const r2 = clusterSamples(samples, params);
-
-  assert.equal(r1.clusterCount, 2);
-  assert.equal(r1.usedCount, 8);
-  assert.deepEqual(
-    r1.clusters.map((c) => c.members.slice().sort()),
-    r2.clusters.map((c) => c.members.slice().sort()),
-  );
-
-  const aCluster = r1.clusters.find((c) => c.members.includes('a1'));
-  assert.ok(aCluster);
-  assert.equal(aCluster!.members.includes('b1'), false);
-});
-
-test('face cluster v2: 低质量样本不参与聚类、参数越界直接抛错', () => {
-  const samples = [
-    { id: 'x1', photoId: 'p1', vec: [1, 0], quality: 30 },
-    { id: 'x2', photoId: 'p2', vec: [1, 0], quality: 90 },
-  ];
-  const r = clusterSamples(samples, {
-    ...DEFAULT_PARAMS,
-    consensusMinSupport: 1,
-    centerEmbeddings: false,
-  });
-  assert.equal(r.usedCount, 1);
-  assert.equal(r.assignments.find((a) => a.sampleId === 'x1')!.clusterKey, null);
-
-  assert.throws(() => validateParams({ topK: 1 }), /out of bounds/);
-});
 test('smb: UNC 归一化与扫描路径规整', () => {
   assert.equal(buildUnc('\\\\nas\\', '\\media\\', 'movies/2026'), '\\\\nas\\media\\movies\\2026');
   const parsed = parseUnc('\\\\nas\\media\\movies');

@@ -226,12 +226,30 @@ async function run(k: KernelApi, id: string, params: GenerateParams): Promise<vo
 
     const sections = [...new Set(items.map((it) => it.spoken))];
     const headlines = items.slice(0, 12).map((it) => it.title);
+    // 本期素材清单：文稿弹窗底部要列「引用链接」，所以连原文 URL 一起落库。
+    // 按 link 去重（同一条新闻常出现在多个源），最多 60 条，避免把 blob 撑大。
+    const seen = new Set<string>();
+    const news = items
+      .filter((it) => {
+        const link = String(it.link || '').trim();
+        if (!link || seen.has(link)) return false;
+        seen.add(link);
+        return true;
+      })
+      .slice(0, 60)
+      .map((it) => ({
+        category: String(it.spoken || ''),
+        title: String(it.title || '').slice(0, 200),
+        link: String(it.link || '').slice(0, 500),
+        source: String(it.source || '').slice(0, 60),
+      }));
     // 先把清单与稿件落库：合成失败也能看见「这期本来要播什么」
     await setStatus(k, id, {
       script: text,
       item_count: script.usedLlm ? script.stats.total : items.length,
       sections_json: JSON.stringify(sections),
       headlines_json: JSON.stringify(headlines),
+      news_json: JSON.stringify(news),
     });
 
     // 稿件已落库，剩下的纯音频合成独立成函数：接口可从已有稿件直接重跑，
@@ -298,6 +316,14 @@ export async function synthesizeEpisode(
   const finalBytes = result.mp3 ? result.mp3Bytes : result.wavBytes;
   if (!result.mp3) {
     k.log.warn('[blog] mp3 转码失败，保留 wav（缺 ffmpeg？npm run ffmpeg:fetch）');
+  }
+  // 自检：TTS 被截断时不报错、退出码也是 0，唯一痕迹是「念得太快」
+  // （正常 ≈4.5 汉字/秒 @speed=1）。真出现就说明某块顶到了 -n 上限还没被兜底切开。
+  const charsPerSec = result.durationSec > 0 ? (result.han / result.durationSec) * speed : 0;
+  if (charsPerSec > 6) {
+    k.log.warn(
+      `[blog] 第 ${id} 期语速异常：${charsPerSec.toFixed(1)} 汉字/秒（正常约 4.5），可能有分块被 TTS 截断`,
+    );
   }
   await setStatus(k, id, {
     status: 'done',

@@ -15,7 +15,7 @@ import { filesRoot, resolveAnyPath } from '../files/fs-root';
  *   阶段 2 比对：按 phash 前 32 位分桶，桶内汉明距离 ≤6 视为相似，写入 `photo_phash_groups`
  *
  * 先扫描、再比对；失败的照片标记 `phash_state=2`，
- * 不会在下次扫描时反复重试。阈值固定 6，与参考实现一致（64 位里 6 位差异）。
+ * 不会在下次扫描时反复重试。阈值固定 6，与既有实现一致（64 位里 6 位差异）。
  */
 const PHASH_DISTANCE = 6;
 const PREFIX_LEN = 8;
@@ -41,6 +41,11 @@ const state: PhashState = {
   failed: 0,
   owner: '',
 };
+
+/** 给 AI 设置页的队列卡用：只读快照，不暴露可写引用 */
+export function phashScanState(): PhashState {
+  return { ...state };
+}
 
 function hexBits(hex: string): bigint {
   try {
@@ -75,7 +80,8 @@ async function runPhash(k: KernelApi, uid: string): Promise<void> {
   try {
     const pending = await sql<{ n: number }>`
       select count(*) as n from photo_items
-       where in_trash = 0 and phash_state = 0 and ${ownerFilter(uid)}
+       where in_trash = 0 and phash_state = 0 and media_kind = 'image'
+         and ${ownerFilter(uid)}
     `.execute(k.db);
     state.total = Number(pending.rows[0]?.n) || 0;
 
@@ -86,7 +92,8 @@ async function runPhash(k: KernelApi, uid: string): Promise<void> {
       const rows = (
         await sql<{ id: string; rel_path: string }>`
           select id, rel_path from photo_items
-           where in_trash = 0 and phash_state = 0 and ${ownerFilter(uid)}
+           where in_trash = 0 and phash_state = 0 and media_kind = 'image'
+             and ${ownerFilter(uid)}
            order by taken_at desc limit ${SCAN_BATCH}
         `.execute(k.db)
       ).rows;
@@ -133,7 +140,8 @@ async function runPhash(k: KernelApi, uid: string): Promise<void> {
         rel_path: string;
       }>`
         select id, phash, size, taken_at, rel_path from photo_items
-         where in_trash = 0 and phash is not null and phash <> '' and ${ownerFilter(uid)}
+         where in_trash = 0 and phash is not null and phash <> ''
+           and media_kind = 'image' and ${ownerFilter(uid)}
          order by taken_at asc, id asc
          limit 40000
       `.execute(k.db)

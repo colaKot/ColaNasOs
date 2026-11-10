@@ -487,6 +487,9 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
                   initialZoom: 9,
                   minZoom: 2,
                   maxZoom: 18,
+                  interactionOptions: const InteractionOptions(
+                    flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                  ),
                   onTap: (_, point) => setState(() {
                     _lat = point.latitude;
                     _lng = point.longitude;
@@ -713,6 +716,9 @@ class _GpsPickerDialogState extends State<_GpsPickerDialog> {
                     initialZoom: 13,
                     minZoom: 2,
                     maxZoom: 18,
+                    interactionOptions: const InteractionOptions(
+                      flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                    ),
                     onTap: (_, p) => setState(() => _point = p),
                   ),
                   children: [

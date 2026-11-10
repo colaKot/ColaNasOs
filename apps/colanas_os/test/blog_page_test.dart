@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:colanas_os/core/session.dart';
 import 'package:colanas_os/features/blog/ai_news_page.dart';
+import 'package:colanas_os/features/blog/blog_player_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nas_core/nas_core.dart';
@@ -123,6 +124,20 @@ class _FakeTransport implements Transport {
         'modelReady': modelInstalled,
         'modelDir': modelInstalled ? 'C:/data/tts/models/qwen3-tts' : null,
       };
+    } else if (path.endsWith('/blog/script')) {
+      payload = {
+        'id': 'ep1',
+        'title': '2026年11月6日 AI 新闻',
+        'script': '各位听众早上好。\n今天的第一条新闻……',
+        'items': [
+          {
+            'category': '国内综合新闻',
+            'title': '示例新闻',
+            'link': 'https://example.com/a',
+            'source': '示例源',
+          },
+        ],
+      };
     } else if (path.endsWith('/blog/warmup')) {
       payload = {'ready': true, 'available': true};
     } else if (path.endsWith('/blog/status')) {
@@ -238,16 +253,17 @@ void main() {
     await _pumpPage(tester);
     expect(tester.takeException(), isNull);
 
-    // 已生成的列表在页面下方：滚过去，确认列表项与错误态都能画出来
-    await tester.drag(find.byType(ListView).first, const Offset(0, -1400));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    expect(find.text('已生成新闻'), findsOneWidget);
+    // 已生成的音频列表在最上面（2026-11-06 调整）：进页就该看到，不用滚
+    expect(find.text('已生成音频'), findsOneWidget);
     expect(find.text('2026年11月6日 AI 新闻'), findsOneWidget);
 
-    // 打开第一个下拉（曾经的崩溃点：无宽度约束的 DropdownButton）
-    await tester.drag(find.byType(ListView).first, const Offset(0, 1400));
+    // 滚到底部：生成设置区在最下面，确认两列配置卡片都能画出来
+    await tester.drag(find.byType(ListView).first, const Offset(0, -1600));
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('新闻条数'), findsOneWidget);
+
+    // 打开第一个下拉（曾经的崩溃点：无宽度约束的 DropdownButton）
     await tester.tap(find.byType(DropdownButton<int>).first);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -255,6 +271,76 @@ void main() {
     // 关掉菜单，避免 pending 的遮罩影响后续断言
     await tester.tapAt(const Offset(4, 4));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('音频列表：宽屏一行两列，窄屏堆成一列', (tester) async {
+    await _pumpPage(tester);
+    expect(tester.takeException(), isNull);
+
+    final newest = tester.getCenter(find.text('2026年11月6日 AI 新闻'));
+    final older = tester.getCenter(find.text('2026年11月5日 AI 新闻'));
+    // 同一行、较新的在左侧
+    expect(older.dy, moreOrLessEquals(newest.dy, epsilon: 4));
+    expect(newest.dx, lessThan(older.dx));
+
+    await _pumpPage(tester, width: 420);
+    expect(tester.takeException(), isNull);
+    final narrowNewest = tester.getCenter(find.text('2026年11月6日 AI 新闻'));
+    final narrowOlder = tester.getCenter(find.text('2026年11月5日 AI 新闻'));
+    expect(narrowOlder.dy, greaterThan(narrowNewest.dy));
+  });
+
+  testWidgets('音频卡片：宽屏三个按钮，窄屏把重新生成与删除收进更多', (tester) async {
+    await _pumpPage(tester);
+    expect(tester.takeException(), isNull);
+    expect(find.byTooltip('查看文稿'), findsNWidgets(2));
+    expect(find.byTooltip('重新合成音频'), findsNWidgets(2));
+    expect(find.byTooltip('删除'), findsNWidgets(2));
+
+    await _pumpPage(tester, width: 420);
+    expect(tester.takeException(), isNull);
+    expect(find.byTooltip('查看文稿'), findsNWidgets(2));
+    expect(find.byTooltip('重新合成音频'), findsNothing);
+    expect(find.byTooltip('删除'), findsNothing);
+    expect(find.byTooltip('更多'), findsNWidgets(2));
+  });
+
+  testWidgets('查看文稿：正文与底部引用链接都能看到', (tester) async {
+    await _pumpPage(tester);
+    await tester.tap(find.byTooltip('查看文稿').first);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('播报文稿'), findsOneWidget);
+    expect(find.textContaining('各位听众早上好'), findsOneWidget);
+    expect(find.text('引用链接'), findsOneWidget);
+    expect(find.text('示例新闻'), findsOneWidget);
+  });
+
+  testWidgets('手机更多菜单：队列操作与重新生成 / 删除都在', (tester) async {
+    await _pumpPage(tester, width: 420);
+    await tester.tap(find.byTooltip('更多').first);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('加入播放列表'), findsOneWidget);
+    expect(find.text('下一期播放'), findsOneWidget);
+    expect(find.text('重新合成音频'), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
+  });
+
+  testWidgets('全屏播放页：没播放时给空提示，播放列表弹层也能打开', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: BlogPlayerPage()));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('还没有播放的期次'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.queue_music));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('播放列表'), findsOneWidget);
+    expect(find.text('播放列表是空的，先点一期播放吧'), findsOneWidget);
   });
 
   testWidgets('老库残留 Kokoro 音色 id：不崩且下拉 value 回到有效项', (tester) async {

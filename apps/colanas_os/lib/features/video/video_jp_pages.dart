@@ -3,10 +3,15 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../shell/app_widgets.dart';
+import '../../shell/shell_back.dart';
 
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
+import '../../core/task_poll.dart';
+import 'detail/video_detail_router.dart';
 import 'video_card.dart';
+import 'video_item_actions.dart';
+import 'video_jp_filters.dart';
 import 'video_page.dart';
 
 /// 日本片榜单（JavDB 日 / 周 / 月 × 影片 / 演员）。
@@ -231,12 +236,23 @@ class _VideoJpRankPageState extends State<VideoJpRankPage> {
 ///   * 演员封面 = 她「最热的未看片」，全看过时退化为全部里最热的一部；
 ///   * 点进演员后作品按服务端综合序（未看 → 热度 → 评分 → 年份 → 入库 → 收藏）。
 class VideoJpActorPage extends StatefulWidget {
-  const VideoJpActorPage({super.key, this.embedded = true, this.libraryId});
+  const VideoJpActorPage({
+    super.key,
+    this.embedded = true,
+    this.libraryId,
+    this.initialActorName,
+  });
 
   final bool embedded;
 
   /// 只看某个日本库；null = 所有库
   final String? libraryId;
+
+  /// 直接打开这位演员（从影片详情的「演职人员」点进来）。
+  ///
+  /// 非空时**只显示演员详情**，不加载演员网格、不再注册自己的返回层 ——
+  /// 它是叠在影片详情之上的三级页，返回由外壳统一处理。
+  final String? initialActorName;
 
   @override
   State<VideoJpActorPage> createState() => _VideoJpActorPageState();
@@ -267,14 +283,63 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
   String? _worksError;
   List<VideoItem> _works = const [];
 
+  /// 演员页筛选：口径与影片列表完全一致（同一个 VideoJpFilter / 同一个 facets 接口）。
+  /// 语义是「名下至少有一部符合条件的影片，这个人才显示」—— 由服务端在
+  /// 「演员 × 作品」关系行上过滤，不在客户端拍脑袋。
+  VideoJpFilter _filter = const VideoJpFilter();
+
   String _k(String name) => 'video.jp.${widget.libraryId ?? 'all'}.$name';
+
+  /// true = 「只看这一个演员」模式（从影片详情点演员进来）
+  bool get _pinned => (widget.initialActorName ?? '').trim().isNotEmpty;
 
   @override
   void initState() {
     super.initState();
     _showFanart = SettingsStore.instance.getBool(_k('fanart')) ?? false;
     _sortBy = SettingsStore.instance.getString(_k('sortBy')) ?? 'smart';
-    _load();
+    if (_pinned) {
+      // 不拉那 500 个演员的网格，直接按名字要档案 + 作品
+      _loading = false;
+      _openActorByName(widget.initialActorName!.trim());
+    } else {
+      _load();
+    }
+  }
+
+  /// 按名字打开演员：先要档案（身高 / 三围 / 生日），再拉作品；
+  /// 档案拿不到就只显示名字，至少作品列表是对的。
+  Future<void> _openActorByName(String name) async {
+    var actor = <String, dynamic>{'name': name};
+    try {
+      final p = await ApiSession.instance.client.videoJpActorProfile(
+        body: {'name': name},
+      );
+      if (!mounted) return;
+      if (p.isNotEmpty) actor = <String, dynamic>{...actor, ...p};
+    } catch (_) {
+      // 档案接口失败不影响看作品
+    }
+    if (!mounted) return;
+    await _openActor(actor);
+    if (!mounted) return;
+    final selected = _selected;
+    if (selected == null) return;
+    // 档案接口只给「身高/三围/生日」，没有列表侧的聚合（共几部、几部未看），
+    // 这两个用刚拉到的作品补上，别让页头显示 0 部。
+    final patch = <String, dynamic>{};
+    if (_int(selected['count']) == 0 && _works.isNotEmpty) {
+      patch['count'] = _works.length;
+    }
+    if (_int(selected['unwatchedCount']) == 0) {
+      final unwatched = _works.where((w) => !w.watched).length;
+      if (unwatched > 0) patch['unwatchedCount'] = unwatched;
+    }
+    if (patch.isNotEmpty) {
+      setState(() {
+        _selected = <String, dynamic>{...selected, ...patch};
+      });
+    }
   }
 
   @override
@@ -297,6 +362,10 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
       final res = await ApiSession.instance.client.videoJpActorList(
         libraryId: widget.libraryId,
         limit: '500',
+        resolution: _filter.resolution.isEmpty ? null : _filter.resolution,
+        jpTag: _filter.jpTag.isEmpty ? null : _filter.jpTag,
+        genre: _filter.genre.isEmpty ? null : _filter.genre,
+        sourceId: _filter.sourceId.isEmpty ? null : _filter.sourceId,
       );
       if (!mounted) return;
       setState(() {
@@ -324,10 +393,17 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
       _works = const [];
     });
     try {
+      // 作品必须和演员列表用同一份筛选：列表写着 1 部，进来就只有这 1 部。
+      // libraryId 也要带 —— 不然同一个演员在别的库里的片会被算进来。
       final res = await ApiSession.instance.client.videoJpActorWorks(
         key: _str(actor['key']).isEmpty ? null : _str(actor['key']),
         name: _str(actor['name']),
-        limit: '200',
+        libraryId: widget.libraryId,
+        limit: '2000',
+        resolution: _filter.resolution.isEmpty ? null : _filter.resolution,
+        jpTag: _filter.jpTag.isEmpty ? null : _filter.jpTag,
+        genre: _filter.genre.isEmpty ? null : _filter.genre,
+        sourceId: _filter.sourceId.isEmpty ? null : _filter.sourceId,
       );
       if (!mounted || _selected != actor) return;
       setState(() {
@@ -369,6 +445,78 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
     } catch (e) {
       if (!mounted) return;
       NasSnack.show(context, '$e');
+    }
+  }
+
+  /// 删除「当前筛选下这位演员的全部作品」——不是删除这个演员。
+  ///
+  /// 批量删除的三条底线：范围说清楚、可恢复、不牵连范围外的数据。
+  ///   · 名单就是作品接口按同一份筛选返回的 ids（触到上限就拒绝，避免「全部」名不副实）；
+  ///   · 走回收站（permanent: false）；
+  ///   · 服务端只删这些条目及其关联行，绝不 delete jp_actors。
+  Future<void> _deleteFilteredWorks(Map<String, dynamic> actor) async {
+    if (_filter.isEmpty) {
+      NasSnack.show(context, tr('video.jp.deleteNeedFilter'));
+      return;
+    }
+    final ids = _works.map((e) => e.id).toList();
+    if (ids.isEmpty) return;
+    if (ids.length >= 2000) {
+      NasSnack.show(
+        context,
+        tr('video.jp.deleteTooMany', {'count': '${ids.length}'}),
+      );
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('common.delete')),
+        content: Text(
+          tr('video.jp.deleteWorksBody', {'count': '${ids.length}'}),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('common.delete')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    // 提前拿 messenger：后面要 await 删除任务，别把 BuildContext 带过异步间隙
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _worksLoading = true);
+    try {
+      final res = await ApiSession.instance.client.videoItemsDeleteTask(
+        body: VideoDeleteItemsBody(ids: ids, permanent: false),
+      );
+      final taskId = _str(res['taskId']);
+      if (taskId.isNotEmpty) {
+        final task = await waitTask(taskId);
+        if (task != null && task['state'] != 'done') {
+          NasSnack.showOn(messenger, '${task['error'] ?? task['state']}');
+          await _openActor(actor);
+          await _load();
+          return;
+        }
+      }
+      NasSnack.showOn(
+        messenger,
+        tr('video.jp.deleteWorksDone', {'count': '${ids.length}'}),
+      );
+      // 删完这批，这个人在当前筛选下可能就不再出现 —— 但她的档案和不符合
+      // 筛选的影片都还在，取消筛选立刻能再看到她。
+      await _openActor(actor);
+      await _load();
+    } catch (e) {
+      NasSnack.showOn(messenger, '$e');
+    } finally {
+      if (mounted) setState(() => _worksLoading = false);
     }
   }
 
@@ -435,12 +583,34 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
 
   @override
   Widget build(BuildContext context) {
+    return SubPageScope(
+      // pinned：三层页里的返回由外壳那层 SubPageScope 负责，
+      // 这里再注册一个只会把「演员详情」退成空网格。
+      active: !_pinned && (_showMovies || _selected != null),
+      onBack: () {
+        if (_showMovies) {
+          setState(() => _showMovies = false);
+        } else if (_selected != null) {
+          _closeActor();
+        }
+      },
+      child: _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     final body = _showMovies
         ? _buildMoviesView()
         : (_selected == null ? _buildActorView() : _buildActorDetail());
     if (widget.embedded) return body;
     return Scaffold(
-      appBar: AppBar(title: Text(tr('video.jp.actorTitle'))),
+      appBar: AppBar(
+        title: Text(
+          _pinned && _selected != null
+              ? _str(_selected!['name'])
+              : tr('video.jp.actorTitle'),
+        ),
+      ),
       body: body,
     );
   }
@@ -480,6 +650,21 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
                 ),
               ),
               const SizedBox(width: NasTokens.spaceSm),
+              // 筛选：和普通影视列表同一个按钮样式（有筛选时高亮），
+              // 点开才是演员页自己的各种条件，不再常驻占两行。
+              VideoJpFilterButton(
+                value: _filter,
+                libraryId: widget.libraryId,
+                onlyFavorite: _onlyFavorite,
+                onlyUnwatched: _onlyUnwatched,
+                onOnlyFavoriteChanged: (v) => setState(() => _onlyFavorite = v),
+                onOnlyUnwatchedChanged: (v) =>
+                    setState(() => _onlyUnwatched = v),
+                onChanged: (v) {
+                  setState(() => _filter = v);
+                  _load();
+                },
+              ),
               PopupMenuButton<String>(
                 initialValue: _sortBy,
                 tooltip: tr('video.jp.sort'),
@@ -516,35 +701,17 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
                       : null,
                 ),
               ),
-              IconButton(
-                tooltip: tr('video.jp.movie'),
+              // 「影片」视图的入口。纯图标在满屏海报里几乎看不见，补上文字。
+              TextButton.icon(
                 onPressed: () => setState(() => _showMovies = true),
-                icon: const Icon(Icons.movie_outlined),
+                icon: const Icon(Icons.movie_outlined, size: 18),
+                label: Text(tr('video.jp.movie')),
               ),
               NasRefreshButton(onPressed: _loading ? null : _load),
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: NasTokens.spaceMd),
-          child: Row(
-            children: [
-              NasChip(
-                label: Text(tr('video.jp.favorites')),
-                selected: _onlyFavorite,
-                visualDensity: VisualDensity.compact,
-                onSelected: (v) => setState(() => _onlyFavorite = v),
-              ),
-              const SizedBox(width: NasTokens.spaceXs),
-              NasChip(
-                label: Text(tr('video.jp.onlyUnwatched')),
-                selected: _onlyUnwatched,
-                visualDensity: VisualDensity.compact,
-                onSelected: (v) => setState(() => _onlyUnwatched = v),
-              ),
-            ],
-          ),
-        ),
+        // 筛选入口已收进顶栏按钮，这里直接留整块高度给演员网格。
         Expanded(
           child: _loading
               ? const NasLoading()
@@ -717,7 +884,7 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
   }
 
   /// 「影片」视图：直接复用普通列表页（分页 / 搜索 / 排序 / 筛选都在），
-  /// 顶栏额外给一个「返回演员」按钮 —— 参考实现是在列表页顶栏放同样的切换钮。
+  /// 顶栏额外给一个「返回演员」按钮 —— 既有实现是在列表页顶栏放同样的切换钮。
   Widget _buildMoviesView() {
     return Column(
       children: [
@@ -747,7 +914,14 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
             ],
           ),
         ),
-        Expanded(child: VideoPage(embedded: true, libraryId: widget.libraryId)),
+        Expanded(
+          child: VideoPage(
+            embedded: true,
+            libraryId: widget.libraryId,
+            jp: true,
+            jpFilter: _filter,
+          ),
+        ),
       ],
     );
   }
@@ -767,11 +941,12 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
           ),
           child: Row(
             children: [
-              IconButton(
-                tooltip: tr('video.jp.back'),
-                onPressed: _closeActor,
-                icon: const Icon(Icons.arrow_back),
-              ),
+              if (!_pinned)
+                IconButton(
+                  tooltip: tr('video.jp.back'),
+                  onPressed: _closeActor,
+                  icon: const Icon(Icons.arrow_back),
+                ),
               Expanded(
                 child: Text(
                   name,
@@ -782,6 +957,13 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+              ),
+              // 删的是「当前筛选下这批作品」，不是这个演员：
+              // 演员档案、收藏关系、以及不符合筛选的影片一律不动。
+              IconButton(
+                tooltip: tr('video.jp.deleteWorks'),
+                onPressed: _worksLoading ? null : () => _deleteFilteredWorks(actor),
+                icon: const Icon(Icons.delete_outline),
               ),
               IconButton(
                 tooltip: fav
@@ -853,12 +1035,34 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
           itemCount: _works.length,
           itemBuilder: (context, i) {
             final item = _works[i];
+            Future<void> run(String action) async {
+              final changed = await runVideoItemAction(context, action, item);
+              if (!mounted || _selected == null) return;
+              // 删片会改变演员在当前筛选下的影片数，演员列表也要跟着重算
+              if (action == VideoItemAction.delete) await _load();
+              if (changed) await _openActor(_selected!);
+            }
+
             return RepaintBoundary(
-              child: VideoPosterCard(
-                item: item,
-                width: cellW,
-                showFanart: _showFanart,
-                onTap: () => openVideoDetail(context, item),
+              child: NasContextMenuRegion(
+                entries: videoItemMenuEntries(item, onAction: run),
+                child: GestureDetector(
+                  onLongPress: () async {
+                    final action = await showVideoItemActionSheet(context, item);
+                    if (action != null) await run(action);
+                  },
+                  child: VideoPosterCard(
+                    item: item,
+                    width: cellW,
+                    showFanart: _showFanart,
+                    onTap: () async {
+                      await openVideoDetail(context, item);
+                      // 详情页里标记已看 / 收藏 / 删片后，回来不能还是旧状态
+                      if (!mounted || _selected == null) return;
+                      await _openActor(_selected!);
+                    },
+                  ),
+                ),
               ),
             );
           },
@@ -1070,3 +1274,37 @@ int _int(Object? v) {
 }
 
 String _str(Object? v) => v == null ? '' : '$v';
+
+/// 打开「某位日本演员」的详情（与 `openVideoDetail` 同口径）。
+///
+/// 影片详情里点演员时用它：日本库的演员页有身高 / 三围 / 生日 / 收藏，
+/// 和普通库的「某人的作品」不是同一页，别拿后者顶。
+Future<void> openVideoJpActor(
+  BuildContext context, {
+  required String name,
+  String? libraryId,
+}) {
+  final router = VideoDetailRouter.instance;
+  if (router.embeddableFrom(context)) {
+    router.open(
+      VideoDetailEntry(
+        tag: 'jpactor:${libraryId ?? 'all'}:$name',
+        build: (_) => VideoJpActorPage(
+          embedded: true,
+          libraryId: libraryId,
+          initialActorName: name,
+        ),
+      ),
+    );
+    return Future<void>.value();
+  }
+  return Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => VideoJpActorPage(
+        embedded: false,
+        libraryId: libraryId,
+        initialActorName: name,
+      ),
+    ),
+  );
+}

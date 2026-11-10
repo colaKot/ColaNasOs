@@ -197,12 +197,19 @@ export async function backfillActorThumbs(
   return { scanned: rows.length, updated };
 }
 
-/** 清掉既没有作品也没有档案的演员行（重建后可能留下空壳） */
+/**
+ * 清掉既没有作品也没有档案的演员行（重建后可能留下空壳）。
+ *
+ * 收藏过的演员一律不删：收藏是用户明确表态要留住的人，哪怕她此刻一部片都不剩
+ * （比如刚按某个筛选把那批片删了），也不该让一次「重建关联」把人抹掉。
+ * 演员档案（`profile`）同理 —— 抓过的资料不会因为片子变动而丢弃。
+ */
 export async function pruneOrphanActors(db: any): Promise<number> {
   const res = await sql`
     delete from jp_actors
      where (profile is null or profile = '')
        and id not in (select actor_id from jp_actor_items)
+       and id not in (select actor_key from video_actor_favorite)
   `.execute(db);
   return Number(res.numAffectedRows || 0);
 }

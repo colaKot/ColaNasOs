@@ -21,8 +21,18 @@ Future<void> enterPlayerFullscreen({
   );
 }
 
-/// 退出全屏：朝向放开成「跟随系统」，别把用户锁死在某一个方向里。
-Future<void> exitPlayerFullscreen() async {
-  await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+/// 退出全屏。
+///
+/// [portrait] = 要不要锁回竖屏，由调用方按「进播放器时的朝向」决定：
+///   - 手机竖着进来 → 锁回竖屏。只「放开朝向」（`DeviceOrientation.values`）
+///     是不够的：安卓在 `screenOrientation=unspecified` + 系统自动旋转关闭时
+///     会**保持上一次的横屏不动**，用户看到的就是「退出影片以后一直横着」。
+///   - 横着进来（TV / 平板横放）→ 放开朝向，别把 TV 的界面掰成竖的。
+Future<void> exitPlayerFullscreen({bool portrait = true}) async {
+  await SystemChrome.setPreferredOrientations(
+    portrait
+        ? const [DeviceOrientation.portraitUp]
+        : DeviceOrientation.values,
+  );
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 }

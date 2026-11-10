@@ -74,12 +74,24 @@ export const ClusterItem = Type.Object(
 );
 
 export const ClusterList = Type.Object(
-  { items: Type.Array(Type.Ref(ClusterItem)) },
+  {
+    items: Type.Array(Type.Ref(ClusterItem)),
+    /** 符合过滤条件的簇总数（不含分页） */
+    total: Type.Optional(Type.Integer()),
+    /** 下一页 cursor（offset）；null = 已翻到底 */
+    nextCursor: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  },
   { $id: 'PhotoFaceClusterList' },
 );
 
 export const ClusterDetailQuery = Type.Object(
-  { id: Type.String({ minLength: 1 }) },
+  {
+    id: Type.String({ minLength: 1 }),
+    /** 分页：单页张数（默认 500，上限 5000） */
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 5000 })),
+    /** 下一页 cursor（offset）；缺省从 0 开始 */
+    cursor: Type.Optional(Type.Integer({ minimum: 0 })),
+  },
   { $id: 'PhotoFaceClusterQuery' },
 );
 
@@ -128,7 +140,13 @@ export const FaceImageQuery = Type.Object(
 );
 
 export const FaceList = Type.Object(
-  { items: Type.Array(Type.Ref(FaceItem)) },
+  {
+    items: Type.Array(Type.Ref(FaceItem)),
+    /** 该簇下的照片总数（不含分页） */
+    total: Type.Optional(Type.Integer()),
+    /** 下一页 cursor（offset）；null = 已翻到底 */
+    nextCursor: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  },
   { $id: 'PhotoFaceList' },
 );
 
@@ -331,6 +349,10 @@ export const FaceClusterFilterQuery = Type.Object(
         description: '展示门：少于这个张数的组不显示（具名组豁免）',
       }),
     ),
+    /** 分页：单页簇数（默认 500，上限 5000） */
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 5000 })),
+    /** 下一页 cursor（offset）；缺省从 0 开始 */
+    cursor: Type.Optional(Type.Integer({ minimum: 0 })),
   },
   { $id: 'PhotoFaceClusterFilter' },
 );
@@ -345,6 +367,32 @@ export const FaceDissolveBody = Type.Object(
     clusterId: Type.String({ minLength: 1 }),
   },
   { $id: 'PhotoFaceDissolveBody' },
+);
+
+export const FaceSweepBody = Type.Object(
+  {
+    /** 碎片簇上限：成员数 ≤ 此值且未命名的簇先解绑再重认，0 = 不动碎片簇 */
+    fragmentMax: Type.Optional(Type.Integer({ minimum: 0, maximum: 20, default: 2 })),
+    /** 最多处理多少张未归属脸，0 = 全部 */
+    limit: Type.Optional(Type.Integer({ minimum: 0, default: 0 })),
+    /** 只往已命名人物里收（默认 true）；false 时也往未命名簇收，容易把脸锁进无名簇 */
+    onlyNamed: Type.Optional(Type.Boolean({ default: true })),
+    /** 干跑：只统计不写库 */
+    dryRun: Type.Optional(Type.Boolean({ default: false })),
+  },
+  { $id: 'PhotoFaceSweepBody' },
+);
+
+export const FaceSweepResult = Type.Object(
+  {
+    candidates: Type.Integer(),
+    fragments: Type.Integer(),
+    unbound: Type.Integer(),
+    assigned: Type.Integer(),
+    left: Type.Integer(),
+    elapsedMs: Type.Integer(),
+  },
+  { $id: 'PhotoFaceSweepResult' },
 );
 
 export const FaceMergeBody = Type.Object(
@@ -376,6 +424,24 @@ export const FaceMoveResponse = Type.Object(
     clusterId: Type.Union([Type.String(), Type.Null()], { description: '移动后的簇，null = 未分组' }),
   },
   { $id: 'PhotoFaceMoveResponse' },
+);
+
+/** 把簇内某张照片手动设为该人脸的封面 */
+export const FaceCoverBody = Type.Object(
+  {
+    clusterId: Type.String({ minLength: 1 }),
+    photoId: Type.String({ minLength: 1 }),
+  },
+  { $id: 'PhotoFaceCoverBody' },
+);
+
+export const FaceCoverResponse = Type.Object(
+  {
+    ok: Type.Boolean(),
+    coverPhotoId: Type.String(),
+    coverFaceId: Type.String(),
+  },
+  { $id: 'PhotoFaceCoverResponse' },
 );
 
 /** 跨照片二次合并：先出候选，逐对确认后再合并 */
@@ -436,30 +502,6 @@ export const FaceMergeUndoResponse = Type.Object(
     faces: Type.Integer(),
   },
   { $id: 'PhotoFaceMergeUndoResponse' },
-);
-
-export const FaceRebuildBody = Type.Object(
-  { limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200000, default: 200000 })) },
-  { $id: 'PhotoFaceRebuildBody' },
-);
-
-export const FaceRebuildResponse = Type.Object(
-  {
-    runId: Type.String(),
-    faces: Type.Integer(),
-    clusters: Type.Integer(),
-    ms: Type.Integer(),
-    /** v2：覆盖率（已归类样本 / 有效样本，百分比） */
-    coverage: Type.Optional(Type.Number()),
-    elapsedMs: Type.Optional(Type.Integer()),
-    algoVersion: Type.Optional(Type.String()),
-  },
-  { $id: 'PhotoFaceRebuildResponse' },
-);
-
-export const FaceRollbackBody = Type.Object(
-  { runId: Type.String({ minLength: 1 }) },
-  { $id: 'PhotoFaceRollbackBody' },
 );
 
 export const FaceOk = Type.Object({ ok: Type.Boolean() }, { $id: 'PhotoFaceOk' });
@@ -606,18 +648,19 @@ export const PHOTO_AI_SCHEMAS = [
   FaceClusterFilterQuery,
   FaceNameBody,
   FaceDissolveBody,
+  FaceSweepBody,
+  FaceSweepResult,
   FaceMergeBody,
   FaceMergeResponse,
   FaceMoveBody,
   FaceMoveResponse,
+  FaceCoverBody,
+  FaceCoverResponse,
   FaceMergeCandidateBody,
   FaceMergeCandidate,
   FaceMergeCandidateList,
   FaceMergeUndoBody,
   FaceMergeUndoResponse,
-  FaceRebuildBody,
-  FaceRebuildResponse,
-  FaceRollbackBody,
   FaceOk,
   FaceRescanBody,
   FaceMergeSimilarBody,

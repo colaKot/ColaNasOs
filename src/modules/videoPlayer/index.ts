@@ -434,6 +434,63 @@ async function itemPath(k: KernelApi, itemId: string): Promise<string | null> {
   return rows[0]?.path ?? null;
 }
 
+/**
+ * HLS 分片目录的保留时长。
+ *
+ * 转码产物是**大件**：4K 档实测一小时片子 6~7GB。以前没有任何清理逻辑，
+ * 一台天天看片的机器几个月就能堆几十 GB（2026-11-07 实测 28GB / 21 个会话）。
+ * 保留策略：
+ *   - 已结束（done / failed / canceled）→ 6 小时，够看完一遍 + 当天回头重看；
+ *   - paused（用户中间暂停、等着续播）→ 24 小时，隔天回来还能接着播；
+ *   - running / pending 但 24 小时没动过（内核中途崩过留下的）→ 当垃圾清掉。
+ */
+const HLS_TTL_DONE_SEC = 6 * 3600;
+const HLS_TTL_PAUSED_SEC = 24 * 3600;
+const HLS_TTL_STALE_SEC = 24 * 3600;
+/** 扫盘间隔：半小时一次，开销就是一次 select + 几个 rm */
+const HLS_SWEEP_MS = 30 * 60 * 1000;
+
+async function sweepHls(k: KernelApi): Promise<number> {
+  const t = now();
+  const rows = (
+    await sql<{ id: string }>`
+      select id from player_sessions
+       where (status in ('done', 'failed', 'canceled') and updated_at < ${t - HLS_TTL_DONE_SEC})
+          or (status = 'paused' and updated_at < ${t - HLS_TTL_PAUSED_SEC})
+          or (status in ('pending', 'running') and created_at < ${t - HLS_TTL_STALE_SEC})
+    `.execute(k.db)
+  ).rows;
+  const root = hlsRootOf(k);
+
+  for (const row of rows) {
+    await fsp.rm(path.join(root, row.id), { recursive: true, force: true }).catch(() => undefined);
+    await sql`delete from player_sessions where id = ${row.id}`.execute(k.db);
+  }
+
+  // 孤儿目录：会话行已经不在了（手工删过库 / 旧版本从没清理过），按最后修改时间收
+  try {
+    const alive = new Set(
+      (await sql<{ id: string }>`select id from player_sessions`.execute(k.db)).rows.map(
+        (r) => r.id,
+      ),
+    );
+    const names = await fsp.readdir(root).catch(() => [] as string[]);
+    for (const name of names) {
+      if (alive.has(name)) continue;
+      const dir = path.join(root, name);
+      const st = await fsp.stat(dir).catch(() => null);
+      if (!st || !st.isDirectory()) continue;
+      if (t * 1000 - st.mtimeMs < HLS_TTL_STALE_SEC * 1000) continue;
+      await fsp.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  } catch {
+    // hls 根还不存在 / 没权限：下次再说，别让清理把启动搞挂
+  }
+
+  if (rows.length > 0) k.log.info({ removed: rows.length }, 'player hls sessions swept');
+  return rows.length;
+}
+
 export const videoPlayer: ServerModule = {
   id: 'videoPlayer',
   prefix: '/api/v1/player',
@@ -554,6 +611,11 @@ export const videoPlayer: ServerModule = {
     for (const schema of PLAYER_SCHEMAS) app.addSchema(schema);
     await sql`update player_sessions set status = 'pending' where status = 'running'`.execute(k.db);
     pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
+    // 清过期分片：启动先扫一遍（把上次的垃圾收掉），之后每半小时一次
+    sweepHls(k).catch((err) => k.log.warn({ err: String(err) }, 'player hls sweep failed'));
+    setInterval(() => {
+      sweepHls(k).catch((err) => k.log.warn({ err: String(err) }, 'player hls sweep failed'));
+    }, HLS_SWEEP_MS).unref?.();
 
     app.post(
       '/api/v1/player/sessions',
@@ -805,9 +867,11 @@ export const videoPlayer: ServerModule = {
           isPlaylist && parts.length > 0 ? Buffer.from(mergePlaylists(parts), 'utf8') : null;
         // 首片还没落盘时**短暂等一下**：直接返回空 EVENT 播放列表，很多播放器
         // （实测 Web 的 hls.js）拿到「没有任何分片」就停在黑屏，而 ffmpeg 其实
-        // 1~2 秒后就有首片了。等最多 15s，能等到就直接给真实播放列表。
+        // 1~2 秒后就有首片了。等最多 25s，能等到就直接给真实播放列表。
+        // 15s 是给 1080p 定的；4K + HDR 色调映射时首片（-hls_init_time 2s）要
+        // 十几秒，卡在 15s 边界上就是「4K 一播就报错」。会话失败会提前跳出。
         if (body === null) {
-          const deadline = Date.now() + 15_000;
+          const deadline = Date.now() + 25_000;
           for (;;) {
             try {
               body = await fsp.readFile(abs);

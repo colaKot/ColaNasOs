@@ -4,6 +4,7 @@ import 'package:nas_media/nas_media.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
+import '../../shell/shell_back.dart';
 
 /// 年视图：年份卡片 → 该年的 12 个月。
 ///
@@ -107,6 +108,14 @@ class _PhotoYearViewPageState extends State<PhotoYearViewPage> {
 
   @override
   Widget build(BuildContext context) {
+    return SubPageScope(
+      active: _selectedYear != null,
+      onBack: () => setState(() => _selectedYear = null),
+      child: _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     final year = _selectedYear;
     final body = _loading
         ? const NasLoading()

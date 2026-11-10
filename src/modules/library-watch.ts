@@ -24,7 +24,7 @@ export interface WatchableLibrary {
   name: string;
   root_path: string;
   /** 可选：1 目录变化时自动重扫；0 / 缺省按旧行为（自动） */
-  scan_when_change?: number;
+  scan_when_change?: number | null;
 }
 
 export interface LibraryWatchSpec<T extends WatchableLibrary> {
@@ -43,6 +43,12 @@ export interface LibraryWatchSpec<T extends WatchableLibrary> {
   maxSubDirs?: number;
   /** 周期性全量校验间隔，默认 6 小时；0 关闭 */
   verifyIntervalMs?: number;
+  /**
+   * 每库独立的扫描周期（毫秒）。返回 0 / 不传表示该库跟随 `verifyIntervalMs`。
+   *
+   * 音乐来源页有「间隔扫描 N 小时」开关，是**按库**配置的；只有全局定时器表达不了。
+   */
+  intervalOf?: (lib: T) => number;
   /**
    * 运行时策略（可选；不传即保持「自动监视 + 固定校验间隔」的旧行为）。
    * photo 用它接「自动监视 / 周期校验 / 跳过隐藏文件」三个开关。
@@ -92,6 +98,8 @@ export function bindLibraryWatch<T extends WatchableLibrary>(spec: LibraryWatchS
   const pending = new Map<string, { dirs: Set<string>; full: boolean }>();
   let chain: Promise<void> = Promise.resolve();
   let verifyTimer: NodeJS.Timeout | null = null;
+  /** 每库独立周期（`intervalOf` 有返回值时才填） */
+  const perLibTimers = new Map<string, NodeJS.Timeout>();
   let stopped = false;
 
   const keyOf = (lib: T) => spec.keyOf?.(lib) ?? lib.id;
@@ -237,6 +245,7 @@ export function bindLibraryWatch<T extends WatchableLibrary>(spec: LibraryWatchS
       subs.clear();
       eventRoots.clear();
       applyVerifyTimer();
+      applyPerLibTimers();
       return;
     }
     for (const lib of list) {
@@ -252,6 +261,7 @@ export function bindLibraryWatch<T extends WatchableLibrary>(spec: LibraryWatchS
       eventRoots.set(key, base);
     }
     applyVerifyTimer();
+    applyPerLibTimers();
   };
 
   /** 周期性全量校验：补齐「没有事件」的漂移（外部删除 / 网络盘重连） */
@@ -260,6 +270,9 @@ export function bindLibraryWatch<T extends WatchableLibrary>(spec: LibraryWatchS
     // 错峰：多个库同时全量 walk 会互相拖慢，也会和用户请求抢 IO；0~60 s 随机散开
     for (const lib of libs.values()) {
       if (lib.scan_when_change === 0) continue;
+      // 配了自己的间隔就别跟着全局校验再扫一遍
+      if ((spec.intervalOf?.(lib) ?? 0) > 0) continue;
+      // 错峰：多个库同时全量 walk 会互相拖慢，也会和用户请求抢 IO；0~60 s 随机散开
       const timer = setTimeout(
         () => {
           if (!stopped) schedule(lib, null);
@@ -285,12 +298,35 @@ export function bindLibraryWatch<T extends WatchableLibrary>(spec: LibraryWatchS
 
   applyVerifyTimer();
 
+  /** 按每库 `intervalOf` 重建「间隔扫描」定时器（幂等；库增删/开关变更后调用） */
+  const applyPerLibTimers = () => {
+    for (const t of perLibTimers.values()) clearInterval(t);
+    perLibTimers.clear();
+    if (stopped || !spec.intervalOf) return;
+    for (const lib of libs.values()) {
+      const raw = Math.trunc(Number(spec.intervalOf(lib)) || 0);
+      if (!(raw > 0)) continue;
+      const timer = setInterval(
+        () => {
+          if (stopped || lib.scan_when_change === 0) return;
+          schedule(lib, null);
+        },
+        // 少于 1 分钟的周期没有意义，只会把 IO 打满
+        Math.max(60_000, raw),
+      );
+      timer.unref?.();
+      perLibTimers.set(keyOf(lib), timer);
+    }
+  };
+
   const stop = () => {
     stopped = true;
     if (verifyTimer) {
       clearInterval(verifyTimer);
       verifyTimer = null;
     }
+    for (const t of perLibTimers.values()) clearInterval(t);
+    perLibTimers.clear();
     for (const off of subs.values()) off();
     subs.clear();
     eventRoots.clear();

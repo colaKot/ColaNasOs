@@ -66,7 +66,11 @@ export async function ensureSidecar(k: KernelApi): Promise<SidecarSupervisor> {
       env: {
         COLANAS_FFMPEG: ffmpeg,
         COLANAS_MODEL_DIR: modelRoot(),
-        ...(aiConfig(k).gpuPrefer ? {} : { COLANAS_PHOTO_AI_FORCE_CPU: '1' }),
+        // 默认 CPU（见 config.ts 的 gpuPrefer 注释）；打开面板上的「优先使用 GPU」
+        // 才会传 COLANAS_PHOTO_AI_GPU=1，让 sidecar 把 dml 排到 EP 首位。
+        ...(aiConfig(k).gpuPrefer
+          ? { COLANAS_PHOTO_AI_GPU: '1' }
+          : { COLANAS_PHOTO_AI_FORCE_CPU: '1' }),
         ...(process.versions.electron && !process.env.COLANAS_SIDECAR_NODE
           ? { ELECTRON_RUN_AS_NODE: '1' }
           : {}),

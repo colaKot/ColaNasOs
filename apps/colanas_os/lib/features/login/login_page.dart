@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/server_discovery.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
 
@@ -53,6 +55,15 @@ class _LoginPageState extends State<LoginPage> {
   String? _error;
   String? _hint;
 
+  /// 局域网扫描中（按钮转圈）
+  bool _scanning = false;
+
+  /// 地址下方的提示：端口自动匹配结果 / 扫描结果
+  String? _serverHint;
+
+  /// 防止「连不上 → 自动匹配端口 → 再连 → 又连不上」死循环
+  bool _autoMatched = false;
+
   /// 当前步骤：先连服务器，连上才显示登录 / 创建管理员
   _LoginStage _stage = _LoginStage.server;
   bool _connecting = false;
@@ -62,8 +73,9 @@ class _LoginPageState extends State<LoginPage> {
   void initState() {
     super.initState();
     final store = SettingsStore.instance;
-    final server = store.getString('auth.server');
-    if (server != null && server.isNotEmpty) _server.text = server;
+    // 服务器地址：Web 端以**地址栏**为准（页面本身就是内核，可能经 lucky 反代，
+    // API 必须同源），原生端读存档。currentServerUrl() 已把两者分开处理。
+    _server.text = ApiSession.currentServerUrl();
     final user = store.getString('auth.username');
     if (user != null && user.isNotEmpty) _user.text = user;
     // 记住的密码直接预填（用户要求「账号密码都要保存」），点登录即可
@@ -122,12 +134,24 @@ class _LoginPageState extends State<LoginPage> {
           : await ApiSession.instance.client.authBootstrapStatus();
       if (!mounted) return;
       SettingsStore.instance.setString('auth.server', url);
+      _autoMatched = false;
       setState(() {
         _setupMode = res['needsSetup'] == true;
         _stage = _LoginStage.auth;
         _connecting = false;
         _checking = false;
+        _serverHint = null;
       });
+      // 连上之后，勾了自动登录且账号密码都记着 → 直接登录进桌面。
+      // 覆盖「启动时服务端还没起来、用户手动重试连上」这种情况：
+      // 勾了自动登录就不该再让人手输一遍密码。
+      if (auto &&
+          !_setupMode &&
+          _autoLogin &&
+          _user.text.trim().isNotEmpty &&
+          _password.text.isNotEmpty) {
+        await _submitLogin();
+      }
     } catch (e) {
       debugPrint('[login] connect failed: $e');
       if (!mounted) return;
@@ -136,7 +160,117 @@ class _LoginPageState extends State<LoginPage> {
         _checking = false;
         _serverError = auto ? null : _describe(e);
       });
+      // 把用户刚填的地址记住：服务端端口换过也不至于下次还要重打一遍
+      if (url.isNotEmpty) {
+        SettingsStore.instance.setString('auth.server', url);
+      }
+      // 原生端：连不上时按「同一个主机 + 候选端口」自动找一遍（Web 端同源，无需匹配）。
+      // 启动自动重连时只在「本机地址」上匹配 —— 端口改了一般就是本机内核，
+      // 而远程 NAS 连不上多半是没开机，别在启动路径上干等 8 个端口的超时。
+      if (!kIsWeb && !_autoMatched && (!auto || _isLocalHost(url))) {
+        await _autoMatchPort(url, silent: auto);
+      }
     }
+  }
+
+  /// 端口自动匹配：只换端口、不换主机。找到就填回输入框并重连一次。
+  ///
+  /// 这是「服务端把 7788 改成别的口」最省事的处理方式：用户不用知道新端口。
+  Future<void> _autoMatchPort(String url, {bool silent = false}) async {
+    if (!silent) setState(() => _serverHint = tr('login.matchingPort'));
+    final hit = await matchPort(url);
+    if (!mounted) return;
+    final normalized = url.trim().replaceAll(RegExp(r'/+$'), '');
+    if (hit == null || hit.baseUrl == normalized) {
+      // 端口也没找着：原生端提示可以直接扫网段（Web 端本来就没有扫描入口）
+      setState(() => _serverHint = silent || kIsWeb ? null : tr('login.matchFailed'));
+      return;
+    }
+    setState(() {
+      _server.text = hit.baseUrl;
+      _serverHint = tr('login.autoMatched', {'url': hit.baseUrl});
+      _autoMatched = true;
+    });
+    await _connect();
+  }
+
+  /// 扫本网段：手机 / 换机器时不知道填哪个 IP，点一下列出来。
+  Future<void> _scanLan() async {
+    if (_scanning) return;
+    final typed = _portOf(_server.text) ?? 7788;
+    setState(() {
+      _scanning = true;
+      _serverHint = tr('login.scanning');
+    });
+    List<DiscoveredServer> found = const <DiscoveredServer>[];
+    try {
+      found = await scanLan(port: typed, extraPorts: const <int>[7788, 23788]);
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+    if (!mounted) return;
+    if (found.isEmpty) {
+      setState(() => _serverHint = tr('login.scanEmpty'));
+      return;
+    }
+    setState(() => _serverHint = null);
+    final picked = await showDialog<DiscoveredServer>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('login.pickServer')),
+        content: SizedBox(
+          width: 420,
+          child: ListView(
+            shrinkWrap: true,
+            children: found
+                .map((e) => ListTile(
+                      leading: const Icon(Icons.dns_outlined, size: 18),
+                      title: Text(e.label),
+                      subtitle: Text(e.baseUrl),
+                      onTap: () => Navigator.of(ctx).pop(e),
+                    ))
+                .toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(tr('common.cancel')),
+          ),
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _server.text = picked.baseUrl;
+      _serverHint = tr('login.autoMatched', {'url': picked.baseUrl});
+    });
+    await _connect();
+  }
+
+  /// 是不是指向本机（127.x / localhost / ::1）
+  bool _isLocalHost(String url) {
+    var s = url.trim();
+    if (s.isEmpty) return false;
+    if (!s.contains('://')) s = 'http://$s';
+    final uri = Uri.tryParse(s);
+    final host = uri?.host ?? '';
+    return host == 'localhost' ||
+        host == '::1' ||
+        host == '[::1]' ||
+        host.startsWith('127.');
+  }
+
+  /// 从输入框里取端口（没写就是 null）
+  int? _portOf(String text) {
+    var s = text.trim();
+    if (s.isEmpty) return null;
+    if (!s.contains('://')) s = 'http://$s';
+    final uri = Uri.tryParse(s);
+    if (uri == null) return null;
+    if (uri.hasPort) return uri.port;
+    if (uri.scheme == 'https') return 443;
+    return null;
   }
 
   /// 回到第一步（换一台服务器）
@@ -295,9 +429,34 @@ class _LoginPageState extends State<LoginPage> {
           decoration: InputDecoration(
             labelText: tr('login.server'),
             prefixIcon: const Icon(Icons.dns_outlined, size: 18),
+            // 浏览器扫不了网段（没有 dart:io），只在原生端给扫描入口
+            suffixIcon: kIsWeb
+                ? null
+                : IconButton(
+                    tooltip: tr('login.scanLan'),
+                    onPressed: _scanning || _connecting ? null : _scanLan,
+                    icon: _scanning
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.wifi_tethering, size: 18),
+                  ),
           ),
+          onChanged: (_) => _autoMatched = false,
           onSubmitted: (_) => _connecting ? null : _connect(),
         ),
+        if (_serverHint != null) ...[
+          const SizedBox(height: NasTokens.spaceSm),
+          Text(
+            _serverHint!,
+            style: TextStyle(
+              fontSize: NasTokens.fontCaption,
+              color: context.nasTextSecondary,
+            ),
+          ),
+        ],
         if (_serverError != null) ...[
           const SizedBox(height: NasTokens.spaceSm),
           Text(_serverError!, style: TextStyle(color: context.nasDanger)),
@@ -420,8 +579,13 @@ class _LoginPageState extends State<LoginPage> {
               Expanded(
                 child: CheckboxListTile(
                   value: _autoLogin,
-                  onChanged: (v) =>
-                      setState(() => _autoLogin = v ?? true),
+                  // 勾选状态**立即落盘**：用户取消勾选就是「不要记住我」，
+                  // 不该等到点登录才生效 —— 否则下次打开又是勾上的。
+                  onChanged: (v) async {
+                    final enabled = v ?? true;
+                    setState(() => _autoLogin = enabled);
+                    await ApiSession.instance.setAutoLoginEnabled(enabled);
+                  },
                   title: Text(tr('login.autoLogin')),
                   controlAffinity: ListTileControlAffinity.leading,
                   contentPadding: EdgeInsets.zero,

@@ -25,7 +25,10 @@ class MusicPage extends StatefulWidget {
 }
 
 class _MusicPageState extends State<MusicPage> {
-  static const _pageSize = 120;
+  /// 一页多少首：以前是 120，首屏一次拉 120 首 + 120 个封面请求
+  /// （服务端首次取封面还要现抽内嵌图），页面会卡住好几秒。
+  /// 现在一页 36 首（网格 3~6 列 = 6~12 行），滚到底再续下一页。
+  static const _pageSize = 36;
 
   final _scroll = ScrollController();
   final _searchCtrl = TextEditingController();
@@ -79,8 +82,11 @@ class _MusicPageState extends State<MusicPage> {
   }
 
   void _onScroll() {
-    if (!_scroll.hasClients || _loadingMore || _cursor == null) return;
-    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 320) {
+    if (!_scroll.hasClients || _loading || _loadingMore || _cursor == null) {
+      return;
+    }
+    // 提前 2 屏开始续拉：等真的滚到底再请求，用户会看到一段空白等待
+    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 480) {
       _loadMore();
     }
   }
@@ -96,19 +102,21 @@ class _MusicPageState extends State<MusicPage> {
         client.musicList(limit: _pageSize, sort: _sort, order: _order),
         client.musicStats(),
         client.musicLibraryList(),
-        client.musicFavorites(),
+        // 星标只要 id：以前拉整份收藏曲目（上限 200 首、含 path/封面），
+        // 首屏白白多传几百 KB，还要跟着解析
+        client.musicFavoriteIds(),
       ]);
       final list = results[0] as MusicListResponse;
       final stats = results[1] as MusicStatsResponse;
       final libs = results[2] as MusicLibraryListResponse;
-      final favs = results[3] as MusicListResponse;
+      final favIds = ((results[3] as Map<String, dynamic>)['ids'] as List?) ?? const [];
       if (!mounted) return;
       setState(() {
         _tracks = list.items;
         _cursor = list.nextCursor;
         _stats = stats;
         _sources = libs.items;
-        _favoriteIds = favs.items.map((t) => t.id).toSet();
+        _favoriteIds = favIds.map((e) => e.toString()).toSet();
         _loading = false;
       });
     } catch (e) {

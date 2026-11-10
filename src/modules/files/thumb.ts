@@ -25,7 +25,11 @@ import { Err } from '../../../kernel/errors';
  * - 未就绪（缺 ffmpeg / sidecar）返回 503，客户端按占位图处理
  */
 
-/** 只对图片做缩略图；视频海报走 `/video/poster`，音频封面走 `/music/cover` */
+/**
+ * 缩略图源：图片 + 视频。
+ * 视频走 ffmpeg 抽帧（`at` 指定位置），相册网格的视频封面也走这里，
+ * 不再需要单独一套 poster 管道。
+ */
 const IMAGE_EXT = new Set([
   'jpg',
   'jpeg',
@@ -40,6 +44,26 @@ const IMAGE_EXT = new Set([
   'heif',
 ]);
 
+const VIDEO_EXT = new Set([
+  'mp4',
+  'm4v',
+  'mov',
+  'mkv',
+  'webm',
+  'avi',
+  'wmv',
+  'flv',
+  '3gp',
+  'mpg',
+  'mpeg',
+  'mts',
+  'm2ts',
+  'ogv',
+]);
+
+/** 视频默认抽帧位置（秒）：首帧常是黑场/过渡，往后一点更像个封面 */
+const DEFAULT_VIDEO_AT = 0.5;
+
 const DEFAULT_SIZE = 256;
 const MIN_SIZE = 32;
 const MAX_SIZE = 2048;
@@ -47,6 +71,8 @@ const MAX_SIZE = 2048;
 export interface ThumbQuery {
   path?: string;
   size?: number;
+  /** 视频抽帧位置（秒）；缺省 0.5 */
+  at?: number;
 }
 
 const limit = createLimiter(4);
@@ -66,14 +92,20 @@ export function clampThumbSize(input: unknown): number {
   return Math.min(Math.max(n, MIN_SIZE), MAX_SIZE);
 }
 
-async function generate(k: KernelApi, src: string, out: string, size: number): Promise<void> {
+async function generate(
+  k: KernelApi,
+  src: string,
+  out: string,
+  size: number,
+  atSec: number,
+): Promise<void> {
   const existing = inflight.get(out);
   if (existing) return existing;
 
   const job = (async () => {
     const tmp = `${out}.${process.pid}-${Date.now()}.tmp.jpg`;
     try {
-      await limit(() => k.media.thumb(src, tmp, size));
+      await limit(() => k.media.thumb(src, tmp, size, atSec));
       await fsp.rename(tmp, out);
     } catch (err) {
       await fsp.rm(tmp, { force: true }).catch(() => undefined);
@@ -126,9 +158,17 @@ export async function thumbHandler(
   const ext = path.extname(abs).slice(1).toLowerCase();
   // 自建缓存不按扩展名卡（`w500/<hash>.img` 实际是 jpg）；真的不是图片时
   // ffmpeg 会失败并返回 503，不会读出错内容。
-  if (!ownCache && !IMAGE_EXT.has(ext)) {
+  if (!ownCache && !IMAGE_EXT.has(ext) && !VIDEO_EXT.has(ext)) {
     throw httpError(400, `unsupported thumbnail source: .${ext || 'unknown'}`);
   }
+  const isVideo = VIDEO_EXT.has(ext);
+  // `at` 只对视频生效；夹到 3 小时以内，避免被当成离谱的 seek 目标
+  const rawAt = Number(q.at);
+  const atSec = isVideo
+    ? Number.isFinite(rawAt) && rawAt > 0
+      ? Math.min(rawAt, 10800)
+      : DEFAULT_VIDEO_AT
+    : 0;
 
   let st;
   try {
@@ -143,7 +183,7 @@ export async function thumbHandler(
 
   const key = crypto
     .createHash('sha1')
-    .update(`${rel}|${size}|${st.size}|${Math.floor(st.mtimeMs)}`)
+    .update(`${rel}|${size}|${st.size}|${Math.floor(st.mtimeMs)}|${atSec}`)
     .digest('hex');
   const dir = path.join(k.paths.dataDir, 'thumbs');
   const out = path.join(dir, `${key}.jpg`);
@@ -168,7 +208,7 @@ export async function thumbHandler(
     }
     await fsp.mkdir(dir, { recursive: true });
     try {
-      await generate(k, abs, out, size);
+      await generate(k, abs, out, size, atSec);
     } catch (err) {
       const message = String((err as Error).message || err);
       k.log.warn({ err: message, path: rel, size }, 'thumbnail generation failed');

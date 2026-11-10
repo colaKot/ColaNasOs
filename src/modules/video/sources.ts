@@ -409,6 +409,18 @@ export function offlineCond(prefixes: string[], column = 'rel_path'): ReturnType
   return sql`not (${sql.join(exprs, sql` or `)})`;
 }
 
+/**
+ * SQL 条件：`rel_path` 落在某个来源根内。
+ *
+ * 反斜杠统一成正斜杠再比：SMB 来源的 `rel_path` 是
+ * `\\host\share/sub/...` 这种混合分隔符，直接 `like '\\\\host\\share/%'` 匹配不上。
+ * 不用 `like` 是因为根路径里的 `_` / `%` 会被当通配符。
+ */
+export function sourceRootCond(root: string, column = 'rel_path'): ReturnType<typeof sql> {
+  const p = `${String(root || '').replace(/\\/g, '/').replace(/\/+$/, '')}/`;
+  return sql`substr(replace(${sql.raw(column)}, '\\', '/'), 1, ${p.length}) = ${p}`;
+}
+
 /** 内存版：`rel_path` 是否落在某个已知离线的来源内 */
 export function isOfflinePath(relPath: string, prefixes: string[]): boolean {
   const p = String(relPath || '').replace(/\\/g, '/');

@@ -331,6 +331,9 @@ async function thumb(params) {
   if (!src || !dst) throw Object.assign(new Error('src/dst required'), { code: 'E_PARAM' });
   const size = Math.max(16, Math.min(Number(params.size) || 256, 4096));
   const quality = Math.max(1, Math.min(Number(params.quality) || 4, 31));
+  // 视频抽帧位置（秒）。`-ss` 放在 `-i` 前是快速定位（关键帧跳转），
+  // 相册里长视频首帧多半是黑场，海报图必须从中间取。
+  const at = Number(params.at) || 0;
 
   const started = process.hrtime.bigint();
   await limit(() =>
@@ -339,6 +342,7 @@ async function thumb(params) {
       '-loglevel',
       'error',
       '-y',
+      ...(at > 0 ? ['-ss', String(at)] : []),
       '-i',
       src,
       '-vf',
@@ -526,16 +530,49 @@ function escapeFilterPath(p) {
 let hwAllCache = null;
 let hwAllPromise = null;
 
+/**
+ * `ffmpeg -encoders` 的原始输出。
+ *
+ * **必须异步**：这里曾经是 `spawnSync(..., {timeout: 15000})`。ffmpeg 冷启动 +
+ * 输出几百行 encoder 列表，在这台机器上实测能卡住事件循环好几秒；sidecar 是单线程，
+ * 心跳（supervisor 2.5s 就判超时）一超时就 SIGKILL —— 正在跑的 4K 转码连带一起死，
+ * 用户看到的就是「4K 一播就报错」。日志里 `[media] heartbeat timeout, killing for restart`
+ * 紧跟着 `player hls failed (signal=SIGKILL)` 就是这个。
+ */
 function encoderListing() {
-  try {
-    const r = require('node:child_process').spawnSync(findFfmpeg(), ['-hide_banner', '-encoders'], {
-      encoding: 'utf8',
-      timeout: 15000,
+  return new Promise((resolve) => {
+    let out = '';
+    let done = false;
+    const finish = (text) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(text);
+    };
+    let child;
+    try {
+      child = require('node:child_process').spawn(findFfmpeg(), ['-hide_banner', '-encoders'], {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+    } catch {
+      return resolve('');
+    }
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        /* 已退出 */
+      }
+      finish(out);
+    }, 15000);
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      out += chunk;
     });
-    return String(r.stdout || '');
-  } catch {
-    return '';
-  }
+    child.on('error', () => finish(''));
+    child.on('close', () => finish(out));
+  });
 }
 
 /** 实测某个硬件编码器能否用（1 帧 lavfi → null）。失败就当没有，绝不靠名字猜。 */
@@ -560,7 +597,7 @@ async function detectHwAll() {
   if (hwAllPromise) return hwAllPromise;
   hwAllPromise = (async () => {
     const out = { h264: [], h265: [], av1: [] };
-    const listing = encoderListing();
+    const listing = await encoderListing();
     const map = { h264: 'h264_', h265: 'hevc_', av1: 'av1_' };
     const candidates = [];
     for (const kind of ['h264', 'h265', 'av1']) {

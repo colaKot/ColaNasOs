@@ -4,6 +4,7 @@
  *
  *   匿名 401 → 设置默认值 → 3 个内置音色 → 保存与回读（含明文 Key、越界值收敛）
  *   → 空列表 → 不存在的音频 404 → 删不存在的期 ok
+ *   → 文稿与引用链接（新数据带 link / 老数据 headlines 兜底 / 404 / 匿名 401）
  *   → TTS 不可用时试听 / 生成必须 503（不能假装成功）
  *
  * **默认不真的合成语音**：一次试听首次要加载 1.4GB 模型（首次约 30 秒，含着色器编译），
@@ -291,6 +292,142 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   } else {
     console.log('[skip] 语音合成链路（设 COLANAS_BLOG_SMOKE_TTS=1 开启）');
   }
+
+  // 文稿弹窗的数据源：新期次落 news_json（带原文链接），迁移前的老期次
+  // 只有 headlines，接口要退化成「有标题、没有链接」的引用，不能直接 500。
+  const { sql: ksql } = require('kysely');
+  await ksql`
+    insert into blog_episodes
+      (id, title, voice, speed, status, script, headlines_json, news_json, created_at)
+    values ('smoke-script', '文稿测试期', 'default', 1, 'done', '第一段播报稿。', '[]',
+            ${JSON.stringify([
+              {
+                category: '国内综合新闻',
+                title: '示例新闻',
+                link: 'https://example.com/a',
+                source: '示例源',
+              },
+            ])}, 1)
+  `.execute(k.db);
+  await ksql`
+    insert into blog_episodes
+      (id, title, voice, speed, status, script, headlines_json, created_at)
+    values ('smoke-script-old', '老期次', 'default', 1, 'done', '老稿。', '["老标题"]', 2)
+  `.execute(k.db);
+
+  // 服务端真分页：total 是全部条数，offset/limit 只切当前页（前端不再一次拉 200 条切片）
+  const epP1 = (
+    await app.inject({ method: 'GET', url: '/api/v1/blog/episodes?limit=1', headers: bearer })
+  ).json();
+  const epP2 = (
+    await app.inject({ method: 'GET', url: '/api/v1/blog/episodes?limit=1&offset=1', headers: bearer })
+  ).json();
+  check(
+    'episodes_server_paging',
+    epP1.items.length === 1 &&
+      epP1.total >= 2 &&
+      epP1.limit === 1 &&
+      epP1.offset === 0 &&
+      epP2.items.length === 1 &&
+      epP2.offset === 1 &&
+      epP2.items[0].id !== epP1.items[0].id,
+    `total=${epP1.total} p1=${epP1.items[0]?.id} p2=${epP2.items[0]?.id}`,
+  );
+
+  r = await app.inject({
+    method: 'GET',
+    url: '/api/v1/blog/script?id=smoke-script',
+    headers: bearer,
+  });
+  const sc = r.json();
+  check(
+    'script_with_links',
+    r.statusCode === 200 &&
+      sc.script === '第一段播报稿。' &&
+      sc.items.length === 1 &&
+      sc.items[0].link === 'https://example.com/a' &&
+      sc.items[0].source === '示例源',
+    'status=' + r.statusCode,
+  );
+
+  r = await app.inject({
+    method: 'GET',
+    url: '/api/v1/blog/script?id=smoke-script-old',
+    headers: bearer,
+  });
+  const legacy = r.json();
+  check(
+    'script_legacy_headlines_fallback',
+    r.statusCode === 200 &&
+      legacy.items.length === 1 &&
+      legacy.items[0].title === '老标题' &&
+      legacy.items[0].link === '',
+    'status=' + r.statusCode,
+  );
+
+  r = await app.inject({ method: 'GET', url: '/api/v1/blog/script?id=nope', headers: bearer });
+  check('script_404', r.statusCode === 404, 'status=' + r.statusCode);
+  r = await app.inject({ method: 'GET', url: '/api/v1/blog/script?id=smoke-script' });
+  check('script_anonymous_401', r.statusCode === 401, 'status=' + r.statusCode);
+
+  // ---------------------------------------------------------------- 语音合成切块
+  // `llama-tts` 不给 `-n` 时只生成 **512 帧**（12Hz → 42.67s ≈ 200 字），
+  // 超出的文字**静默丢弃**：不报错、退出码 0，只听得出「念到一半没了」。
+  // 这两条不变量必须守住：切块不丢字、每块按字数给足上限。
+  const tts = require('../../dist/kernel/tts/engine.js');
+  const longText =
+    '沪武高速安徽潜山段11月7日下午发生一起多车追尾事故。记者从消防、公安等多部门了解到，' +
+    '事发路段位于岳西往桐城南方向。一辆载有电池的货车发生自燃，后方多车随即追尾。' +
+    '目前事故伤亡情况仍在进一步了解中，当地有关部门表示，已有人被送往医院接受治疗。' +
+    '事故发生后，消防、公安等救援力量赶赴现场处置。高速公路货车自燃并引发连环追尾，' +
+    '往往造成长时间拥堵和二次事故风险。这也提醒运输企业和驾驶人，加强对电池等特殊货物的装载检查，' +
+    '遇到突发情况及时预警后方车辆。';
+  const pieces = tts.splitText(longText, 300);
+  check(
+    'tts_split_keeps_all_text',
+    pieces.join('').replace(/\s/g, '') === longText.replace(/\s/g, ''),
+    `块数=${pieces.length} 字=${longText.length}`,
+  );
+  // 512 帧是 200 字左右；300 字的块必须拿到明显更大的上限，否则一定被截
+  check(
+    'tts_predict_covers_512_frame_default',
+    tts.predictFrames('字'.repeat(300)) > 512 && tts.predictFrames('字'.repeat(300)) <= 8192,
+    'n=' + tts.predictFrames('字'.repeat(300)),
+  );
+  const half = tts.halveForRetry(longText);
+  check(
+    'tts_halve_keeps_all_text',
+    !!half && (half[0] + half[1]).replace(/\s/g, '') === longText.replace(/\s/g, ''),
+    half ? `${half[0].length}+${half[1].length}` : 'null',
+  );
+
+  // ---------------------------------------------------------------- 播报头（序号 + 一句话总结）
+  // 以前整篇只有「下面是国内科技。」分段，同一分类下连着好几条，听众分不清
+  // 什么时候换了一条新闻。现在每条前面必须报序号 + 一句总结，再进正文。
+  const blogScript = require('../../dist/src/modules/blog/script.js');
+  const rendered = blogScript.renderScript(
+    [
+      {
+        key: 'a',
+        spoken: '国内科技',
+        articles: [
+          { summary: '甲总结。', text: '甲正文。' },
+          { summary: '乙总结', text: '乙正文' },
+        ],
+      },
+      { key: 'b', spoken: '国内AI', articles: [{ summary: '丙总结；', text: '丙正文' }] },
+    ],
+    null,
+    '2026年11月8日',
+  );
+  check(
+    'script_numbered_with_summary',
+    rendered.includes('第一，甲总结。') &&
+      rendered.includes('第二，乙总结。') &&
+      // 序号必须**跨分类连续**，不是每类从「第一」重来
+      rendered.includes('第三，丙总结。'),
+    rendered.slice(0, 90).replace(/\n/g, ' / '),
+  );
 
   await k.close?.();
   try {

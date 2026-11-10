@@ -6,9 +6,12 @@ import '../../core/scan_refresh.dart';
 import '../../core/session.dart';
 import '../../shell/app_nav_shell.dart';
 import '../../shell/nav_spec_adapter.dart';
+import '../../shell/shell_back.dart';
+import 'detail/video_detail_router.dart';
 import 'video_collections_page.dart';
 import 'video_duplicates_page.dart';
 import 'video_image_library_page.dart';
+import 'video_item_actions.dart';
 import 'video_jp_pages.dart';
 import 'video_media_browser_page.dart';
 import 'video_page.dart';
@@ -37,9 +40,24 @@ class _VideoShellPageState extends State<VideoShellPage> {
   int _epoch = 0;
   void Function()? _offSmb;
 
+  /// 上一次渲染的二级菜单 key：换菜单时把三级栈清掉
+  String _activeKey = '';
+
+  /// 二级菜单选中项：首页「来源」卡片点一下 = 切到对应库（不推整页）
+  final NavSelection _selection = NavSelection('home');
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 登记外壳所在的 route：三级页只在「同一条 route 的内容区」里叠，
+    // 整页 push 出来的页面里点条目仍然走整页（否则详情会被路由盖住）。
+    VideoDetailRouter.instance.shellRoute = ModalRoute.of(context);
+  }
+
   @override
   void initState() {
     super.initState();
+    VideoDetailRouter.instance.attached = true;
     _loadLibraries();
     // SMB 库离线时服务端把内容过滤掉，探到在线后要自己「长出来」。
     // 只订阅翻转事件（服务端每 20s 心跳，但只在状态变化时发），不做定时刷新。
@@ -53,6 +71,9 @@ class _VideoShellPageState extends State<VideoShellPage> {
   @override
   void dispose() {
     _offSmb?.call();
+    VideoDetailRouter.instance.attached = false;
+    VideoDetailRouter.instance.shellRoute = null;
+    VideoDetailRouter.instance.reset();
     super.dispose();
   }
 
@@ -60,6 +81,10 @@ class _VideoShellPageState extends State<VideoShellPage> {
     try {
       final res = await ApiSession.instance.client.videoLibraryList();
       if (!mounted) return;
+      VideoDetailRouter.instance.jpLibraryIds = {
+        for (final l in res.items)
+          if (l.libType == 'jp_movie') l.id,
+      };
       setState(() => _libraries = res.items);
     } catch (_) {
       // 库列表读不到：菜单里就少几个库入口，不影响其它板块
@@ -105,7 +130,60 @@ class _VideoShellPageState extends State<VideoShellPage> {
         ],
       },
       conditions: {if (_hasJpLibrary) 'hasJpLibrary'},
-      content: (key) => KeyedSubtree(key: ValueKey('$key#$_epoch'), child: _content(key)),
+      selection: _selection,
+      content: (key) => _withDetail(key),
+    );
+  }
+
+  /// 二级内容 + 三级详情层。
+  ///
+  /// 详情页只在**内容区**叠一层：左侧一二级栏、外壳顶栏都不动；
+  /// 返回注册到 `ShellBack`，所以桌面右上角 / 手机左上角都能退。
+  Widget _withDetail(String key) {
+    if (_activeKey != key) {
+      _activeKey = key;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) VideoDetailRouter.instance.closeAll();
+      });
+    }
+    return Stack(
+      children: <Widget>[
+        Positioned.fill(
+          child: KeyedSubtree(
+            key: ValueKey('$key#$_epoch'),
+            child: _content(key),
+          ),
+        ),
+        Positioned.fill(
+          child: ValueListenableBuilder<int>(
+            valueListenable: VideoDetailRouter.instance.revision,
+            builder: (context, _, _) {
+              final entry = VideoDetailRouter.instance.top;
+              if (entry == null) return const SizedBox.shrink();
+              return SubPageScope(
+                active: true,
+                onBack: VideoDetailRouter.instance.back,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // 三级层必须自带不透明底：它是盖在内容区之上的，
+                    // 只要某一页忘了自己铺底，底下的二级页就会透上来
+                    // （2026-11-09 日本演员页：两个「前田かおり」叠在一起就是这么来的）。
+                    Positioned.fill(child: context.nasStyle.background),
+                    Positioned.fill(
+                      // key 用 entry.tag：影片详情 / 剧集详情互换时才重建 State
+                      child: KeyedSubtree(
+                        key: ValueKey<String>(entry.tag),
+                        child: Builder(builder: entry.build),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -113,7 +191,7 @@ class _VideoShellPageState extends State<VideoShellPage> {
     if (key.startsWith('lib:')) {
       for (final lib in _libraries) {
         if ('lib:${lib.id}' == key) {
-          // 日本电影库和普通电影库的「入口」不同：参考实现是先进演员网格，
+          // 日本电影库和普通电影库的「入口」不同：既有实现是先进演员网格，
           // 点演员再看她的作品；点右上角「影片」才切回普通列表。
           if (lib.libType == 'jp_movie') {
             return VideoJpActorPage(embedded: true, libraryId: lib.id);
@@ -129,7 +207,7 @@ class _VideoShellPageState extends State<VideoShellPage> {
           return VideoPage(embedded: true, libraryId: lib.id);
         }
       }
-      return const VideoPage(embedded: true);
+      return VideoPage(embedded: true, onNavigate: _selection.select);
     }
     switch (key) {
       case 'history':
@@ -163,7 +241,7 @@ class _VideoShellPageState extends State<VideoShellPage> {
       // 未列出的菜单项落到这个默认页
       // nav-default: home
       default:
-        return const VideoPage(embedded: true);
+        return VideoPage(embedded: true, onNavigate: _selection.select);
     }
   }
 }
@@ -234,6 +312,16 @@ class _VideoSeriesPageState extends State<VideoSeriesPage> {
                 'seasons': '${s.seasons}',
                 'episodes': '${s.episodes}',
               }),
+            ),
+            // 三级页：点出去留在内容区，左栏不消失
+            onTap: () => openVideoSeries(
+              context,
+              name: s.name,
+              coverId: s.coverId,
+              headers: {
+                if (ApiSession.instance.token != null)
+                  'authorization': 'Bearer ${ApiSession.instance.token}',
+              },
             ),
           );
         },
@@ -323,12 +411,62 @@ class _VideoHistoryPageState extends State<VideoHistoryPage> {
         body: VideoProgressClearBody(onlyFinished: onlyFinished),
       );
       if (!mounted) return;
-      NasSnack.show(context, tr('video.history.cleared', {'n': '${res.cleared}'}));
+      NasSnack.show(
+        context,
+        tr('video.history.cleared', {'n': '${res.cleared}'}),
+      );
       await _load();
     } catch (e) {
       if (!mounted) return;
       NasSnack.show(context, '$e');
     }
+  }
+
+  /// 状态筛选面板：和其它影视列表的筛选面板同款（chip 点选即生效）
+  Future<void> _openStateSheet() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            NasTokens.spaceMd,
+            0,
+            NasTokens.spaceMd,
+            NasTokens.spaceMd,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                tr('video.list.filter'),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final (value, key) in const [
+                    ('all', 'video.history.all'),
+                    ('unfinished', 'video.history.unfinished'),
+                    ('finished', 'video.history.finished'),
+                  ])
+                    NasChip(
+                      label: Text(tr(key)),
+                      selected: _state == value,
+                      onSelected: (_) => Navigator.pop(ctx, value),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _state = picked);
+    _load();
   }
 
   @override
@@ -344,23 +482,17 @@ class _VideoHistoryPageState extends State<VideoHistoryPage> {
           ),
           child: Row(
             children: [
-              for (final (value, key) in const [
-                ('all', 'video.history.all'),
-                ('unfinished', 'video.history.unfinished'),
-                ('finished', 'video.history.finished'),
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(right: NasTokens.spaceXs),
-                  child: NasChip(
-                    visualDensity: VisualDensity.compact,
-                    label: Text(tr(key)),
-                    selected: _state == value,
-                    onSelected: (_) {
-                      setState(() => _state = value);
-                      _load();
-                    },
-                  ),
+              // 状态筛选收进按钮，和其它影视列表一样点开面板才展开
+              IconButton(
+                tooltip: tr('video.list.filter'),
+                onPressed: _openStateSheet,
+                icon: Icon(
+                  Icons.filter_alt_outlined,
+                  color: _state == 'all'
+                      ? null
+                      : Theme.of(context).colorScheme.primary,
                 ),
+              ),
               const Spacer(),
               PopupMenuButton<bool>(
                 tooltip: tr('video.history.clear'),
@@ -488,6 +620,18 @@ class _VideoFavoritesPageState extends State<VideoFavoritesPage> {
     }
   }
 
+  /// 收藏卡片同样支持右键 / 长按，动作与全站列表一致
+  Future<void> _runItemAction(VideoItem item, String action) async {
+    final changed = await runVideoItemAction(context, action, item);
+    if (changed && mounted) await _load();
+  }
+
+  Future<void> _showItemActions(VideoItem item) async {
+    final action = await showVideoItemActionSheet(context, item);
+    if (action == null || !mounted) return;
+    await _runItemAction(item, action);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) return const NasLoading();
@@ -525,35 +669,46 @@ class _VideoFavoritesPageState extends State<VideoFavoritesPage> {
                   itemCount: _items.length,
                   itemBuilder: (context, i) {
                     final item = _items[i];
-                    return NasCard(
-                      padding: const EdgeInsets.all(NasTokens.spaceXs),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Center(
-                              child: Icon(
-                                Icons.movie_outlined,
-                                size: 32,
-                                color: context.nasTextSecondary,
+                    return NasContextMenuRegion(
+                      entries: videoItemMenuEntries(
+                        item,
+                        onAction: (a) => _runItemAction(item, a),
+                      ),
+                      child: GestureDetector(
+                        onLongPress: () => _showItemActions(item),
+                        child: NasCard(
+                          padding: const EdgeInsets.all(NasTokens.spaceXs),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Center(
+                                  child: Icon(
+                                    Icons.movie_outlined,
+                                    size: 32,
+                                    color: context.nasTextSecondary,
+                                  ),
+                                ),
                               ),
-                            ),
+                              Text(
+                                item.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: NasTokens.fontCaption,
+                                ),
+                              ),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: IconButton(
+                                  tooltip: tr('nav.favorites'),
+                                  icon: const Icon(Icons.favorite, size: 16),
+                                  onPressed: () => _remove(item),
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            item.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: NasTokens.fontCaption),
-                          ),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: IconButton(
-                              tooltip: tr('nav.favorites'),
-                              icon: const Icon(Icons.favorite, size: 16),
-                              onPressed: () => _remove(item),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     );
                   },
@@ -596,19 +751,16 @@ class _VideoFavoritesPageState extends State<VideoFavoritesPage> {
               return SizedBox(
                 width: 150,
                 child: InkWell(
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => VideoSeriesDetailPage(
-                        name: s.series,
-                        coverId: s.coverId,
-                        posterUrl: null,
-                        headers: {
-                          if (ApiSession.instance.token != null)
-                            'authorization':
-                                'Bearer ${ApiSession.instance.token}',
-                        },
-                      ),
-                    ),
+                  onTap: () => openVideoSeries(
+                    context,
+                    name: s.series,
+                    coverId: s.coverId,
+                    posterUrl: null,
+                    headers: {
+                      if (ApiSession.instance.token != null)
+                        'authorization':
+                            'Bearer ${ApiSession.instance.token}',
+                    },
                   ),
                   child: NasCard(
                     padding: const EdgeInsets.all(NasTokens.spaceXs),

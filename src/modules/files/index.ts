@@ -3,7 +3,7 @@ import { ftsPhrase } from './fts';
 import type { ServerModule } from '../../../kernel/types';
 import { secured } from '../../../kernel/route';
 import { Err } from '../../../kernel/errors';
-import { filesRoot, listBrowsableRoots, toPosix } from './fs-root';
+import { filesRoot, listBrowsableRoots, resolveWriteTarget, toPosix } from './fs-root';
 import * as S from './schemas';
 import { listHandler, type ListQuery } from './list';
 import { downloadHandler, type DownloadQuery } from './download';
@@ -27,11 +27,30 @@ import {
   trashRestoreHandler,
 } from './ops';
 import { opLogListHandler, resolveActor, writeOpLogs, type OpLogQuery } from './oplog';
+import { createTransferStore } from '../../../kernel/transfer-store';
 
 const TAG = ['files'];
 
 /** Fastify schema $ref 语法：`<id>#` */
 const ref = (id: string) => ({ $ref: `${id}#` });
+
+/** 发起端自报门口（与 transfer 模块保持一致的头名） */
+function transferOrigin(req: { headers: Record<string, unknown> }): {
+  origin: string;
+  device: string;
+} {
+  const pick = (name: string): string => {
+    const raw = req.headers[name];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (typeof value !== 'string') return '';
+    try {
+      return decodeURIComponent(value).slice(0, 64);
+    } catch {
+      return value.slice(0, 64);
+    }
+  };
+  return { origin: pick('x-colanas-client'), device: pick('x-colanas-device') };
+}
 
 export const files: ServerModule = {
   id: 'files',
@@ -129,6 +148,9 @@ export const files: ServerModule = {
   ],
 
   async register(app, k) {
+    // 传输会话表：上传 / 下载进度都记在这里，客户端任意一端轮询就能看到全部来源
+    const transferStore = createTransferStore(k.db);
+
     // 注册到 Fastify schema 池 → @fastify/swagger 提升为 components.schemas
     for (const schema of [
       S.ListItem,
@@ -221,7 +243,38 @@ export const files: ServerModule = {
           response: { 200: ref('FilesCheckResponse') },
         },
       }),
-      async (req) => checkHandler(k.paths.dataDir, (req.body || {}) as CheckBody),
+      async (req) => {
+        const body = (req.body || {}) as CheckBody;
+        const res = await checkHandler(k.paths.dataDir, body);
+
+        const { origin, device } = transferOrigin(req);
+        const owner = String(req.user?.sub || 'anonymous');
+        const size = Number(body.size) || 0;
+        const chunkSize = res.chunkSize > 0 ? res.chunkSize : 4 * 1024 * 1024;
+        const session = await transferStore.begin({
+          owner,
+          direction: 'upload',
+          path: res.path,
+          size,
+          totalChunks: size > 0 ? Math.ceil(size / chunkSize) : 0,
+          origin,
+          device,
+        });
+
+        // 秒传：文件已在服务端，直接收口成「已完成」——面板上能看到这条，
+        // 而不是「我选了 5 个文件，列表却只有 2 个」。
+        if (res.exists) {
+          await transferStore.finish(session.id, { size: size || session.size });
+          return { ...res, sessionId: session.id };
+        }
+
+        // 已收分片也补进会话：换台机器接着传时，进度条一进来就是真实值而不是 0
+        for (const index of res.uploaded) {
+          const bytes = size > 0 ? Math.min(chunkSize, Math.max(0, size - index * chunkSize)) : 0;
+          await transferStore.advance(session.id, { chunkIndex: index, bytes });
+        }
+        return { ...res, sessionId: session.id };
+      },
     );
 
     app.post(
@@ -239,7 +292,31 @@ export const files: ServerModule = {
           response: { 200: ref('FilesChunkResponse') },
         },
       }),
-      async (req) => chunkHandler(k.paths.dataDir, (req.query || {}) as ChunkQuery, req.body),
+      async (req) => {
+        const q = (req.query || {}) as ChunkQuery;
+        const res = await chunkHandler(k.paths.dataDir, q, req.body);
+
+        // 会话进度：客户端带了 sid 就用它；没带（老客户端 / 同步模块）按 owner+路径找活跃会话。
+        const chunkBytes = Buffer.isBuffer(req.body) ? req.body.length : 0;
+        const sid = String((q as { sid?: string }).sid || '');
+        if (chunkBytes > 0) {
+          const session = sid
+            ? await transferStore.get(sid)
+            : await transferStore.findActive(
+                String(req.user?.sub || 'anonymous'),
+                'upload',
+                resolveWriteTarget(q.path).rel,
+              );
+          if (session) {
+            await transferStore.advance(session.id, {
+              chunkIndex: Number(q.index),
+              bytes: chunkBytes,
+              totalChunks: q.total === undefined ? 0 : Number(q.total),
+            });
+          }
+        }
+        return res;
+      },
     );
 
     app.post(
@@ -257,8 +334,17 @@ export const files: ServerModule = {
       async (req) => {
         const body = (req.body || {}) as MergeBody;
         const actor = await resolveActor(k.db, req);
+        const owner = String(req.user?.sub || 'anonymous');
         try {
           const res = await mergeHandler(k.paths.dataDir, body, k.log);
+          const session = await transferStore.findActive(
+            owner,
+            'upload',
+            String(res.path || body.path || ''),
+          );
+          if (session) {
+            await transferStore.finish(session.id, { size: Number(res.size) || 0 });
+          }
           await writeOpLogs(k.db, actor, [
             {
               action: 'upload',
@@ -269,6 +355,15 @@ export const files: ServerModule = {
           ]);
           return res;
         } catch (err) {
+          // 失败也要收口：否则面板上这条会一直挂在「进行中」，看起来像卡死
+          const session = await transferStore.findActive(
+            owner,
+            'upload',
+            String(body.path || ''),
+          );
+          if (session) {
+            await transferStore.fail(session.id, (err as Error).message || String(err));
+          }
           await writeOpLogs(k.db, actor, [
             {
               action: 'upload',
@@ -296,8 +391,68 @@ export const files: ServerModule = {
       async (req, reply) => {
         const query = (req.query || {}) as DownloadQuery;
         const actor = await resolveActor(k.db, req);
+
+        // 只跟踪「用户点下载」这一种。内联预览（inline=1）和播放器的中段 Range seek
+        // 会在一部片子播放期间产生成百上千次请求，全记下来面板就没法看了。
+        const rangeHeader = typeof req.headers.range === 'string' ? req.headers.range : '';
+        const midRange = rangeHeader !== '' && !/^bytes=0-/.test(rangeHeader.trim());
+        const track = query.inline !== '1' && !midRange;
+
+        const { origin, device } = transferOrigin(req);
+        const owner = String(req.user?.sub || 'anonymous');
+
+        // onStart 是同步回调，但建会话要写库：先存一个 promise，onEnd 时等它落地再收口
+        let sessionReady: Promise<string> = Promise.resolve('');
+        let sessionId = '';
+        let pendingBytes = 0;
+        let lastFlush = 0;
+
+        const hooks = track
+          ? {
+              onStart: (info: { abs: string; size: number; ranged: boolean }) => {
+                sessionReady = (async () => {
+                  const session = await transferStore.begin({
+                    owner,
+                    direction: 'download' as const,
+                    path: toPosix(info.abs),
+                    size: info.size,
+                    totalChunks: 0,
+                    origin,
+                    device,
+                  });
+                  sessionId = session.id;
+                  return session.id;
+                })().catch(() => '');
+              },
+              onBytes: (n: number) => {
+                if (!sessionId) return;
+                pendingBytes += n;
+                const now = Date.now();
+                // 每 MB 或每 800ms 落一次库：写太密会把 SQLite 打热，写太稀进度条会跳
+                if (pendingBytes >= 1024 * 1024 || now - lastFlush > 800) {
+                  const flush = pendingBytes;
+                  pendingBytes = 0;
+                  lastFlush = now;
+                  void transferStore.advance(sessionId, { bytes: flush });
+                }
+              },
+              onEnd: (info: { completed: boolean; sent: number }) => {
+                void sessionReady.then(async (id) => {
+                  const target = id || sessionId;
+                  if (!target) return;
+                  if (pendingBytes > 0) {
+                    await transferStore.advance(target, { bytes: pendingBytes });
+                    pendingBytes = 0;
+                  }
+                  if (info.completed) await transferStore.finish(target, { size: info.sent });
+                  else await transferStore.fail(target, '客户端中断');
+                });
+              },
+            }
+          : undefined;
+
         try {
-          const out = await downloadHandler(req, reply, query);
+          const out = await downloadHandler(req, reply, query, hooks);
           await writeOpLogs(k.db, actor, [
             { action: 'download', status: 'ok', path: String(query.path || '') },
           ]);

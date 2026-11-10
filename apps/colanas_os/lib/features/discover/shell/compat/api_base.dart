@@ -2,7 +2,7 @@ import 'package:nas_core/nas_core.dart';
 
 import '../../../../core/session.dart';
 
-/// 参考实现 `BaseApiService` / `ApiResponse` 的等价实现。
+/// 既有实现 `BaseApiService` / `ApiResponse` 的等价实现。
 ///
 /// 参考源码的 `DiscoverApiService` 调 `apiGet/apiPost('/api/...')`，而本项目走
 /// 强类型 `ApiSession.instance.client`（`/api/v1/...`，camelCase 字段）。
@@ -82,7 +82,7 @@ class CompatApi {
 
   static ApiClient get _api => ApiSession.instance.client;
 
-  /// 参考实现 的 catalog type → 本项目的 (kind, media)。
+  /// 既有实现 的 catalog type → 本项目的 (kind, media)。
   static const Map<String, List<String>> _catalogTypes = <String, List<String>>{
     'trending_day': <String>['trending_day', 'movie'],
     'trending_week': <String>['trending_week', 'movie'],
@@ -281,7 +281,7 @@ class CompatApi {
       final body = <String, dynamic>{
         if (name.isNotEmpty) 'name': name,
         if (siteUrl.isNotEmpty) 'baseUrl': siteUrl,
-        // 参考实现 的 adapter_type=mteam 对应本项目的 kind=mteam（走专有 JSON API）
+        // 既有实现 的 adapter_type=mteam 对应本项目的 kind=mteam（走专有 JSON API）
         'kind': (_str(b['adapter_type'], '') == 'mteam' || siteUrl.contains('m-team'))
             ? 'mteam'
             : 'nexusphp',
@@ -571,7 +571,7 @@ class CompatApi {
           .toList();
     }
 
-    // 兜底：未识别的 参考实现 端点回空结构（参考页不会崩，只是这一块没数据）。
+    // 兜底：未识别的 既有实现 端点回空结构（参考页不会崩，只是这一块没数据）。
     // 43 个端点已全部接完，这里正常不会命中。
     return _empty();
   }
@@ -663,7 +663,7 @@ class CompatApi {
     };
   }
 
-  /// 本项目 camelCase 媒体卡 → 参考实现 snake_case 条目（补齐参考页会读的字段）。
+  /// 本项目 camelCase 媒体卡 → 既有实现 snake_case 条目（补齐参考页会读的字段）。
   static Map<String, dynamic> _card(Map<String, dynamic> c) {
     final id = c['id'];
     final year = c['year'];
@@ -793,7 +793,7 @@ class CompatApi {
     return const <dynamic>[];
   }
 
-  /// 参考实现 全用 int id，本项目是 base64url 文本 id / guid。
+  /// 既有实现 全用 int id，本项目是 base64url 文本 id / guid。
   /// 下发列表时把字符串映射成稳定整数，动作回传时再反查，避免运行时类型错误。
   static final Map<int, String> _idMap = <int, String>{};
 
@@ -813,7 +813,7 @@ class CompatApi {
 
   /// 路径里那段 id → 真实 id。
   ///
-  /// 参考实现把 id 直接拼进 URL（`'/api/pt/sites/$id/test'`），而本项目站点 id 是
+  /// 既有实现把 id 直接拼进 URL（`'/api/pt/sites/$id/test'`），而本项目站点 id 是
   /// base64 字符串；UI 手里拿到的是 `_ensureItems` 哈希后的 int，拼进路径就成了纯数字。
   /// 拿这个数字去 `/api/v1/pt/sites/<id>/test` 必然 404，所以按 `_idMap` 还原。
   static String _pathId(String seg) {

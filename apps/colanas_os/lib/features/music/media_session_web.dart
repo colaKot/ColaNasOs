@@ -45,3 +45,25 @@ void updateMediaSession({
     // 极少数浏览器没有 Media Session：播放本身不受影响
   }
 }
+
+/// 锁屏 / 通知栏的进度条。浏览器不要求它才能后台播放，但没有它系统面板
+/// 会把时长显示成 0，拖不动进度；Android 上也更容易保持音频会话。
+void updateMediaSessionPosition({
+  required Duration duration,
+  required Duration position,
+  double playbackRate = 1,
+}) {
+  final total = duration.inMilliseconds / 1000;
+  if (total <= 0) return;
+  try {
+    web.window.navigator.mediaSession.setPositionState(
+      web.MediaPositionState(
+        duration: total,
+        playbackRate: playbackRate,
+        position: (position.inMilliseconds / 1000).clamp(0, total).toDouble(),
+      ),
+    );
+  } catch (_) {
+    // 浏览器不支持 positionState：不影响播放
+  }
+}

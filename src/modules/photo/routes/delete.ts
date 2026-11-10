@@ -5,6 +5,7 @@ import { secured } from '../../../../kernel/route';
 import { Err } from '../../../../kernel/errors';
 import { TAG, newId } from '../util';
 import { deletePhotosPermanently } from '../delete';
+import { recordDeletedFingerprints } from '../deleted-fp';
 import type { PhotoHelpers } from '../helpers';
 
 /**
@@ -57,6 +58,9 @@ export async function registerPhotoDelete(
           `.execute(trx);
           const n = Number(res.numAffectedRows || 0);
           if (n > 0) {
+            // 删过的照片留指纹：清空回收站会物理删行，到那时手机备份就再也
+            // 查不到「这张传过」，会当成新照片重新堆上来。
+            await recordDeletedFingerprints(trx, owner, ids);
             await sql`
               insert into photo_delete_batches (id, owner_id, kind, item_count, created_at)
               values (${batchId}, ${owner}, 'delete', ${n}, ${ts})

@@ -80,6 +80,7 @@ class NasStyleSpec {
     required this.cardRadius,
     required this.cardShadow,
     required this.background,
+    required this.baseColor,
   });
 
   final NasUiStyle style;
@@ -106,6 +107,13 @@ class NasStyleSpec {
 
   /// 背景层（铺满整个 App，页面本身透明）
   final Widget background;
+
+  /// 背景的**基色**（渐变背后那一层纯色）。
+  ///
+  /// 用途：把半透明的 `panelColor` 合成成不透明的等价色，让卡片 / 弹窗 / 列表底色
+  /// 既跟背景同色系、又绝不透明。以前用 `colorScheme.surface` 合成，深色主题下那里
+  /// 是纯黑 —— 于是所有卡片都是「黑洞」（2026-11-09 用户反馈）。
+  final Color baseColor;
 }
 
 /// 取当前上下文的风格规格；未包裹时退回极光玻璃。
@@ -158,6 +166,7 @@ NasStyleSpec nasStyleSpec(
               offset: const Offset(0, 14)),
         ],
         background: _AuroraBackground(dark: dark, primary: primary),
+        baseColor: dark ? const Color(0xFF0A0E17) : const Color(0xFFEEF2FB),
       );
     case NasUiStyle.card:
       return NasStyleSpec(
@@ -187,6 +196,7 @@ NasStyleSpec nasStyleSpec(
               offset: const Offset(0, 6)),
         ],
         background: _FlatBackground(dark: dark, primary: primary),
+        baseColor: dark ? const Color(0xFF0E1218) : const Color(0xFFF4F6FA),
       );
     case NasUiStyle.fluent:
       return NasStyleSpec(
@@ -216,6 +226,7 @@ NasStyleSpec nasStyleSpec(
               offset: const Offset(0, 2)),
         ],
         background: _MicaBackground(dark: dark, primary: primary),
+        baseColor: dark ? const Color(0xFF1B1B1B) : const Color(0xFFF2F2F2),
       );
   }
 }

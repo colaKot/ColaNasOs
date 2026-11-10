@@ -3,6 +3,8 @@ import '../../shell/app_widgets.dart';
 
 import 'package:flutter/material.dart';
 import 'package:nas_media/nas_media.dart';
+// 人脸列表翻页封装（photoFacesAll）不在 nas_core 的默认导出链上，这里显式引
+import 'package:nas_core/api/face_paging.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
@@ -87,7 +89,7 @@ class _PhotoFaceRelationsPageState extends State<PhotoFaceRelationsPage> {
 
   Future<void> _openPerson(_Node node) async {
     try {
-      final res = await ApiSession.instance.client.photoFaces(id: node.id);
+      final faces = await ApiSession.instance.client.photoFacesAll(node.id);
       if (!mounted) return;
       final media = MediaUrls(ApiSession.instance.baseUrl);
       final token = ApiSession.instance.token;
@@ -100,7 +102,7 @@ class _PhotoFaceRelationsPageState extends State<PhotoFaceRelationsPage> {
           content: SizedBox(
             width: 640,
             height: 420,
-            child: res.items.isEmpty
+            child: faces.isEmpty
                 ? Center(child: Text(tr('photo.relations.noPhotos')))
                 : GridView.builder(
                     gridDelegate:
@@ -109,9 +111,9 @@ class _PhotoFaceRelationsPageState extends State<PhotoFaceRelationsPage> {
                       mainAxisSpacing: NasTokens.spaceXs,
                       crossAxisSpacing: NasTokens.spaceXs,
                     ),
-                    itemCount: res.items.length,
+                    itemCount: faces.length,
                     itemBuilder: (c, i) {
-                      final p = res.items[i];
+                      final p = faces[i];
                       return ClipRRect(
                         borderRadius:
                             BorderRadius.circular(NasTokens.radiusSm),

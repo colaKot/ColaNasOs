@@ -127,12 +127,42 @@ export const BlogEpisodeItem = Type.Object(
 );
 
 export const BlogEpisodeListResponse = Type.Object(
-  { items: Type.Array(Type.Ref(BlogEpisodeItem)) },
+  {
+    items: Type.Array(Type.Ref(BlogEpisodeItem)),
+    /** 符合条件的总条数（分页算总页数用，不是本页条数） */
+    total: Type.Integer(),
+    limit: Type.Integer(),
+    offset: Type.Integer(),
+  },
   { $id: 'BlogEpisodeListResponse' },
 );
 
+/** 文稿弹窗底部的一条引用：老期次没有落过链接，link 会是空串 */
+export const BlogScriptItem = Type.Object(
+  {
+    category: Type.String({ description: '素材所属的新闻类别' }),
+    title: Type.String(),
+    link: Type.String({ description: '原文 URL；老数据为空串' }),
+    source: Type.String({ description: '媒体 / 源站名' }),
+  },
+  { $id: 'BlogScriptItem' },
+);
+
+export const BlogScriptResponse = Type.Object(
+  {
+    id: Type.String(),
+    title: Type.String(),
+    script: Type.String({ description: '播报稿全文（含栏目分隔，可能为空：老数据/生成失败）' }),
+    items: Type.Array(Type.Ref(BlogScriptItem), { description: '本期引用链接' }),
+  },
+  { $id: 'BlogScriptResponse' },
+);
+
 export const BlogQuery = Type.Object(
-  { limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })) },
+  {
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
+    offset: Type.Optional(Type.Integer({ minimum: 0 })),
+  },
   { $id: 'BlogQuery' },
 );
 
@@ -282,6 +312,8 @@ export const BLOG_SCHEMAS = [
   BlogVoiceRemoveBody,
   BlogEpisodeItem,
   BlogEpisodeListResponse,
+  BlogScriptItem,
+  BlogScriptResponse,
   BlogQuery,
   BlogGenerateBody,
   BlogGenerateResponse,

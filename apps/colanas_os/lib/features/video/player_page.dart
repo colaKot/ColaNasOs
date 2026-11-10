@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/audio_focus.dart';
 import '../../core/audio_track_label.dart';
 import '../../core/codec_support.dart';
 import '../../core/play_preferences.dart';
@@ -141,6 +142,21 @@ class _PlayerPageState extends State<PlayerPage> {
   bool _boosting = false;
   bool _controls = true;
   bool _locked = false;
+  /// 进播放器时的朝向（null = 还没读到，按竖屏处理）
+  bool? _entryPortrait;
+
+  // —— 进度手势（横向拖动 / 双击左右两侧）
+  /// 拖动起点的片源绝对位置（毫秒）；null = 当前没在拖
+  double? _dragStartMs;
+  /// 相对起点的偏移（毫秒），拖动过程中实时变
+  double _dragDeltaMs = 0;
+  bool _dragSeeking = false;
+  /// 双击落点：用来区分左 / 中 / 右
+  Offset? _lastDoubleTapPos;
+  /// 快进快退的短暂提示（800ms 后自动消失）
+  String? _seekHint;
+  Timer? _seekHintTimer;
+
   bool _immersive = false;
   Timer? _hideTimer;
 
@@ -277,6 +293,19 @@ class _PlayerPageState extends State<PlayerPage> {
     });
   }
 
+  /// 进播放器那一刻的朝向，只记一次。
+  ///
+  /// 退出全屏 / 退出播放器要还原成它（见 `player_screen_stub.dart`）：
+  /// 竖着进来就锁回竖屏，横着进来（TV / 平板横放）就放开朝向。
+  /// `initState` 里不能读 MediaQuery，所以放在这里。
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _entryPortrait ??= MediaQuery.orientationOf(context) == Orientation.portrait;
+  }
+
+  bool get _wantPortraitOnExit => _entryPortrait ?? true;
+
   /// 拉源文件的音轨清单。
   ///
   /// 转码流的 `_player.state.tracks.audio` 永远只有一条（就是转出来的那条），
@@ -388,17 +417,29 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   void dispose() {
     _hideTimer?.cancel();
+    _seekHintTimer?.cancel();
     _volumeVN.dispose();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    // 退出播放器（可能是**在全屏里按返回**，而不是先点退出全屏）必须把屏幕
+    // 朝向还回去：全屏时按视频比例锁了 landscape，只还原 SystemUiMode 的话
+    // 人已经回到列表页、手机还横着 —— 用户反馈「退出影片以后一直是横屏」。
+    unawaited(exitPlayerFullscreen(portrait: _wantPortraitOnExit));
+    AudioFocus.instance.release(_player);
     _player.dispose();
     super.dispose();
   }
 
   // ------------------------------------------------------------------ 播放源
 
-  Future<void> _openUrl(String u, {Duration? seekTo, int retries = 0}) async {
+  Future<void> _openUrl(
+    String u, {
+    Duration? seekTo,
+    int retries = 0,
+    bool resetBenignRetries = true,
+  }) async {
     _url = u;
     try {
+      // 视频也带声音：开播前先让音乐 / 播客 / 音色试听让路
+      await AudioFocus.instance.request(_player, () async => _player.pause());
       await _player.open(Media(u));
       // 字幕走控制层自绘；关掉内核自带字幕轨，避免内嵌字幕再叠一层。
       // 自绘的 cue 是 State 字段，重开 Media 不需要重新挂载。
@@ -416,16 +457,18 @@ class _PlayerPageState extends State<PlayerPage> {
         await Future<void>.delayed(const Duration(milliseconds: 350));
         await _player.seek(seekTo);
       }
-      _benignRetries = 0;
+      // 良性错误重试链里不能清零，否则「报错→重开→成功清零→又报错」无限循环，
+      // 永远走不到 _benignRetries >= 2，黑屏且不显示任何错误。
+      if (resetBenignRetries) _benignRetries = 0;
       if (mounted) setState(() => _error = null);
     } catch (e) {
       // 边转边播的第一次打开会「打不开」：播放器拉 index.m3u8 时首片可能还没落盘
       // （服务端最多等 15s，超时就先给空 EVENT 列表），内核当场就报错退出。
       // 转码本身没失败，过一两秒分片就有了 —— 直接弹「播放失败」太冤。
       // 《匹诺曹》这种 4K DV 片首片要 5s 上下（HDR→SDR + 4K 解码初始化），
-      // 正是最容易踩到这条的片源。重试 2 次（+3s）能给足首片时间。
+      // 正是最容易踩到这条的片源。重试 3 次（+6s）能给足首片时间。
       if (retries > 0 && _isTranscode && mounted) {
-        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        await Future<void>.delayed(const Duration(milliseconds: 2000));
         if (!mounted) return;
         return _openUrl(u, seekTo: seekTo, retries: retries - 1);
       }
@@ -434,13 +477,35 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
-  /// 浏览器换源时的良性中断：不是真的播不了，重开一次就好。
-  static bool _isBenignPlaybackError(String message) {
+  /// 「能自愈的错误」：不是真的播不了，重开一次（或等一两秒）就好。
+  bool _isBenignPlaybackError(String message) {
     final m = message.toLowerCase();
-    return m.contains('interrupted by a call to pause') ||
+    if (m.contains('interrupted by a call to pause') ||
         m.contains('interrupted by a new load request') ||
         (m.contains('play()') && m.contains('interrupt')) ||
-        m.contains('aborterror');
+        m.contains('aborterror')) {
+      return true;
+    }
+    // mpv / libavformat 的传输层日志：`tcp: ffurl read returned 0`、`http: ... eof`
+    // 这类是连接被对端正常关闭（分片结束、keep-alive 超时、转码会话切段），
+    // 数据其实还在管道里、播放器会自己续上 —— 但以前会糊一层错误页，用户以为播不了。
+    // 归到良性里走「静默重试 2 次」，真播不动时仍然会把错误显示出来。
+    if ((m.contains('tcp:') || m.contains('ffurl') || m.contains('http:')) &&
+        (m.contains('read returned') ||
+            m.contains('eof') ||
+            m.contains('connection reset') ||
+            m.contains('end of file'))) {
+      return true;
+    }
+    // 转码流刚建会话那几秒，首片可能还没落盘：mpv / hls.js 会报
+    // 「打不开」「认不出格式」「没有可播的流」—— 一两秒后同一个地址就能播。
+    // 直链报这些就是真坏了（文件没了 / 403），不能装作没事。
+    if (!_isTranscode) return false;
+    return m.contains('failed to open') ||
+        m.contains('failed to recognize') ||
+        m.contains('no video or audio streams') ||
+        m.contains('timed out') ||
+        m.contains('404');
   }
 
   /// 良性中断 → 静默重开当前地址；重试两次仍没播起来才把错误显示出来。
@@ -454,7 +519,7 @@ class _PlayerPageState extends State<PlayerPage> {
     if (target.isEmpty) return;
     Future<void>.delayed(const Duration(milliseconds: 900), () {
       if (!mounted || _player.state.playing) return;
-      _openUrl(target);
+      _openUrl(target, resetBenignRetries: false);
     });
   }
 
@@ -576,8 +641,8 @@ class _PlayerPageState extends State<PlayerPage> {
         _preparing = false;
         _isTranscode = true;
       });
-      // retries: 首片还没落盘时内核会「打不开」，不是转码失败，给两次重试
-      await _openUrl(u, retries: 2);
+      // retries: 首片还没落盘时内核会「打不开」，不是转码失败，给三次重试
+      await _openUrl(u, retries: 3);
     } catch (e) {
       if (!mounted) return;
       // 不能退回直链：走到这里就说明片源直链本来解不了（HEVC / MKV / HDR），
@@ -616,9 +681,10 @@ class _PlayerPageState extends State<PlayerPage> {
             );
       // 回直链：时间轴是片源时间轴，起转偏移必须清零，否则位置会凭空多一截
       if (toDirect) _startMs = 0;
-      // 换档也是新建会话，同样可能撞上「首片还没落盘」，给两次重试。
+      // 换档也是新建会话，同样可能撞上「首片还没落盘」，给三次重试
+      // （服务端已经会等到 25s，这里再兜几次是给 SMB 片源 + 4K 的余量）。
       // 转码会话的时间轴 0 = pos（见 _ensureTranscode 的 startMs），不能再 seekTo。
-      await _openUrl(u, seekTo: toDirect ? pos : null, retries: toDirect ? 0 : 2);
+      await _openUrl(u, seekTo: toDirect ? pos : null, retries: toDirect ? 0 : 3);
       if (!mounted) return;
       setState(() {
         _preset = effective;
@@ -745,6 +811,143 @@ class _PlayerPageState extends State<PlayerPage> {
 
   // -------------------------------------------------------------------- 交互
 
+  /// 字幕菜单里「搜索字幕」那一项的占位值（不可能与真实字幕名 / 偏好值撞上）
+  static const _subtitleSearchSentinel = '\u0000search';
+
+  /// 字幕正文搜索：在已加载的 cue 里找关键字，点结果直接跳到那句台词。
+  ///
+  /// 为什么有用：一部两小时的片子想找某句台词 / 某个场景，只能靠拖进度条瞎撞。
+  /// 既有实现 的「字幕搜索」就是干这个的。Cue 在 `_applySubtitle` 里已经
+  /// 解析进内存（自绘字幕要用），这里只是过滤 + seek，不额外请求服务端。
+  Future<void> _showSubtitleSearch() async {
+    if (_cues.isEmpty) {
+      NasSnack.show(
+        context,
+        tr(_activeSub == null ? 'player.subtitleSearchNoSub' : 'player.subtitleSearchEmpty'),
+      );
+      return;
+    }
+    final ctrl = TextEditingController();
+    final hitCount = ValueNotifier<int>(0);
+    List<VideoSubtitleCue> matches = const [];
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: const Color(0xFF1B1B1B),
+        builder: (ctx) => Padding(
+          // 键盘弹起来别把列表顶出屏幕
+          padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(ctx).height * 0.62,
+            child: StatefulBuilder(
+              builder: (ctx, setLocal) {
+                void search(String raw) {
+                  final q = raw.trim().toLowerCase();
+                  if (q.isEmpty) {
+                    setLocal(() {
+                      matches = const [];
+                      hitCount.value = 0;
+                    });
+                    return;
+                  }
+                  final out = <VideoSubtitleCue>[];
+                  for (final cue in _cues) {
+                    if (cue.text.toLowerCase().contains(q)) {
+                      out.add(cue);
+                      // 上千条命中的时候没必要全渲染，取前 200 条够翻
+                      if (out.length >= 200) break;
+                    }
+                  }
+                  setLocal(() {
+                    matches = out;
+                    hitCount.value = out.length;
+                  });
+                }
+
+                return Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                      child: TextField(
+                        controller: ctrl,
+                        autofocus: true,
+                        onChanged: search,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: tr('player.subtitleSearchHint'),
+                          hintStyle: const TextStyle(color: Colors.white38),
+                          prefixIcon:
+                              const Icon(Icons.search, color: Colors.white54, size: 20),
+                          isDense: true,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: hitCount,
+                        builder: (_, n, _) {
+                          if (ctrl.text.trim().isEmpty) {
+                            return Center(
+                              child: Text(
+                                tr('player.subtitleSearchTip'),
+                                style: const TextStyle(color: Colors.white38),
+                              ),
+                            );
+                          }
+                          if (n == 0) {
+                            return Center(
+                              child: Text(
+                                tr('player.subtitleSearchNone'),
+                                style: const TextStyle(color: Colors.white38),
+                              ),
+                            );
+                          }
+                          return ListView.builder(
+                            itemCount: matches.length,
+                            itemBuilder: (_, i) {
+                              final cue = matches[i];
+                              return ListTile(
+                                dense: true,
+                                title: Text(
+                                  cue.text,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                                ),
+                                leading: Text(
+                                  _fmt(Duration(milliseconds: cue.startMs)),
+                                  style: const TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                onTap: () {
+                                  Navigator.of(ctx).pop();
+                                  unawaited(
+                                    _seekTo(Duration(milliseconds: cue.startMs)),
+                                  );
+                                  _poke();
+                                },
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      );
+    } finally {
+      hitCount.dispose();
+      ctrl.dispose();
+    }
+  }
+
   void _resetHideTimer() {
     _hideTimer?.cancel();
     _hideTimer = Timer(const Duration(seconds: 4), () {
@@ -761,6 +964,22 @@ class _PlayerPageState extends State<PlayerPage> {
     final now = DateTime.now();
     if (!show && now.difference(_lastPoke).inMilliseconds < 400) return;
     _lastPoke = now;
+    _resetHideTimer();
+  }
+
+  /// 单击画面：控件开着就**收起**（进入沉浸观看），收起就唤出。
+  ///
+  /// 以前单击只调用 [_poke]，也就是「永远只会把控件叫出来」，要靠 4 秒定时器
+  /// 自动消失 —— 用户点第二下没有任何反应，全屏时也没法手动进沉浸。
+  void _toggleControls() {
+    // 锁屏时点击不解锁，避免误触（左下角有专门的解锁按钮）
+    if (_locked) return;
+    if (_controls) {
+      _hideTimer?.cancel();
+      setState(() => _controls = false);
+      return;
+    }
+    setState(() => _controls = true);
     _resetHideTimer();
   }
 
@@ -795,13 +1014,114 @@ class _PlayerPageState extends State<PlayerPage> {
     if (next) {
       await enterPlayerFullscreen(videoWidth: w, videoHeight: h);
     } else {
-      await exitPlayerFullscreen();
+      await exitPlayerFullscreen(portrait: _wantPortraitOnExit);
     }
   }
 
   Future<void> _seekBy(int seconds) async {
     final p = _absPosition(_player.state.position);
     await _seekTo(p + Duration(seconds: seconds));
+  }
+
+  // ------------------------------------------------------------ 进度手势
+  //
+  // 既有实现 那套手势：横向拖动 = 快进快退（松手才真跳），
+  // 双击左 / 右两侧 = ±10s，中间双击仍然是播放/暂停。
+  // 以前只有底部那条细滑块能拖，手机上一根手指很难抓准；画面区域
+  // 那么大一块却只认「单击唤出控件」和「长按 2 倍速」，等于浪费。
+
+  /// 双击快进 / 快退的步长（秒）
+  static const _tapSeekStep = 10;
+
+  void _onDoubleTapDown(TapDownDetails d) {
+    _lastDoubleTapPos = d.localPosition;
+  }
+
+  Future<void> _onDoubleTap() async {
+    if (_locked) return;
+    final pos = _lastDoubleTapPos;
+    final w = MediaQuery.sizeOf(context).width;
+    // 拿不到落点就退回老行为（播放/暂停），别让双击直接失效
+    if (pos == null || w <= 0) {
+      await _player.playOrPause();
+      _poke();
+      return;
+    }
+    final ratio = pos.dx / w;
+    if (ratio >= 0.6) {
+      await _seekByHinted(_tapSeekStep);
+    } else if (ratio <= 0.4) {
+      await _seekByHinted(-_tapSeekStep);
+    } else {
+      await _player.playOrPause();
+      _poke();
+    }
+  }
+
+  Future<void> _seekByHinted(int seconds) async {
+    await _seekBy(seconds);
+    _poke();
+    _flashSeek(
+      seconds > 0
+          ? tr('player.seekForward', {'n': '$seconds'})
+          : tr('player.seekBack', {'n': '${-seconds}'}),
+    );
+  }
+
+  /// 拖动中：只更新预览，不做 seek（每帧都 seek 会把转码会话拖垮）
+  void _onSeekDragStart(DragStartDetails d) {
+    if (_locked) return;
+    final total = _timelineDuration(_player.state.duration);
+    if (total <= Duration.zero) return;
+    _dragStartMs = _absPosition(_player.state.position).inMilliseconds.toDouble();
+    _dragDeltaMs = 0;
+    setState(() => _dragSeeking = true);
+  }
+
+  void _onSeekDragUpdate(DragUpdateDetails d) {
+    if (!_dragSeeking) return;
+    final w = MediaQuery.sizeOf(context).width;
+    final total = _timelineDuration(_player.state.duration).inMilliseconds.toDouble();
+    if (w <= 0 || total <= 0) return;
+    // 划满一屏 ≈ 整片的 1/4，夹在 1 分钟 ~ 5 分钟之间：
+    // 短片不会一动就到片尾，两小时的片子也不用划十几下才走一分钟。
+    final span = (total / 4).clamp(60000.0, 300000.0);
+    setState(() => _dragDeltaMs += d.delta.dx / w * span);
+  }
+
+  Future<void> _onSeekDragEnd(DragEndDetails d) async {
+    if (!_dragSeeking) return;
+    final start = _dragStartMs ?? 0;
+    final total = _timelineDuration(_player.state.duration).inMilliseconds.toDouble();
+    final target = (start + _dragDeltaMs).clamp(0.0, total);
+    final jumped = (target - start).abs() >= 1000;
+    setState(() {
+      _dragSeeking = false;
+      _dragStartMs = null;
+      _dragDeltaMs = 0;
+    });
+    // 手抖几个像素不跳，否则「轻轻划一下画面」会莫名其妙跳一小段
+    if (!jumped) return;
+    await _seekTo(Duration(milliseconds: target.round()));
+    _poke();
+  }
+
+  void _flashSeek(String text) {
+    _seekHintTimer?.cancel();
+    setState(() => _seekHint = text);
+    _seekHintTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted) setState(() => _seekHint = null);
+    });
+  }
+
+  /// 拖动预览：`12:34 / +2:30`
+  String get _seekPreviewText {
+    final start = _dragStartMs ?? 0;
+    final total = _timelineDuration(_player.state.duration).inMilliseconds.toDouble();
+    final target = (start + _dragDeltaMs).clamp(0.0, total);
+    final sign = _dragDeltaMs < 0 ? '-' : '+';
+    final delta = Duration(milliseconds: _dragDeltaMs.abs().round());
+    return '${_fmt(Duration(milliseconds: target.round()))}  $sign${_fmt(delta)}';
   }
 
   /// 跳到片源绝对位置 [target]。
@@ -856,7 +1176,7 @@ class _PlayerPageState extends State<PlayerPage> {
         startMs: target.inMilliseconds,
       );
       // 新播放列表的时间轴 0 就是 target，不能再 seekTo（否则会跳过 target 那一段）
-      await _openUrl(u, retries: 2);
+      await _openUrl(u, retries: 3);
       _poke();
     } catch (e) {
       if (messenger != null && mounted) {
@@ -944,8 +1264,14 @@ class _PlayerPageState extends State<PlayerPage> {
   ///
   /// 播放器在拿不到时长时会吐负数哨兵值，这种一律按「就是起点」处理，
   /// 不然进度条会显示成 -106751991167 小时。
-  Duration _absPosition(Duration raw) =>
-      raw <= Duration.zero ? _startOffset : _startOffset + raw;
+  Duration _absPosition(Duration raw) {
+    if (raw <= Duration.zero) return _startOffset;
+    final abs = _startOffset + raw;
+    // HLS EVENT 列表首片未就绪时，mpv 可能把分片绝对 PTS 当成 time-pos
+    // （26 小时量级）。不夹住会让进度条、字幕定位、观看上报一起跑飞。
+    final limit = _timelineDuration(_player.state.duration);
+    return limit > Duration.zero && abs > limit ? limit : abs;
+  }
 
   /// 已加载（已转出）到的**片源绝对位置**：进度条粗的那一段画到这里。
   ///
@@ -1020,7 +1346,11 @@ class _PlayerPageState extends State<PlayerPage> {
     // 只列这部片转得出来的档位：没有 1080p 的片就别给 1080P 选项。
     final options = presetsForSource(_srcHeight);
     return PopupMenuButton<String>(
-      tooltip: tr('player.quality'),
+      // 控制栏上**只留一个图标**：原来是「HD 图标 + 1080P 1.4Mbps」，
+      // 这串文字宽了近百像素，窄屏上把字幕 / 更多按钮直接挤出可视区
+      // （右侧控件是一整条横向滚动，溢出时先牺牲最左边那几个）。
+      // 当前档位的完整文案放进 tooltip 与菜单首行，信息一点没少。
+      tooltip: '${tr('player.quality')} · $cur',
       color: const Color(0xFF222222),
       onSelected: (v) {
         if (v.startsWith('codec:')) {
@@ -1050,16 +1380,9 @@ class _PlayerPageState extends State<PlayerPage> {
             child: _checked(c.label, _codec == c.key),
           ),
       ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.hd_outlined, size: 18, color: Colors.white),
-            const SizedBox(width: 4),
-            Text(cur, style: const TextStyle(color: Colors.white, fontSize: 13)),
-          ],
-        ),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8),
+        child: Icon(Icons.hd_outlined, size: 20, color: Colors.white),
       ),
     );
   }
@@ -1073,7 +1396,9 @@ class _PlayerPageState extends State<PlayerPage> {
           size: 20,
         ),
         onSelected: (value) {
-          if (value == VideoSubtitlePrefs.off) {
+          if (value == _subtitleSearchSentinel) {
+            unawaited(_showSubtitleSearch());
+          } else if (value == VideoSubtitlePrefs.off) {
             _chooseSubtitle(VideoSubtitlePrefs.off, null);
           } else if (value == VideoSubtitlePrefs.auto) {
             _chooseSubtitle(
@@ -1106,6 +1431,19 @@ class _PlayerPageState extends State<PlayerPage> {
               enabled: false,
               child: Text(tr('player.noSubtitles')),
             ),
+          // 字幕正文搜索：按关键字找那句台词，点一下就跳到那儿
+          const PopupMenuDivider(),
+          PopupMenuItem<String>(
+            value: _subtitleSearchSentinel,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.search, size: 18),
+                const SizedBox(width: 8),
+                Text(tr('player.subtitleSearch')),
+              ],
+            ),
+          ),
         ],
       );
 
@@ -1540,54 +1878,80 @@ class _PlayerPageState extends State<PlayerPage> {
   List<Widget> _rightControls(bool wide) {
     // 顺序就是用户看到的从左到右顺序，**别再 reversed**：反过一次以后
     // 整排按钮跟常见的播放器（倍速在最左、全屏在最右）完全对不上。
-    final all = <Widget>[
-      _speedButton(),
-      _qualityButton(),
-      _subtitleButton(),
-      _audioButton(),
-      // 包一层 KeyedSubtree：音量浮窗要贴着这个按钮弹出来（见 _showVolume）
-      KeyedSubtree(
-        key: _volumeAnchor,
-        child: ValueListenableBuilder<double>(
-          valueListenable: _volumeVN,
-          builder: (_, vol, _) => _btn(
-            vol <= 0
-                ? Icons.volume_off
-                : vol < 50
-                    ? Icons.volume_down
-                    : Icons.volume_up,
-            tr('player.volume'),
-            _showVolume,
-          ),
+    final speed = _speedButton();
+    final quality = _qualityButton();
+    final subtitle = _subtitleButton();
+    final audio = _audioButton();
+    // 包一层 KeyedSubtree：音量浮窗要贴着这个按钮弹出来（见 _showVolume）
+    final volume = KeyedSubtree(
+      key: _volumeAnchor,
+      child: ValueListenableBuilder<double>(
+        valueListenable: _volumeVN,
+        builder: (_, vol, _) => _btn(
+          vol <= 0
+              ? Icons.volume_off
+              : vol < 50
+                  ? Icons.volume_down
+                  : Icons.volume_up,
+          tr('player.volume'),
+          _showVolume,
         ),
       ),
-      // 没有同系列 / 同目录分卷时，这个按钮直接不出现，后面的按钮自然往左靠。
-      if (_hasPlaylist)
-        _btn(Icons.playlist_play, tr('player.playlist'), _showPlaylist),
-      _btn(Icons.info_outline, tr('player.info'), _showInfo),
-      _btn(Icons.settings_outlined, tr('player.settings'), _showSettings),
-      _btn(
-        _immersive ? Icons.fullscreen_exit : Icons.fullscreen,
-        _immersive ? tr('player.fullscreenExit') : tr('player.fullscreen'),
-        _toggleImmersive,
-        active: _immersive,
-      ),
-      if (!wide) _btn(Icons.lock_outline, tr('player.lock'), () {
-        setState(() => _locked = true);
-      }),
-    ];
-    if (wide) return all;
-    // 窄屏：前三项常驻（倍速 / 画质 / 字幕）+「更多」，其余全进底部面板。
-    // 顺序必须和宽屏同向 —— 外层横向滚动条是 `reverse: true`（内容靠右对齐、
-    // 溢出时优先保住最右边那个），所以**列表顺序就是从左到右的视觉顺序**，
-    // 别再倒着写（写成 [more, subtitle, quality, speed] 会真的显示成
-    // 更多 · 字幕 · 画质 · 倍速）。
-    // `all.skip(3)` 的 3 = 前面常驻的倍速/画质/字幕三项，改上面顺序时一起改。
+    );
+    // 没有同系列 / 同目录分卷时，这个按钮直接不出现，后面的按钮自然往左靠。
+    final playlist = _hasPlaylist
+        ? _btn(Icons.playlist_play, tr('player.playlist'), _showPlaylist)
+        : null;
+    final info = _btn(Icons.info_outline, tr('player.info'), _showInfo);
+    final settings =
+        _btn(Icons.settings_outlined, tr('player.settings'), _showSettings);
+    final fullscreen = _btn(
+      _immersive ? Icons.fullscreen_exit : Icons.fullscreen,
+      _immersive ? tr('player.fullscreenExit') : tr('player.fullscreen'),
+      _toggleImmersive,
+      active: _immersive,
+    );
+    final lock = wide
+        ? null
+        : _btn(Icons.lock_outline, tr('player.lock'), () {
+            setState(() => _locked = true);
+          });
+
+    if (wide) {
+      return [
+        speed,
+        quality,
+        subtitle,
+        audio,
+        volume,
+        ?playlist,
+        info,
+        settings,
+        fullscreen,
+        ?lock,
+      ];
+    }
+
+    // 窄屏（手机竖屏）：**倍速 / 画质 / 更多 / 全屏**。
+    //
+    // 2026-11-08 用户要求：全屏 / 退出全屏是竖屏下最常用的操作，
+    // 必须常驻在最右边，不能藏在「更多」里（每次都要多点两下）；字幕反而收进去。
+    // 音量不放进「更多」：浮窗是贴着音量按钮定位的（`_volumeAnchor`），
+    // 按钮不在树上浮窗就弹不出来，手机上用系统音量键即可。
     return [
-      _speedButton(),
-      _qualityButton(),
-      _subtitleButton(),
-      _btn(Icons.more_horiz, tr('common.more'), () => _showMore(all.skip(3).toList())),
+      speed,
+      quality,
+      _btn(Icons.more_horiz, tr('common.more'), () {
+        _showMore([
+          subtitle,
+          audio,
+          ?playlist,
+          info,
+          settings,
+          ?lock,
+        ]);
+      }),
+      fullscreen,
     ];
   }
 
@@ -1624,7 +1988,9 @@ class _PlayerPageState extends State<PlayerPage> {
                 : loadedMs.clamp(cur, max).toDouble();
             return Row(
               children: [
-                Text(_fmt(p),
+                // 与 Slider 同源：必须用夹取后的 cur，否则 position 异常时
+                // 左边显示 26:28:05、滑块却被 clamp 到满格。
+                Text(_fmt(Duration(milliseconds: cur)),
                     style: const TextStyle(color: Colors.white70, fontSize: 12)),
                 Expanded(
                   child: SliderTheme(
@@ -2005,7 +2371,7 @@ class _PlayerPageState extends State<PlayerPage> {
               const SizedBox(height: NasTokens.spaceMd),
               OutlinedButton(
                 onPressed: () => Navigator.of(context).maybePop(),
-                child: Text(tr('ui.mount.019')),
+                child: Text(tr('common.back')),
               ),
               const SizedBox(height: NasTokens.spaceSm),
               Text(
@@ -2043,11 +2409,15 @@ class _PlayerPageState extends State<PlayerPage> {
                 onHover: (_) => _poke(),
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: _poke,
-                  onDoubleTap: () {
-                    _player.playOrPause();
-                    _poke();
-                  },
+                  // 单击 = 切换控件显隐（也是进 / 出沉浸的唯一手势）
+                  onTap: _toggleControls,
+                  // 双击左 40% = 退 10s，右 40% = 进 10s，中间 20% = 播放/暂停
+                  onDoubleTapDown: _onDoubleTapDown,
+                  onDoubleTap: _onDoubleTap,
+                  // 横向拖动整块画面 = 快进快退（松手才真跳，见 _onSeekDragEnd）
+                  onHorizontalDragStart: _onSeekDragStart,
+                  onHorizontalDragUpdate: _onSeekDragUpdate,
+                  onHorizontalDragEnd: _onSeekDragEnd,
                   onLongPressStart: (_) {
                     _boosting = true;
                     _player.setRate(2.0);
@@ -2068,9 +2438,10 @@ class _PlayerPageState extends State<PlayerPage> {
               _subtitleLayer(),
               _statusLayer(),
               if (_controls && !_locked) ...[
-                // Web 上「全屏」是浏览器 Fullscreen API，顶栏即使留着也在全屏页里，
-                // 藏掉反而让用户按 Esc 退出后回不到上一页 —— 所以 Web 不藏顶栏。
-                if (!_immersive || kIsWeb) _topBar(wide),
+                // 顶栏（含左上角返回）必须跟着控件一起出现：以前全屏时
+                // `!_immersive` 会把它藏掉，手机 app 全屏以后**没有任何返回入口**，
+                // 用户只能杀进程。现在点一下画面就出来，再点一下连它一起收起（沉浸）。
+                _topBar(wide),
                 _centerControls(wide),
                 _bottomBar(wide),
               ],
@@ -2099,6 +2470,33 @@ class _PlayerPageState extends State<PlayerPage> {
                         child: Text(
                           tr('player.speedBoost'),
                           style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              // 拖动进度时在画面正中显示目标时间；双击快进给一个 900ms 的短提示。
+              // 两者不同时出现（拖动中不会触发双击）。
+              if (_dragSeeking || _seekHint != null)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xCC000000),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _dragSeeking ? _seekPreviewText : (_seekHint ?? ''),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),

@@ -3,6 +3,7 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_media/nas_media.dart';
 import 'package:nas_ui/nas_ui.dart';
 import '../../shell/app_widgets.dart';
+import '../../shell/shell_back.dart';
 
 import '../../core/session.dart';
 import 'photo_viewer_page.dart';
@@ -136,6 +137,14 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
 
   @override
   Widget build(BuildContext context) {
+    return SubPageScope(
+      active: _source != null,
+      onBack: _up,
+      child: _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     if (_loading) return const NasLoading();
     if (_error != null) return NasErrorState(message: _error!, onRetry: _loadRoots);
     return Column(

@@ -64,7 +64,11 @@ export interface KernelApi {
    * `thumb()` 在不可用或生成失败时抛错（`MediaUnavailableError.code = 'E_MEDIA_UNAVAILABLE'`）。
    */
   media: {
-    thumb(src: string, dst: string, size?: number): Promise<{ ms: number }>;
+    /**
+     * `atSec` 只对视频有意义：从第几秒抽帧当封面（缺省 0 = 首帧）。
+     * 相册里长视频的首帧常是黑屏，海报图要指定位置。
+     */
+    thumb(src: string, dst: string, size?: number, atSec?: number): Promise<{ ms: number }>;
     /** 转码：`preset` = audio / web720 / copy（缺省 copy）；`options` 为参数化编码 */
     transcode(
       src: string,

@@ -159,6 +159,7 @@ class I18nKeys {
   static const transmissionDeletingHint = 'transmission.deletingHint';
   static const transmissionActionTimeout = 'transmission.actionTimeout';
   static const transmissionActionFailed = 'transmission.actionFailed';
+  static const transmissionCompleted = 'transmission.completed';
   // ---- ui ----
   static const uiBook020 = 'ui.book.020';
   static const uiBookHd9c32a = 'ui.book.hd9c32a';
@@ -2659,4 +2660,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2617;
+const int i18nKeyCount = 2618;

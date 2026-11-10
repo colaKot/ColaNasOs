@@ -35,7 +35,10 @@ const REC_MAX_W = 960;
 const EP_ALLOW = ['dml', 'cuda', 'cpu'];
 
 function bestEps() {
+  // OCR 是四个模型里 GPU 最不划算的一个：DML 715ms vs CPU 394ms（慢 1.8×）。
+  // 默认 CPU，只有显式 COLANAS_PHOTO_AI_GPU=1 才走 DirectML。
   if (process.env.COLANAS_PHOTO_AI_FORCE_CPU === '1') return ['cpu'];
+  if (process.env.COLANAS_PHOTO_AI_GPU !== '1') return ['cpu'];
   try {
     const backing = ort.listSupportedBackends().map((b) => b.name);
     const allowed = EP_ALLOW.filter((e) => backing.includes(e));
@@ -313,23 +316,42 @@ function decodeCtc(logits, timeSteps, classes) {
 }
 
 /**
+ * 检测输入几何：等比缩到 DET_LIMIT_SIDE 内，再对齐到 32 的倍数。
+ *
+ * 抽出来导出，是为了让主进程能**一次 ffmpeg 解码就把这一路一起输出**：
+ * 每张照片原本要 spawn 4~5 次 ffmpeg，每次都要把整张 JPEG 从头解码一遍，
+ * 实测 426ms → 合成一次多路输出 129ms。几何必须两边算得一模一样，
+ * 否则 raw 长度对不上会直接抛错。
+ */
+function geometry(w, h) {
+  const scale = Math.min(1, DET_LIMIT_SIDE / Math.max(w, h));
+  const detW = align32(Math.max(1, Math.round(w * scale)));
+  const detH = align32(Math.max(1, Math.round(h * scale)));
+  return { detW, detH };
+}
+
+/**
  * 识别一张图。
+ * @param {string} src 图片路径
+ * @param {string} ffmpeg
+ * @param {string} ffprobe
+ * @param {{size?:{width:number,height:number}, raw?:Buffer}} [pre] 主进程已解好的底图（可选）
  * @returns {Promise<{text: string, lines: Array<{text:string,box:{x:number,y:number,w:number,h:number},score:number}>}>}
  */
-async function recognize(src, ffmpeg, ffprobe) {
+async function recognize(src, ffmpeg, ffprobe, pre) {
   if (!available()) throw new Error('ocr model not available');
   if (!ffmpeg) throw new Error('ffmpeg not found');
 
-  const size = await probeSize(src, ffprobe);
+  const size = (pre && pre.size) || (await probeSize(src, ffprobe));
   if (!size) throw new Error('probe failed');
 
-  const scale = Math.min(1, DET_LIMIT_SIDE / Math.max(size.width, size.height));
-  const baseW = Math.max(1, Math.round(size.width * scale));
-  const baseH = Math.max(1, Math.round(size.height * scale));
-  const detW = align32(baseW);
-  const detH = align32(baseH);
+  const { detW, detH } = geometry(size.width, size.height);
 
-  const raw = await rawRgb(src, ffmpeg, detW, detH);
+  // 主进程已经把这一路解好了（多路输出），就不再自己 spawn 一次
+  const raw =
+    pre && pre.raw && pre.raw.length >= detW * detH * 3
+      ? pre.raw.subarray(0, detW * detH * 3)
+      : await rawRgb(src, ffmpeg, detW, detH);
   const rawW = detW;
   const rawH = detH;
   if (raw.length !== rawW * rawH * 3) {
@@ -402,4 +424,4 @@ async function recognize(src, ffmpeg, ffprobe) {
   return { text: lines.map((l) => l.text).join('\n'), lines };
 }
 
-module.exports = { available, recognize, dictSize: () => dict().length };
+module.exports = { available, recognize, geometry, dictSize: () => dict().length };

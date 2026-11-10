@@ -299,10 +299,14 @@ process.chdir(root);
 
   const held = claim(near(A, 0.04), 60);
   const held2 = claim(near(A, 0.04), 60);
+  // 挂起语义（2026-11-07）：低质量 / 侧脸**不建簇**，cluster_id 保持 null 等 sweep 回捞。
+  // 旧实现「名字叫 hold 却 randomUUID 独立成组」，用例原来只检查两个 id 不同；
+  // 现在改成检查两次都是 hold 且都没有 id，比旧断言更严。
   check(
     'claim_low_quality_hold',
-    held.reason === 'low_quality_hold' && held2.clusterId !== held.clusterId,
-    `held=${held.reason} second=${held2.reason}`,
+    held.reason === 'low_quality_hold' && held.clusterId === null &&
+      held2.reason === 'low_quality_hold' && held2.clusterId === null,
+    `held=${held.reason}/${held.clusterId} second=${held2.reason}/${held2.clusterId}`,
   );
   const posed = claim(near(A, 0.04), 95, { yaw: 0.8 });
   check('claim_pose_hold', posed.reason === 'pose_hold', 'reason=' + posed.reason);
@@ -311,12 +315,14 @@ process.chdir(root);
   const samePhoto = claim(near(A, 0.04), 90, { used: new Set([ga]) });
   check('claim_same_photo_mutex', samePhoto.clusterId !== ga, 'cluster=' + String(samePhoto.clusterId).slice(0, 8));
 
-  // 低质量邻居不投票：3 张低分 + 1 张高分同组，新脸若让低分投票就会误认领
+  // 低质量邻居不投票：整组都低于 FACE_CLAIM_MIN_QUALITY(70)，新脸不该被认领进这个组。
+  // 原来组里放了一张 90 分的 q4，按新实现「组还没成型、有高分成员就跟着走」本来就该认领，
+  // 那条断言测的其实是旧行为。全低分才能单独验证 minQuality 过滤。
   const gq = 'low-vote-group';
   eng.add('q1', gq, near(C, 0.04), 60, 'pq1');
   eng.add('q2', gq, near(C, 0.04), 60, 'pq2');
   eng.add('q3', gq, near(C, 0.04), 60, 'pq3');
-  eng.add('q4', gq, near(C, 0.04), 90, 'pq4');
+  eng.add('q4', gq, near(C, 0.04), 60, 'pq4');
   const voteTest = claim(near(C, 0.04), 90);
   check('claim_low_quality_no_vote', voteTest.clusterId !== gq, 'reason=' + voteTest.reason);
 

@@ -28,7 +28,9 @@ const ACT_THRESHOLD = Number(process.env.COLANAS_ACTIVITY_THRESHOLD || 0.078);
 const EP_ALLOW = ['dml', 'cuda', 'cpu'];
 
 function bestEps() {
+  // 与 main.js / ocr.js 保持一致：默认 CPU，只有 COLANAS_PHOTO_AI_GPU=1 才试 DirectML。
   if (process.env.COLANAS_PHOTO_AI_FORCE_CPU === '1') return ['cpu'];
+  if (process.env.COLANAS_PHOTO_AI_GPU !== '1') return ['cpu'];
   try {
     const backing = ort.listSupportedBackends().map((b) => b.name);
     const allowed = EP_ALLOW.filter((e) => backing.includes(e));
@@ -156,7 +158,11 @@ function l2(vec) {
  */
 async function score(src, ffmpeg, opts = {}) {
   await ensure();
-  const rgb = await rgb224(src, ffmpeg);
+  // 主进程多路解码时已经把 224×224 cover 这一路一起出好了，直接用，省一次 spawn
+  const rgb =
+    opts.rgb && opts.rgb.length >= INPUT_SIZE * INPUT_SIZE * 3
+      ? opts.rgb.subarray(0, INPUT_SIZE * INPUT_SIZE * 3)
+      : await rgb224(src, ffmpeg);
   const out = await session.run({
     [inputName]: new ort.Tensor('float32', chw(rgb), [1, 3, INPUT_SIZE, INPUT_SIZE]),
   });

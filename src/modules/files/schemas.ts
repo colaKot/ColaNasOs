@@ -68,6 +68,8 @@ export const CheckResponse = Type.Object(
     uploadId: Type.String(),
     uploaded: Type.Array(Type.Integer()),
     chunkSize: Type.Integer(),
+    /** 传输中心会话 id：客户端把它带进 chunk / merge，进度就能被所有设备看到 */
+    sessionId: Type.Optional(Type.String()),
   },
   { $id: 'FilesCheckResponse' },
 );
@@ -77,6 +79,8 @@ export const ChunkQuery = Type.Object(
     path: Type.String({ minLength: 1 }),
     index: Type.Integer({ minimum: 0 }),
     total: Type.Optional(Type.Integer({ minimum: 1 })),
+    /** 传输会话 id（可选）：带了就把这一片计入该会话的进度 */
+    sid: Type.Optional(Type.String()),
   },
   { $id: 'FilesChunkQuery' },
 );
@@ -133,13 +137,20 @@ export const BinaryBody = Type.Unsafe({ type: 'string', format: 'binary' });
 
 export const ThumbQuery = Type.Object(
   {
-    path: Type.String({ minLength: 1, description: '图片相对路径（files 根内）' }),
+    path: Type.String({ minLength: 1, description: '图片/视频相对路径（files 根内）' }),
     size: Type.Optional(
       Type.Integer({
         minimum: 32,
         maximum: 2048,
         default: 256,
         description: '目标宽度（px），高度按比例；默认 256',
+      }),
+    ),
+    at: Type.Optional(
+      Type.Number({
+        minimum: 0,
+        maximum: 10800,
+        description: '视频抽帧位置（秒），仅对视频生效；默认 0.5',
       }),
     ),
   },

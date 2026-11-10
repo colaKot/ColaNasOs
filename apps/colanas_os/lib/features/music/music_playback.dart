@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:nas_core/nas_core.dart';
 
+import '../../core/audio_background.dart';
+import '../../core/audio_focus.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import 'equalizer.dart';
@@ -92,6 +94,8 @@ class MusicPlaybackService extends ChangeNotifier {
     _subs.add(
       p.stream.position.listen((value) {
         position = value;
+        // 原生 Android 的锁屏进度：内部按 900ms 节流，不会每 100ms 重绘通知
+        if (!kIsWeb && AudioFocus.instance.holds(this)) _syncMediaSession();
         notifyListeners();
       }),
     );
@@ -207,11 +211,16 @@ class MusicPlaybackService extends ChangeNotifier {
     lyrics = null;
     _times = const [];
     player.stop();
+    AudioFocus.instance.release(this);
+    // 队列清空 = 这一路彻底不播了，通知栏 / 锁屏面板跟着收掉
+    audioBackground.clear(this);
     notifyListeners();
   }
 
   Future<void> _load(int next) async {
     if (queue.isEmpty) return;
+    // 开播前先让播客 / 音色试听让路：一路声音都不要叠着放
+    await AudioFocus.instance.request(this, () async => pause());
     final seq = ++_seq;
     index = next.clamp(0, queue.length - 1);
     final current = queue[index];
@@ -374,11 +383,17 @@ class MusicPlaybackService extends ChangeNotifier {
     if (playing) {
       player.pause();
     } else {
-      player.play();
+      unawaited(_playWithFocus());
     }
   }
 
-  void play() => player.play();
+  void play() => unawaited(_playWithFocus());
+
+  /// 从暂停恢复 / 系统媒体键点「播放」也算开播，先把别路音源停掉。
+  Future<void> _playWithFocus() async {
+    await AudioFocus.instance.request(this, () async => pause());
+    await player.play();
+  }
 
   void pause() => player.pause();
 
@@ -410,7 +425,30 @@ class MusicPlaybackService extends ChangeNotifier {
 
   void _syncMediaSession() {
     final current = track;
-    if (current == null || !kIsWeb) return;
+    // 系统媒体面板全局只有一份：暂停方不能把播客的锁屏控制抢过来
+    if (current == null || !AudioFocus.instance.holds(this)) return;
+    if (!kIsWeb) {
+      // 原生 Android：前台服务 + 通知栏 / 锁屏控制（Web 端由浏览器自己接管）
+      audioBackground.update(
+        AudioSnapshot(
+          owner: this,
+          id: current.id,
+          title: current.title,
+          artist: current.artist,
+          album: current.album,
+          playing: playing,
+          position: position,
+          duration: duration,
+          onPlay: play,
+          onPause: pause,
+          onNext: next,
+          onPrevious: previous,
+          onSeek: (to) => seek(to),
+          onStop: () => clearQueue(),
+        ),
+      );
+      return;
+    }
     updateMediaSession(
       title: current.title,
       artist: current.artist,

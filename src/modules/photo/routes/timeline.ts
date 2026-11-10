@@ -537,7 +537,7 @@ export async function registerPhotoTimeline(app: FastifyInstance, k: KernelApi, 
                    and ph.library_id in (select id from photo_libraries where owner_id = ${uid})
                    and lower(ph.rel_path) not like '%screenshot%'
                    and f.cluster_id in (
-                     select id from photo_face_clusters where size > 0 order by size desc limit 3
+                     select id from photo_face_clusters where size > 0 order by size desc limit 5
                    )
                    and (f.img_width is null or f.img_width = 0
                         or (f.box_width * f.box_height) * 100 >= f.img_width * f.img_height)

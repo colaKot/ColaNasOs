@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 三项补充能力验收：discover 离线刮削 / 加密空间导出 / 受限命令执行。
+ * 两项补充能力验收：discover 离线刮削 / 受限命令执行。
  *
  * 用法：node tool/check/extras-smoke.js（Electron 自举）
  */
@@ -104,8 +104,6 @@ process.chdir(root);
   const all = [
     'discover:read',
     'discover:write',
-    'vault:read',
-    'vault:write',
     'system:read',
     'system:write',
     'video:read',
@@ -114,7 +112,7 @@ process.chdir(root);
     'files:write',
   ];
   const admin = await devToken(all, 'admin');
-  const reader = await devToken(['discover:read', 'vault:read', 'system:read'], 'reader');
+  const reader = await devToken(['discover:read', 'system:read'], 'reader');
 
   // ---- discover：NFO 离线刮削 ----
   let r = await inject('POST', '/api/v1/discover/scrape', '', {});
@@ -148,44 +146,6 @@ process.chdir(root);
       Math.abs((metas[0].rating || 0) - 7.8) < 0.01 &&
       (metas[0].plot || '').includes('钥匙'),
     JSON.stringify(metas[0] || {}).slice(0, 120),
-  );
-
-  // ---- 加密空间导出 ----
-  await inject('POST', '/api/v1/vault/create', admin, { id: 'vaultx', password: 's3cret-pass' });
-  await inject('POST', '/api/v1/vault/put', admin, {
-    id: 'vaultx',
-    path: 'docs/secret.txt',
-    data: Buffer.from('top-secret').toString('base64'),
-    password: 's3cret-pass',
-  });
-
-  r = await inject('POST', '/api/v1/vault/export', admin, {
-    id: 'vaultx',
-    password: 'wrong',
-    target: 'exported',
-  });
-  check('export_wrong_password_403', r.statusCode === 403, 'status=' + r.statusCode);
-
-  r = await inject('POST', '/api/v1/vault/export', admin, {
-    id: 'vaultx',
-    password: 's3cret-pass',
-    target: '../../escape',
-  });
-  check('export_target_escape_403', r.statusCode === 403, 'status=' + r.statusCode);
-
-  r = await inject('POST', '/api/v1/vault/export', admin, {
-    id: 'vaultx',
-    password: 's3cret-pass',
-    target: 'exported',
-  });
-  const out = path.join(filesRoot, 'exported', 'docs', 'secret.txt');
-  check(
-    'export_ok',
-    r.statusCode === 200 &&
-      r.json().exported === 1 &&
-      fs.existsSync(out) &&
-      fs.readFileSync(out, 'utf8') === 'top-secret',
-    'status=' + r.statusCode + ' ' + r.body.slice(0, 160),
   );
 
   // ---- 受限命令执行 ----

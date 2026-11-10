@@ -2,15 +2,19 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../core/app_navigator.dart';
 import '../core/app_settings.dart';
+import '../core/audio_background.dart';
 import '../core/client_log.dart';
 import '../core/i18n_setup.dart';
 import '../core/session.dart';
 import '../core/tv_mode.dart';
 import '../features/login/login_page.dart';
 import '../features/music/music_page.dart';
+import '../features/photo/backup/photo_backup_bootstrap.dart';
 import '../features/photo/photo_page.dart';
 import '../features/sync/sync_page.dart';
 import '../features/sync/sync_scheduler.dart';
@@ -32,9 +36,16 @@ Future<void> runColanasApp({AppLaunchMode mode = AppLaunchMode.full}) async {
   await AppSettings.instance.load();
   await initI18n();
   await ApiSession.instance.restore();
-  // 前端异常也进服务端日志：日志页只有一份，排查时不用两头找
-  ClientLogger.instance.install();
+  // 前端异常也进服务端日志：日志页只有一份，排查时不用两头找。
+  // 传端标识，dev 批量日志里能区分是完整端还是相册/音乐/同步端。
+  ClientLogger.instance.install(app: mode.name);
   MediaKit.ensureInitialized();
+  // Android 前台服务：熄屏 / 切后台继续播，通知栏与锁屏才有控制。
+  // Web 走浏览器自己的 Media Session、桌面窗口常驻，两端都是空实现。
+  // 失败只打日志（内部已 catch），不能把启动挡在这里。
+  await audioBackground.ensureStarted(
+    channelName: I18n.instance.tr('audio.channelName'),
+  );
   // 桌面端托盘：关窗缩到托盘常驻；初始化失败自动降级为普通关闭
   await desktopTray.init();
   // Electron 托盘的同步三项：**登录前就要挂上**，否则「同步任务」点了没反应
@@ -57,6 +68,13 @@ Future<void> runColanasApp({AppLaunchMode mode = AppLaunchMode.full}) async {
   // 未登录时 `localTaskCount` 返回 0，菜单里「立即同步」是灰的 —— 符合实际。
   unawaited(syncTrayBridge.refresh());
   runApp(ColaNasApp(launchMode: mode));
+  // 相册备份开关是整机状态：必须在 App 启动时就把控制器挂到进程上。
+  // 挂在页面里的话，用户切出备份页 / 最小化时 State.dispose 会把网络监听
+  // 一起取消，后台上传和通知栏进度全断（2026-11-07 反馈）。
+  // 独立端里只有完整客户端与相册端需要它。
+  if (mode == AppLaunchMode.full || mode == AppLaunchMode.photo) {
+    unawaited(startPhotoBackupService());
+  }
 }
 
 class ColaNasApp extends StatelessWidget {
@@ -70,6 +88,9 @@ class ColaNasApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: Listenable.merge([settings.listenable, i18nRevision]),
       builder: (context, _) => MaterialApp(
+        // 全局 Navigator key：无 context 的 GetX controller 靠它弹对话框
+        // （`Get.context` 在 MaterialApp 下恒为 null，见 core/app_navigator.dart）
+        navigatorKey: kAppNavigatorKey,
         title: switch (launchMode) {
           AppLaunchMode.full => 'ColaNasOs',
           AppLaunchMode.photo => tr('ui.shell.h2aea9e'),

@@ -6,6 +6,7 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/app_visibility.dart';
+import '../photo/backup/photo_backup_status.dart';
 import '../photo/backup_page.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
@@ -276,11 +277,18 @@ class _HomePageState extends State<HomePage> {
             ),
         ];
 
-        // 手机 App 独有的「相册备份」横条（web / 桌面不出现）
+        // 手机 App 独有的「相册备份」横条（web / 桌面不出现）。
+        // 定高 104：原来横条只有内容高度（约 60），到「我的应用」之间还剩
+        // spaceMd + spaceLg 两段留白，看着像断开的一块。现在把高度补上去，
+        // 只留 spaceSm 分组呼吸（2026-11-07 反馈）。
         final backupBanner = <Widget>[
           if (isMobileApp()) ...[
-            _backupBanner(context),
-            const SizedBox(height: NasTokens.spaceMd),
+            SizedBox(
+              width: double.infinity,
+              height: 104,
+              child: _backupBanner(context),
+            ),
+            const SizedBox(height: NasTokens.spaceSm),
           ],
         ];
 
@@ -294,7 +302,8 @@ class _HomePageState extends State<HomePage> {
               children: [
                 _greeting(scheme),
                 ...backupBanner,
-                const SizedBox(height: NasTokens.spaceLg),
+                // 手机端的间距已经放进 backupBanner，避免横条下方再空一大截
+                if (!isMobileApp()) const SizedBox(height: NasTokens.spaceLg),
                 // 手机端顺序对齐移动端基线：问候 → 应用网格 → 系统状态 → 硬盘。
                 // 应用网格是主要入口，必须在前两屏内；系统状态与硬盘留在下方（D4 保留）。
                 // 「快捷操作」整块已删（2026-11-04 用户反馈：四个入口实际都没用，
@@ -331,62 +340,140 @@ class _HomePageState extends State<HomePage> {
   }
 
   /// 手机 App 专属：相册备份入口（横条）。web / 桌面不出现。
+  ///
+  /// 进度直接读进程级状态源，不自己建控制器：用户从备份页切回来、甚至 App
+  /// 最小化后再回来，横条都还显示同一轮的百分比，不会「从头开始」。
   Widget _backupBanner(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      borderRadius: BorderRadius.circular(NasTokens.radiusMd),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const PhotoBackupPage()),
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: NasTokens.spaceMd,
-          vertical: NasTokens.spaceMd,
-        ),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [scheme.primary, const Color(0xFF8B5CF6)],
-          ),
+    return ValueListenableBuilder<BackupStatusSnapshot>(
+      valueListenable: PhotoBackupStatus.instance,
+      builder: (context, s, _) {
+        final scheme = Theme.of(context).colorScheme;
+        final running = s.running;
+        final paused = s.waitingWifi;
+        final showBar = running || paused;
+        final title = running
+            ? tr('home.backup.running')
+            : tr('home.backup.title');
+        final String hint;
+        if (running && s.total > 0) {
+          hint = tr('home.backup.progress', <String, Object>{
+            'done': '${s.done}',
+            'total': '${s.total}',
+          });
+        } else if (running) {
+          hint = tr('home.backup.scanning');
+        } else if (paused) {
+          hint = tr('home.backup.waitingWifi');
+        } else if (s.lastFinishedAtMs > 0) {
+          hint = tr('home.backup.lastDone', <String, Object>{
+            'count': '${s.lastUploaded}',
+            'time': _shortTime(s.lastFinishedAtMs),
+          });
+        } else {
+          hint = tr('home.backup.hint');
+        }
+        return InkWell(
           borderRadius: BorderRadius.circular(NasTokens.radiusMd),
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.cloud_upload_outlined,
-              color: Colors.white,
-              size: 22,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const PhotoBackupPage()),
+          ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: NasTokens.spaceMd,
+              vertical: NasTokens.spaceMd,
             ),
-            const SizedBox(width: NasTokens.spaceSm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    tr('home.backup.title'),
-                    style: const TextStyle(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [scheme.primary, const Color(0xFF8B5CF6)],
+              ),
+              borderRadius: BorderRadius.circular(NasTokens.radiusMd),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.cloud_upload_outlined,
                       color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: NasTokens.fontBody,
+                      size: 22,
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    tr('home.backup.hint'),
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.86),
-                      fontSize: NasTokens.fontMicro,
+                    const SizedBox(width: NasTokens.spaceSm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: NasTokens.fontBody,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            hint,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.86),
+                              fontSize: NasTokens.fontMicro,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (showBar && s.progress != null)
+                      Text(
+                        '${s.percent}%',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      )
+                    else if (showBar)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    else
+                      const Icon(Icons.chevron_right, color: Colors.white),
+                  ],
+                ),
+                if (showBar) ...[
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: s.progress,
+                      minHeight: 6,
+                      backgroundColor: Colors.white.withValues(alpha: 0.28),
+                      color: Colors.white,
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
-            const Icon(Icons.chevron_right, color: Colors.white),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
+  }
+
+  String _shortTime(int ms) {
+    if (ms <= 0) return '-';
+    final d = DateTime.fromMillisecondsSinceEpoch(ms).toLocal();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
   }
 
   Widget _sectionTitle(String text) {
@@ -674,26 +761,15 @@ class _HomePageState extends State<HomePage> {
     final greeting = ApiSession.instance.welcome.isNotEmpty
         ? ApiSession.instance.welcome
         : tr('home.greeting');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          user.isEmpty ? greeting : '$greeting，$user',
-          style: TextStyle(
-            fontSize: NasTokens.fontHeadline,
-            fontWeight: FontWeight.w700,
-            color: scheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          tr('home.summary'),
-          style: TextStyle(
-            fontSize: NasTokens.fontBody,
-            color: scheme.onSurfaceVariant,
-          ),
-        ),
-      ],
+    // 「存储、内存与服务状态一览」副标题已按 2026-11-07 反馈删除：
+    // 顶栏和问候语各出现一次，信息重复且占首屏高度。
+    return Text(
+      user.isEmpty ? greeting : '$greeting，$user',
+      style: TextStyle(
+        fontSize: NasTokens.fontHeadline,
+        fontWeight: FontWeight.w700,
+        color: scheme.onSurface,
+      ),
     );
   }
 }

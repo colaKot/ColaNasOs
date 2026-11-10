@@ -7,9 +7,13 @@ import 'package:media_kit/media_kit.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/audio_focus.dart';
+import '../../core/external_link.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import 'blog_player.dart';
+import 'blog_player_page.dart';
+import 'blog_queue_sheet.dart';
 
 /// 8 类新闻。顺序与「播报顺序」一致，也是服务端稿件里的顺序。
 const List<({String key, String labelKey})> _kCategories = [
@@ -48,7 +52,11 @@ class _AiNewsPageState extends State<AiNewsPage> {
   String? _error;
 
   BlogSettingsResponse? _settings;
+  /// 只存**服务端返回的当前页**，不再一次拉 200 期在前端切片
   List<BlogEpisodeItem> _episodes = const [];
+  int _total = 0;
+  static const int _perPage = 20;
+  int _page = 0;
 
   // ---- 编辑态（保存前只改本地）
   List<BlogVoiceItem> _voices = const [];
@@ -84,7 +92,8 @@ class _AiNewsPageState extends State<AiNewsPage> {
   BlogStatusResponse? _genStatus;
   Timer? _poll;
 
-  final BlogPlayer _player = BlogPlayer();
+  /// 全局单例：页面重建 / 切模块不会停播，手机上熄屏、最小化也能继续听。
+  final BlogPlayer _player = BlogPlayer.instance;
   Player? _previewPlayer;
 
   @override
@@ -98,12 +107,27 @@ class _AiNewsPageState extends State<AiNewsPage> {
   void dispose() {
     _poll?.cancel();
     _modelPoll?.cancel();
-    _player.dispose();
-    unawaited(_previewPlayer?.dispose());
+    // 不要 dispose _player：它是全局单例，切页面 / 熄屏 / 最小化都要继续播。
+    // 试听是页内短音频，销毁前必须**先同步 pause**，否则 Web 端那个 <video>
+    // 元素会留在 globalContext 里继续出声（以前「刷新还在播」就是这么来的）。
+    unawaited(_disposePreview());
     _keyCtrl.dispose();
     _baseCtrl.dispose();
     _modelCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _disposePreview() async {
+    final p = _previewPlayer;
+    _previewPlayer = null;
+    if (p == null) return;
+    AudioFocus.instance.release(p);
+    try {
+      await p.pause();
+      await p.dispose();
+    } catch (_) {
+      // 已经销毁过就算了
+    }
   }
 
   // ------------------------------------------------------------------ 数据
@@ -116,7 +140,11 @@ class _AiNewsPageState extends State<AiNewsPage> {
     try {
       final client = ApiSession.instance.client;
       final s = await client.blogSettings();
-      final episodes = await client.blogEpisodes(limit: 60);
+      // 服务端真分页：一次只拿当前页（新的在前）
+      final episodes = await client.blogEpisodes(
+        limit: _perPage,
+        offset: _page * _perPage,
+      );
       // 下载状态单独兜底：老版本服务端没有这个接口时，页面其余部分照常可用
       BlogTtsModelResponse? model;
       try {
@@ -134,6 +162,7 @@ class _AiNewsPageState extends State<AiNewsPage> {
         _voices = voices.items;
         _normalizeVoice();
         _episodes = episodes.items;
+        _total = episodes.total;
         _model = model;
         _loading = false;
       });
@@ -217,14 +246,28 @@ class _AiNewsPageState extends State<AiNewsPage> {
     });
   }
 
-  Future<void> _reloadEpisodes() async {
+  Future<void> _reloadEpisodes() async => _fetchPage(_page);
+
+  Future<void> _fetchPage(int page) async {
     try {
-      final res = await ApiSession.instance.client.blogEpisodes(limit: 60);
+      final res = await ApiSession.instance.client.blogEpisodes(
+        limit: _perPage,
+        offset: page * _perPage,
+      );
       if (!mounted) return;
-      setState(() => _episodes = res.items);
+      setState(() {
+        _episodes = res.items;
+        _total = res.total;
+      });
     } catch (_) {
       // 列表刷新失败不打断当前操作
     }
+  }
+
+  Future<void> _goPage(int page) async {
+    if (page < 0 || page == _page) return;
+    setState(() => _page = page);
+    await _fetchPage(page);
   }
 
   // ------------------------------------------------------------------ 语音模型一键下载
@@ -397,8 +440,10 @@ class _AiNewsPageState extends State<AiNewsPage> {
         body: BlogPreviewBody(voice: _voice),
       );
       final url = '${ApiSession.instance.baseUrl}${res.url}';
-      _previewPlayer ??= Player();
-      await _previewPlayer!.open(Media(url), play: true);
+      final p = _previewPlayer ??= Player();
+      // 试听也是一路音频：开播前先让音乐 / 播客让路
+      await AudioFocus.instance.request(p, () async => p.pause());
+      await p.open(Media(url), play: true);
     } catch (e) {
       if (messenger != null) {
         NasSnack.showOn(
@@ -417,7 +462,7 @@ class _AiNewsPageState extends State<AiNewsPage> {
   Future<void> _generateNow() async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (_totalItems == 0) {
-      NasSnack.showOn(messenger!, tr('blog.total', {'count': 0}), error: true);
+      NasSnack.showOn(messenger!, tr('blog.generate.noCount'), error: true);
       return;
     }
     // 生成用的是服务端已保存的设置：先把这一屏的选择存下来，避免"点了生成但播的是旧音色"
@@ -538,78 +583,291 @@ class _AiNewsPageState extends State<AiNewsPage> {
       );
     }
 
-    return Column(
-      children: [
-        Expanded(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 920),
+    // Web 端铺满：原来卡在 920 居中，1440 屏两侧白掉一大半（用户 2026-11-06 反馈）。
+    // 全宽后靠「列表 2 列 + 配置 2 列」把横向空间用起来，仍留一档 padding 不贴边。
+    return LayoutBuilder(
+      builder: (context, outer) {
+        final wide = outer.maxWidth >= 1024;
+        final twoCol = outer.maxWidth >= 900;
+        const perPage = _perPage;
+        final cols = twoCol ? 2 : 1;
+        final pages = (_total / perPage).ceil().clamp(1, 9999);
+        if (_page > pages - 1) {
+          // 删完最后一条 / 换页后总数变小：回到最后一页，别停在空白页
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _page > pages - 1) _goPage(pages - 1);
+          });
+        }
+        final page = _page.clamp(0, pages - 1);
+        final visible = _episodes;
+        final modelReady = _model?.installed ?? false;
+
+        return Column(
+          children: [
+            Expanded(
               child: ListView(
-                padding: const EdgeInsets.all(NasTokens.spaceLg),
+                padding: EdgeInsets.symmetric(
+                  horizontal: wide ? NasTokens.spaceXl : NasTokens.spaceLg,
+                  vertical: NasTokens.spaceLg,
+                ),
                 children: [
                   _header(context),
-                  const SizedBox(height: NasTokens.spaceMd),
-                  // 下载卡片常驻：下完以后每次进页面都看得到「已下载」
-                  _modelCard(context),
-                  const SizedBox(height: NasTokens.spaceMd),
-                  // 模型齐了却还不可用（缺 ffmpeg / 参考音等）：单独提示排障原因
-                  if (_settings?.ttsAvailable == false && (_model?.installed ?? false)) ...[
+                  // 首启时模型还没下载：这张卡必须先看到，否则用户找半天不知道要下模型
+                  if (!modelReady) ...[
+                    const SizedBox(height: NasTokens.spaceMd),
+                    _modelCard(context),
+                  ],
+                  if (_settings?.ttsAvailable == false && modelReady) ...[
+                    const SizedBox(height: NasTokens.spaceMd),
                     _banner(context, _ttsReason ?? tr('blog.generate.needsVoice')),
-                    const SizedBox(height: NasTokens.spaceMd),
                   ],
-                  _countsCard(),
                   const SizedBox(height: NasTokens.spaceMd),
-                  _voiceCard(),
-                  const SizedBox(height: NasTokens.spaceMd),
-                  _speedCard(),
-                  const SizedBox(height: NasTokens.spaceMd),
-                  _apiCard(),
-                  const SizedBox(height: NasTokens.spaceMd),
-                  _planCard(),
-                  const SizedBox(height: NasTokens.spaceLg),
-                  _actions(context),
-                  const SizedBox(height: NasTokens.spaceXs),
-                  Text(
-                    // 实测：一条 400 字 ≈ 90 秒音频，本机 Vulkan 合成 1.3x 实时，
-                    // 加上每块一次模型加载，约 1.4 分钟/条
-                    tr('blog.generate.eta', {
-                      'minutes': (_totalItems * 1.4).round().clamp(1, 999),
-                    }),
-                    style: TextStyle(
-                      fontSize: NasTokens.fontCaption,
-                      color: context.nasTextSecondary,
-                    ),
-                  ),
-                  if (_generatingId != null) ...[
-                    const SizedBox(height: NasTokens.spaceMd),
-                    _progressCard(),
-                  ],
-                  const SizedBox(height: NasTokens.spaceLg),
-                  _episodesHeader(),
+
+                  // ---------------- 已生成音频（最上面，最新在前）
+                  _episodesHeader(pages: pages, page: page, perPage: perPage),
                   const SizedBox(height: NasTokens.spaceSm),
                   if (_episodes.isEmpty)
                     NasEmptyState(
                       title: tr('blog.episodes.empty'),
                       icon: Icons.podcasts_outlined,
                     )
-                  else
-                    for (final ep in _episodes) ...[
-                      _episodeTile(ep),
-                      const SizedBox(height: NasTokens.spaceSm),
+                  else ...[
+                    _episodeGrid(visible, cols),
+                    if (pages > 1) ...[
+                      const SizedBox(height: NasTokens.spaceXs),
+                      _pager(pages: pages, page: page, perPage: perPage, compact: !twoCol),
                     ],
-                  const SizedBox(height: NasTokens.spaceLg),
+                  ],
+
+                  // ---------------- 生成设置（列表下方 2 列）
+                  const SizedBox(height: NasTokens.spaceXl),
+                  Row(
+                    children: [
+                      Text(
+                        tr('blog.settings.title'),
+                        style: const TextStyle(
+                          fontSize: NasTokens.fontTitle,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: NasTokens.spaceSm),
+                      if (_generatingId != null)
+                        Text(
+                          tr('blog.episodes.status.running'),
+                          style: const TextStyle(
+                            fontSize: NasTokens.fontCaption,
+                            color: Color(NasTokens.colorWarning),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: NasTokens.spaceSm),
+                  if (_generatingId != null) ...[
+                    _progressCard(),
+                    const SizedBox(height: NasTokens.spaceMd),
+                  ],
+                  _configGrid(twoCol: twoCol),
+                  if (modelReady) ...[
+                    const SizedBox(height: NasTokens.spaceMd),
+                    _modelCard(context),
+                  ],
+                  const SizedBox(height: NasTokens.spaceXl),
                 ],
               ),
             ),
+            AnimatedBuilder(
+              animation: _player,
+              builder: (context, _) => _PlayerBar(player: _player),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// 生成设置分两列：左「内容」（条数 / 音色 / 倍速），右「运行」（API / 计划 / 动作）。
+  Widget _configGrid({required bool twoCol}) {
+    final left = <Widget>[
+      _countsCard(),
+      const SizedBox(height: NasTokens.spaceMd),
+      _voiceCard(),
+      const SizedBox(height: NasTokens.spaceMd),
+      _speedCard(),
+    ];
+    final right = <Widget>[
+      _apiCard(),
+      const SizedBox(height: NasTokens.spaceMd),
+      _planCard(),
+      const SizedBox(height: NasTokens.spaceMd),
+      _actions(context),
+      const SizedBox(height: NasTokens.spaceXs),
+      Text(
+        // 实测：一条 400 字 ≈ 90 秒音频，本机 Vulkan 合成 1.3x 实时，
+        // 加上每块一次模型加载，约 1.4 分钟/条
+        tr('blog.generate.eta', {
+          'minutes': (_totalItems * 1.4).round().clamp(1, 999),
+        }),
+        style: TextStyle(
+          fontSize: NasTokens.fontCaption,
+          color: context.nasTextSecondary,
+        ),
+      ),
+    ];
+    if (!twoCol) return Column(children: [...left, const SizedBox(height: NasTokens.spaceMd), ...right]);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: Column(children: left)),
+        const SizedBox(width: NasTokens.spaceLg),
+        Expanded(child: Column(children: right)),
+      ],
+    );
+  }
+
+  /// 音频卡片网格：宽屏一行 2 张。同一行用 IntrinsicHeight 对齐高度，
+  /// 免得「失败」那条多一行错误文案把两列拉不齐。
+  Widget _episodeGrid(List<BlogEpisodeItem> items, int cols) {
+    if (cols <= 1) {
+      return Column(
+        children: [
+          for (final ep in items) ...[
+            _episodeTile(ep),
+            const SizedBox(height: NasTokens.spaceSm),
+          ],
+        ],
+      );
+    }
+    final rows = <Widget>[];
+    for (var i = 0; i < items.length; i += cols) {
+      final slice = items.sublist(i, (i + cols).clamp(0, items.length));
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: NasTokens.spaceSm),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var j = 0; j < cols; j += 1) ...[
+                  if (j > 0) const SizedBox(width: NasTokens.spaceMd),
+                  Expanded(
+                    child: j < slice.length
+                        ? _episodeTile(slice[j])
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
-        AnimatedBuilder(
-          animation: _player,
-          builder: (context, _) => _PlayerBar(player: _player),
+      );
+    }
+    return Column(children: rows);
+  }
+
+  Widget _pager({
+    required int pages,
+    required int page,
+    required int perPage,
+    required bool compact,
+  }) {
+    final from = page * perPage + 1;
+    final to = (page + 1) * perPage;
+    final total = _total;
+    const btnStyle = TextStyle(fontSize: NasTokens.fontCaption);
+    final prev = OutlinedButton(
+      onPressed: page > 0 ? () => _goPage(page - 1) : null,
+      child: Text(tr('blog.episodes.prev'), style: btnStyle),
+    );
+    final next = OutlinedButton(
+      onPressed: page < pages - 1 ? () => _goPage(page + 1) : null,
+      child: Text(tr('blog.episodes.next'), style: btnStyle),
+    );
+    // 窄屏放不下「上一页 + 7 个页码 + 下一页 + 区间文字」，
+    // 只留 上一页 / 第 x/y 页 / 下一页，避免整行溢出。
+    if (compact) {
+      return Row(
+        children: [
+          prev,
+          const Spacer(),
+          Text(
+            '${page + 1} / $pages',
+            style: TextStyle(
+              fontSize: NasTokens.fontCaption,
+              color: context.nasTextSecondary,
+            ),
+          ),
+          const Spacer(),
+          next,
+        ],
+      );
+    }
+    return Row(
+      children: [
+        prev,
+        const SizedBox(width: NasTokens.spaceXs),
+        // 页码按钮最多 7 个，多的用省略号，避免几百期时把一行撑爆
+        for (final p in _pageWindow(pages, page)) ...[
+          if (p == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text('…', style: btnStyle),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: p == page
+                  // 当前页用实心块而不是 disabled 按钮：置灰按钮看着像「点不了」，
+                  // 用户会以为分页坏了
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${p + 1}',
+                        style: btnStyle.copyWith(
+                          color: Theme.of(context).colorScheme.onPrimary,
+                        ),
+                      ),
+                    )
+                  : OutlinedButton(
+                      onPressed: () => _goPage(p),
+                      child: Text('${p + 1}', style: btnStyle),
+                    ),
+            ),
+        ],
+        const SizedBox(width: NasTokens.spaceXs),
+        next,
+        const Spacer(),
+        Text(
+          tr('blog.episodes.range', {
+            'from': '$from',
+            'to': '${to > total ? total : to}',
+            'total': '$total',
+          }),
+          style: TextStyle(
+            fontSize: NasTokens.fontCaption,
+            color: context.nasTextSecondary,
+          ),
         ),
       ],
     );
+  }
+
+  /// 当前页附近最多 7 个页码；`null` 表示省略号
+  List<int?> _pageWindow(int pages, int page) {
+    if (pages <= 7) return [for (var i = 0; i < pages; i += 1) i];
+    final out = <int?>[0];
+    final lo = (page - 1).clamp(1, pages - 2);
+    final hi = (page + 1).clamp(1, pages - 2);
+    if (lo > 1) out.add(null);
+    for (var i = lo; i <= hi; i += 1) {
+      out.add(i);
+    }
+    if (hi < pages - 2) out.add(null);
+    out.add(pages - 1);
+    return out;
   }
 
   Widget _header(BuildContext context) {
@@ -1353,18 +1611,31 @@ class _AiNewsPageState extends State<AiNewsPage> {
     );
   }
 
-  Widget _episodesHeader() {
+  Widget _episodesHeader({
+    required int pages,
+    required int page,
+    required int perPage,
+  }) {
+    final meta = [
+      if (_total > 0) tr('blog.episodes.total', {'count': _total}),
+      tr('blog.episodes.newest'),
+      tr('blog.episodes.perPage', {'count': perPage}),
+      if (pages > 1) '${page + 1} / $pages',
+    ].join(' · ');
     return NasSectionHeader(
       title: tr('blog.episodes.title'),
-      subtitle: _episodes.isEmpty
-          ? null
-          : tr('blog.total', {'count': _episodes.length}),
+      subtitle: _episodes.isEmpty ? null : meta,
     );
   }
 
   Widget _episodeTile(BlogEpisodeItem ep) {
     final playingThis = _player.isCurrent(ep.id) && _player.playing;
     final ready = ep.status == 'done';
+    // 手机 / 窄屏放不下 3 个按钮：文稿常驻，重新生成 / 删除收进「更多」。
+    // 用屏幕宽度而不是 LayoutBuilder：宽屏列表套了 IntrinsicHeight，
+    // LayoutBuilder 不支持 intrinsic dimensions，会直接在布局期抛断言。
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    final canResynth = ep.status != 'running' && ep.status != 'pending';
     return NasCard(
       padding: const EdgeInsets.symmetric(
         horizontal: NasTokens.spaceMd,
@@ -1428,17 +1699,79 @@ class _AiNewsPageState extends State<AiNewsPage> {
               ],
             ),
           ),
-          if (ep.status != 'running' && ep.status != 'pending')
-            IconButton(
-              tooltip: tr('blog.episodes.resynth'),
-              onPressed: () => _resynthEpisode(ep),
-              icon: const Icon(Icons.refresh),
-            ),
+          // 文稿放最前面：听之前先看这期讲了什么
           IconButton(
-            tooltip: tr('blog.episodes.delete'),
-            onPressed: () => _removeEpisode(ep),
-            icon: const Icon(Icons.delete_outline),
+            tooltip: tr('blog.episodes.script'),
+            onPressed: () => _openScript(ep),
+            icon: const Icon(Icons.description_outlined),
           ),
+          if (!compact) ...[
+            if (canResynth)
+              IconButton(
+                tooltip: tr('blog.episodes.resynth'),
+                onPressed: () => _resynthEpisode(ep),
+                icon: const Icon(Icons.refresh),
+              ),
+            IconButton(
+              tooltip: tr('blog.episodes.delete'),
+              onPressed: () => _removeEpisode(ep),
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ] else
+                PopupMenuButton<String>(
+                  tooltip: tr('common.more'),
+                  onSelected: (value) {
+                    if (value == 'enqueue') _enqueue(ep);
+                    if (value == 'playNext') _playNext(ep);
+                    if (value == 'resynth') _resynthEpisode(ep);
+                    if (value == 'delete') _removeEpisode(ep);
+                  },
+                  itemBuilder: (context) => [
+                    if (ready) ...[
+                      PopupMenuItem<String>(
+                        value: 'enqueue',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.playlist_add, size: 18),
+                            const SizedBox(width: 8),
+                            Text(tr('blog.queue.enqueue')),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'playNext',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.play_arrow, size: 18),
+                            const SizedBox(width: 8),
+                            Text(tr('blog.queue.playNext')),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (canResynth)
+                      PopupMenuItem<String>(
+                        value: 'resynth',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.refresh, size: 18),
+                            const SizedBox(width: 8),
+                            Text(tr('blog.episodes.resynth')),
+                          ],
+                        ),
+                      ),
+                PopupMenuItem<String>(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.delete_outline, size: 18),
+                      const SizedBox(width: 8),
+                      Text(tr('blog.episodes.delete')),
+                    ],
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
@@ -1450,6 +1783,197 @@ class _AiNewsPageState extends State<AiNewsPage> {
         'failed' => tr('blog.episodes.status.failed'),
         _ => tr('blog.episodes.status.done'),
       };
+
+  Future<void> _openScript(BlogEpisodeItem ep) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _ScriptDialog(episode: ep),
+    );
+  }
+
+  Future<void> _enqueue(BlogEpisodeItem ep) async {
+    await _player.enqueue(ep);
+    if (mounted) NasSnack.show(context, tr('blog.queue.added'));
+  }
+
+  Future<void> _playNext(BlogEpisodeItem ep) async {
+    await _player.enqueueNext(ep);
+    if (mounted) NasSnack.show(context, tr('blog.queue.added'));
+  }
+}
+
+/// 文稿弹窗：上半是播报稿全文，最下面是这一期引用的原文链接。
+/// 数据进来前先显示 loading，避免点开后空白一下。
+class _ScriptDialog extends StatefulWidget {
+  const _ScriptDialog({required this.episode});
+
+  final BlogEpisodeItem episode;
+
+  @override
+  State<_ScriptDialog> createState() => _ScriptDialogState();
+}
+
+class _ScriptDialogState extends State<_ScriptDialog> {
+  BlogScriptResponse? _data;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    try {
+      final res = await ApiSession.instance.client.blogScript(id: widget.episode.id);
+      if (!mounted) return;
+      setState(() => _data = res);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = '$e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = _data;
+    final scheme = Theme.of(context).colorScheme;
+    return AlertDialog(
+      title: Text(tr('blog.script.title')),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 680,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+        ),
+        child: SizedBox(
+          width: 680,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.episode.title,
+                  style: TextStyle(
+                    fontSize: NasTokens.fontCaption,
+                    color: context.nasTextSecondary,
+                  ),
+                ),
+                const SizedBox(height: NasTokens.spaceMd),
+                if (_error != null)
+                  Text(
+                    tr('blog.loadFailed', {'error': _error ?? ''}),
+                    style: const TextStyle(color: Color(NasTokens.colorDanger)),
+                  )
+                else if (data == null)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else ...[
+                  if (data.script.trim().isEmpty)
+                    Text(tr('blog.script.empty'))
+                  else
+                    SelectableText(
+                      data.script,
+                      style: const TextStyle(fontSize: 14, height: 1.6),
+                    ),
+                  const SizedBox(height: NasTokens.spaceLg),
+                  const Divider(height: 1),
+                  const SizedBox(height: NasTokens.spaceMd),
+                  Text(
+                    tr('blog.script.links'),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: NasTokens.spaceSm),
+                  if (data.items.isEmpty)
+                    Text(
+                      tr('blog.script.noLinks'),
+                      style: TextStyle(
+                        fontSize: NasTokens.fontCaption,
+                        color: context.nasTextSecondary,
+                      ),
+                    )
+                  else ...[
+                    for (var i = 0; i < data.items.length; i += 1)
+                      _linkTile(data.items[i], i, scheme),
+                    if (data.items.every((e) => e.link.isEmpty))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          tr('blog.script.noLinks'),
+                          style: TextStyle(
+                            fontSize: NasTokens.fontCaption,
+                            color: context.nasTextSecondary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(tr('common.close')),
+        ),
+      ],
+    );
+  }
+
+  Widget _linkTile(BlogScriptItem item, int index, ColorScheme scheme) {
+    final canOpen = canOpenExternalLinks && item.link.isNotEmpty;
+    final caption = TextStyle(
+      fontSize: NasTokens.fontCaption,
+      color: context.nasTextSecondary,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: NasTokens.spaceSm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${index + 1}. ', style: caption),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (canOpen)
+                  InkWell(
+                    onTap: () => openExternalLink(item.link),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.title,
+                            style: TextStyle(color: scheme.primary),
+                          ),
+                        ),
+                        Icon(Icons.open_in_new, size: 14, color: scheme.primary),
+                      ],
+                    ),
+                  )
+                else
+                  Text(item.title),
+                if (item.category.isNotEmpty || item.source.isNotEmpty)
+                  Text(
+                    [item.category, item.source]
+                        .where((s) => s.isNotEmpty)
+                        .join(' · '),
+                    style: caption,
+                  ),
+                // 非 Web 端点不开，就把地址显示出来让用户复制
+                if (item.link.isNotEmpty && !canOpen)
+                  SelectableText(item.link, style: caption),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// 细进度条（自绘）。
@@ -1486,11 +2010,20 @@ class _ThinBar extends StatelessWidget {
   }
 }
 
-/// 底部播放条：只有播过东西才出现。上一期 / 下一期 + 进度拖动。
+/// 底部迷你播放条：只有播过东西才出现。
+/// 点整条进全屏播放页（可拖进度 + 播放列表），右边图标直接开播放队列。
 class _PlayerBar extends StatelessWidget {
   const _PlayerBar({required this.player});
 
   final BlogPlayer player;
+
+  void _open(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => BlogPlayerPage(player: player),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1502,75 +2035,83 @@ class _PlayerBar extends StatelessWidget {
     final pos = player.position.inMilliseconds.clamp(0, total == 0 ? 0 : total);
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 自绘而不是 LinearProgressIndicator：3px 高的 Material 进度条在 CanvasKit 上
-              // 配合高频 position 通知重绘，出现过 `memory access out of bounds`。
-              _ThinBar(value: total > 0 ? (pos / total).clamp(0.0, 1.0) : 0.0),
-              Row(
-                children: [
-                  const SizedBox(width: 4),
-                  IconButton(
-                    tooltip: tr('blog.player.prev'),
-                    onPressed: player.prev,
-                    icon: const Icon(Icons.skip_previous),
-                  ),
-                  IconButton(
-                    tooltip: player.playing ? tr('blog.player.pause') : tr('blog.player.play'),
-                    onPressed: player.toggle,
-                    icon: player.loading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Icon(player.playing ? Icons.pause_circle : Icons.play_circle),
-                  ),
-                  IconButton(
-                    tooltip: tr('blog.player.next'),
-                    onPressed: player.next,
-                    icon: const Icon(Icons.skip_next),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          ep.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          '${formatDurationMs(pos)} / ${formatDurationMs(total)}',
-                          style: TextStyle(
-                            fontSize: NasTokens.fontCaption,
-                            color: context.nasTextSecondary,
-                          ),
-                        ),
-                      ],
+      child: InkWell(
+        onTap: () => _open(context),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 自绘而不是 LinearProgressIndicator：3px 高的 Material 进度条在 CanvasKit 上
+                // 配合高频 position 通知重绘，出现过 `memory access out of bounds`。
+                _ThinBar(value: total > 0 ? (pos / total).clamp(0.0, 1.0) : 0.0),
+                Row(
+                  children: [
+                    const SizedBox(width: 4),
+                    IconButton(
+                      tooltip: tr('blog.player.prev'),
+                      onPressed: player.prev,
+                      icon: const Icon(Icons.skip_previous),
                     ),
-                  ),
-                  if (player.error != null)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: Text(
-                        player.error!,
-                        style: const TextStyle(
-                          fontSize: NasTokens.fontCaption,
-                          color: Color(NasTokens.colorDanger),
-                        ),
+                    IconButton(
+                      tooltip: player.playing ? tr('blog.player.pause') : tr('blog.player.play'),
+                      onPressed: player.toggle,
+                      icon: player.loading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(player.playing ? Icons.pause_circle : Icons.play_circle),
+                    ),
+                    IconButton(
+                      tooltip: tr('blog.player.next'),
+                      onPressed: player.next,
+                      icon: const Icon(Icons.skip_next),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            ep.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          Text(
+                            '${formatDurationMs(pos)} / ${formatDurationMs(total)} · ${player.index + 1}/${player.queue.length}',
+                            style: TextStyle(
+                              fontSize: NasTokens.fontCaption,
+                              color: context.nasTextSecondary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                ],
-              ),
-            ],
+                    if (player.error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8),
+                        child: Text(
+                          player.error!,
+                          style: const TextStyle(
+                            fontSize: NasTokens.fontCaption,
+                            color: Color(NasTokens.colorDanger),
+                          ),
+                        ),
+                      ),
+                    IconButton(
+                      tooltip: tr('blog.queue.title'),
+                      onPressed: () => showBlogQueueSheet(context, player),
+                      icon: const Icon(Icons.queue_music),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -4,6 +4,8 @@ import 'package:nas_ui/nas_ui.dart';
 import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
+import 'detail/video_detail_router.dart';
+import 'video_item_actions.dart';
 import 'video_page.dart';
 
 /// 影视自定义合集（每用户）：列表 + 新建 / 重命名 / 删除 + 合集内影片。
@@ -147,14 +149,7 @@ class _VideoCollectionsPageState extends State<VideoCollectionsPage> {
     NasMenuEntry(
       label: tr('common.open'),
       icon: Icons.collections_bookmark_outlined,
-      onSelected: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => VideoCollectionDetailPage(
-            collection: c,
-            onChanged: _load,
-          ),
-        ),
-      ),
+      onSelected: () => openVideoCollection(context, c, onChanged: _load),
     ),
     NasMenuEntry(
       label: tr('video.collection.edit'),
@@ -326,13 +321,10 @@ class _VideoCollectionsPageState extends State<VideoCollectionsPage> {
                       ),
                       child: NasCard(
                         padding: const EdgeInsets.all(NasTokens.spaceSm),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => VideoCollectionDetailPage(
-                              collection: c,
-                              onChanged: _load,
-                            ),
-                          ),
+                        onTap: () => openVideoCollection(
+                          context,
+                          c,
+                          onChanged: _load,
                         ),
                         child: Row(
                           children: [
@@ -435,10 +427,15 @@ class VideoCollectionDetailPage extends StatefulWidget {
     super.key,
     required this.collection,
     this.onChanged,
+    this.embedded = false,
   });
 
   final VideoCollection collection;
   final VoidCallback? onChanged;
+
+  /// true = 作为三级页放进影视壳的内容区：不画 AppBar，标题与刷新改成本页页头，
+  /// 返回交给外壳（`ShellBack`）。
+  final bool embedded;
 
   @override
   State<VideoCollectionDetailPage> createState() =>
@@ -480,33 +477,43 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
     }
   }
 
-  /// 长按：设封面 / 移出。此前长按直接移出且无提示，误触就丢。
-  Future<void> _itemMenu(VideoItem item) async {
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.star_outline),
-              title: Text(tr('video.collection.setCover')),
-              enabled: _coverId != item.id,
-              onTap: () => Navigator.pop(ctx, 'cover'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.remove_circle_outline),
-              title: Text(tr('video.collection.removeItem')),
-              onTap: () => Navigator.pop(ctx, 'remove'),
-            ),
-          ],
-        ),
+  /// 合集专有动作，和全站通用动作一起进同一个菜单（右键 / 长按）。
+  List<VideoItemActionSpec> _collectionExtras(VideoItem item) => [
+    if (_coverId != item.id)
+      VideoItemActionSpec(
+        'collection:cover',
+        tr('video.collection.setCover'),
+        Icons.star_outline,
       ),
+    VideoItemActionSpec(
+      'collection:remove',
+      tr('video.collection.removeItem'),
+      Icons.remove_circle_outline,
+    ),
+  ];
+
+  /// 长按：专有项 + 全站统一的影片动作。此前长按直接移出且无提示，误触就丢。
+  Future<void> _itemMenu(VideoItem item) async {
+    final action = await showVideoItemActionSheet(
+      context,
+      item,
+      extra: _collectionExtras(item),
     );
     if (!mounted || action == null) return;
-    if (action == 'cover') await _setCover(item);
-    if (action == 'remove') await _remove(item);
+    await _runItemAction(action, item);
+  }
+
+  Future<void> _runItemAction(String action, VideoItem item) async {
+    if (action == 'collection:cover') {
+      await _setCover(item);
+      return;
+    }
+    if (action == 'collection:remove') {
+      await _remove(item);
+      return;
+    }
+    final changed = await runVideoItemAction(context, action, item);
+    if (changed && mounted) await _load();
   }
 
   Future<void> _load() async {
@@ -555,59 +562,41 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
     final token = ApiSession.instance.token;
     final headers =
         token == null ? const <String, String>{} : {'Authorization': 'Bearer $token'};
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(widget.collection.name),
-            if ((widget.collection.description ?? '').isNotEmpty)
-              Text(
-                widget.collection.description!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: NasTokens.fontCaption,
-                  color: context.nasTextSecondary,
-                ),
-              ),
-          ],
-        ),
-        actions: [
-          NasRefreshButton(onPressed: _load),
-        ],
-      ),
-      body: _loading
-          ? const NasLoading()
-          : _error != null
-              ? NasErrorState(message: _error!, onRetry: _load)
-              : _items.isEmpty
-                  ? ListView(
-                      children: [
-                        NasEmptyState(
-                          title: tr('video.collection.emptyItems'),
-                          message: tr('video.collection.emptyItemsHint'),
-                          icon: Icons.movie_outlined,
+    final body = _loading
+        ? const NasLoading()
+        : _error != null
+            ? NasErrorState(message: _error!, onRetry: _load)
+            : _items.isEmpty
+                ? ListView(
+                    children: [
+                      NasEmptyState(
+                        title: tr('video.collection.emptyItems'),
+                        message: tr('video.collection.emptyItemsHint'),
+                        icon: Icons.movie_outlined,
+                      ),
+                    ],
+                  )
+                : LayoutBuilder(
+                    builder: (context, c) {
+                      final columns = gridColumns(c.maxWidth);
+                      return GridView.builder(
+                        padding: const EdgeInsets.all(NasTokens.spaceSm),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
+                          crossAxisSpacing: NasTokens.spaceSm,
+                          mainAxisSpacing: NasTokens.spaceSm,
+                          childAspectRatio: 0.72,
                         ),
-                      ],
-                    )
-                  : LayoutBuilder(
-                      builder: (context, c) {
-                        final columns = gridColumns(c.maxWidth);
-                        return GridView.builder(
-                          padding: const EdgeInsets.all(NasTokens.spaceSm),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: columns,
-                            crossAxisSpacing: NasTokens.spaceSm,
-                            mainAxisSpacing: NasTokens.spaceSm,
-                            childAspectRatio: 0.72,
-                          ),
-                          itemCount: _items.length,
-                          itemBuilder: (context, i) {
-                            final item = _items[i];
-                            return InkWell(
+                        itemCount: _items.length,
+                        itemBuilder: (context, i) {
+                          final item = _items[i];
+                          return NasContextMenuRegion(
+                            entries: videoItemMenuEntries(
+                              item,
+                              onAction: (a) => _runItemAction(a, item),
+                              extra: _collectionExtras(item),
+                            ),
+                            child: InkWell(
                               onLongPress: () => _itemMenu(item),
                               onTap: () => openVideoDetail(context, item),
                               child: Column(
@@ -665,11 +654,109 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
                                   ),
                                 ],
                               ),
-                            );
-                          },
-                        );
-                      },
-                    ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+
+    if (!widget.embedded) {
+      return Scaffold(
+        appBar: AppBar(
+          title: _titleBlock(context),
+          actions: [
+            NasRefreshButton(onPressed: _load),
+          ],
+        ),
+        body: body,
+      );
+    }
+
+    // 三级页：顶栏交给外壳，标题做成页内页头；底色必须自己铺
+    //（本项目 `scaffoldBackgroundColor` 是透明的，不铺会跟下面的列表叠在一起）
+    return Material(
+      color: Colors.transparent,
+      child: Stack(
+        children: [
+          Positioned.fill(child: context.nasStyle.background),
+          Positioned.fill(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    NasTokens.spaceMd,
+                    NasTokens.spaceSm,
+                    NasTokens.spaceXs,
+                    0,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(child: _titleBlock(context)),
+                      NasRefreshButton(onPressed: _load),
+                    ],
+                  ),
+                ),
+                Expanded(child: body),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
+
+  /// 标题块：合集名 + 描述（AppBar 与嵌入页头共用一份）
+  Widget _titleBlock(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(widget.collection.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        if ((widget.collection.description ?? '').isNotEmpty)
+          Text(
+            widget.collection.description!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: NasTokens.fontCaption,
+              color: context.nasTextSecondary,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 打开合集详情的统一入口（与 `openVideoDetail` 同口径）。
+///
+/// 影视壳挂载且调用方在内容区时叠三级页；否则退回整页 push。
+Future<void> openVideoCollection(
+  BuildContext context,
+  VideoCollection collection, {
+  VoidCallback? onChanged,
+}) {
+  final router = VideoDetailRouter.instance;
+  if (router.embeddableFrom(context)) {
+    router.open(
+      VideoDetailEntry(
+        tag: 'collection:${collection.id}',
+        build: (_) => VideoCollectionDetailPage(
+          collection: collection,
+          onChanged: onChanged,
+          embedded: true,
+        ),
+      ),
+    );
+    return Future<void>.value();
+  }
+  return Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => VideoCollectionDetailPage(
+        collection: collection,
+        onChanged: onChanged,
+      ),
+    ),
+  );
 }

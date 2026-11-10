@@ -170,11 +170,30 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
     }
   }
 
-  Future<void> _startFaceScene() => _queueScan(ocr: true);
+  /// 四项识别（人脸 / 场景 / 活动 / 文字）本来就是同一次解码、同一次 analyze 出来的，
+  /// 所以共用一个总开关。拆成四个开关反而会造出「AI_DONE_BASE 已记、某项却没跑」的
+  /// 不一致状态——BASE 一个位同时管人脸/场景/向量，单项开关并不能真正独立。
+  bool _aiMasterOn(PhotoAiSettings s) =>
+      s.config.faceEnabled &&
+      s.config.placeEnabled &&
+      s.config.activityEnabled &&
+      s.config.ocrEnabled;
 
-  Future<void> _startOcr() => _queueScan(ocr: true);
+  Future<void> _setAiMaster(bool v) async {
+    await _save(
+      PhotoAiConfigBody(
+        faceEnabled: v,
+        placeEnabled: v,
+        activityEnabled: v,
+        ocrEnabled: v,
+      ),
+    );
+    if (v) await _startAll();
+  }
 
-  Future<void> _startActivity() => _queueScan(ocr: true, activity: true);
+  /// 四项一起跑：ocr / activity 必须显式传 true，
+  /// 服务端用 `body ?? 开关` 判定，传 false 会把开关打开的活动识别按掉。
+  Future<void> _startAll() => _queueScan(ocr: true, activity: true);
 
   /// 只补人脸框（不重算场景/嵌入）：头像墙依赖 bbox，老数据需要补一次
   Future<void> _backfillFaces() async {
@@ -487,6 +506,15 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
                 style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
               ),
             ),
+          // 「已分析张数一模一样」是正常的（一次分析同时产出人脸 / 场景 / 向量），
+          // 这里先说清楚，免得用户当成前端没联动。
+          Padding(
+            padding: const EdgeInsets.only(top: 2, bottom: 2),
+            child: Text(
+              tr('photo.ai.queueHint'),
+              style: TextStyle(fontSize: 11, height: 1.35, color: context.nasTextSecondary),
+            ),
+          ),
           for (final job in queue.jobs) _queueRow(job),
         ],
       ),
@@ -536,6 +564,18 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
               ),
             ],
           ),
+          if (job.detail.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            // 人脸 / 场景 / 向量由同一次分析产出，左侧「已分析张数」必然相同；
+            // 这一行给的是**各模块自己的产出数**，用来证明不是同一个数字复制三遍。
+            Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: Text(
+                job.detail,
+                style: TextStyle(fontSize: 11, color: context.nasTextSecondary),
+              ),
+            ),
+          ],
           const SizedBox(height: 5),
           ClipRRect(
             borderRadius: BorderRadius.circular(3),
@@ -699,58 +739,32 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
     return _card(
       child: Column(
         children: [
-          _moduleRow(
-            title: tr('photo.ai.enableOcr'),
-            subtitle: tr('photo.ai.sub.ocr'),
-            percent: s.progress.ocr,
-            counts: _counts(s, 'ocr'),
-            value: s.config.ocrEnabled,
-            onChanged: (v) async {
-              await _save(PhotoAiConfigBody(ocrEnabled: v));
-              if (v) await _startOcr();
-            },
-            onStart: _startOcr,
-            startTooltip: tr('photo.ai.startOcr'),
-            onReset: () => _run(
-              tr('photo.ai.reset'),
-              () => _client.photoAiReset(body: const PhotoAiResetBody(kind: 'ocr')),
-            ),
+          // 一个人脸 / 场景 / 活动 / 文字的总开关：一次解码全部跑完，
+          // 单独开关只会在「BASE 位」上互相踩（见 _aiMasterOn 注释）。
+          _switchRow(
+            title: tr('photo.ai.master'),
+            subtitle: tr('photo.ai.masterHint'),
+            value: _aiMasterOn(s),
+            onChanged: _setAiMaster,
+            onStart: _startAll,
+            startTooltip: tr('photo.ai.startAll'),
           ),
-          const Divider(height: 22),
-          _moduleRow(
-            title: tr('photo.ai.enablePlace'),
-            subtitle: tr('photo.ai.sub.place'),
-            percent: s.progress.place,
-            counts: _counts(s, 'place'),
-            value: s.config.placeEnabled,
-            onChanged: (v) async {
-              await _save(PhotoAiConfigBody(placeEnabled: v));
-              if (v) await _startFaceScene();
-            },
-            onStart: _startFaceScene,
-            startTooltip: tr('photo.ai.startFaceScene'),
-            onReset: () => _run(
-              tr('photo.ai.reset'),
-              () => _client.photoAiReset(body: const PhotoAiResetBody(kind: 'place')),
-            ),
-          ),
-          const Divider(height: 22),
-          _moduleRow(
-            title: tr('photo.ai.enableActivity'),
-            subtitle: tr('photo.ai.sub.activity'),
-            percent: s.progress.activity,
-            counts: _counts(s, 'activity'),
-            value: s.config.activityEnabled,
-            onChanged: (v) async {
-              await _save(PhotoAiConfigBody(activityEnabled: v));
-              if (v) await _startActivity();
-            },
-            onStart: _startActivity,
-            startTooltip: tr('photo.ai.startActivity'),
-            onReset: () => _run(
-              tr('photo.ai.reset'),
-              () => _client.photoAiReset(body: const PhotoAiResetBody(kind: 'activity')),
-            ),
+          const SizedBox(height: 6),
+          // 合并开关后仍要能单独清空某一类结果重跑。
+          // 人脸 / 场景 / 向量共用 AI_DONE_BASE 一个位，所以只能整组重置。
+          Wrap(
+            spacing: 4,
+            runSpacing: 2,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                '${tr('photo.ai.resetKind')}：',
+                style: TextStyle(fontSize: 12, color: context.nasTextSecondary),
+              ),
+              _kindReset(tr('photo.ai.kind.base'), 'place'),
+              _kindReset(tr('photo.ai.kind.activity'), 'activity'),
+              _kindReset(tr('photo.ai.kind.ocr'), 'ocr'),
+            ],
           ),
           const Divider(height: 22),
           _moduleRow(
@@ -766,8 +780,34 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
               () => _client.photoAiReset(body: const PhotoAiResetBody(kind: 'similar')),
             ),
           ),
+          const Divider(height: 22),
+          SwitchListTile(
+            value: s.config.petEnabled,
+            onChanged: (v) => _save(PhotoAiConfigBody(petEnabled: v)),
+            title: Text(tr('photo.ai.enablePet')),
+            subtitle: Text(tr('photo.ai.sub.pet')),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _kindReset(String label, String kind) {
+    return TextButton(
+      onPressed: _busy
+          ? null
+          : () => _run(
+                tr('photo.ai.reset'),
+                () => _client.photoAiReset(body: PhotoAiResetBody(kind: kind)),
+              ),
+      style: TextButton.styleFrom(
+        minimumSize: const Size(0, 30),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(label, style: const TextStyle(fontSize: 12)),
     );
   }
 
@@ -809,16 +849,25 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _switchRow(
-            title: '${tr('photo.ai.enableFace')}${_progressSuffix(s.progress.face, _counts(s, 'face'))}',
-            subtitle: tr('photo.ai.sub.face'),
-            value: s.config.faceEnabled,
-            onChanged: (v) async {
-              await _save(PhotoAiConfigBody(faceEnabled: v));
-              if (v) await _startFaceScene();
-            },
-            onStart: _startFaceScene,
-            startTooltip: tr('photo.ai.startFaceScene'),
+          // 人脸识别的总开关已并进上面那张卡的「开启 AI 识别」，这里只留人脸专属设置，
+          // 避免同一件事出现两个开关、互相看起来像没联动。
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  tr('photo.ai.faceSection'),
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
+              ),
+              Text(
+                tr('photo.ai.progressDoneTotal', {
+                  'done': '${_counts(s, 'face').$1}',
+                  'total': '${_counts(s, 'face').$2}',
+                  'percent': '${s.progress.face}',
+                }),
+                style: TextStyle(fontSize: 12, color: context.nasTextSecondary),
+              ),
+            ],
           ),
           const Divider(height: 22),
           _titleRow(
@@ -952,18 +1001,6 @@ class _PhotoAiSettingsPageState extends State<PhotoAiSettingsPage> {
                         ),
                 icon: const Icon(Icons.merge_type, size: 16),
                 label: Text(tr('photo.ai.mergeSimilar')),
-              ),
-              OutlinedButton.icon(
-                onPressed: _busy
-                    ? null
-                    : () => _run(
-                          tr('photo.ai.recluster'),
-                          () => _client.photoFaceRebuild(
-                            body: const PhotoFaceRebuildBody(limit: 200000),
-                          ),
-                        ),
-                icon: const Icon(Icons.restart_alt, size: 16),
-                label: Text(tr('photo.ai.recluster')),
               ),
               OutlinedButton.icon(
                 onPressed: _busy

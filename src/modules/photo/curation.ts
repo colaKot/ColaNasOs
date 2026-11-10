@@ -5,6 +5,7 @@ import { secured } from '../../../kernel/route';
 import type { KernelApi } from '../../../kernel/types';
 import { Err } from '../../../kernel/errors';
 import { TRASH_RETENTION_DAYS } from './delete';
+import { recordDeletedFingerprints } from './deleted-fp';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 
 /**
@@ -613,6 +614,10 @@ export async function registerPhotoCleanup(app: any, k: KernelApi): Promise<void
             trashed += 1;
           }
 
+          // 删过的照片留指纹：清空回收站 / 30 天到期清理都是物理删行，
+          // 到那时 photo_items 里查不到了，手机备份会把它们当新照片重新传上来。
+          await recordDeletedFingerprints(trx, owner, removeIds);
+
           // 只在「恰好留一张」时合并从属关系
           if (removeIds.length >= 1) {
             const keep = (
@@ -817,8 +822,9 @@ export async function registerPhotoCleanup(app: any, k: KernelApi): Promise<void
       const limit = Math.max(1, Math.min(Number(body.limit) || 500, 5000));
 
       const candidates = (
-        await sql<{ id: string; rel_path: string }>`
-          select p.id, p.rel_path from photo_items p
+        await sql<{ id: string; rel_path: string; root_path: string }>`
+          select p.id, p.rel_path, l.root_path from photo_items p
+           join photo_libraries l on l.id = p.library_id
            where p.in_trash = 0
              and (p.content_md5 is null or p.content_md5 = '')
              and p.size in (
@@ -828,22 +834,15 @@ export async function registerPhotoCleanup(app: any, k: KernelApi): Promise<void
         `.execute(k.db)
       ).rows;
 
-      const { filesRoot, resolveInRoot } = await import('../files/fs-root');
-      const { createReadStream } = await import('node:fs');
-      const root = filesRoot();
+      // photoItemAbs 同时认「绝对路径 / 相对 filesRoot / 相对库根」三种历史形态；
+      // 老库 rel_path 本来就是 G:/... 绝对路径，用 resolveInRoot 会直接抛 403。
+      const { contentMd5Of, photoItemAbs } = await import('./content-md5');
       let hashed = 0;
       let failed = 0;
 
-      // 流式哈希：原实现是 `readFile` 整个读进内存再算 md5 —— 一张 20 MB 的原图就是
-      // 20 MB Buffer，长边还可能是 RAW / HEIC，5000 个候选会把堆顶穿。
-      const hashFile = (abs: string) =>
-        new Promise<string>((resolve, reject) => {
-          const h = crypto.createHash('md5');
-          const s = createReadStream(abs);
-          s.on('data', (chunk) => h.update(chunk as Buffer));
-          s.on('end', () => resolve(h.digest('hex')));
-          s.on('error', reject);
-        });
+      // 与手机备份判重共用同一份全文件流式 MD5（content-md5.ts）。
+      // 两端算法写成两份必然对不上，届时客户端算的 md5 永远命中不了服务端索引。
+      const hashFile = contentMd5Of;
 
       // 每 200 条提交一次：原来是「每条一个 update」，即每条一个写事务
       //（WAL 一次 fsync）。5000 条就是 5000 次落盘。
@@ -860,7 +859,7 @@ export async function registerPhotoCleanup(app: any, k: KernelApi): Promise<void
 
       for (const row of candidates) {
         try {
-          const abs = resolveInRoot(root, row.rel_path);
+          const abs = photoItemAbs(String(row.root_path || ''), row.rel_path);
           pending.push({ id: row.id, md5: await hashFile(abs) });
           hashed += 1;
           if (pending.length >= 200) await flush();
@@ -1164,12 +1163,23 @@ export async function registerPhotoCleanup(app: any, k: KernelApi): Promise<void
       const uid = String((req as any).user?.sub || '');
       const body = (req.body || {}) as { batchId?: string };
       const scoped = sql`library_id in (select id from photo_libraries where owner_id = ${uid})`;
+      const batchCond = !body.batchId
+        ? sql``
+        : body.batchId === 'none'
+          ? sql`and delete_batch_id is null`
+          : sql`and delete_batch_id = ${body.batchId}`;
+      // 清空回收站是物理删行：先留指纹。正常流程在「删到回收站」时已写过，
+      // 这里补的是旧版本遗留 / 其它入口写进来的行 —— 不补的话手机下次备份
+      // 会把这些已删照片当成新照片再传一遍。
+      const ids = (
+        await sql<{ id: string }>`
+          select id from photo_items where in_trash = 1 and ${scoped} ${batchCond}
+        `.execute(k.db)
+      ).rows.map((r) => r.id);
+      await recordDeletedFingerprints(k.db, uid, ids);
       if (body.batchId) {
         await sql`delete from photo_items
-           where in_trash = 1 and ${scoped}
-             ${body.batchId === 'none' ? sql`and delete_batch_id is null` : sql`and delete_batch_id = ${body.batchId}`}`.execute(
-          k.db,
-        );
+           where in_trash = 1 and ${scoped} ${batchCond}`.execute(k.db);
         if (body.batchId !== 'none') {
           await sql`
             delete from photo_delete_batches where id = ${body.batchId} and owner_id = ${uid}

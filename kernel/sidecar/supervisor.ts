@@ -258,7 +258,11 @@ export class SidecarSupervisor extends EventEmitter {
     this.stopHeartbeat();
     this.heartbeat = setInterval(() => {
       if (this._state !== 'ready' || this.stopping) return;
-      this.ping(Math.max(1_000, Math.floor(this.heartbeatMs / 2))).catch(() => {
+      // 判活超时**不能**比心跳间隔还短：sidecar 是单线程的，一次重活
+      // （ffmpeg 冷启动探编码器、4K 分片收尾落盘）就可能让事件循环卡几秒，
+      // 超时一刀下去就是 SIGKILL —— 正在跑的转码全死（表现是「4K 一播就报错」）。
+      // 现在给足一个完整心跳周期（不足 3s 的按 3s 兜底），真僵死仍会被杀掉重启。
+      this.ping(Math.max(3_000, this.heartbeatMs)).catch(() => {
         this.log('error', `[${this.opts.name}] heartbeat timeout, killing for restart`);
         this.killChild();
       });

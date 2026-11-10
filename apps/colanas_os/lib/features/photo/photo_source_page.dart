@@ -390,7 +390,7 @@ class _PhotoSourcePageState extends State<PhotoSourcePage> {
                     ),
                     const SizedBox(height: NasTokens.spaceXs),
                     Text(
-                      tr('photo.collection.count').replaceAll(
+                      tr('photo.album.photoCount').replaceAll(
                         '{n}',
                         '${item.items}',
                       ),

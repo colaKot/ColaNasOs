@@ -358,6 +358,82 @@ process.chdir(root);
   r = await post('/api/v1/photo/ai/rerun', { photoId: 'ghost' });
   check('rerun_missing_404', r.statusCode === 404, 'status=' + r.statusCode);
 
+  // ---- 封面 6 级（2026-11-09 用户口径）：1 横屏+前5人脸 … 6 竖屏
+  // 横屏是同一人脸档内的硬优先，命中几个簇不再加权。
+  const cover = require(path.join(root, 'dist', 'src', 'modules', 'photo', 'cover.js'));
+  check(
+    'cover_score_tiers',
+    cover.coverScore(1, false, true) === 6 &&
+      cover.coverScore(1, false, false) === 5 &&
+      cover.coverScore(0, true, true) === 4 &&
+      cover.coverScore(0, true, false) === 3 &&
+      cover.coverScore(0, false, true) === 2 &&
+      cover.coverScore(0, false, false) === 1 &&
+      cover.hasTopFace(6) === true &&
+      cover.hasTopFace(4) === false,
+    '6级=6/5/4/3/2/1',
+  );
+  check(
+    'cover_landscape_hard_priority',
+    cover.coverScore(1, false, true) > cover.coverScore(5, false, false),
+    '横屏命中1簇 必须压过 竖屏命中5簇',
+  );
+
+  const today = new Date();
+  const sameDay = Math.floor(
+    new Date(today.getFullYear() - 1, today.getMonth(), today.getDate(), 12, 0, 0).getTime() / 1000,
+  );
+  await sql`update photo_libraries set owner_id = 'u1' where id = 'lib1'`.execute(k.db);
+  await sql`update photo_items set taken_at = ${sameDay} where id in ('p1','p2','p3')`.execute(k.db);
+  // p6 无人脸横屏；p7 是第 4 大簇（c4）的人脸 —— 前 5 口径下也算 top5 命中
+  for (const [id, name] of [['p6', 'landscape.jpg'], ['p7', 'person4.jpg']]) {
+    await sql`
+      insert into photo_items (id, library_id, rel_path, taken_at, size, mtime, mime, created_at, width, height)
+      values (${id}, 'lib1', ${'/' + name}, ${sameDay}, 1, ${now}, 'image/jpeg', ${now}, 1600, 900)
+    `.execute(k.db);
+  }
+  await sql`
+    insert into photo_face_clusters (id, name, size, centroid, created_at)
+    values ('c4', '第四个人', 1, ${emb(0.5)}, ${now})
+  `.execute(k.db);
+  await sql`
+    insert into photo_faces (id, photo_id, emb, cluster_id, score, created_at)
+    values ('f7', 'p7', ${emb(0.5)}, 'c4', 1, ${now})
+  `.execute(k.db);
+
+  r = await get('/api/v1/photo/on-this-day?perYear=120');
+  const year = r.json().years.find((y) => y.items.some((i) => i.id === 'p7'));
+  const ids = year ? year.items.map((i) => i.id) : [];
+  check(
+    'on_this_day_non_top3_face',
+    r.statusCode === 200 &&
+      ids.length === 5 &&
+      ids.indexOf('p7') >= 0 &&
+      ids.indexOf('p7') < ids.indexOf('p6'),
+    ids.join(','),
+  );
+
+  // ---- 票夹：OCR 里能抽出席别 / 座位 / 票价（放在最后，不影响前面的统计断言）
+  await sql`
+    insert into photo_items (id, library_id, rel_path, taken_at, size, mtime, mime, created_at, width, height)
+    values ('p8', 'lib1', '/ticket.jpg', ${now}, 1, ${now}, 'image/jpeg', ${now}, 1200, 900)
+  `.execute(k.db);
+  await sql`
+    insert into photo_ocr (photo_id, text, updated_at)
+    values ('p8', '车次G3705二等座08车12F2026-09-1209:52南宁东站广州南站票价553.00', ${now})
+  `.execute(k.db);
+  r = await get('/api/v1/photo/memories/tickets?limit=50');
+  const ticket = (r.json().tickets || []).find((x) => x.photoId === 'p8');
+  check(
+    'ticket_ocr_fields',
+    r.statusCode === 200 &&
+      !!ticket &&
+      ticket.seatClass === '二等座' &&
+      ticket.seat === '08车12F' &&
+      ticket.price === '553.00',
+    JSON.stringify(ticket || {}),
+  );
+
   await app.close();
   try { fs.rmSync(dataDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); } catch { /* 句柄释放有延迟 */ }
 

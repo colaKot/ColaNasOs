@@ -3,6 +3,7 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 import '../../shell/app_widgets.dart';
 
+import '../../core/display_labels.dart';
 import '../../core/session.dart';
 import '../../shell/app_nav_shell.dart';
 import 'discover_page.dart';
@@ -1012,9 +1013,9 @@ class _SubscriptionManagerDialogState extends State<_SubscriptionManagerDialog> 
         body: <String, dynamic>{'id': '${sub['id']}'},
       );
       await _load();
-      NasSnack.showOn(messenger, '${res['message'] ?? ''}');
+      NasSnack.showOn(messenger, errorMessageOf(res['message']));
     } catch (e) {
-      NasSnack.showOn(messenger, '$e');
+      NasSnack.showOn(messenger, errorMessageOf(e));
     }
   }
 
@@ -1725,7 +1726,7 @@ class _TasksTabState extends State<_TasksTab> {
       case 'proposed':
         return tr('discover.tasks.status.proposed');
       default:
-        return status;
+        return unknownStatusLabel();
     }
   }
 

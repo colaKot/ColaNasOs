@@ -16,8 +16,9 @@ import {
   aiJobRunning,
 } from './config';
 import { enqueueScanOnce } from './vision';
+import { visionScanState } from '../routes/geo';
+import { phashScanState } from '../phash';
 import { faceIndex, fromBuffer, toBuffer, mergeClusterPair } from './face';
-import { paramsFromEnv } from './cluster-v2';
 import { ensureSidecar, aiAvailable } from './sidecar';
 import { filesRoot, resolveAnyPath } from '../../files/fs-root';
 
@@ -84,12 +85,29 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
           base: number;
           activity: number;
           ocr: number;
+          faces: number;
+          clustered: number;
+          face_photos: number;
+          vecs: number;
+          scene_rows: number;
+          act_rows: number;
+          ocr_rows: number;
+          phash: number;
         }>`
           select
             (select count(*) from photo_items i where ${owner} and i.ai_skip_at = 0) as total,
             (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_BASE}) <> 0) as base,
             (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_ACTIVITY}) <> 0) as activity,
-            (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_OCR}) <> 0) as ocr
+            (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_OCR}) <> 0) as ocr,
+            (select count(*) from photo_faces f join photo_items i on i.id = f.photo_id where ${owner}) as faces,
+            (select count(*) from photo_faces f join photo_items i on i.id = f.photo_id
+              where ${owner} and f.cluster_id is not null and f.cluster_id <> '') as clustered,
+            (select count(distinct f.photo_id) from photo_faces f join photo_items i on i.id = f.photo_id where ${owner}) as face_photos,
+            (select count(*) from photo_embeddings e join photo_items i on i.id = e.photo_id where ${owner}) as vecs,
+            (select count(*) from photo_scenes s join photo_items i on i.id = s.photo_id where ${owner}) as scene_rows,
+            (select count(*) from photo_activities a join photo_items i on i.id = a.photo_id where ${owner}) as act_rows,
+            (select count(*) from photo_ocr o join photo_items i on i.id = o.photo_id where ${owner}) as ocr_rows,
+            (select count(*) from photo_items i where ${owner} and i.phash is not null and i.phash <> '') as phash
         `.execute(k.db)
       ).rows[0];
       const total = Number(row?.total) || 0;
@@ -98,12 +116,15 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
       // 同时保留真实「已识别条数」：19113 张时识别 20 张，百分比会被四舍五入成 0%，
       // 只看百分比会误以为任务没动，所以 pending 用真实剩余数（不再按百分比反推）。
       const base = Number(row?.base) || 0;
+      const n0 = (v: unknown) => Number(v) || 0;
       const doneOf = {
         face: base,
-        place: base,
-        activity: Number(row?.activity) || 0,
-        ocr: Number(row?.ocr) || 0,
-        clip: base,
+        // 场景 / 向量是「每分析一张就有且只有一条产物」，所以产物数就是覆盖率；
+        // 老数据（mask 位还没引入时分析的）只能从产物看出来，取两者更大值避免进度倒退。
+        place: Math.max(base, n0(row?.scene_rows)),
+        activity: n0(row?.activity),
+        ocr: n0(row?.ocr),
+        clip: Math.max(base, n0(row?.vecs)),
       };
       // 队列里真有任务才算「识别中」。以前只看内存里的 aiJobRunning()，
       // 批次间隙或任务排队时一律回落 idle，面板就永远显示「空闲」。
@@ -114,46 +135,173 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
         `.execute(k.db)
       ).rows[0];
       const queueActive = Number(active?.n) > 0;
+      // 相似照片：扫描中读内存里的实时进度，空闲时读磁盘上的指纹覆盖率
+      // （取真实覆盖率，不写死 0，否则扫完了面板还显示 0%）。
+      const phashState = phashScanState();
+      const phashPct =
+        phashState.running && phashState.total > 0
+          ? Math.round((phashState.done / phashState.total) * 100)
+          : pct(Number(row?.phash) || 0);
       const progress = {
         face: pct(doneOf.face),
         place: pct(doneOf.place),
         activity: pct(doneOf.activity),
         ocr: pct(doneOf.ocr),
         clip: pct(doneOf.clip),
-        similarScan: 0,
-        similarCompare: 0,
+        similarScan: phashPct,
+        // 比对是扫描完一次性跑的短阶段，只有「跑完了 / 没跑完」两态，没有中间百分比
+        similarCompare: phashState.running ? 0 : 100,
       };
+      // 一项 `analyze` 会同时产出人脸 / 场景 / 向量，所以这三行的「已完成」天然相同
+      // （4771 / 19076 一模一样不是没联动，是同一批产物）。为了不让人误判成假数据，
+      // 每行再带一条**该模块自己的真实产出数**（人脸数 / 场景标签数 / 向量条数），
+      // 面板把它显示在标题下面 —— 这些数字各不相同，且都来自磁盘上的结果表。
+      // 最后一次人脸重建还没收尾（finished_at 为空）＝ 正在跑
+      let rebuildRunning = false;
       const job = (
         key: string,
         label: string,
         enabled: boolean,
         percent: number,
         done: number,
+        detail: string,
         totalCount = total,
       ) => ({
         key,
         label,
-        status: !enabled ? 'disabled' : queueActive || aiJobRunning(key) ? 'running' : 'idle',
+        detail,
+        status: !enabled
+          ? 'disabled'
+          : key === 'similar'
+            ? phashState.running
+              ? 'running'
+              : 'idle'
+            : key === 'faceRebuild' && rebuildRunning
+              ? 'running'
+              : queueActive || aiJobRunning(key)
+                ? 'running'
+                : 'idle',
         pending: Math.max(0, totalCount - done),
         // 面板显示「已完成/总数」：几万张里识别 20 张，百分比会被四舍五入成 0%，
         // 只有条数才能让人看出任务真的在推进
         done,
         total: totalCount,
-        percent,
+        percent: Math.max(0, Math.min(100, percent)),
       });
+      const jobs = [
+        job(
+          'face',
+          '人脸识别',
+          cfg.faceEnabled,
+          progress.face,
+          doneOf.face,
+          `已检出 ${n0(row?.faces)} 张人脸 / ${n0(row?.face_photos)} 张照片`,
+        ),
+        job(
+          'ocr',
+          'OCR 文字',
+          cfg.ocrEnabled,
+          progress.ocr,
+          doneOf.ocr,
+          `有文字的照片 ${n0(row?.ocr_rows)} 张`,
+        ),
+        job(
+          'place',
+          '场景识别',
+          cfg.placeEnabled,
+          progress.place,
+          doneOf.place,
+          `场景标签 ${n0(row?.scene_rows)} 条`,
+        ),
+        job(
+          'activity',
+          '活动识别',
+          cfg.activityEnabled,
+          progress.activity,
+          doneOf.activity,
+          `活动标签 ${n0(row?.act_rows)} 条`,
+        ),
+        job(
+          'clip',
+          '图像搜索',
+          true,
+          progress.clip,
+          doneOf.clip,
+          `向量 ${n0(row?.vecs)} 条（512 维）`,
+        ),
+        job(
+          'similar',
+          '重复照片',
+          cfg.similarEnabled,
+          phashPct,
+          n0(row?.phash),
+          `已算指纹 ${n0(row?.phash)} 张 · 相似组 ${
+            (
+              await sql<{ n: number }>`
+                select count(*) as n from photo_phash_groups
+                 where owner_id = ${uid}
+              `.execute(k.db)
+            ).rows[0]?.n || 0
+          } 组`,
+        ),
+      ];
+      // 视觉定位与「人脸重建」是两条独立的后台任务：有真实进度才列出来，
+      // 没跑过就不出现（避免出现一眼假的 0/0）。
+      const vision = visionScanState();
+      if (vision.running || vision.total > 0) {
+        jobs.push(
+          job(
+            'vision',
+            'GPS 视觉候选',
+            true,
+            vision.total > 0 ? Math.round((vision.done / vision.total) * 100) : 0,
+            vision.done,
+            `本批 ${vision.total} 张，已生成 ${vision.generated} 个候选`,
+            vision.total,
+          ),
+        );
+      }
+      const rebuild = (
+        await sql<{
+          id: string;
+          faces: number;
+          clusters: number;
+          sample_count: number | null;
+          coverage: number | null;
+          finished_at: number | null;
+        }>`
+          select id, faces, clusters, sample_count, coverage, finished_at
+            from photo_face_rebuild_runs
+           order by created_at desc limit 1
+        `.execute(k.db)
+      ).rows[0];
+      if (rebuild) {
+        rebuildRunning = rebuild.finished_at == null;
+        // coverage 存的是百分数（97.74），不是 0~1 的比率：老代码乘 100 会得到 9774%
+        const rawCov = Number(rebuild.coverage) || 0;
+        const cov = Math.round(rawCov > 1 ? rawCov : rawCov * 100);
+        const clustered = n0(row?.clustered);
+        const faceTotal = n0(row?.faces);
+        jobs.push(
+          job(
+            'faceRebuild',
+            '人脸重建',
+            cfg.faceEnabled,
+            faceTotal > 0 ? Math.round((clustered / faceTotal) * 100) : 0,
+            clustered,
+            rebuild.finished_at
+              ? `上次重建 ${n0(rebuild.faces)} 张人脸 → ${n0(rebuild.clusters)} 簇，覆盖 ${cov}%`
+              : `重建进行中：${n0(rebuild.faces)} 张人脸 → ${n0(rebuild.clusters)} 簇`,
+            faceTotal,
+          ),
+        );
+      }
       return {
         config: cfg,
         progress,
         queue: {
           paused: cfg.paused,
-          jobs: [
-            job('face', '人脸识别', cfg.faceEnabled, progress.face, doneOf.face),
-            job('ocr', 'OCR 文字', cfg.ocrEnabled, progress.ocr, doneOf.ocr),
-            job('place', '场景识别', cfg.placeEnabled, progress.place, doneOf.place),
-            job('activity', '活动识别', cfg.activityEnabled, progress.activity, doneOf.activity),
-            job('clip', '图像搜索', true, progress.clip, doneOf.clip),
-            job('similar', '重复照片', cfg.similarEnabled, 0, 0, 0),
-          ],
+          jobs,
         },
       };
     },
@@ -179,6 +327,7 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
         'activityEnabled',
         'ocrEnabled',
         'similarEnabled',
+        'petEnabled',
         'gpuPrefer',
         'paused',
       ] as const) {
@@ -432,10 +581,10 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
     async (req: FastifyRequest) => {
       const body = (req.body || {}) as { dryRun?: boolean; rounds?: number };
       const dryRun = body.dryRun === true;
-      // 簇级合并阈值必须和 rebuild 用同一把尺（mergeClusterSim，默认 0.76）。
-      // 此前这里借用增量投票的 matchSim（0.45）——那是"两张脸是否同一人"的单张门，
+      // 簇级合并阈值：默认 0.76（沿用原 cluster-v2 的 mergeClusterSim）。
+      // 不要借用增量认领的 matchSim（0.45）——那是「两张脸是否同一人」的单张门，
       // 拿它当簇级门会把不同的人整簇并掉。
-      const clusterSim = paramsFromEnv().mergeClusterSim;
+      const clusterSim = Number(process.env.COLANAS_CLUSTER_MERGE_SIM) || 0.76;
       await faceIndex.load(k.db);
       const rows = (
         await sql<{ id: string; size: number; centroid: Buffer }>`
@@ -529,14 +678,18 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
       schema: {
         operationId: 'photoFacePurge',
         tags: ['photo'],
-        summary: '清理误检人脸（低分 / 无归属）',
+        summary: '清理误检人脸（仅低检测置信度）',
         response: { 200: ref('PhotoAiOpResponse') },
       },
     }),
     async () => {
       const before = (await sql<{ n: number }>`select count(*) as n from photo_faces`.execute(k.db))
         .rows[0];
-      await sql`delete from photo_faces where cluster_id is null or score < 0.35`.execute(k.db);
+      // 注意：cluster_id is null 自 2026-11-06 起表示「挂起待认领」（侧脸 / 糊脸 / 一时判不准），
+      // 不是垃圾数据 —— 它们等着 sweep 或用户手动指派。这里绝不能按「无归属」全删，
+      // 否则等于把「既准又全」里刚捞回来的那部分又扔掉一次。
+      // 只清真正的误检：检测置信度过低的脸。
+      await sql`delete from photo_faces where score < 0.35`.execute(k.db);
       const after = (await sql<{ n: number }>`select count(*) as n from photo_faces`.execute(k.db))
         .rows[0];
       await sql`

@@ -18,7 +18,7 @@ export function makePhotoHelpers(k: KernelApi, libWatch: { refresh(): Promise<vo
     const loadAlbum = async (id: string, owner: string): Promise<AlbumRow | null> => {
       const res = await sql<AlbumRow>`
         select a.id, a.name, a.owner_id, a.created_at,
-          a.description, a.cover_item_id, a.sort_order,
+          a.description, a.cover_item_id, a.sort_order, a.rules_json,
           (select count(*) from photo_album_items m where m.album_id = a.id) as items,
           coalesce(
             (select i.rel_path from photo_album_items m

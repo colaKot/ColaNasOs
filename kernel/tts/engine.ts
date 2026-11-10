@@ -80,10 +80,52 @@ export interface SynthResult {
 
 const SAMPLE_RATE = 24000;
 const BYTES_PER_SEC = SAMPLE_RATE * 2; // 16-bit 单声道
+/** 声码器帧率：Qwen3-TTS-**12Hz** 系列每帧 2000 采样点（24000 / 12） */
+const FRAME_RATE = 12;
 const GAP_SEC = 0.18;
 const CHUNK_TIMEOUT_MS = 10 * 60 * 1000;
 
 const HAN = /[\u4e00-\u9fff]/g;
+
+/**
+ * `llama-tts` 的 `-n` 实际默认是 **512 帧**，虽然它的 `--help` 写着 `-1 = infinity`。
+ *
+ * 512 帧 × 12Hz = 42.67 秒，中文约 200 字。**超过这个长度的部分不会报错，直接不出声**
+ * —— 表现就是「朗读吞字」：一句话念到一半没了，后面的整段被跳过，日志和退出码都正常。
+ * 实测（同一段 276 字新闻）：不传 `-n` 只生成 512 帧（只念完 3/4），传 `-n 4096` 生成
+ * 707 帧（完整）。所以每块必须显式给足上限。
+ *
+ * 3.6 帧/字是实测 2.43~2.54 再放 40% 余量：估算偏大没有副作用（模型念完自然停，
+ * 不会多说话），估小就会真丢字。
+ */
+const FRAMES_PER_CHAR = 3.6;
+const MAX_PREDICT = 8192;
+
+export function predictFrames(text: string): number {
+  const n = Math.ceil([...text].length * FRAMES_PER_CHAR);
+  return Math.max(96, Math.min(n, MAX_PREDICT));
+}
+
+/**
+ * 命中上限时把一块对半切开重合成：优先切在句末，其次逗号，最后硬切。
+ * 两头都太短（< 8 字）就不切，交给调用方接受结果。
+ */
+export function halveForRetry(text: string): [string, string] | null {
+  const mid = Math.floor([...text].length / 2);
+  const chars = [...text];
+  const marks = ['。', '！', '？', '；', '!', '?', ';', '\n', '，', '、', ',', ' '];
+  for (const m of marks) {
+    let best = -1;
+    for (let i = Math.max(0, mid - 80); i <= Math.min(chars.length - 1, mid + 80); i += 1) {
+      if (chars[i] === m && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
+    }
+    if (best >= 8 && best <= chars.length - 9) {
+      return [chars.slice(0, best + 1).join('').trim(), chars.slice(best + 1).join('').trim()];
+    }
+  }
+  if (chars.length < 40) return null;
+  return [chars.slice(0, mid).join('').trim(), chars.slice(mid).join('').trim()];
+}
 
 export function hanCount(s: string): number {
   return (s.match(HAN) || []).length;
@@ -253,7 +295,12 @@ export class TtsEngine {
   }
 
   /** 合成一块 */
-  private async synthChunk(text: string, voicePath: string, outWav: string): Promise<void> {
+  private async synthChunk(
+    text: string,
+    voicePath: string,
+    outWav: string,
+    maxFrames?: number,
+  ): Promise<void> {
     const args = [
       '-m',
       this.opts.modelPath,
@@ -269,6 +316,9 @@ export class TtsEngine {
       String(this.ngl),
       '-t',
       String(this.threads),
+      // 不给 -n 会被工具内部的 512 帧默认值截断（见 predictFrames 注释）
+      '-n',
+      String(maxFrames && maxFrames > 0 ? maxFrames : predictFrames(text)),
       '-o',
       outWav,
     ];
@@ -280,6 +330,42 @@ export class TtsEngine {
       const tail = (r.stderr || r.stdout || '').split('\n').filter(Boolean).slice(-6).join('\n');
       throw new Error(`语音合成失败（退出码 ${r.code}）：${tail || '没有输出'}`);
     }
+  }
+
+  /**
+   * 合成一块并**验证没被截断**：生成帧数顶到 `-n` 上限，说明后面还有文字没念，
+   * 对半切开重来（最多 3 层）。正常情况下零成本，只多读一次 wav 头。
+   */
+  private async synthGuarded(
+    text: string,
+    voicePath: string,
+    dir: string,
+    tag: string,
+    depth: number,
+  ): Promise<{ files: string[]; bytes: number; split: boolean }> {
+    const cap = predictFrames(text);
+    const out = path.join(dir, `${tag}.wav`);
+    await this.synthChunk(text, voicePath, out, cap);
+    const bytes = wavDataBytes(out);
+    const frames = (bytes / 2 / SAMPLE_RATE) * FRAME_RATE;
+    if (frames >= cap * 0.97 && depth < 3) {
+      const half = halveForRetry(text);
+      if (half) {
+        fs.rmSync(out, { force: true });
+        this.opts.log?.(
+          'warn',
+          `[tts] ${tag} 顶到 ${cap} 帧上限（${text.length} 字），对半重切`,
+        );
+        const left = await this.synthGuarded(half[0], voicePath, dir, `${tag}a`, depth + 1);
+        const right = await this.synthGuarded(half[1], voicePath, dir, `${tag}b`, depth + 1);
+        return {
+          files: [...left.files, ...right.files],
+          bytes: left.bytes + right.bytes,
+          split: true,
+        };
+      }
+    }
+    return { files: [out], bytes, split: false };
   }
 
   /**
@@ -307,12 +393,15 @@ export class TtsEngine {
     try {
       for (let i = 0; i < chunks.length; i += 1) {
         if (this.closed || p.isCancelled?.()) throw new Error('已取消');
-        const out = path.join(partDir, `part${String(i).padStart(4, '0')}.wav`);
-        await this.synthChunk(chunks[i], p.voicePath, out);
-        parts.push(out);
-        pcmBytes += wavDataBytes(out);
+        const tag = `part${String(i).padStart(4, '0')}`;
+        const one = await this.synthGuarded(chunks[i], p.voicePath, partDir, tag, 0);
+        parts.push(...one.files);
+        pcmBytes += one.bytes;
         p.onProgress?.(i + 1, chunks.length);
-        this.opts.log?.('debug', `[tts] ${i + 1}/${chunks.length} ${chunks[i].length} 字`);
+        this.opts.log?.(
+          'debug',
+          `[tts] ${i + 1}/${chunks.length} ${chunks[i].length} 字${one.split ? '（顶到上限，已对半重切）' : ''}`,
+        );
       }
 
       // 块间补静音：模型自带的首尾留白不足，直接拼会黏在一起

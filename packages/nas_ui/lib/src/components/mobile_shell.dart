@@ -142,7 +142,13 @@ class NasMobileAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
             if (bottom != null) bottom!,
             if (!transparent)
-              Divider(height: 1, thickness: 1, color: scheme.outlineVariant),
+              // 顶栏底缝：用主题分隔线色（onSurface 8%），outlineVariant 太亮、
+              // 手机上看着像一条硬边框（2026-11-06 用户反馈）
+              Divider(
+                height: 1,
+                thickness: 1,
+                color: scheme.onSurface.withValues(alpha: 0.08),
+              ),
           ],
         ),
       ),
@@ -352,10 +358,12 @@ class NasMorePage extends StatelessWidget {
                 children: [
                   for (var i = 0; i < group.entries.length; i++) ...[
                     if (i > 0)
+                      // 顶到卡片两边的浅色细线：outlineVariant 在暗色下太亮，
+                      // 且原来的 indent:48 只缩左边不缩右边，看着像断了的粗线
+                      //（2026-11-06 用户反馈「更多」页分隔线丑）
                       Divider(
                         height: 1,
-                        indent: 48,
-                        color: scheme.outlineVariant,
+                        color: scheme.onSurface.withValues(alpha: 0.08),
                       ),
                     ListTile(
                       dense: false,

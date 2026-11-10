@@ -78,9 +78,20 @@ class NasTheme {
     // 玻璃皮肤的 `panelColor` 自带 alpha（极光暗色才 8% 白），直接拿来当弹窗底色，
     // 后面的整页内容会透上来，文字跟海报叠在一起根本看不清（用户明确反馈过）。
     // 做法：把它和底色合成成等效的不透明色 —— 观感与半透明面板一致，但绝不透。
-    final solidPanel = Color.alphaBlend(spec.panelColor, scheme.surface);
+    final solidPanel = Color.alphaBlend(spec.panelColor, spec.baseColor);
 
     return base.copyWith(
+      // 卡片 / 列表 / 输入框这些「容器色」统一指到 solidPanel。
+      // 默认的 M3 `surfaceContainer*` 在深色下几乎是纯黑，跟极光背景完全割裂，
+      // 全项目 60+ 处直接拿它当底的地方都会变成「黑洞卡片」。
+      // 指到 solidPanel（半透明面板色合成到背景基色上）后，卡片比背景亮一档、
+      // 同色系，且依然不透明 —— 浮层不会透出下面的内容。
+      colorScheme: scheme.copyWith(
+        surfaceContainer: solidPanel,
+        surfaceContainerLow: solidPanel,
+        surfaceContainerHigh: solidPanel,
+        surfaceContainerHighest: solidPanel,
+      ),
       // `canvasColor` 保持透明会让 DropdownButton 的弹出菜单、Drawer、Material(type:canvas)
       // 全部变透明 —— 这也是"某些弹窗看不清"的来源之一。它只影响浮层与默认材质，
       // 页面底色仍由 CanvasBackground 负责（scaffoldBackgroundColor 依旧透明）。
@@ -169,11 +180,8 @@ class NasTheme {
     );
   }
 
-  static ThemeData _base(
-          ColorScheme scheme,
-          Brightness brightness,
-          NasSkin skin,
-          String? fontFamily) =>
+  static ThemeData _base(ColorScheme scheme, Brightness brightness,
+          NasSkin skin, String? fontFamily) =>
       ThemeData(
         useMaterial3: true,
         brightness: brightness,

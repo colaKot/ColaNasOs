@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 import '../../shell/app_widgets.dart';
+import '../../shell/shell_back.dart';
 
+import '../../core/display_labels.dart';
 import '../../core/session.dart';
 import 'discover_detail_page.dart';
 
@@ -73,7 +75,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
   String _country = '';
   double _minVote = 0;
 
-  /// 浏览态：显示筛选行；榜单态只显示榜单胶囊与信息条（参考实现的三态之一）
+  /// 浏览态：显示筛选行；榜单态只显示榜单胶囊与信息条（既有实现的三态之一）
   bool _browse = false;
 
   bool get _hasFilters =>
@@ -242,7 +244,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
     _load();
   }
 
-  /// 评分分色（参考实现：<6 灰 / 6 蓝 / 7 绿 / 8+ 橙）
+  /// 评分分色（既有实现：<6 灰 / 6 蓝 / 7 绿 / 8+ 橙）
   static Color _ratingColor(double? rating) {
     if (rating == null || rating < 6) return const Color(0xFF6B7280);
     if (rating < 7) return const Color(0xFF3B82F6);
@@ -381,9 +383,10 @@ class _DiscoverPageState extends State<DiscoverPage> {
       final r = await ApiSession.instance.client.videoTmdbTest(
         body: {'apiKey': apiKey},
       );
-      NasSnack.showOn(messenger, '${r['message'] ?? ''} (${r['latencyMs'] ?? 0} ms)');
+      NasSnack.showOn(messenger,
+          '${errorMessageOf(r['message'])} (${r['latencyMs'] ?? 0} ms)');
     } catch (e) {
-      NasSnack.showOn(messenger, '$e');
+      NasSnack.showOn(messenger, errorMessageOf(e));
     }
   }
 
@@ -394,9 +397,10 @@ class _DiscoverPageState extends State<DiscoverPage> {
       final r = await ApiSession.instance.client.discoverDoubanTest(
         body: {'cookie': cookie},
       );
-      NasSnack.showOn(messenger, '${r['message'] ?? ''} (${r['latencyMs'] ?? 0} ms)');
+      NasSnack.showOn(messenger,
+          '${errorMessageOf(r['message'])} (${r['latencyMs'] ?? 0} ms)');
     } catch (e) {
-      NasSnack.showOn(messenger, '$e');
+      NasSnack.showOn(messenger, errorMessageOf(e));
     }
   }
 
@@ -437,13 +441,24 @@ class _DiscoverPageState extends State<DiscoverPage> {
         ];
       });
     } catch (e) {
-      NasSnack.showOn(messenger, '$e');
+      NasSnack.showOn(messenger, errorMessageOf(e));
     }
   }
 
 
   @override
   Widget build(BuildContext context) {
+    return SubPageScope(
+      active: _browse,
+      onBack: () {
+        setState(() => _browse = false);
+        _load();
+      },
+      child: _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     return Scaffold(
       appBar: widget.embedded
           ? null

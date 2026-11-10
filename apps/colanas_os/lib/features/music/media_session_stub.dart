@@ -9,3 +9,10 @@ void updateMediaSession({
   required void Function() onNext,
   required void Function() onPrevious,
 }) {}
+
+/// 桌面 / 移动端由系统音频会话自己维护进度，无需 JS 侧同步。
+void updateMediaSessionPosition({
+  required Duration duration,
+  required Duration position,
+  double playbackRate = 1,
+}) {}

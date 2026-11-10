@@ -67,6 +67,7 @@ const MEDIA_TOKEN_TTL = 12 * 3600;
  *   POST /api/v1/blog/generate         立即生成一期（后台跑，立刻返回 id）
  *   GET  /api/v1/blog/status           生成进度（parts / doneParts）
  *   GET  /api/v1/blog/episodes         已生成列表
+ *   GET  /api/v1/blog/script           某一期的播报稿 + 引用链接
  *   GET  /api/v1/blog/audio-url        带令牌的播放地址
  *   GET  /api/v1/blog/audio            播放 / 下载 mp3
  *   POST /api/v1/blog/remove           删除一期（连同音频文件）
@@ -535,14 +536,76 @@ export const blog: ServerModule = {
         },
       }),
       async (req) => {
-        const q = (req.query || {}) as { limit?: number };
+        const q = (req.query || {}) as { limit?: number; offset?: number };
         const limit = Math.max(1, Math.min(Number(q.limit ?? 60) || 60, 200));
+        const offset = Math.min(Math.max(Math.trunc(Number(q.offset ?? 0) || 0), 0), 1_000_000);
+        // 以前一次吐 200 条再由前端切片（内存伪分页）；现在服务端真翻页
+        const countRes = await sql<{ n: number }>`
+          select count(*) as n from blog_episodes
+        `.execute(k.db);
+        const total = Number(countRes.rows[0]?.n) || 0;
         const rows = (
           await sql<any>`
-            select * from blog_episodes order by created_at desc limit ${limit}
+            select * from blog_episodes
+             order by created_at desc, id desc
+             limit ${limit} offset ${offset}
           `.execute(k.db)
         ).rows;
-        return { items: rows.map(toEpisode) };
+        return { items: rows.map(toEpisode), total, limit, offset };
+      },
+    );
+
+    app.get(
+      '/api/v1/blog/script',
+      secured('blog:read', {
+        schema: {
+          operationId: 'blogScript',
+          tags: TAG,
+          summary: '某一期的播报稿全文与引用链接',
+          querystring: { $ref: 'BlogIdQuery#' },
+          response: {
+            200: { $ref: 'BlogScriptResponse#' },
+            404: { $ref: 'BlogErrorResponse#' },
+          },
+        },
+      }),
+      async (req, reply) => {
+        const q = (req.query || {}) as { id?: string };
+        const rows = (
+          await sql<any>`select * from blog_episodes where id = ${String(q.id || '')}`.execute(k.db)
+        ).rows;
+        const row = rows[0];
+        if (!row) return reply.code(404).send({ error: Err.notFound, message: 'episode missing' });
+
+        // select * 而不是点名 news_json：万一老库还没跑迁移，也不至于整条接口 500
+        const parseJson = (raw: unknown): unknown[] => {
+          try {
+            const v = JSON.parse(String(raw || '[]'));
+            return Array.isArray(v) ? v : [];
+          } catch {
+            return [];
+          }
+        };
+        const items = parseJson(row.news_json)
+          .slice(0, 60)
+          .map((x: any) => ({
+            category: String(x?.category || ''),
+            title: String(x?.title || ''),
+            link: String(x?.link || ''),
+            source: String(x?.source || ''),
+          }));
+        // 迁移前的老期次只存了 headlines：给一组「只有标题、没有链接」的引用
+        if (items.length === 0) {
+          for (const h of parseJson(row.headlines_json).slice(0, 12)) {
+            items.push({ category: '', title: String(h), link: '', source: '' });
+          }
+        }
+        return {
+          id: String(row.id || ''),
+          title: String(row.title || ''),
+          script: String(row.script || ''),
+          items,
+        };
       },
     );
 

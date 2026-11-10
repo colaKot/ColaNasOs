@@ -5,6 +5,7 @@ library nas_core;
 
 export 'api/api_error.dart';
 export 'api/client.dart';
+export 'api/face_paging.dart';
 export 'api/models.dart';
 export 'api/transport.dart';
 export 'app_nav_spec.dart';

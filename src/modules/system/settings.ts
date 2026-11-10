@@ -152,10 +152,15 @@ const LogsResponse = Type.Object(
     size: Type.Integer(),
     /** 文件最后修改时间（ISO；文件不存在时为空串） */
     updatedAt: Type.String(),
-    /** 时间正序（最早 → 最新），只保留最后 N 行 */
+    /** 当前页，**时间倒序**（最新 → 最旧）；offset=0 即最新日志 */
     lines: Type.Array(LogEntry),
-    /** 是否因为行数 / 字节上限只截取了尾部 */
+    /** 是否因扫描字节上限没读到文件头（更早的行没纳入） */
     truncated: Type.Boolean(),
+    /** 本次请求的页大小 / 往回跳过的匹配行数 */
+    limit: Type.Integer(),
+    offset: Type.Integer(),
+    /** 是否还有更旧的一页 */
+    hasMore: Type.Boolean(),
   },
   { $id: 'SystemLogsResponse' },
 );
@@ -283,42 +288,84 @@ function parseLogLine(raw: string): { time: string; level: string; msg: string }
   }
 }
 
-/**
- * 读文件尾部最多 maxLines 行。
- *
- * 日志单文件上限 10 MB，整读会拖慢设置页；只从末尾倒读 `maxBytes`，
- * 并丢弃第一行（可能是被切断的半行 JSON）。
- */
-function tailLines(
-  file: string,
-  maxLines: number,
-  maxBytes = 2 * 1024 * 1024,
-): { lines: string[]; truncated: boolean } {
-  let st: fs.Stats;
-  try {
-    st = fs.statSync(file);
-  } catch {
-    return { lines: [], truncated: false };
-  }
-  if (st.size === 0) return { lines: [], truncated: false };
+const LOG_CHUNK = 64 * 1024;
+/** 单文件轮转上限 10MB，留点余量；防止异常大文件把设置页拖死 */
+const LOG_SCAN_MAX_BYTES = 16 * 1024 * 1024;
 
-  const start = Math.max(0, st.size - maxBytes);
-  const buf = Buffer.alloc(st.size - start);
+interface LogPage {
+  lines: { time: string; level: string; msg: string }[];
+  hasMore: boolean;
+  truncated: boolean;
+}
+
+/**
+ * 日志分页：从文件末尾**按块倒读**，凑够 `offset + limit + 1` 条匹配行就停。
+ *
+ * 旧实现把尾部 2MB 全 split 一遍再 slice：翻页时既拿不到更早的行，也白扫一大片。
+ * 现在第 1 页通常只读几十 KB。级别过滤在倒读时逐行做，所以筛选后也不会被
+ * info 日志挤出窗口（2026-11-03 那个「日志页里啥也看不到」的坑天然消失）。
+ * 返回顺序是「最新 → 最旧」，第 1 页即最新日志。
+ */
+function readLogPage(
+  file: string,
+  opts: { offset: number; limit: number; level: 'warn' | 'error' | 'info' | '' },
+): LogPage {
+  let size: number;
+  try {
+    size = fs.statSync(file).size;
+  } catch {
+    return { lines: [], hasMore: false, truncated: false };
+  }
+  if (size === 0) return { lines: [], hasMore: false, truncated: false };
+
+  const collected: LogPage['lines'] = [];
+  const { level: want, offset, limit } = opts;
+  let skipped = 0;
+  let pos = size;
+  let scanned = 0;
+  /** 更靠后的块切下来的首段（可能只有半行），要拼到下一块的末尾 */
+  let pending = '';
+  let done = false;
   let fd: number | null = null;
+
+  const take = (raw: string): void => {
+    if (done || !raw.trim()) return;
+    const entry = parseLogLine(raw);
+    if (want && !levelMatch(entry.level, want)) return;
+    if (skipped < offset) {
+      skipped += 1;
+      return;
+    }
+    collected.push(entry);
+    // 多收一条只为判断「还有下一页」，不返回给客户端
+    if (collected.length > limit) done = true;
+  };
+
   try {
     fd = fs.openSync(file, 'r');
-    fs.readSync(fd, buf, 0, buf.length, start);
+    while (pos > 0 && !done && scanned < LOG_SCAN_MAX_BYTES) {
+      const len = Math.min(LOG_CHUNK, pos);
+      pos -= len;
+      scanned += len;
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, pos);
+      const parts = (buf.toString('utf8') + pending).split(/\r?\n/);
+      // 首段可能不完整（前面还有字节），留到下一轮拼接
+      pending = parts.shift() ?? '';
+      // 其余是完整行、按文件顺序旧→新；倒序遍历 = 最新在前
+      for (let i = parts.length - 1; i >= 0 && !done; i -= 1) take(parts[i]);
+    }
+    // 读到文件头时，最后剩下的首段就是第一行
+    if (!done && pos === 0 && pending.trim()) take(pending);
   } finally {
     if (fd !== null) fs.closeSync(fd);
   }
 
-  const all = buf
-    .toString('utf8')
-    .split(/\r?\n/)
-    .filter((line) => line.length > 0);
-  if (start > 0 && all.length > 0) all.shift();
-  const lines = all.slice(-Math.max(1, maxLines));
-  return { lines, truncated: start > 0 || all.length > lines.length };
+  return {
+    lines: collected.slice(0, limit),
+    hasMore: collected.length > limit,
+    truncated: pos > 0 && scanned >= LOG_SCAN_MAX_BYTES,
+  };
 }
 
 export function registerSystemSettings(app: FastifyInstance, k: KernelApi): void {
@@ -581,8 +628,16 @@ export function registerSystemSettings(app: FastifyInstance, k: KernelApi): void
       schema: {
         operationId: 'systemLogs',
         tags: TAG,
-        summary: '服务端日志尾部（logs/kernel.log，按时间正序返回最后 N 行）',
+        summary: '服务端日志分页（logs/kernel.log，时间倒序；第 1 页为最新）',
         querystring: Type.Object({
+          // 别写 default：ajv 会把缺省值填进 q.limit，导致下面的 lines 兼容别名永远失效
+          limit: Type.Optional(
+            Type.Integer({ minimum: 1, maximum: 200, description: '每页行数（缺省 50）' }),
+          ),
+          offset: Type.Optional(
+            Type.Integer({ minimum: 0, description: '从最新一条往回跳过的匹配行数（缺省 0）' }),
+          ),
+          /** 兼容旧调用方：等价于 limit */
           lines: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
           file: Type.Optional(Type.String({ maxLength: 64 })),
           level: Type.Optional(
@@ -604,18 +659,18 @@ export function registerSystemSettings(app: FastifyInstance, k: KernelApi): void
       },
     }),
     async (req) => {
-      const q = (req.query || {}) as { lines?: number; file?: string; level?: string };
+      const q = (req.query || {}) as {
+        lines?: number; limit?: number; offset?: number; file?: string; level?: string;
+      };
       // 只允许读 logs 目录下的 kernel.log 及轮转文件，避免任意路径读取
       const name = q.file && /^kernel\.log(\.\d+)?$/.test(q.file) ? q.file : 'kernel.log';
       const file = path.join(k.paths.dataDir, 'logs', name);
-      const maxLines = Math.min(Math.max(q.lines ?? 200, 1), 1000);
-      // 级别筛选必须在截断之前：请求日志一秒几十条，先取最后 200 行再筛的话，
-      // 错误几乎全被 info 挤出窗口 —— 表现就是「日志页里啥也看不到」（2026-11-03 反馈）。
+      // lines 是旧参数（「取最后 N 行」），现在作为 limit 的兼容别名
+      const limit = Math.min(Math.max(Math.trunc(Number(q.limit ?? q.lines ?? 50) || 50), 1), 200);
+      const offset = Math.min(Math.max(Math.trunc(Number(q.offset ?? 0) || 0), 0), 1_000_000);
       const want = q.level === 'warn' || q.level === 'error' || q.level === 'info' ? q.level : '';
-      const tail = tailLines(file, want ? Math.min(maxLines * 12, 4000) : maxLines);
-      const parsed = tail.lines.map(parseLogLine);
-      const filtered = want ? parsed.filter((l) => levelMatch(l.level, want)) : parsed;
-      const lines = filtered.slice(-maxLines);
+      // 倒读时逐行做级别过滤，天然保证「筛完还能凑够一页」
+      const page = readLogPage(file, { offset, limit, level: want });
 
       let size = 0;
       let updatedAt = '';
@@ -631,8 +686,11 @@ export function registerSystemSettings(app: FastifyInstance, k: KernelApi): void
         file: name,
         size,
         updatedAt,
-        lines,
-        truncated: tail.truncated || filtered.length > lines.length,
+        lines: page.lines,
+        truncated: page.truncated,
+        limit,
+        offset,
+        hasMore: page.hasMore,
       };
     },
   );

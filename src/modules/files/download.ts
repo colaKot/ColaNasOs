@@ -92,8 +92,45 @@ function disposition(name: string, inline: boolean): string {
   return `${inline ? 'inline' : 'attachment'}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }
 
+/** 下载过程的观测钩子（传输中心用；不传则行为与之前完全一致） */
+export interface DownloadHooks {
+  /** 真正开始回传时触发一次；`size` 是这个响应的字节总数（Range 时是区间长度） */
+  onStart?(info: { abs: string; size: number; ranged: boolean }): void;
+  /** 每块数据回调，用于累计已发字节 */
+  onBytes?(n: number): void;
+  /** 连接结束：`completed` 为真表示正常写完，false 表示客户端中途断开 */
+  onEnd?(info: { completed: boolean; sent: number }): void;
+}
+
+/** 把文件流包一层计数：只在传了 hooks 时才挂监听，避免给每条下载都加开销 */
+function countedStream(
+  abs: string,
+  opts: { start?: number; end?: number } | undefined,
+  hooks?: DownloadHooks,
+): NodeJS.ReadableStream {
+  const stream = opts ? createReadStream(abs, opts) : createReadStream(abs);
+  if (!hooks?.onBytes && !hooks?.onEnd) return stream;
+
+  let sent = 0;
+  stream.on('data', (chunk: string | Buffer) => {
+    const n = typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
+    sent += n;
+    hooks.onBytes?.(n);
+  });
+  stream.on('end', () => hooks.onEnd?.({ completed: true, sent }));
+  stream.on('error', () => hooks.onEnd?.({ completed: false, sent }));
+  // 客户端主动断开（暂停 / 关页面）不会触发 end，只会 close 或 abort
+  stream.on('close', () => hooks.onEnd?.({ completed: false, sent }));
+  return stream;
+}
+
 /** GET /api/v1/files/download：Range + ETag + If-None-Match / If-Range，流式输出 */
-export async function downloadHandler(req: FastifyRequest, reply: FastifyReply, q: DownloadQuery) {
+export async function downloadHandler(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  q: DownloadQuery,
+  hooks?: DownloadHooks,
+) {
   const root = filesRoot();
   // 绝对路径（盘符 / UNC）直通：同步的远端目录可能整个在 D 盘，
   // 下载走 /files/download —— 只在 extraRoots 里找会 403。
@@ -134,7 +171,8 @@ export async function downloadHandler(req: FastifyRequest, reply: FastifyReply, 
 
   if (!rangeHeader) {
     reply.header('Content-Length', String(st.size));
-    return reply.code(200).send(createReadStream(abs));
+    hooks?.onStart?.({ abs, size: st.size, ranged: false });
+    return reply.code(200).send(countedStream(abs, undefined, hooks));
   }
 
   const range = parseRange(rangeHeader, st.size);
@@ -143,7 +181,8 @@ export async function downloadHandler(req: FastifyRequest, reply: FastifyReply, 
   }
   if (range === null) {
     reply.header('Content-Length', String(st.size));
-    return reply.code(200).send(createReadStream(abs));
+    hooks?.onStart?.({ abs, size: st.size, ranged: false });
+    return reply.code(200).send(countedStream(abs, undefined, hooks));
   }
 
   reply
@@ -151,5 +190,6 @@ export async function downloadHandler(req: FastifyRequest, reply: FastifyReply, 
     .header('Content-Range', `bytes ${range.start}-${range.end}/${st.size}`)
     .header('Content-Length', String(range.end - range.start + 1));
 
-  return reply.send(createReadStream(abs, { start: range.start, end: range.end }));
+  hooks?.onStart?.({ abs, size: range.end - range.start + 1, ranged: true });
+  return reply.send(countedStream(abs, { start: range.start, end: range.end }, hooks));
 }

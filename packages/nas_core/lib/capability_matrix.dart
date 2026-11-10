@@ -18,9 +18,7 @@ enum Capability {
   photo,
   video,
   music,
-  book,
   terminal,
-  editor,
   system,
 }
 
@@ -64,7 +62,7 @@ class CapabilityMatrix {
     CapabilityEntry(
       id: 'files',
       nameKey: 'app.files',
-      appIds: <String>['files', 'netdisk', 'share'],
+      appIds: <String>['files'],
       levels: <CapabilityEndpoint, CapabilityLevel>{
         CapabilityEndpoint.desktop: CapabilityLevel.full,
         CapabilityEndpoint.mobile: CapabilityLevel.full,
@@ -90,7 +88,7 @@ class CapabilityMatrix {
     CapabilityEntry(
       id: 'video',
       nameKey: 'app.video',
-      appIds: <String>['video', 'mediaTool'],
+      appIds: <String>['video'],
       levels: <CapabilityEndpoint, CapabilityLevel>{
         CapabilityEndpoint.desktop: CapabilityLevel.full,
         CapabilityEndpoint.mobile: CapabilityLevel.full,
@@ -114,19 +112,6 @@ class CapabilityMatrix {
       },
     ),
     CapabilityEntry(
-      id: 'book',
-      nameKey: 'app.book',
-      appIds: <String>['book'],
-      levels: <CapabilityEndpoint, CapabilityLevel>{
-        CapabilityEndpoint.desktop: CapabilityLevel.full,
-        CapabilityEndpoint.mobile: CapabilityLevel.full,
-        CapabilityEndpoint.web: CapabilityLevel.full,
-        CapabilityEndpoint.tvAndroid: CapabilityLevel.none,
-        CapabilityEndpoint.tvApple: CapabilityLevel.none,
-        CapabilityEndpoint.harmony: CapabilityLevel.full,
-      },
-    ),
-    CapabilityEntry(
       id: 'terminal',
       nameKey: 'app.terminal',
       appIds: <String>['terminal'],
@@ -137,19 +122,6 @@ class CapabilityMatrix {
         CapabilityEndpoint.tvAndroid: CapabilityLevel.none,
         CapabilityEndpoint.tvApple: CapabilityLevel.none,
         CapabilityEndpoint.harmony: CapabilityLevel.none,
-      },
-    ),
-    CapabilityEntry(
-      id: 'editor',
-      nameKey: 'app.notes',
-      appIds: <String>['notes'],
-      levels: <CapabilityEndpoint, CapabilityLevel>{
-        CapabilityEndpoint.desktop: CapabilityLevel.full,
-        CapabilityEndpoint.mobile: CapabilityLevel.limited,
-        CapabilityEndpoint.web: CapabilityLevel.full,
-        CapabilityEndpoint.tvAndroid: CapabilityLevel.none,
-        CapabilityEndpoint.tvApple: CapabilityLevel.none,
-        CapabilityEndpoint.harmony: CapabilityLevel.limited,
       },
     ),
     CapabilityEntry(

@@ -2,6 +2,8 @@ import { Type } from '@sinclair/typebox';
 import { secured } from '../../../kernel/route';
 import type { KernelApi } from '../../../kernel/types';
 import { fetchDoubanChart, fetchDoubanRating, toCatalogItem } from './douban';
+import { doubanTest } from './rating';
+import { normalizeConfig } from './tmdb';
 import type { FastifyRequest } from 'fastify';
 
 /**
@@ -104,22 +106,40 @@ export async function registerDoubanRoutes(app: any, k: KernelApi): Promise<void
       },
     );
 
-    // 连通性自检：真打一次豆瓣榜单；Cookie 失效也会返回 403/空列表
+    // 连通性自检：网站 / Cookie 登录态 / TMDB 反查命中率，三段分开给结论
     app.post(
       '/api/v1/discover/douban/test',
       secured('discover:read', {
         schema: {
           operationId: 'discoverDoubanTest',
           tags: TAG,
-          summary: '测试豆瓣连通性（用当前 Cookie）',
+          summary: '测试豆瓣连通性（网站 / Cookie / TMDB 反查）',
           body: Type.Object({
             cookie: Type.Optional(Type.String({ maxLength: 4096 })),
           }),
           response: {
             200: Type.Object({
-              ok: Type.Boolean(),
-              message: Type.String(),
-              latencyMs: Type.Integer(),
+              site: Type.Object({
+                ok: Type.Boolean(),
+                elapsed_ms: Type.Integer(),
+                code: Type.String(),
+              }),
+              cookie: Type.Object({
+                provided: Type.Boolean(),
+                valid: Type.Boolean(),
+                user: Type.String(),
+                elapsed_ms: Type.Integer(),
+                code: Type.String(),
+              }),
+              tmdb_match: Type.Object({
+                total: Type.Integer(),
+                matched: Type.Integer(),
+                match_rate: Type.Integer(),
+              }),
+              sample: Type.Union([
+                Type.Object({ title: Type.String(), rating: Type.Union([Type.Number(), Type.Null()]) }),
+                Type.Null(),
+              ]),
             }),
           },
         },
@@ -128,23 +148,8 @@ export async function registerDoubanRoutes(app: any, k: KernelApi): Promise<void
         const body = (req.body || {}) as { cookie?: string };
         const cookie = String(body.cookie ?? '').trim()
           || String(k.config.get('discover.doubanCookie') || '').trim();
-        const started = Date.now();
-        try {
-          const items = await fetchDoubanChart('热门', cookie ? { cookie } : {});
-          return {
-            ok: items.length > 0,
-            message: items.length > 0
-              ? `连接成功：取到 ${items.length} 条`
-              : '连接失败：能访问但没取到数据（Cookie 可能失效）',
-            latencyMs: Date.now() - started,
-          };
-        } catch (err) {
-          return {
-            ok: false,
-            message: `连接失败：${String((err as Error)?.message || err)}`,
-            latencyMs: Date.now() - started,
-          };
-        }
+        const cfg = normalizeConfig(k.config.get('discover.tmdb'));
+        return doubanTest(cfg, cookie);
       },
     );
 

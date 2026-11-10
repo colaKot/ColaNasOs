@@ -293,7 +293,7 @@ export const VIDEO_MIGRATIONS: Migration[] = [
       // 媒体信息层（nfo_* 一组列）。
       //
       // 为什么一次补全而不是分批：SQLite 的 add column 极便宜，分批反而要写三次迁移、
-      // 三次改契约、三次重新生成 Dart 模型。列名与参考实现保持同义，
+      // 三次改契约、三次重新生成 Dart 模型。列名与既有实现保持同义，
       // 便于将来对抄/迁移数据。
       id: '080_video_nfo',
       async up(db) {
@@ -371,7 +371,7 @@ export const VIDEO_MIGRATIONS: Migration[] = [
     },
     {
       // 库级设置：首页是否出现（show_in_home）、左栏排序（sort_order）、
-      // 响度归一（audio_normalize，参考实现同名开关）
+      // 响度归一（audio_normalize，既有实现同名开关）
       id: '082_video_library_settings',
       async up(db) {
         const cols = (
@@ -700,6 +700,67 @@ export const VIDEO_MIGRATIONS: Migration[] = [
             .raw('alter table video_items add column hdr_meta_v integer not null default 0')
             .execute(db);
         }
+      },
+    },
+    {
+      // 与 `163_music_library_owner` 同一件事：三张 *libraries 表里只有
+      // `photo_libraries` 有 `owner_id`，视频/音乐库缺列。
+      //
+      // ⚠️ 同样只补列、不回填、不加 NOT NULL —— NULL 表示「所有人可见」，
+      // 保持影视库在家庭内共享的现状。要私有化时填值并加
+      // `and (owner_id is null or owner_id = ?)` 即可。
+      id: '164_video_library_owner',
+      async up(db) {
+        const cols = (
+          (await sql`pragma table_info(video_libraries)`.execute(db)).rows as Array<{ name: string }>
+        ).map((r) => r.name);
+        if (!cols.includes('owner_id')) {
+          await sql`alter table video_libraries add column owner_id text`.execute(db);
+        }
+        await sql`
+          create index if not exists idx_video_libraries_owner
+            on video_libraries (owner_id)
+        `.execute(db);
+      },
+    },
+    {
+      // FTS 增量同步触发器收紧触发范围。
+      //
+      // 原来的 `after update on video_items` 是**无条件**的：只要这行被 UPDATE，
+      // 就把 7 个被索引字段的 trigram 条目删掉重建一遍。可这张表上大量更新跟搜索无关
+      // （`sub_fetch_state`/`sub_fetch_at`/`jp_hot_votes`/`match_nfo`/`hdr_meta_v`…），
+      // 于是「改一个整数」变成「重算 1.3KB 文本的 trigram」。
+      //
+      // 真库实测（200 行 × 5 轮取平均）：
+      //   · 改非 FTS 字段（原触发器）      1,169 µs/条
+      //   · 同上，删掉触发器                 36 µs/条   ← 触发器占了 97%
+      //   · 同上，触发器加 `update of`       35 µs/条   ← 省回 97%
+      //   · 改 title（真需要重建）          762 µs/条   ← 这笔开销是应该付的
+      // 折算到 2,162 部片子扫一遍字幕：2,338ms → 70ms。
+      //
+      // `after update of <列>` 只在 SET 子句**提到**这些列时才触发；UPDATE 不可能
+      // 改动没提到的列，所以不会漏同步。插入 / 删除两个触发器不动（必须每次都同步）。
+      id: '167_video_fts_update_scope',
+      async up(db) {
+        await sql`drop trigger if exists ${sql.table('video_items_fts_au')}`.execute(db);
+        await sql`
+          create trigger video_items_fts_au
+          after update of
+            title, rel_path, nfo_name, nfo_original_name, code, nfo_actors, nfo_directors
+          on video_items begin
+            insert into video_items_fts
+              (video_items_fts, rowid, title, rel_path, nfo_name, nfo_original_name,
+               code, nfo_actors, nfo_directors)
+            values
+              ('delete', old.rowid, old.title, old.rel_path, old.nfo_name, old.nfo_original_name,
+               old.code, old.nfo_actors, old.nfo_directors);
+            insert into video_items_fts
+              (rowid, title, rel_path, nfo_name, nfo_original_name, code, nfo_actors, nfo_directors)
+            values
+              (new.rowid, new.title, new.rel_path, new.nfo_name, new.nfo_original_name,
+               new.code, new.nfo_actors, new.nfo_directors);
+          end
+        `.execute(db);
       },
     },
 ];

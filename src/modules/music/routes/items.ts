@@ -8,8 +8,8 @@ import {
     decodeCursor,
     encodeSortCursor,
     decodeSortCursor,
-    likePattern,
 } from '../util';
+import { musicSearchWhere } from '../search';
 import type { FastifyInstance } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { MusicHelpers } from '../helpers';
@@ -85,8 +85,9 @@ export async function registerMusicItems(app: FastifyInstance, k: KernelApi, h: 
           where = sql`${where} and year = ${Number(q.year)}`;
         }
         if (q.q && q.q.trim()) {
-          const pat = likePattern(q.q.trim());
-          where = sql`${where} and (title like ${pat} escape '\\' or artist like ${pat} escape '\\' or album like ${pat} escape '\\')`;
+          // 标题 / 艺人 / 专辑 / 文件名：简繁互通 + 跳字模糊
+          const sw = musicSearchWhere(['title', 'artist', 'album', 'rel_path'], q.q.trim());
+          if (sw) where = sql`${where} and ${sw}`;
         }
         if (cur) {
           const key = sort.numeric ? Number(cur.key) : String(cur.key);
@@ -147,8 +148,8 @@ export async function registerMusicItems(app: FastifyInstance, k: KernelApi, h: 
         let where = sql`album is not null and album != ''`;
         if (q.libraryId) where = sql`${where} and library_id = ${q.libraryId}`;
         if (q.q && q.q.trim()) {
-          const pat = likePattern(q.q.trim());
-          where = sql`${where} and album like ${pat} escape '\\'`;
+          const sw = musicSearchWhere(['album'], q.q.trim());
+          if (sw) where = sql`${where} and ${sw}`;
         }
         const order =
           q.sort === 'tracks'
@@ -210,8 +211,8 @@ export async function registerMusicItems(app: FastifyInstance, k: KernelApi, h: 
         let where = sql`artist is not null and artist != ''`;
         if (q.libraryId) where = sql`${where} and library_id = ${q.libraryId}`;
         if (q.q && q.q.trim()) {
-          const pat = likePattern(q.q.trim());
-          where = sql`${where} and artist like ${pat} escape '\\'`;
+          const sw = musicSearchWhere(['artist'], q.q.trim());
+          if (sw) where = sql`${where} and ${sw}`;
         }
         const order =
           q.sort === 'tracks' ? sql`count(*) desc, artist asc` : sql`artist asc`;

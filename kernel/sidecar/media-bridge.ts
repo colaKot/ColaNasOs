@@ -85,10 +85,15 @@ export class MediaBridge {
     return Boolean(this.scriptPath() && this.ffmpegPath());
   }
 
-  /** 生成缩略图：`src` 原文件 → `dst` 目标 JPEG */
-  async thumb(src: string, dst: string, size = 256): Promise<ThumbResult> {
+  /** 生成缩略图：`src` 原文件 → `dst` 目标 JPEG；视频可用 `atSec` 指定抽帧位置 */
+  async thumb(src: string, dst: string, size = 256, atSec = 0): Promise<ThumbResult> {
     const sup = await this.ensure();
-    const res = await sup.request<{ dst: string; ms: number }>('thumb', { src, dst, size });
+    const res = await sup.request<{ dst: string; ms: number }>('thumb', {
+      src,
+      dst,
+      size,
+      ...(atSec > 0 ? { at: atSec } : {}),
+    });
     return { ms: res.ms };
   }
 

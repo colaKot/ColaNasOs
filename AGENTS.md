@@ -8,7 +8,7 @@
 dev.bat
 ```
 
-- 开两个窗口：`tool/dev/watch-kernel.js`（`tsc --watch` + 自动重启内核，7788）+ `tool/dev/flutter-dev.js`（托管 `flutter run -d chrome --web-port 5173`，Dart 热重载）。
+- 开两个窗口：`tool/dev/watch-kernel.js`（`tsc --watch` + 自动重启内核，**7888**）+ `tool/dev/flutter-dev.js`（托管 `flutter run -d chrome --web-port 5173`，Dart 热重载）。
 - 改服务端 1s 内自动重启，改 Flutter 保存即热重载，不需要反复 release 构建。
 - `dev.bat` 会显式设置 `COLANAS_DEV_TOKEN=1` 与开发期 CORS；测试联调就用它。
 
@@ -64,7 +64,7 @@ curl -s -X POST "http://127.0.0.1:5174/hot-reload?token=colanas-dev-ctl"    # �
 ## 3. 端口与同源
 
 - 内核 **7788**（`PORT` 可改），`GET /health` 探活；`http://127.0.0.1:7788/` 由内核托管 `apps/colanas_os/build/web`。
-- 开发期页面在 **5173**，客户端默认服务地址取「页面同源」；`dev.bat` 用 `--dart-define=COLANAS_API_BASE=http://127.0.0.1:7788` 把 API 固定到内核。
+- 开发期页面在 **5173**，客户端默认服务地址取「页面同源」；`dev.bat` 用 `--dart-define=COLANAS_API_BASE=http://127.0.0.1:7888` 把 API 固定到开发内核（正式服务端仍是 7788，两套可同时开）。
 
 ## 4. 改完必须跑的验证
 

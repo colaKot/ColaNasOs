@@ -2,6 +2,12 @@ import { sql } from 'kysely';
 import { secured } from '../../../../kernel/route';
 import { Err } from '../../../../kernel/errors';
 import { TAG, PhotoItemRow, AlbumRow, newId, toItem, encodeCursor, decodeCursor, albumFrom } from '../util';
+import {
+  type AlbumRule,
+  backfillAlbumByRules,
+  parseAlbumRules,
+  serializeAlbumRules,
+} from '../album-rules';
 import type { FastifyInstance } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { PhotoHelpers } from '../helpers';
@@ -22,30 +28,66 @@ export async function registerPhotoAlbums(app: FastifyInstance, k: KernelApi, h:
         },
       }),
       async (req, reply) => {
-        const body = (req.body || {}) as { name?: string; itemIds?: string[] };
+        const body = (req.body || {}) as {
+          name?: string;
+          itemIds?: string[];
+          coverItemId?: string | null;
+          rules?: AlbumRule[];
+        };
         const name = (body.name || '').trim();
         if (!name) return reply.code(400).send({ error: Err.badRequest, message: 'name required' });
 
         const owner = req.user?.sub || '';
         const now = Math.floor(Date.now() / 1000);
         const id = newId();
+        const rules = parseAlbumRules(JSON.stringify(body.rules ?? []));
+        const itemIds = [...new Set(body.itemIds || [])].slice(0, 500);
+        // 封面必须是相册成员：手选的那张如果在待加入列表里，直接用；
+        // 规则相册没有显式成员清单时不设，交给列表查询回落到最早的成员。
+        const coverItemId =
+          body.coverItemId && itemIds.includes(String(body.coverItemId))
+            ? String(body.coverItemId)
+            : null;
 
         await k.db.transaction().execute(async (trx: any) => {
           await sql`
-            insert into photo_albums (id, name, owner_id, created_at, updated_at)
-            values (${id}, ${name}, ${owner}, ${now}, ${now})
+            insert into photo_albums (id, name, owner_id, created_at, updated_at, cover_item_id, rules_json)
+            values (${id}, ${name}, ${owner}, ${now}, ${now}, ${coverItemId}, ${serializeAlbumRules(rules)})
           `.execute(trx);
 
-          for (const itemId of body.itemIds || []) {
+          // 分块 multi-VALUES，每块 200 行 × 3 参数 = 600，低于旧版 SQLite 的 999 参数上限。
+          // 原实现逐张 insert：一次「新建相册并加入 500 张」要 500 次语句往返。
+          for (let i = 0; i < itemIds.length; i += 200) {
+            const values = itemIds
+              .slice(i, i + 200)
+              .map((itemId) => sql`(${id}, ${itemId}, ${now})`);
             await sql`
               insert or ignore into photo_album_items (album_id, item_id, added_at)
-              values (${id}, ${itemId}, ${now})
+              values ${sql.join(values, sql`, `)}
             `.execute(trx);
           }
         });
 
+        // 规则相册：建完立刻把现有的命中照片补进去，不然用户建完看到的是空相册
+        if (rules.length > 0) {
+          await backfillAlbumByRules(k.db as any, id, rules);
+        }
+
         const album = await h.loadAlbum(id, owner);
-        return album ? albumFrom(album) : { id, name, items: 0, coverPath: null, createdAt: now };
+        return album
+          ? albumFrom(album)
+          : {
+              id,
+              name,
+              items: 0,
+              coverPath: null,
+              createdAt: now,
+              description: null,
+              coverItemId,
+              sortOrder: 0,
+              rules,
+              ruleCount: rules.length,
+            };
       },
     );
 
@@ -63,7 +105,7 @@ export async function registerPhotoAlbums(app: FastifyInstance, k: KernelApi, h:
         const owner = req.user?.sub || '';
         const res = await sql<AlbumRow>`
           select a.id, a.name, a.owner_id, a.created_at,
-            a.description, a.cover_item_id, a.sort_order,
+            a.description, a.cover_item_id, a.sort_order, a.rules_json,
             (select count(*) from photo_album_items m where m.album_id = a.id) as items,
             coalesce(
               (select i.rel_path from photo_album_items m
@@ -102,6 +144,7 @@ export async function registerPhotoAlbums(app: FastifyInstance, k: KernelApi, h:
           description?: string | null;
           coverItemId?: string | null;
           sortOrder?: number;
+          rules?: AlbumRule[];
         };
         const owner = req.user?.sub || '';
         const album = body.albumId ? await h.loadAlbum(body.albumId, owner) : null;
@@ -147,10 +190,56 @@ export async function registerPhotoAlbums(app: FastifyInstance, k: KernelApi, h:
             k.db,
           );
         }
+        // 规则变更：整组替换（客户端永远提交完整规则集），然后立刻回填。
+        // 只补不删是刻意的 —— 规则收紧后，之前自动收进来的照片留在相册里，
+        // 除非用户自己「移出」。这样调整规则不会误伤已经整理好的东西。
+        let rulesChanged = false;
+        let nextRules = parseAlbumRules(album.rules_json ?? '[]');
+        if (body.rules !== undefined) {
+          nextRules = parseAlbumRules(JSON.stringify(body.rules));
+          const prevJson = serializeAlbumRules(parseAlbumRules(album.rules_json ?? '[]'));
+          const nextJson = serializeAlbumRules(nextRules);
+          if (prevJson !== nextJson) {
+            await sql`
+              update photo_albums set rules_json = ${nextJson} where id = ${album.id}
+            `.execute(k.db);
+            rulesChanged = true;
+          }
+        }
         await sql`update photo_albums set updated_at = ${now} where id = ${album.id}`.execute(k.db);
+
+        if (rulesChanged && nextRules.length > 0) {
+          await backfillAlbumByRules(k.db as any, album.id, nextRules);
+        }
 
         const updated = await h.loadAlbum(album.id, owner);
         return updated ? albumFrom(updated) : albumFrom(album);
+      },
+    );
+
+    // 规则没改、但想重算一次（比如刚跑完一批 AI 打标，或换了集群阈值）。
+    // 幂等，只增不减。
+    app.post(
+      '/api/v1/photo/albums/reapply',
+      secured('photo:write', {
+        schema: {
+          operationId: 'photoAlbumReapply',
+          tags: TAG,
+          summary: '按规则重算相册成员（只增不减，返回新增张数）',
+          body: h.ref('PhotoAlbumDeleteBody'),
+          response: { 200: h.ref('PhotoAlbum'), 404: h.ref('PhotoErrorResponse') },
+        },
+      }),
+      async (req, reply) => {
+        const body = (req.body || {}) as { albumId?: string };
+        const owner = req.user?.sub || '';
+        const album = body.albumId ? await h.loadAlbum(body.albumId, owner) : null;
+        if (!album) return reply.code(404).send({ error: Err.notFound, message: 'album not found' });
+
+        const rules = parseAlbumRules(album.rules_json ?? '[]');
+        if (rules.length > 0) await backfillAlbumByRules(k.db as any, album.id, rules);
+        const fresh = await h.loadAlbum(album.id, owner);
+        return fresh ? albumFrom(fresh) : albumFrom(album);
       },
     );
 
@@ -221,12 +310,16 @@ export async function registerPhotoAlbums(app: FastifyInstance, k: KernelApi, h:
         if (!album) return reply.code(404).send({ error: Err.notFound, message: 'album not found' });
 
         const now = Math.floor(Date.now() / 1000);
-        const ids = (body.itemIds || []).slice(0, 500);
+        const ids = [...new Set((body.itemIds || []).slice(0, 500))];
         await k.db.transaction().execute(async (trx: any) => {
-          for (const itemId of ids) {
+          // 分块 multi-VALUES（同新建相册；原来是逐张 insert）
+          for (let i = 0; i < ids.length; i += 200) {
+            const values = ids
+              .slice(i, i + 200)
+              .map((itemId) => sql`(${album.id}, ${itemId}, ${now})`);
             await sql`
               insert or ignore into photo_album_items (album_id, item_id, added_at)
-              values (${album.id}, ${itemId}, ${now})
+              values ${sql.join(values, sql`, `)}
             `.execute(trx);
           }
           await sql`update photo_albums set updated_at = ${now} where id = ${album.id}`.execute(trx);
@@ -254,12 +347,23 @@ export async function registerPhotoAlbums(app: FastifyInstance, k: KernelApi, h:
         if (!album) return reply.code(404).send({ error: Err.notFound, message: 'album not found' });
 
         const now = Math.floor(Date.now() / 1000);
-        for (const itemId of (body.itemIds || []).slice(0, 500)) {
-          await sql`
-            delete from photo_album_items where album_id = ${album.id} and item_id = ${itemId}
-          `.execute(k.db);
-        }
-        await sql`update photo_albums set updated_at = ${now} where id = ${album.id}`.execute(k.db);
+        // 一条 `in (...)` 删完并包进事务。原实现逐张 delete，且没有事务 ——
+        // 500 张就是 500 次独立隐式提交，WAL 落盘 500 次。
+        const removeIds = [...new Set((body.itemIds || []).slice(0, 500))];
+        await k.db.transaction().execute(async (trx: any) => {
+          for (let i = 0; i < removeIds.length; i += 200) {
+            const slice = removeIds.slice(i, i + 200);
+            await sql`
+              delete from photo_album_items
+               where album_id = ${album.id}
+                 and item_id in (${sql.join(
+                   slice.map((itemId) => sql`${itemId}`),
+                   sql`, `,
+                 )})
+            `.execute(trx);
+          }
+          await sql`update photo_albums set updated_at = ${now} where id = ${album.id}`.execute(trx);
+        });
 
         return { ok: true };
       },
