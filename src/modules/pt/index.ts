@@ -31,7 +31,7 @@ import { filesRoot, resolveAnyPath } from '../files/fs-root';
 import { normalizeConfig, tmdbGet } from '../discover/tmdb';
 import { resolveSecret, signToken } from '../../../kernel/auth';
 import { registerTransmissionWebUi, transmissionWebDir } from './webui';
-import { ensureDaemon, stopDaemonGracefully } from './daemon';
+import { ensureDaemon } from './daemon';
 import {
   DEFAULT_DOWNLOAD,
   DOWNLOAD_KEY,
@@ -3067,9 +3067,10 @@ export const pt: ServerModule = {
     app.addHook('onClose', async () => {
       clearInterval(timer);
       clearTimeout(bootTimer);
-      // 正常关闭时先向 tracker 发 stopped 再杀 daemon，避免旧 peer 残留
-      // 导致下次启动被判「同一资源重复下载」。
-      await stopDaemonGracefully();
+      // 内核关闭**故意不动 daemon**：它是 detached 常驻进程，内核重启后
+      // ensureDaemon 会复用同一个 session，做种不中断。
+      // 以前这里 stop → 再拉起，每次重启都是一次新的 tracker 请求，M-Team 会
+      // 累计成「多个做种位置」并拒绝 announce（2026-11-10 定位）。
     });
   },
 };
