@@ -32,6 +32,7 @@ import { VIDEO_MIGRATIONS } from './migrations';
 import { makeVideoHelpers } from './helpers';
 import { registerVideoLibrary } from './routes/library';
 import { registerVideoItems } from './routes/items';
+import { registerVideoFacets } from './routes/facets';
 import { registerVideoPlayback } from './routes/playback';
 import { registerVideoSubtitles } from './routes/subtitles';
 import { registerVideoCollections } from './routes/collections';
@@ -484,12 +485,22 @@ export const video: ServerModule = {
       },
       keyOf: (lib) => `${lib.id}|${lib.watchRoot ?? ''}`,
       idOf: (lib) => lib.id,
-      scan: (lib, subDir) =>
-        scanVideoLibrary(k.db, lib, undefined, subDir, {
+      scan: async (lib, subDir) => {
+        const result = await scanVideoLibrary(k.db, lib, undefined, subDir, {
           sourceRoot: lib.watchRoot,
           // 整库监控触发的扫描也清理已删文件；子目录扫描不会 prune（数据不完整）
           prune: true,
-        }),
+        });
+        // 下载完成后文件监控直接扫、不经过 video.scan 任务，挂在任务里的
+        // 自动刮削钩子碰不到。判据与任务版一致：真有新增 + 库显式开了「入库即刮」。
+        // enqueueIfIdle 自带去重，多子目录连续触发也只排一次。
+        if (result.added > 0 && Number(lib.auto_scrape) === 1) {
+          void k.tasks
+            .enqueueIfIdle('video.scrape.auto', { libraryId: lib.id }, { maxAttempts: 1 })
+            .catch(() => null);
+        }
+        return result;
+      },
       // 文件监控：视频 / 图片会入库；`.nfo` 不入库但**会触发增量扫描**，
       // 否则用户事后补一份 nfo，界面永远不更新（这条是真踩过的）
       accept: (name) => isVideoFile(name) || isImageFile(name) || /\.nfo$/i.test(name),
@@ -499,6 +510,7 @@ export const video: ServerModule = {
     const h = makeVideoHelpers(k, libWatch);
     await registerVideoLibrary(app, k, h);
     await registerVideoItems(app, k, h);
+    await registerVideoFacets(app, k, h);
     await registerVideoPlayback(app, k, h);
     await registerVideoSubtitles(app, k, h);
     await registerVideoCollections(app, k, h);
