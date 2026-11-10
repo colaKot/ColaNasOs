@@ -1,6 +1,43 @@
 # ColaNasOs
 
-> 个人 NAS 操作系统。独立实现，代码、界面与数据模型均为自有。
+> 个人 NAS 操作系统。在一台 Windows 主机上，把照片、影视、音乐、文件、下载、同步与本地 AI 收进同一个自托管服务；桌面 / Web / 平板 / 手机 / TV 共用一套 Flutter 界面。独立实现，代码、界面与数据模型均为自有。
+
+## 项目亮点
+
+- **单机自托管，数据不出家门**：Fastify + SQLite 内核直接读写本机目录，不依赖云账号或额外数据库服务；一个 Electron 外壳 + `utilityProcess` 内核即可跑起来（Windows）。
+- **契约驱动，改一处生成全链路**：`contracts/openapi.json` / `apps.json` / `i18n.json` 是唯一真源，`build → gen → gen:client → api:doc → sdk → gen:i18n → migrate:verify` 一条链生成 Dart `ApiClient` 与 DTO、TypeScript/Python SDK、API 文档和多语言骨架；另有破坏性变更检测、生成物一致性、迁移清单与菜单双向对账兜底。
+- **六端一套代码**：`desktop / tablet / mobile / tv / web / appleTv` 由同一份 Flutter 代码与同一份导航契约驱动，二级侧栏、页面栈、权限域在各端一致；Apple TV 另有原生壳。
+- **大规模媒体库也不卡**：日志倒读真分页、图片墙滚到底再加载、记忆列表每页 10 条、人脸结果渐进返回，数万到数十万张照片不会一次全量拉取。
+- **本地 AI 全离线**：人脸检测与对齐、人脸聚类与人物关系、365 类场景、CLIP 语义检索、OCR、活动识别、短文本翻译、TTS 朗读，全部由 ONNX Runtime / llama.cpp 在本机推理，图片不上传。
+- **媒体链路闭环**：TMDB / 豆瓣评分与刮削、NFO 读写与「用户手改优先」冲突合并、剧集识别、字幕、海报缓存、HLS 分片续转；下载完成经文件监控自动入库并触发「入库即刮」。
+- **内置下载器与优雅退出**：随包内置 transmission-daemon 与同源 Web UI 代理，也支持外部 RPC；退出应用前先 `torrent-stop` 发 `stopped` 公告再停进程，内核热重启不打断做种，也不会被 tracker 当成新的做种位置。
+- **鉴权与隔离**：JWT 密钥落盘持久化（重启不踢客户端）、自动登录与多端口服务发现、子账号权限域、路径越界拦截、分片上传与 Range 下载。
+- **开发体验**：`dev.bat` 一键起开发内核（7888，改服务端秒级自动重启）+ Flutter 5173 热重载；正式服务端固定 7788，两套互不干扰；验收按改动范围选步，数十个定向 smoke 覆盖各模块。
+- **可验证的交付**：错误码登记、i18n 缺键检查、权限域清单、迁移顺序对账、行为用例覆盖矩阵，全部纳入本地门禁。
+
+## 功能模块
+
+| 模块 | 主要能力 |
+| --- | --- |
+| **相册** | 时间轴 / 文件夹 / 收藏 / 足迹地图；那年今日、记忆、每日一帧、人生章节、票根、年度报告；人脸聚类与人物关系、以图搜图与语义检索、智能相册规则、相似与重复清理、GPS、动态照片；备份去重（墓碑表）、回收站、本地与 SMB 多来源 |
+| **影视** | 多影视库与多来源、NFO / TMDB 刮削与海报、剧集与季集、演员作品与日系榜单、查重、智能合集、观看进度、字幕、HLS 续转播放；下载完成自动入库并刮削 |
+| **音乐** | 曲库 / 专辑 / 歌手 / 歌单 / 收藏 / 播放历史、播放队列与全屏播放器、LRC 与在线歌词刮削、Last.fm Scrobble、简繁与跳字搜索、目录源与缓存设置 |
+| **发现** | 影视榜单与评分（TMDB / 豆瓣）、PT 站点搜索与择种、RSS 订阅与自动下载规则、订阅台账与任务面板 |
+| **文件** | 网格 / 列表视图、统一目录选择器（可返回上一层）、分片上传、Range / ETag 下载、回收站、文件操作日志 |
+| **传输 / 下载器** | 多端设备传输、内置 transmission 下载器与完整 Web UI、种子与规则管理 |
+| **同步** | 多端目录同步计划、冲突策略、定时任务 |
+| **AI 播客 / 博客** | AI 新闻聚合、文稿生成、TTS 朗读与播放队列 |
+| **监控 / 终端 / 账号 / 设置** | 系统状态与任务队列、日志真分页、Web 终端、子账号与权限域、2FA、全局与模块设置、多语言 |
+
+服务端按域拆分为 `auth / photo / video / music / discover / rss / pt / files / transfer / sync / blog / system / media / videoPlayer / integrations`，每个域自带迁移、schema 与路由；文件监控（含 `.nfo` 变更）按库订阅，新增文件增量入库，避免整库重扫。
+
+## 架构与技术栈
+
+Electron 44.9.3（外壳）+ `utilityProcess` 内核（TypeScript / Fastify / Kysely / SQLite）+ Sidecar（AI / 媒体 / 索引 / 同步）+ Flutter 客户端（6 端）+ AppleTV 原生壳。
+
+- **内核**：模块注册器、迁移执行器、JWT 鉴权与权限域、任务队列（去重 / 重试 / 进度上报）、事件流、契约导出、静态 Web 托管。
+- **客户端**：`packages/nas_core`（API / 模型 / i18n）+ `packages/nas_ui`（主题 / 组件）+ `apps/colanas_os`（各功能模块），导航来自 `contracts/apps.json#nav`。
+- **Sidecar**：ONNX 推理、FFmpeg 抽帧与转码、索引与同步进程，由内核统一管理启动与心跳。
 
 ## 文档
 
@@ -19,10 +56,6 @@
 | 08  | **施工手册**                           |
 | 09  | **任务清单**                           |
 | 10  | **完成定义 DoD**                       |
-
-## 技术栈
-
-Electron 44.9.3（外壳）+ `utilityProcess` 内核（TypeScript / Fastify / Kysely / SQLite）+ Sidecar（AI / 媒体 / 索引 / 同步）+ Flutter 客户端（6 端）+ AppleTV 原生壳。
 
 ## 快速开始
 
@@ -101,6 +134,6 @@ GPL-3.0。第三方组件见 `docs/06-产品与运维.md` 的「第三方上游�
 
 ## 状态
 
-SP0 骨架 **12/12 完成**：内核（注册器 / DB / 迁移 / 认证 / 队列 / 契约导出）+ `files` 列表 / 分片上传 / Range 下载 + Electron 外壳（单实例 / 托盘 / 内核守护）。冷启动 → `/health` 约 1.2 s。
+主干功能已成型：14 个应用（13 个已开放、1 个规划中）、6 端界面、15 个服务端域，契约生成链与定向验收门禁保持全绿。当前迭代重点与待办见 `docs/09-任务清单.md`、`docs/10-DoD.md`。
 
-SP1 完成（4/4）：`contracts/` 三份真源（OpenAPI / apps / i18n）→ Dart `ApiClient`（10 operations）、`app_registry.dart`（12 App × 6 端）、`keys.dart` + 13 语言骨架（46 键）；`npm run verify` 15 项门禁 13s 全绿，`dart analyze` No issues found（Flutter 3.47.8 / Dart 3.13.7）。
+冷启动 → `/health` 约 1.2 s；`flutter analyze lib` 0 error，服务端 `tsc` / ESLint / 生成物一致性 / 迁移清单 / i18n / 文件监控 / 影视等定向验收通过。
