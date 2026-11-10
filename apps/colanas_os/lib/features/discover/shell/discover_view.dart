@@ -1031,10 +1031,28 @@ class _ArchiveTargetRow extends StatelessWidget {
   }
 }
 
-class _PtTab extends StatelessWidget {
+class _PtTab extends StatefulWidget {
   const _PtTab(this.c);
 
   final DiscoverController c;
+
+  @override
+  State<_PtTab> createState() => _PtTabState();
+}
+
+class _PtTabState extends State<_PtTab> {
+  DiscoverController get c => widget.c;
+
+  @override
+  void initState() {
+    super.initState();
+    // 侧栏渲染不经过 `DiscoverController.setTab()`，这里自己把本页要的数据拉起来，
+    // 否则站点 / 订阅 / 归档目录下拉全是空的。
+    unawaited(c.loadSites());
+    unawaited(c.loadSubscriptions());
+    unawaited(c.loadFilter());
+    unawaited(c.loadVideoSources());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1654,10 +1672,26 @@ class _SetTokenDialog extends StatelessWidget {
 }
 
 // ==================== RSS ====================
-class _RssTab extends StatelessWidget {
+class _RssTab extends StatefulWidget {
   const _RssTab(this.c);
 
   final DiscoverController c;
+
+  @override
+  State<_RssTab> createState() => _RssTabState();
+}
+
+class _RssTabState extends State<_RssTab> {
+  DiscoverController get c => widget.c;
+
+  @override
+  void initState() {
+    super.initState();
+    // 同上：侧栏直接渲染组件，不经过 setTab()，这里自己拉数据。
+    unawaited(c.loadFeeds());
+    unawaited(c.loadEntries());
+    unawaited(c.loadLedger());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1950,12 +1984,18 @@ class _TasksTab extends StatefulWidget {
 }
 
 class _TasksTabState extends State<_TasksTab> {
+  DiscoverController get c => widget.c;
+
   @override
   void initState() {
     super.initState();
     // 收藏可能是在别的页点的，切到「任务」时重新拉一次，
     // 否则待下载列表一直停在进入应用那一刻的快照。
-    unawaited(widget.c.loadFavorites());
+    unawaited(c.loadFavorites());
+    // 下载任务同理：改走二级侧栏后 `setTab()` 不再被调用（侧栏是直接
+    // `discoverTabContent(key)` 渲染组件的），不在这里拉一次就永远是
+    // 「暂无下载任务」—— 明明下载器里正在下。（2026-11-10 反馈）
+    unawaited(c.loadTasks());
   }
 
   @override
@@ -1981,12 +2021,13 @@ class _TasksTabState extends State<_TasksTab> {
           ],
         ),
         Obx(() {
-          // 只显示还没下完的任务：下完后会归位到「已下载」，
-          // 否则同一部片会同时出现在「任务」和「已下载」里，让人分不清状态。
-          // 服务端状态是小写（completed），以前按 'Completed' 比较恒不成立，
-          // 下完的片子一直赖在「任务」里，看起来像永远没下完。
+          // 只显示「还在下载链路里」的任务：下完归位到「已下载」，
+          // 删掉的（removed）/ 取消的（proposed 未提交）不再占位。
+          // 以前按 `!= 'Completed'` 排除，一是大小写对不上（服务端是小写 completed），
+          // 二是反了：删掉的记录（removed）反而一直留着，看起来像删不掉。
+          const alive = {'added', 'downloading', 'paused', 'failed', 'proposed'};
           final active = c.tasks
-              .where((t) => (t['status'] ?? '').toString().toLowerCase() != 'completed')
+              .where((t) => alive.contains((t['status'] ?? '').toString().toLowerCase()))
               .toList();
           if (active.isEmpty) {
             return Padding(
@@ -2837,6 +2878,7 @@ String _taskStatusText(dynamic s) {
     case 'seeding':
       return 'discover_status_completed'.tr;
     case 'error':
+    case 'failed':
       return 'discover_status_error'.tr;
     default:
       return unknownStatusLabel();

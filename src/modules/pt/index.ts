@@ -1946,6 +1946,23 @@ export const pt: ServerModule = {
             .send({ error: Err.badRequest, message: 'torrent hash missing for this download' });
         }
         const action = b.action === 'pause' ? 'stop' : b.action === 'resume' ? 'start' : 'remove';
+        // 下载器里已经没有这颗种子（历史台账 / 之前删过 / 换过下载器）时，
+        // remove 不该报「torrents not found」把记录永远卡住 —— 直接标成 removed。
+        // 这类「幽灵记录」在「下载器」页面看不到（那页读的是 transmission 实时任务），
+        // 却在发现页「任务」里删不掉，用户会以为界面坏了（2026-11-10 反馈）。
+        if (action === 'remove') {
+          const list = await torrentList(cfg);
+          const alive =
+            list.ok &&
+            list.items.some((t) => String(t.hashString).toLowerCase() === hash.toLowerCase());
+          if (!alive) {
+            await sql`
+              update pt_downloads set status = 'removed', message = ${'下载器里已没有这颗种子，已移除记录'}
+               where id = ${row.id}
+            `.execute(k.db);
+            return { ok: true };
+          }
+        }
         const res = await torrentAction(cfg, action, hash);
         if (!res.ok) {
           return reply.code(400).send({ error: Err.badRequest, message: res.message });
@@ -2759,6 +2776,47 @@ export const pt: ServerModule = {
       },
     );
 
+    /** 种子名 / 文件名归一化：只留小写字母数字，`H.265` 与 `H265`、点与空格视为一样 */
+    const normName = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+    /**
+     * 归档后补打 TMDB 标。
+     *
+     * 影视库没开「自动刮削」时，`video_items.nfo_tmdb_id` 是空的，发现页就认不出
+     * 「这部片已经在影视库里」，只能退化成显示「已下载」。这里拿刚下完的种子名
+     * 与库里的文件名做归一化比对，命中且该行还没标时才写入 —— 不覆盖刮削结果。
+     */
+    const stampArchived = async (uid: string): Promise<void> => {
+      const rows = (
+        await sql<any>`
+          select id, title, media_id, library_id from pt_downloads
+           where uid = ${uid} and status = 'completed'
+             and media_id is not null and library_id is not null and scanned_at is not null
+             and completed_at is not null and completed_at > ${now() - 7 * 86400}
+           order by completed_at desc limit 20
+        `.execute(k.db)
+      ).rows;
+      for (const r of rows) {
+        const want = normName(String(r.title || ''));
+        if (!want) continue;
+        try {
+          const items = (
+            await sql<{ id: string; title: string }>`
+              select id, title from video_items
+               where library_id = ${String(r.library_id)} and nfo_tmdb_id is null
+               limit 500
+            `.execute(k.db)
+          ).rows;
+          const hit = items.find((it) => normName(String(it.title || '')) === want);
+          if (!hit) continue;
+          await sql`
+            update video_items set nfo_tmdb_id = ${Number(r.media_id)} where id = ${hit.id}
+          `.execute(k.db);
+          k.log.info({ id: r.id, itemId: hit.id, tmdbId: r.media_id }, 'pt archive: stamped tmdb id');
+        } catch { /* video_items 不存在时忽略 */ }
+      }
+    };
+
     /**
      * 从 Transmission 同步进度（按账号）。
      * 首次完成时：写 completed_at → 收藏置 downloaded → 入队 video.scan 归档进影视库。
@@ -3011,17 +3069,28 @@ export const pt: ServerModule = {
     // 后台任务：下载进度同步 —— 心跳里跑，用户不开「下载器」页面也能
     // 在下载完成时写完成状态并归档进影视库。
     k.tasks.register('pt.download-sync', async () => {
-      const uids = (
+      const active = (
         await sql<{ uid: string }>`
           select distinct uid from pt_downloads
            where status in ('added', 'paused', 'downloading')
         `.execute(k.db)
       ).rows.map((r) => String(r.uid || ''));
+      // 刚下完的也要算进来：归档扫描是异步的，这一轮通常还没把 TMDB 标补上
+      const archived = (
+        await sql<{ uid: string }>`
+          select distinct uid from pt_downloads
+           where status = 'completed' and scanned_at is not null
+             and completed_at > ${now() - 7 * 86400}
+        `.execute(k.db)
+      ).rows.map((r) => String(r.uid || ''));
+      const uids = [...new Set([...active, ...archived])].filter(Boolean);
       const total = { updated: 0, finished: 0 };
-      for (const uid of uids.filter(Boolean)) {
+      for (const uid of uids) {
         const r = await syncDownloads(uid);
         total.updated += r.updated;
         total.finished += r.finished;
+        // 归档完成后补 TMDB 标，发现页才能显示「已在影视库」的勾
+        await stampArchived(uid);
       }
       return total;
     });
