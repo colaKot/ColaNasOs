@@ -1,18 +1,23 @@
-import {
-  app,
-  BrowserWindow,
-  Menu,
-  Tray,
-  dialog,
-  nativeImage,
-  shell,
-  utilityProcess,
-} from 'electron';
+import { app, Menu, Tray, dialog, nativeImage, shell, utilityProcess } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { WatchdogSupervisor } from '../kernel/watchdog-supervisor';
-import { onTrayState, registerSyncBridge } from './sync-bridge';
 import type { WatchdogMetrics } from '../kernel/watchdog';
+
+/**
+ * 「服务端」外壳：**纯托盘 + 内核守护**，不创建任何窗口。
+ *
+ * 设计取舍（2026-11-10 按用户要求收敛）：
+ *   服务端只需要三件事 —— 右下角托盘图标、右键菜单（打开 Web 页面 / 开机自动启动 / 退出）、
+ *   以及把内核跑起来并看住它。界面一律用系统浏览器打开 `http://127.0.0.1:<port>`，
+ *   不再内嵌 BrowserWindow：省一份 Chromium 渲染进程，也避免「托盘点开是个窗口、
+ *   浏览器里又是另一个会话」的两套 UI 问题。
+ *
+ * 保留的关键能力：
+ *   - 单实例锁（第二次启动只打开 Web 页面）
+ *   - 内核崩溃自动重启（最多 5 次）+ 进程外看门狗（心跳超时 / CPU 打满）
+ *   - 退出前让内核优雅收尾：停种子（发 tracker 的 stopped）→ 停内置 transmission
+ */
 
 const PORT = Number(process.env.PORT || 7788);
 /** 实际监听端口：内核按 config 的 httpPort 监听后通过 `listening` 消息回传 */
@@ -40,20 +45,12 @@ const guard = new WatchdogSupervisor();
 let watchdogTimer: NodeJS.Timeout | null = null;
 let watchdogGaveUp = false;
 
-let win: BrowserWindow | null = null;
 let kernel: Electron.UtilityProcess | null = null;
 let tray: Tray | null = null;
 let quitting = false;
 let crashes = 0;
-
-/**
- * 托盘菜单里的同步状态，由渲染进程上报（Dart 侧 `SyncTrayBridge.publish`）。
- *
- * 为什么不在主进程算：同步的调度、任务列表、自动同步开关都在客户端里
- * （`SyncScheduler` 读写本地设置、`SyncEngine` 按任务跑三向同步），主进程
- * 没有 token 也没有这些状态。所以主进程只负责「画菜单 + 把点击转给页面」。
- */
-let traySync = { paused: true, taskCount: 0 };
+/** 内核是否已经回传监听端口：没就绪时点「打开 Web 页面」只提示，不打开空白页 */
+let kernelReady = false;
 
 // 开发实例与日常实例隔离：锁绑定在 userData 路径上，开发实例用独立 userData，
 // 两个实例可以同时在线（不再「必须关掉日常实例才能调试」）。
@@ -73,15 +70,13 @@ if (userDataOverride) {
   trace(`userData=${dir}`);
 }
 
-// 单实例：第二次启动只聚焦既有窗口
+// 单实例：第二次启动直接把 Web 页面打开（没有窗口可聚焦）
 const locked = app.requestSingleInstanceLock();
 trace(`singleInstance=${locked}`);
 if (!locked) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    showWindow();
-  });
+  app.on('second-instance', () => openWeb());
 }
 
 function resourcesDir(): string {
@@ -96,7 +91,7 @@ function startKernel(): void {
   // 契约在 `resources/contracts`，不能沿用仓库内的相对路径。
   const env: NodeJS.ProcessEnv = { ...process.env };
   // 未显式指定 PORT（运维 / 冒烟）时让内核读取 config 的 httpPort；
-  // 显式 PORT 仍然优先，避免破坏 Docker / 测试对固定端口的依赖。
+  // 显式 PORT 仍然优先，避免破坏测试对固定端口的依赖。
   if (!process.env.PORT) delete env.PORT;
   if (app.isPackaged) {
     env.COLANAS_WEB_DIR = path.join(process.resourcesPath, 'web');
@@ -125,15 +120,10 @@ function startKernel(): void {
     if (payload && payload.type === 'listening') {
       const p = Number(payload.port);
       if (Number.isFinite(p) && p > 0) kernelPort = p;
+      kernelReady = true;
       trace(`kernel listening port=${kernelPort}`);
-      if (win) {
-        const webIndex = app.isPackaged
-          ? path.join(process.resourcesPath, 'web', 'index.html')
-          : path.join(__dirname, '..', '..', 'apps', 'colanas_os', 'build', 'web', 'index.html');
-        void win.loadURL(
-          fs.existsSync(webIndex) ? `${kernelUrl()}/` : `${kernelUrl()}/health`,
-        );
-      }
+      // 托盘提示里直接给地址：用户鼠标悬停就知道服务在哪
+      tray?.setToolTip(`ColaNasOs 服务端 — ${kernelUrl()}`);
       return;
     }
     if (payload && payload.type === 'heartbeat') {
@@ -144,13 +134,15 @@ function startKernel(): void {
   kernel.on('exit', (code) => {
     trace(`kernel exit code=${code}`);
     kernel = null;
+    kernelReady = false;
+    tray?.setToolTip('ColaNasOs 服务端 — 内核重启中');
     if (quitting) return;
 
     crashes += 1;
     if (crashes > MAX_RESTARTS) {
       const msg = `内核连续退出 ${crashes} 次（最后一次退出码 ${code}），已停止自动重启。`;
       console.error('[shell]', msg);
-      tray?.setToolTip('ColaNasOs — 内核已停止');
+      tray?.setToolTip('ColaNasOs 服务端 — 内核已停止');
       dialog.showErrorBox('ColaNasOs', msg);
       return;
     }
@@ -165,6 +157,7 @@ function stopKernel(): void {
   if (!kernel) return;
   kernel.kill();
   kernel = null;
+  kernelReady = false;
 }
 
 /**
@@ -202,140 +195,31 @@ async function shutdownKernelGracefully(timeoutMs = 4000): Promise<void> {
   });
 }
 
-function createWindow(): void {
-  if (win) {
-    showWindow();
+/** 用系统默认浏览器打开服务端 Web 页面（服务端自己没有窗口） */
+function openWeb(): void {
+  if (!kernelReady) {
+    // 内核还没回传端口：这时候打开浏览器只会看到连接被拒，先给个明确提示
+    void dialog.showMessageBox({
+      type: 'info',
+      title: 'ColaNasOs 服务端',
+      message: '服务正在启动，请稍候再试',
+      detail: `端口 ${kernelPort}，就绪后会自动更新托盘提示。`,
+      buttons: ['好'],
+    });
     return;
   }
-
-  win = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    show: false,
-    title: 'ColaNasOs',
-    // 开发模式（electron .）不读 exe 图标，窗口/任务栏会是 Electron 默认图标；
-    // 显式指一份，打包前后一致。托盘是 tray.png，这里是 512 的 icon.png。
-    icon: path.join(resourcesDir(), 'icon.png'),
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      // 同步要访问本地目录：渲染进程是 Web 产物，只能通过 preload 转给主进程
-      preload: path.join(__dirname, 'preload.js'),
-    },
-  });
-
-  win.once('ready-to-show', () => win?.show());
-  win.on('closed', () => {
-    win = null;
-  });
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: 'deny' };
-  });
-
-  // 有 Web 产物就加载应用（内核内置静态托管，同源免 CORS）；没有则退回健康页（SP0 形态）。
-  // 安装包里产物在 `resources/web`（asar 内没有仓库相对路径），必须单独判断。
-  const webIndex = app.isPackaged
-    ? path.join(process.resourcesPath, 'web', 'index.html')
-    : path.join(__dirname, '..', '..', 'apps', 'colanas_os', 'build', 'web', 'index.html');
-  const targetUrl = fs.existsSync(webIndex) ? `${kernelUrl()}/` : `${kernelUrl()}/health`;
-
-  // 渲染进程报错（页面里看到的红字多半来自这里）：落到 userData/ui.log，
-// 便于用户点一遍后按时间定位，而不是只能看到一句「出错了」。
-  const uiLog = path.join(app.getPath('userData'), 'ui.log');
-  const writeUiLog = (line: string): void => {
-    try {
-      fs.appendFileSync(uiLog, `${new Date().toISOString()} ${line}\n`);
-    } catch {
-      /* 日志不可写不影响页面 */
-    }
-  };
-  win.webContents.on('console-message' as any, (...args: any[]) => {
-    const d = args[1];
-    const level = typeof d === 'object' && d ? d.level : args[1];
-    const message = typeof d === 'object' && d ? d.message : args[2];
-    const source = typeof d === 'object' && d ? d.sourceId : args[4];
-    const line = typeof d === 'object' && d ? d.lineNumber : args[3];
-    if (level === 'error' || level === 'warning' || level === 3 || level === 2) {
-      writeUiLog(`[console:${level}] ${message} (${source}:${line})`);
-    }
-  });
-  win.webContents.on('render-process-gone' as any, (_e: unknown, details: unknown) => {
-    writeUiLog(`[render-gone] ${JSON.stringify(details)}`);
-  });
-
-  // 内核（utilityProcess）通常比窗口慢 1~3s：首屏加载失败就短暂重试，
-  // 否则窗口会停在 ERR_CONNECTION_REFUSED，用户需要手动刷新。
-  let loadAttempt = 0;
-  const retryLoad = (): void => {
-    if (!win || loadAttempt >= 20) return;
-    loadAttempt += 1;
-    trace(`window reload attempt=${loadAttempt}`);
-    setTimeout(() => {
-      if (win) void win.loadURL(targetUrl);
-    }, 500);
-  };
-  win.webContents.on('did-fail-load', (_event, code, desc, url, isMainFrame) => {
-    if (!isMainFrame || code === -3) return; // -3 = 被新的 loadURL 取消
-    trace(`window load failed code=${code} ${desc} url=${url}`);
-    retryLoad();
-  });
-  // 托盘里的「立即同步 / 暂停自动同步 / 同步任务」靠页面里的 window.colanasTray
-  // 转发。这里落一行日志，排查时不用猜。
-  // 注意要延迟探测：Flutter 的 main 是异步启动的（读设置 → 恢复会话 → 装桥），
-  // 加载完成的那一刻一定还是 undefined。
-  win.webContents.on('did-finish-load', () => {
-    setTimeout(() => {
-      void win?.webContents
-        .executeJavaScript('typeof window.colanasTray', true)
-        .then((kind) => {
-          trace(`tray bridge=${String(kind)}`);
-          if (String(kind) !== 'function') {
-            trace('tray sync items will be no-ops (web build without the bridge?)');
-          }
-        })
-        .catch((err) => trace(`tray bridge probe failed: ${String(err)}`));
-    }, 5000);
-  });
-  void win.loadURL(targetUrl);
-}
-
-function showWindow(): void {
-  if (!win) {
-    createWindow();
-    return;
-  }
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
+  void shell.openExternal(`${kernelUrl()}/`);
 }
 
 function createTray(): void {
   const icon = nativeImage.createFromPath(path.join(resourcesDir(), 'tray.png'));
   tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
-  tray.setToolTip('ColaNasOs');
+  tray.setToolTip('ColaNasOs 服务端 — 启动中');
   rebuildTrayMenu();
-  tray.on('click', () => showWindow());
-}
-
-/**
- * 把托盘点击转给页面：Dart 侧在 `SyncTrayBridge` 里挂了 `window.colanasTray`。
- *
- * 窗口还没加载完（或页面崩了）时 `executeJavaScript` 会失败，这里兜底把窗口
- * 显示出来 —— 用户点了「同步任务」至少要看到界面，而不是毫无反应。
- */
-function sendTrayAction(action: 'syncNow' | 'toggleAutoSync' | 'openTasks'): void {
-  if (!win || win.isDestroyed() || win.webContents.isLoading()) {
-    showWindow();
-    return;
-  }
-  void win.webContents
-    .executeJavaScript(
-      `window.colanasTray && window.colanasTray(${JSON.stringify(action)});`,
-      true,
-    )
-    .catch((err) => trace(`tray action ${action} failed: ${String(err)}`));
+  // 左键单击 = 打开 Web 页面（托盘程序的习惯动作）
+  tray.on('click', () => openWeb());
+  // Windows 上双击也走一次：有人习惯双击托盘
+  tray.on('double-click', () => openWeb());
 }
 
 function rebuildTrayMenu(): void {
@@ -348,7 +232,7 @@ function rebuildTrayMenu(): void {
   }
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '显示主窗口', click: () => showWindow() },
+      { label: '打开 Web 页面', click: () => openWeb() },
       {
         label: '开机自动启动',
         type: 'checkbox',
@@ -366,34 +250,6 @@ function rebuildTrayMenu(): void {
       },
       { type: 'separator' },
       {
-        label: '立即同步',
-        // 没登录 / 没有本机任务时置灰：点了也没事可做，不如直说
-        enabled: traySync.taskCount > 0,
-        click: () => sendTrayAction('syncNow'),
-      },
-      {
-        label: traySync.paused ? '恢复自动同步' : '暂停自动同步',
-        click: () => sendTrayAction('toggleAutoSync'),
-      },
-      {
-        label: '同步任务',
-        click: () => {
-          showWindow();
-          sendTrayAction('openTasks');
-        },
-      },
-      { type: 'separator' },
-      { label: '在浏览器中打开', click: () => void shell.openExternal(`${kernelUrl()}/`) },
-      {
-        label: '重启内核',
-        click: () => {
-          crashes = 0;
-          stopKernel();
-          startKernel();
-        },
-      },
-      { type: 'separator' },
-      {
         label: '退出',
         click: () => {
           // 别在这里置 quitting：before-quit 靠它判断「第一次退出」，
@@ -405,26 +261,12 @@ function rebuildTrayMenu(): void {
   );
 }
 
-/** 渲染进程上报的状态（sync-bridge 的 `trayState` op 调到这里） */
-function applyTrayState(state: { paused: boolean; taskCount: number }): void {
-  traySync = {
-    paused: state.paused,
-    taskCount: Math.max(0, Math.trunc(state.taskCount) || 0),
-  };
-  // 这条日志 = 页面里的托盘桥确实在位（菜单文案/置灰都跟着它变）
-  trace(`tray state paused=${traySync.paused} tasks=${traySync.taskCount}`);
-  rebuildTrayMenu();
-}
-
 app.whenReady().then(() => {
   trace('app ready');
-  registerSyncBridge();
-  onTrayState(applyTrayState);
   startKernel();
-  createWindow();
   createTray();
 
-  // 进程外看门狗：内核「端口还在听但界面卡死」时也能拉回来
+  // 进程外看门狗：内核「端口还在听但卡死」时也能拉回来
   watchdogTimer = setInterval(() => {
     const decision = guard.check(Date.now());
     if (decision.action === 'restart' && !watchdogGaveUp) {
@@ -441,12 +283,8 @@ app.whenReady().then(() => {
   }, 5000);
   watchdogTimer.unref?.();
 
-  app.on('activate', () => showWindow());
-});
-
-// 关窗不退出（常驻托盘），与 NAS 客户端习惯一致
-app.on('window-all-closed', () => {
-  /* keep running in tray */
+  // macOS 点 Dock 图标：打开 Web 页面
+  app.on('activate', () => openWeb());
 });
 
 app.on('before-quit', (e) => {

@@ -23,9 +23,10 @@ const nodeGlobals = {
 export default [
   {
     ignores: [
-      'dist/**',
-      // electron-builder 产物（内含打包后的 Flutter Web 与第三方 JS，不能进 lint）
-      'dist_installer/**',
+      // tsc 产物与 electron-builder 产物（后者内含打包后的 Flutter Web 与第三方 JS，
+      // 不能进 lint）。用 dist* 一并覆盖 dist / dist_installer / dist_release_<日期> 等
+      // 任意输出目录 —— 换输出目录名时不用再回来改配置。
+      'dist*/**',
       'node_modules/**',
       'docs/**',
       // 工具/经验库的临时副本（accept 补丁会复制一份原文件，不能进 lint）

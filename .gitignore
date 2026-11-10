@@ -26,6 +26,8 @@ vendor/geo/
 vendor/python-runtime/
 # 安装器产物（体积大，不入库）
 dist_installer/
+# electron-builder 的其它输出目录（换 --config.directories.output 时自动覆盖）
+dist_*/
 # 鸿蒙端（flutter_ohos）构建中间物与 SDK 拷入的 har，只保留工程骨架
 apps/colanas_os/ohos/entry/har/
 apps/colanas_os/ohos/**/oh_modules/
