@@ -568,7 +568,11 @@ class CompatApi {
       'tv_save_path': res.tvDir,
       'movie_library_id': s.movieLibraryId,
       'tv_library_id': s.tvLibraryId,
-      'site_ids': s.siteIds,
+      // 参考页里所有 id 都是 int：站点列表由 _ensureItems 把 base64url 文本 id 哈希成
+      // int，设置页也按 int 存 _siteIds 并用 int.tryParse 回填勾选。这里必须同口径转换，
+      // 否则保存能写进库（_rawId 会把 int 还原成真实 id），但重进页面时字符串 id 解析失败
+      // ⇒ 勾选恒为空，表现为「保存了又变回不勾选」。
+      'site_ids': s.siteIds.map(_numId).toList(),
       'quality': s.quality,
       'hdr': s.hdr,
       'audio_langs': s.audioLangs,

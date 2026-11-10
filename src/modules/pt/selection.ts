@@ -290,7 +290,9 @@ export function hardFilter(
   const smart = applySmartFilter({
     filter: rule,
     candidate,
-    isAnimation: (media?.genres || []).includes('Animation'),
+    // TMDB 中文详情里类型是「动画」，英文详情是 Animation，两种都要认；
+    // 只写 includes('Animation') 会让中文库下的动画音轨门槛完全失效。
+    isAnimation: (media?.genres || []).some((g) => /animation|动画/i.test(String(g))),
     originalLanguage: media?.originalLanguage ?? null,
   });
   if (!smart.pass) return smart;

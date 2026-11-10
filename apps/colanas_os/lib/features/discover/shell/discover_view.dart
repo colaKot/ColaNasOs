@@ -2102,10 +2102,12 @@ class _SettingsTabState extends State<_SettingsTab> {
     _audio
       ..clear()
       ..addAll(((f['audio_langs'] as List?) ?? []).map((e) => e.toString()));
+    // compat 层已把服务端的文本站点 id 映射成与 c.sites 一致的 int id；
+    // 这里直接吃 int，纯数字字符串也兼容（旧数据/直连接口时不会把勾选丢掉）。
     _siteIds
       ..clear()
       ..addAll(((f['site_ids'] as List?) ?? [])
-          .map((e) => int.tryParse(e.toString()) ?? 0)
+          .map((e) => e is int ? e : (int.tryParse(e.toString()) ?? 0))
           .where((e) => e > 0));
     _loadCacheStats();
     if (mounted) setState(() => _loaded = true);

@@ -9,7 +9,6 @@ import { Err } from '../../../kernel/errors';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import {
   buildKeywordVariants,
-  hardFilter,
   selectBest,
   titleMatchScore,
   TITLE_MATCH_THRESHOLD,
@@ -1931,6 +1930,186 @@ export const pt: ServerModule = {
       return out;
     };
 
+    // ------------------------------------------------ 收藏自动下载（HTTP 与定时器共用）
+    // 「立即扫描」按钮和后台调度都走这里，保证两条路径用的是同一套
+    // 下载筛选 + 择种优先级，不会出现「手动扫能下、自动扫乱下第一个」。
+    let lastFavoriteScanAt = 0;
+
+    const parseFavoriteMeta = (raw: unknown): Record<string, any> => {
+      try {
+        const v = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return v && typeof v === 'object' ? (v as Record<string, any>) : {};
+      } catch {
+        return {};
+      }
+    };
+
+    const genreNames = (v: unknown): string[] => {
+      if (!Array.isArray(v)) return [];
+      return v
+        .map((g) => (g && typeof g === 'object' ? String((g as any).name ?? '') : String(g ?? '')))
+        .map((s) => (/动画/.test(s) ? 'Animation' : s))
+        .filter(Boolean);
+    };
+
+    /**
+     * 扫描一个用户的 watching 收藏：本地已有 → owned；否则
+     * 搜索 → 硬过滤（画质/HDR/动画音轨/体积/做种/排除词/标题匹配）
+     *      → 按优先级择种（分辨率 → 做种 → 体积 → 发布时间）→ 加种留痕。
+     * 没有符合条件的候选时保持 watching，下一轮继续试，不会误标成下载中。
+     */
+    const scanFavorites = async (
+      uid: string,
+    ): Promise<{
+      scanned: number;
+      submitted: number;
+      owned: number;
+      skipped: number;
+      auto_download: boolean;
+    }> => {
+      const dl = readDownload();
+      if (!dl.autoDownload) {
+        return { scanned: 0, submitted: 0, owned: 0, skipped: 0, auto_download: false };
+      }
+      const rows = (
+        await sql<any>`
+          select * from discover_favorites where uid = ${uid} and state = 'watching'
+           order by created_at asc limit 50
+        `.execute(k.db)
+      ).rows;
+      const meta = await catalogMeta();
+      const cfg = transmissionCfg();
+      const tmdbCfg = normalizeConfig(k.config.get('discover.tmdb'));
+      // 规则直接取设置页的实时值（不是订阅表里的快照），改完筛选下一轮就生效。
+      const rule: PtRule = {
+        maxSizeBytes: dl.maxSizeBytes,
+        minSeeders: dl.minSeeders,
+        excludedKeywords: dl.excludedKeywords,
+        quality: dl.quality as PtRule['quality'],
+        hdr: dl.hdr as PtRule['hdr'],
+        audioLangs: dl.audioLangs,
+        season: 0,
+      };
+      let submitted = 0;
+      let owned = 0;
+      let skipped = 0;
+      for (const r of rows) {
+        try {
+          const hit = (
+            await sql<any>`
+              select 1 from video_items where nfo_tmdb_id = ${Number(r.tmdb_id)} limit 1
+            `.execute(k.db)
+          ).rows[0];
+          if (hit) {
+            await sql`
+              update discover_favorites set state = 'owned', updated_at = ${now()}
+               where uid = ${uid} and media_type = ${r.media_type} and tmdb_id = ${r.tmdb_id}
+            `.execute(k.db);
+            owned += 1;
+            continue;
+          }
+        } catch { /* video_items 表/列不存在时跳过 owned 判定 */ }
+
+        const snap = meta.get(String(r.tmdb_id)) || {};
+        const own = parseFavoriteMeta(r.meta);
+        let title = String(snap.title ?? snap.name ?? own.title ?? '').trim();
+        let originalTitle = String(
+          snap.originalTitle ?? snap.original_title ?? own.originalTitle ?? own.original_title ?? '',
+        ).trim();
+        let year = String(snap.releaseDate ?? snap.release_date ?? own.releaseDate ?? '').slice(0, 4);
+        let genres = genreNames(snap.genres ?? own.genres);
+        let originalLanguage = String(
+          snap.originalLanguage ?? snap.original_language ?? own.originalLanguage ?? '',
+        ).trim();
+
+        // 榜单快照通常没有原名 / 类型 / 原声语言：缺原名会让英文种子全被判
+        // TITLE_MISMATCH，缺类型会让「动画音频」门槛失效。抓一次 TMDB 详情写回 meta。
+        if (!originalTitle || (dl.audioLangs.length > 0 && (genres.length === 0 || !originalLanguage))) {
+          try {
+            const mt = String(r.media_type) === 'tv' ? 'tv' : 'movie';
+            const d: any = await tmdbGet(tmdbCfg, `/${mt}/${Number(r.tmdb_id)}`, {});
+            if (!originalTitle) originalTitle = String(d?.original_title ?? d?.original_name ?? '').trim();
+            if (!year) year = String(d?.release_date ?? d?.first_air_date ?? '').slice(0, 4);
+            if (!title) title = String(d?.title ?? d?.name ?? '').trim();
+            if (genres.length === 0) genres = genreNames(d?.genres);
+            if (!originalLanguage) originalLanguage = String(d?.original_language ?? '').trim();
+            await sql`
+              update discover_favorites set meta = ${JSON.stringify({
+                ...own,
+                title,
+                originalTitle,
+                releaseDate: year,
+                genres,
+                originalLanguage,
+              })}
+               where uid = ${uid} and media_type = ${r.media_type} and tmdb_id = ${Number(r.tmdb_id)}
+            `.execute(k.db);
+          } catch {
+            // 没配 TMDB Key / 网络不通：动画音轨门槛降级，其余筛选照常生效
+          }
+        }
+
+        if (!title || !cfg) { skipped += 1; continue; }
+        const media: PtMedia = {
+          title,
+          originalTitle: originalTitle || null,
+          year: year || null,
+          season: 0,
+          genres,
+          originalLanguage: originalLanguage || null,
+        };
+        let results: Array<PtCandidate & { siteId: string; siteName: string }>;
+        try {
+          results = await searchAll(media, 0);
+        } catch (err) {
+          skipped += 1;
+          k.log.warn({ err: String(err), uid, tmdbId: r.tmdb_id }, 'pt favorite scan search failed');
+          continue;
+        }
+        const picked = selectBest(rule, results, media);
+        const c = picked.selected as
+          | (PtCandidate & { siteId: string; downloadUrl?: string | null })
+          | null;
+        if (!c?.downloadUrl) {
+          skipped += 1;
+          if (results.length > 0) {
+            k.log.info(
+              { uid, tmdbId: r.tmdb_id, reason: picked.reason },
+              'pt favorite scan: candidates all filtered out',
+            );
+          }
+          continue;
+        }
+        // 电视剧落到剧集库，电影落到电影库（之前一律用电影库）。
+        const dir = await libraryDir(
+          String(r.media_type) === 'tv' ? dl.tvLibraryId : dl.movieLibraryId,
+        );
+        const added = await addTorrent(cfg, String(c.downloadUrl), {
+          downloadDir: dir || undefined,
+        });
+        if (!added.ok) { skipped += 1; continue; }
+        const id = crypto.randomBytes(8).toString('base64url');
+        // 任务卡上同时留「为什么选它」和下载器返回信息，便于回查筛选是否生效。
+        const message = `${picked.reason}｜${added.message}`.slice(0, 300);
+        await sql`
+          insert into pt_downloads
+            (id, uid, site_id, torrent_id, title, download_url, info_hash,
+             status, message, created_at, idempotency_key)
+          values (${id}, ${uid}, ${c.siteId}, ${c.torrentId}, ${c.title},
+                  ${c.downloadUrl}, ${added.hash ?? c.infoHash ?? null}, 'added',
+                  ${message}, ${now()},
+                  ${added.hash ? `ih:${String(added.hash).toLowerCase()}` : `st:${c.siteId}:${c.torrentId}`})
+        `.execute(k.db);
+        await sql`
+          update discover_favorites
+             set state = 'downloading', download_task_id = ${id}, updated_at = ${now()}
+           where uid = ${uid} and media_type = ${r.media_type} and tmdb_id = ${r.tmdb_id}
+        `.execute(k.db);
+        submitted += 1;
+      }
+      return { scanned: rows.length, submitted, owned, skipped, auto_download: true };
+    };
+
     const taskOf = (r: any) => ({
       id: String(r.id ?? ''),
       status: String(r.status ?? ''),
@@ -2049,8 +2228,9 @@ export const pt: ServerModule = {
             matched_by_id: c.matchedById ?? false,
           };
         });
-        // 参考页会显示「被排除的候选 + 原因」，别只回空数组：
-        // 用当前下载筛选当规则跑一遍硬过滤（体积/做种/关键词/季集/标题匹配/画质 HDR 音轨）。
+        // 与自动下载同一套「下载筛选 + 择种优先级」：硬过滤后按
+        // 分辨率偏好 → 做种降序 → 体积升序 → 发布时间降序 排序，取第一个为选中。
+        // 之前只做硬过滤、items 保持站点返回顺序，selected 就等于「第一个站的第一条」。
         const dl = readDownload();
         const media: PtMedia = {
           title: keyword,
@@ -2067,32 +2247,39 @@ export const pt: ServerModule = {
           hdr: dl.hdr as PtRule['hdr'],
           audioLangs: dl.audioLangs,
         };
-        const passed: typeof items = [];
-        const excluded: Array<Record<string, unknown>> = [];
-        for (const it of items) {
-          const verdict = hardFilter(
-            rule,
-            {
-              siteId: String(it.site_id),
-              torrentId: String(it.torrent_id),
-              title: String(it.title),
-              sizeBytes: it.size_bytes == null ? null : Number(it.size_bytes),
-              seeders: it.seeders == null ? null : Number(it.seeders),
-              resolution: it.resolution,
-              matchedById: Boolean(it.matched_by_id),
-            },
-            media,
-          );
-          if (verdict.pass) passed.push(it);
-          else excluded.push({ ...it, excluded_reason: verdict.reason });
+        const candidates: PtCandidate[] = items.map((it) => ({
+          siteId: String(it.site_id),
+          torrentId: String(it.torrent_id),
+          infoHash: it.info_hash ?? null,
+          title: String(it.title),
+          sizeBytes: it.size_bytes == null ? null : Number(it.size_bytes),
+          seeders: it.seeders == null ? null : Number(it.seeders),
+          resolution: it.resolution ?? null,
+          publishedAt: it.published_at ?? null,
+          matchedById: Boolean(it.matched_by_id),
+          downloadUrl: it.download_url ?? null,
+        }));
+        const selection = selectBest(rule, candidates, media);
+        const itemByKey = new Map<string, (typeof items)[number]>();
+        for (let i = 0; i < candidates.length; i += 1) {
+          itemByKey.set(`${candidates[i].siteId}:${candidates[i].torrentId}`, items[i]);
         }
+        const keyOf = (c: { siteId: string; torrentId: string }) =>
+          `${c.siteId}:${c.torrentId}`;
+        const sortedItems = selection.sorted
+          .map((c) => itemByKey.get(keyOf(c)))
+          .filter((it): it is (typeof items)[number] => it != null);
+        const excluded = selection.excluded.map((c) => ({
+          ...(itemByKey.get(keyOf(c)) ?? {}),
+          excluded_reason: c.excludedReason,
+        }));
         return {
-          items: passed,
+          items: sortedItems,
           excluded,
           sites: siteStatus,
           keyword,
-          selected: passed.length ? passed[0] : null,
-          reason: passed.length === 0 && excluded.length > 0 ? 'all_filtered' : '',
+          selected: sortedItems.length ? sortedItems[0] : null,
+          reason: sortedItems.length === 0 && excluded.length > 0 ? 'all_filtered' : '',
         };
       },
     );
@@ -2403,75 +2590,9 @@ export const pt: ServerModule = {
         },
       }),
       async (req: FastifyRequest) => {
-        const dl = readDownload();
-        if (!dl.autoDownload) {
-          return { scanned: 0, submitted: 0, owned: 0, skipped: 0, auto_download: false };
-        }
-        const uid = uidOf(req);
-        const rows = (
-          await sql<any>`
-            select * from discover_favorites where uid = ${uid} and state = 'watching'
-             order by created_at asc limit 50
-          `.execute(k.db)
-        ).rows;
-        const meta = await catalogMeta();
-        const cfg = transmissionCfg();
-        let submitted = 0;
-        let owned = 0;
-        let skipped = 0;
-        for (const r of rows) {
-          try {
-            const hit = (
-              await sql<any>`
-                select 1 from video_items where nfo_tmdb_id = ${Number(r.tmdb_id)} limit 1
-              `.execute(k.db)
-            ).rows[0];
-            if (hit) {
-              await sql`
-                update discover_favorites set state = 'owned', updated_at = ${now()}
-                 where uid = ${uid} and media_type = ${r.media_type} and tmdb_id = ${r.tmdb_id}
-              `.execute(k.db);
-              owned += 1;
-              continue;
-            }
-          } catch { /* video_items 表/列不存在时跳过 owned 判定 */ }
-          const m = meta.get(String(r.tmdb_id)) || {};
-          const title = String(m.title ?? m.name ?? '');
-          if (!title || !cfg) { skipped += 1; continue; }
-          const results = await searchAll(
-            {
-              title,
-              originalTitle: m.originalTitle ?? m.original_title,
-              year: m.releaseDate ? String(m.releaseDate).slice(0, 4)
-                : m.release_date ? String(m.release_date).slice(0, 4) : undefined,
-            },
-            0,
-          );
-          const c = results[0];
-          if (!c?.downloadUrl) { skipped += 1; continue; }
-          const dir = await libraryDir(dl.movieLibraryId);
-          const added = await addTorrent(cfg, String(c.downloadUrl), {
-            downloadDir: dir || undefined,
-          });
-          if (!added.ok) { skipped += 1; continue; }
-          const id = crypto.randomBytes(8).toString('base64url');
-          await sql`
-            insert into pt_downloads
-              (id, uid, site_id, torrent_id, title, download_url, info_hash,
-               status, message, created_at, idempotency_key)
-            values (${id}, ${uid}, ${c.siteId}, ${c.torrentId}, ${c.title},
-                    ${c.downloadUrl}, ${added.hash ?? c.infoHash ?? null}, 'added',
-                    ${added.message}, ${now()},
-                    ${added.hash ? `ih:${String(added.hash).toLowerCase()}` : `st:${c.siteId}:${c.torrentId}`})
-          `.execute(k.db);
-          await sql`
-            update discover_favorites
-               set state = 'downloading', download_task_id = ${id}, updated_at = ${now()}
-             where uid = ${uid} and media_type = ${r.media_type} and tmdb_id = ${r.tmdb_id}
-          `.execute(k.db);
-          submitted += 1;
-        }
-        return { scanned: rows.length, submitted, owned, skipped, auto_download: true };
+        // 手动扫过就记时间，别让后台心跳紧接着又扫一遍。
+        lastFavoriteScanAt = now();
+        return scanFavorites(uidOf(req));
       },
     );
 
@@ -2488,11 +2609,34 @@ export const pt: ServerModule = {
       return { id };
     });
 
-    // 调度：每分钟检查一次，按「下载筛选」里的扫描间隔（5–360 分钟）决定谁到期；
-    // 改设置后无需重启，下一分钟即按新间隔生效。
-    const timer = setInterval(() => {
-      void (async () => {
-        const cutoff = now() - readDownload().scanIntervalMin * 60;
+    // 后台任务：收藏自动下载扫描（覆盖所有有 watching 收藏的账号）。
+    // 心跳只负责入队，队列负责串行、失败重试与重启后不丢当轮。
+    k.tasks.register('pt.favorite-scan', async () => {
+      const uids = (
+        await sql<{ uid: string }>`
+          select distinct uid from discover_favorites where state = 'watching'
+        `.execute(k.db)
+      ).rows.map((r) => String(r.uid || ''));
+      const total = { scanned: 0, submitted: 0, owned: 0, skipped: 0 };
+      for (const uid of uids.filter(Boolean)) {
+        const r = await scanFavorites(uid);
+        total.scanned += r.scanned;
+        total.submitted += r.submitted;
+        total.owned += r.owned;
+        total.skipped += r.skipped;
+      }
+      return total;
+    });
+
+    // 调度：每分钟心跳检查一次，订阅与收藏扫描都按「下载筛选」的间隔判断谁到期，
+    // 改设置后无需重启。另外：
+    //  - 自动下载关闭时收藏扫描整体跳过；
+    //  - 新收藏（created_at 晚于上次扫描）立刻触发一轮，不必干等一整个间隔；
+    //  - 启动 15s 先跑一轮，避免新收藏要等默认 360 分钟。
+    const tick = async () => {
+      try {
+        const dl = readDownload();
+        const cutoff = now() - dl.scanIntervalMin * 60;
         const rows = (
           await sql<any>`
             select id from pt_subscriptions where enabled = 1
@@ -2507,9 +2651,40 @@ export const pt: ServerModule = {
             k.log.warn({ err: String(err), id: sub.id }, 'pt subscription enqueue failed');
           }
         }
-      })();
+
+        if (dl.autoDownload) {
+          const fresh = lastFavoriteScanAt > 0
+            ? (
+                await sql<any>`
+                  select 1 from discover_favorites
+                   where state = 'watching' and created_at > ${lastFavoriteScanAt} limit 1
+                `.execute(k.db)
+              ).rows[0]
+            : null;
+          if (lastFavoriteScanAt <= 0 || lastFavoriteScanAt <= cutoff || fresh) {
+            lastFavoriteScanAt = now();
+            try {
+              await k.tasks.enqueueIfIdle('pt.favorite-scan', {}, { maxAttempts: 1 });
+            } catch (err) {
+              k.log.warn({ err: String(err) }, 'pt favorite scan enqueue failed');
+            }
+          }
+        }
+      } catch (err) {
+        k.log.warn({ err: String(err) }, 'pt scheduler tick failed');
+      }
+    };
+    const timer = setInterval(() => {
+      void tick();
     }, 60_000);
     timer.unref?.();
-    app.addHook('onClose', async () => clearInterval(timer));
+    const bootTimer = setTimeout(() => {
+      void tick();
+    }, 15_000);
+    bootTimer.unref?.();
+    app.addHook('onClose', async () => {
+      clearInterval(timer);
+      clearTimeout(bootTimer);
+    });
   },
 };
