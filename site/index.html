@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ColaNasOs - Windows NAS 系统 | 开源自托管 · AI 相册 · 影视库 · 目录同步</title>
+<meta name="description" content="ColaNasOs 是一款面向单台 Windows 主机的开源 NAS 系统（GPL-3.0）：一个常驻托盘的 Electron + Fastify 服务端，把照片、影视、音乐、文件、下载、同步与本地 AI 收进同一个私有云；桌面、平板、手机、TV、网页共用一套 Flutter 界面，数据全部留在自己机器上。">
+<meta name="keywords" content="ColaNasOs,Windows NAS,WindowsNas,NAS 系统,NAS OS,自托管 NAS,家庭 NAS,私有云,AI 相册,影视库,目录同步,Flutter NAS,Electron NAS">
+<meta name="author" content="colaKot">
+<link rel="canonical" href="https://cola.gexuan.net/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="ColaNasOs - Windows NAS 系统">
+<meta property="og:description" content="一台 Windows 电脑就是你的 NAS：AI 相册、影视库、目录同步三大核心，照片影音文件一套服务端多端共用，数据全部留在本机。">
+<meta property="og:url" content="https://cola.gexuan.net/">
+<meta property="og:site_name" content="ColaNasOs">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="ColaNasOs - Windows NAS 系统">
+<meta name="twitter:description" content="一台 Windows 电脑就是你的 NAS：AI 相册、影视库、目录同步，六端共用一套服务端。">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/site.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "ColaNasOs",
+  "alternateName": ["ColaNasOs Windows NAS", "WindowsNas", "Windows NAS 系统"],
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "Windows, Android, Android TV, Web",
+  "description": "面向单台 Windows 主机的开源自托管 NAS 系统：AI 相册、影视库、目录同步三大核心，照片、影视、音乐、文件、下载与本地 AI 一套服务端多端共用。",
+  "softwareVersion": "1.0.0",
+  "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+  "url": "https://cola.gexuan.net/",
+  "downloadUrl": "https://github.com/colaKot/ColaNasOs/releases/tag/v1.0.0",
+  "sameAs": ["https://github.com/colaKot/ColaNasOs"],
+  "author": {
+    "@type": "Organization",
+    "name": "广州番禺粤饮越泳软件开发工作室"
+  },
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "CNY"
+  }
+}
+</script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <span class="brand__mark">C</span>
+      <span class="brand__text">
+        <span class="brand__name">ColaNasOs</span>
+        <span class="brand__sub">Windows NAS</span>
+      </span>
+    </a>
+    <nav class="site-nav">
+      <a class="active" href="index.html">首页</a>
+      <a href="#core">核心功能</a>
+      <a href="#server">Windows NAS</a>
+      <a class="nav-sm-hide" href="#photo">AI 相册</a>
+      <a class="nav-sm-hide" href="#movie">影视库</a>
+      <a href="#apps">内置应用</a>
+      <a href="#download">下载</a>
+      <a href="#github">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <span class="hero__eyebrow"><b></b>v1.0.0 已发布 · Windows x64 · 开源 · GPL-3.0</span>
+    <h1>把一台 Windows 电脑<br>变成你的 NAS</h1>
+    <p class="hero__lead">
+      ColaNasOs 是给<strong>单台 Windows 主机</strong>做的自托管 NAS 系统：装好即用，照片、影视、音乐、文件、
+      下载、同步与本地 AI 全部收进同一个服务端。桌面、平板、手机、TV 与浏览器连的都是同一个它，
+      数据一块盘都不用出你家网线。
+    </p>
+    <div class="hero__actions">
+      <a class="btn btn--primary" href="https://github.com/colaKot/ColaNasOs/releases/tag/v1.0.0" target="_blank" rel="noopener noreferrer">下载 v1.0.0</a>
+      <a class="btn btn--ghost" href="#core">看看能做什么</a>
+      <a class="btn btn--ghost" href="https://github.com/colaKot/ColaNasOs" target="_blank" rel="noopener noreferrer">GitHub 仓库</a>
+    </div>
+    <ul class="hero__facts">
+      <li><b>14</b><span>个内置应用</span></li>
+      <li><b>402</b><span>条 API 路径</span></li>
+      <li><b>6 端</b><span>一套 Flutter 代码</span></li>
+      <li><b>2.7 GB</b><span>本地 AI 模型</span></li>
+    </ul>
+
+    <div class="hero-shot">
+      <span class="hero-shot__tag">版面示意图 · 相册时间轴（不含任何真实照片）</span>
+      <div class="window window--tilt">
+        <div class="window__bar">
+          <span class="window__dots"><i></i><i></i><i></i></span>
+          <span class="window__title">ColaNasOs — 相册 · 时间轴</span>
+        </div>
+        <div class="mock__body">
+          <div class="mock-head">
+            <span class="mock-head__title">2026 年 11 月</span>
+            <span class="mock-search"></span>
+          </div>
+          <div class="mock-album__row">
+            <div class="ph ph--a ph--pic"></div>
+            <div class="ph ph--b ph--pic"></div>
+            <div class="ph ph--c ph--pic"></div>
+            <div class="ph ph--d ph--pic"></div>
+          </div>
+          <div class="mock-album__label">10 月 <span>128 张 · 3 个地点 · 已人脸归组</span></div>
+          <div class="mock-album__row">
+            <div class="ph ph--e ph--pic"></div>
+            <div class="ph ph--c ph--pic"></div>
+            <div class="ph ph--a ph--pic"></div>
+            <div class="ph ph--b ph--pic"></div>
+          </div>
+        </div>
+      </div>
+      <div class="hero-shot__float">
+        <div class="mock mock--dark">
+          <div class="mock__bar">
+            <span class="mock__dots"><i></i><i></i><i></i></span>
+            <span class="mock__title">音乐 — 正在播放</span>
+          </div>
+          <div class="mock__body">
+            <div class="mock-mini">
+              <div class="mock-mini__cover"></div>
+              <div class="mock-mini__body">
+                <div class="mock-mini__title"></div>
+                <div class="mock-mini__sub"></div>
+                <div class="mock-mini__bar"><i></i></div>
+                <div class="mock-mini__ctrl"><span></span><span></span><span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main>
+
+  <section class="section section--alt" id="core">
+    <div class="wrap">
+      <div class="section__head">
+        <span class="section__eyebrow">三大核心能力</span>
+        <h2>不是网盘，是一整套私有云</h2>
+        <p>相册负责「找得回来」，影视负责「点开就播」，文件与同步负责「换个设备也还在」。三块都是自己写到底的完整实现。</p>
+      </div>
+
+      <div class="core-grid">
+        <a class="core" href="#photo">
+          <span class="core__no">01 / AI 相册</span>
+          <h3>照片不用出家门，也能被找回来</h3>
+          <p>不是按日期排一遍：本地推理认出人脸、场景、活动与票面，再用语义搜索、足迹地图和记忆把它们重新串起来。</p>
+          <ul>
+            <li>人脸检测 + 106 点对齐 + EdgeFace 512 维聚类</li>
+            <li>365 类场景 · CLIP 语义检索 · OCR 票面识别</li>
+            <li>记忆 / 人生章节 / 每日一帧 / 那年今日 / 年度报告</li>
+            <li>按用户隔离：每个人只看自己名下的照片</li>
+          </ul>
+          <span class="core__more">查看相册能力 →</span>
+        </a>
+
+        <a class="core core--dark" href="#movie">
+          <span class="core__no">02 / 影视库</span>
+          <h3>搜片、下载、入库刮削，一条链跑完</h3>
+          <p>发现页找片、PT 择种、RSS 自动下载，下载完成落盘即被文件监控接到，增量入库并自动触发刮削，海报墙自己长出来。</p>
+          <ul>
+            <li>多影视库、多来源，NFO / TMDB / 豆瓣刮削</li>
+            <li>下载完成增量入库 → 自动刮削</li>
+            <li>HLS fMP4 分片续转，失败自动降级续播</li>
+            <li>剧集季集、演员作品、查重与智能合集</li>
+          </ul>
+          <span class="core__more">查看影视能力 →</span>
+        </a>
+
+        <a class="core" href="#files">
+          <span class="core__no">03 / 文件与同步</span>
+          <h3>一个目录树，六个端同时看见</h3>
+          <p>文件应用管浏览、上传下载与回收站；同步应用按文件夹建计划，双向 / 仅上传 / 仅下载三种方向，定时跑。</p>
+          <ul>
+            <li>网格 / 列表视图，分片上传 · Range / ETag 下载</li>
+            <li>多端目录同步计划、冲突策略、定时任务</li>
+            <li>传输应用集中看设备与传输任务</li>
+            <li>操作日志与回收站，误删能捞回来</li>
+          </ul>
+          <span class="core__more">查看文件与同步 →</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="server">
+    <div class="wrap">
+      <div class="section__head">
+        <span class="section__eyebrow">Windows NAS · 服务端</span>
+        <h2>一个进程，就是整台 NAS</h2>
+        <p>不用刷机、不用买专用设备。服务端常驻在普通 Windows 机器上，一个内核同时提供 API、索引、转码、识别与同步通道。</p>
+      </div>
+
+      <div class="server-split">
+        <div class="server-split__text">
+          <h3>它是什么</h3>
+          <p>一个 Electron 外壳加一个 <code>utilityProcess</code> 内核：外壳只管托盘与开机自启，内核在独立进程里跑
+             HTTP API、任务队列、数据库迁移与静态托管。AI 推理、FFmpeg 转码、索引与同步由 sidecar 进程按需拉起，
+             心跳掉了自动重启——你不用守着它。</p>
+          <h3>右下角只有一个图标</h3>
+          <p>服务端刻意不做第二个窗口。托盘右键只有三项：<b>打开 Web 页面</b>、<b>开机自动启动</b>、<b>退出</b>。
+             点「打开 Web 页面」直接用系统浏览器进管理界面，不需要远程桌面；退出前会先停掉后台任务再关内核。</p>
+          <h3>数据、端口与密钥</h3>
+          <p>数据落在本机磁盘与 SQLite，不上任何公有云。正式服务端固定 <code>7788</code>，开发内核 <code>7888</code>，两套互不干扰；
+             JWT 密钥首次启动生成后落盘，重启不会把所有客户端踢回登录页。</p>
+          <div class="tag-row">
+            <span class="tag">Windows 10 / 11 x64</span>
+            <span class="tag">Electron + Fastify</span>
+            <span class="tag">SQLite 本地库</span>
+            <span class="tag">托盘常驻</span>
+            <span class="tag">网页端内置</span>
+            <span class="tag">权限域隔离</span>
+          </div>
+        </div>
+        <div class="spec-card">
+          <div class="spec-card__title">服务端速览</div>
+          <div class="spec-row"><span>运行环境</span><b>Windows 10 / 11 x64</b></div>
+          <div class="spec-row"><span>形态</span><b>纯托盘，无主窗口</b></div>
+          <div class="spec-row"><span>内核</span><b>Fastify + Kysely + SQLite</b></div>
+          <div class="spec-row"><span>数据位置</span><b>本机磁盘，不上公有云</b></div>
+          <div class="spec-row"><span>管理界面</span><b>浏览器直连，无需安装</b></div>
+          <div class="spec-row"><span>接口</span><b>402 条路径 · OpenAPI 单一真源</b></div>
+          <div class="spec-row"><span>本地推理</span><b>ONNX Runtime · llama.cpp</b></div>
+          <div class="spec-row"><span>当前版本</span><b>v1.0.0</b></div>
+        </div>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <h3>装服务端</h3>
+          <p>从 GitHub Releases 取 Windows x64 安装包（559 MB），Electron 运行时、FFmpeg、本地模型全部内置。</p>
+        </div>
+        <div class="step">
+          <h3>托盘常驻</h3>
+          <p>双击运行后只在右下角留一个图标，勾上「开机自动启动」就跟随登录启动。</p>
+        </div>
+        <div class="step">
+          <h3>各端连接</h3>
+          <p>桌面端、安卓、TV 与浏览器填同一个地址；局域网内会自动探测端口，不用手抄 IP。</p>
+        </div>
+        <div class="step">
+          <h3>建库开始用</h3>
+          <p>添加相册与影视目录、建子账号分配权限域，剩下的索引与识别在后台排队跑。</p>
+        </div>
+      </div>
+
+      <div class="shot">
+        <div class="mock-tray">
+          <div class="mock-tray__screen"><span class="mock-tray__ico"></span></div>
+          <div class="mock-tray__menu">
+            <div class="mock-tray__item">打开 Web 页面</div>
+            <div class="mock-tray__item"><span class="mock-tray__check mock-tray__check--on"></span>开机自动启动</div>
+            <div class="mock-tray__item mock-tray__item--sep"></div>
+            <div class="mock-tray__item">退出</div>
+          </div>
+        </div>
+        <p class="shot__cap">版面示意图：服务端托盘菜单只有这三项，没有主窗口、没有设置面板。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" id="photo">
+    <div class="wrap">
+      <div class="section__head">
+        <span class="section__eyebrow">核心能力 01</span>
+        <h2>相册：把「拍过」变成<br>「找得回来」</h2>
+        <p>索引、识别、检索全在本机跑。数万到数十万张照片，靠真分页与渐进加载撑住，不会一次全量拉。</p>
+      </div>
+
+      <div class="feat-grid" style="margin-top:0">
+        <div class="feat">
+          <h4><i>轴</i>时间轴与文件夹</h4>
+          <p>时间轴按月分组、文件夹保留原始层级，两种视角随时切；收藏、相册、回收站与来源（本地磁盘 / SMB）统一口径。</p>
+        </div>
+        <div class="feat">
+          <h4><i>脸</i>人脸与人物关系</h4>
+          <p>检测 + 106 点对齐后取 512 维特征聚类成人物，支持合并、拆分、命名与「这个不是我」；人物关系图谱单独一页。</p>
+        </div>
+        <div class="feat">
+          <h4><i>搜</i>语义与以图搜图</h4>
+          <p>CLIP 图文对齐后可以用一句话找图（「海边的日落」），也能拿一张图找相似的；OCR 认出的票面文字同样可搜。</p>
+        </div>
+        <div class="feat">
+          <h4><i>忆</i>记忆与人生章节</h4>
+          <p>那年今日、每日一帧、人生章节、年度报告：按时间与地点把照片重新组织成能翻的东西，不是又一个网格。</p>
+        </div>
+        <div class="feat">
+          <h4><i>迹</i>足迹地图</h4>
+          <p>GPS 聚合成网格点，缩放级别决定聚合精度；点开就是那一片地方拍过的全部照片。</p>
+        </div>
+        <div class="feat">
+          <h4><i>净</i>清理与备份</h4>
+          <p>按内容 MD5 分组找重复、按特征聚类找相似，先预演再执行；手机备份按「大小 + MD5」去重，不留第二份。</p>
+        </div>
+      </div>
+
+      <div class="shot__grid shot">
+        <div>
+          <div class="mock">
+            <div class="mock__bar">
+              <span class="mock__dots"><i></i><i></i><i></i></span>
+              <span class="mock__title">相册 — 时间轴</span>
+            </div>
+            <div class="mock__body mock-album">
+              <div class="mock-album__label">2026 年 6 月 <span>412 张</span></div>
+              <div class="mock-album__row">
+                <div class="ph ph--b ph--pic"></div>
+                <div class="ph ph--c ph--pic"></div>
+                <div class="ph ph--a ph--pic"></div>
+                <div class="ph ph--e ph--pic"></div>
+              </div>
+              <div class="mock-album__row">
+                <div class="ph ph--d ph--pic"></div>
+                <div class="ph ph--a ph--pic"></div>
+                <div class="ph ph--b ph--pic"></div>
+                <div class="ph ph--c ph--pic"></div>
+              </div>
+            </div>
+          </div>
+          <p class="shot__cap">版面示意图：时间轴按月分组，滚到底再加载下一页。</p>
+        </div>
+
+        <div>
+          <div class="mock">
+            <div class="mock__bar">
+              <span class="mock__dots"><i></i><i></i><i></i></span>
+              <span class="mock__title">记忆 — 那年今日</span>
+            </div>
+            <div class="mock__body">
+              <div class="mock-head">
+                <span class="mock-head__title">2024-11-10 · 24 张</span>
+                <span class="mock-search"></span>
+              </div>
+              <div class="mock-memory">
+                <div class="mock-memory__main ph ph--a ph--pic"></div>
+                <div class="mock-memory__side">
+                  <div class="ph ph--c ph--pic"></div>
+                  <div class="ph ph--d ph--pic"></div>
+                </div>
+              </div>
+              <div class="mock-memory__thumbs">
+                <div class="ph ph--a ph--pic"></div>
+                <div class="ph ph--b ph--pic"></div>
+                <div class="ph ph--c ph--pic"></div>
+                <div class="ph ph--d ph--pic"></div>
+                <div class="ph ph--e ph--pic"></div>
+                <div class="ph ph--a ph--pic"></div>
+                <div class="ph ph--c ph--pic"></div>
+              </div>
+            </div>
+          </div>
+          <p class="shot__cap">版面示意图：主图 + 侧栏 + 底部缩略条，缩略条可横向翻页。</p>
+        </div>
+      </div>
+
+      <div class="shot">
+        <div class="mock">
+          <div class="mock__bar">
+            <span class="mock__dots"><i></i><i></i><i></i></span>
+            <span class="mock__title">相册 — 人物（本页为隐私示意图）</span>
+          </div>
+          <div class="mock__body">
+            <div class="mock-head">
+              <span class="mock-head__title">人物 · 自动分组</span>
+              <span class="mock-search"></span>
+            </div>
+            <div class="mock-faces">
+              <div class="mock-face">
+                <div class="mock-face__avatar"></div>
+                <div class="mock-face__name"></div>
+                <div class="mock-face__count"></div>
+              </div>
+              <div class="mock-face">
+                <div class="mock-face__avatar"></div>
+                <div class="mock-face__name"></div>
+                <div class="mock-face__count"></div>
+              </div>
+              <div class="mock-face">
+                <div class="mock-face__avatar"></div>
+                <div class="mock-face__name"></div>
+                <div class="mock-face__count"></div>
+              </div>
+              <div class="mock-face">
+                <div class="mock-face__avatar"></div>
+                <div class="mock-face__name"></div>
+                <div class="mock-face__count"></div>
+              </div>
+              <div class="mock-face">
+                <div class="mock-face__avatar"></div>
+                <div class="mock-face__name"></div>
+                <div class="mock-face__count"></div>
+              </div>
+              <div class="mock-face">
+                <div class="mock-face__avatar"></div>
+                <div class="mock-face__name"></div>
+                <div class="mock-face__count"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="shot__cap">隐私示意图：人物分组页只画版面（灰度圆形占位），<b>不展示任何真实人像</b>。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="movie">
+    <div class="wrap">
+      <div class="section__head">
+        <span class="section__eyebrow">核心能力 02</span>
+        <h2>影视库：从找到片子<br>到点开能播</h2>
+        <p>建库、刮削、播放、转码是一条完整链路。手机、电视、桌面各播各的，服务端只负责把对的码流送到对的端。</p>
+      </div>
+
+      <div class="feat-grid" style="margin-top:0">
+        <div class="feat">
+          <h4><i>库</i>多库多来源</h4>
+          <p>电影 / 电视剧 / 图片 / 混合四类库各自独立，各自有「在主页显示」开关；同一个库可以挂多个来源目录，本地盘与 SMB 都能进。</p>
+        </div>
+        <div class="feat">
+          <h4><i>刮</i>刮削与 NFO</h4>
+          <p>TMDB / 豆瓣取元数据与评分，海报落本地缓存；NFO 双向读写，用户手改的字段优先，不会被下一次刮削覆盖。</p>
+        </div>
+        <div class="feat">
+          <h4><i>集</i>剧集与季集</h4>
+          <p>按文件名与目录结构识别季集，缺集与乱序会在库里标出来；演员作品页按人聚合，点进去就是他的全部片目。</p>
+        </div>
+        <div class="feat">
+          <h4><i>发</i>发现 · PT · RSS</h4>
+          <p>发现页放 TMDB 与豆瓣榜单；PT 站点搜索与择种，RSS 订阅按规则自动下载，订阅台账与任务面板能看到每一步。</p>
+        </div>
+        <div class="feat">
+          <h4><i>播</i>播放与续转</h4>
+          <p>HLS fMP4 切片，转码任务中断后能从原进度继续；编码不兼容时自动回退 H.264 并续播，安卓端还有 FFmpeg 软解兜底。</p>
+        </div>
+        <div class="feat">
+          <h4><i>查</i>查重与合集</h4>
+          <p>同一部片子多个版本按元数据与文件指纹查重；智能合集按导演、系列、年代自动归组。</p>
+        </div>
+      </div>
+
+      <div class="shot__grid shot">
+        <div>
+          <div class="mock">
+            <div class="mock__bar">
+              <span class="mock__dots"><i></i><i></i><i></i></span>
+              <span class="mock__title">影视库 — 海报墙（示意图）</span>
+            </div>
+            <div class="mock__body">
+              <div class="mock-filter">
+                <span class="mock-chip mock-chip--on">全部</span>
+                <span class="mock-chip">电影</span>
+                <span class="mock-chip">剧集</span>
+                <span class="mock-chip">图片</span>
+                <span class="mock-chip">混合</span>
+              </div>
+              <div class="mock-posters">
+                <div class="mock-poster">
+                  <div class="mock-poster__art ph ph--a"></div>
+                  <div class="mock-poster__meta">
+                    <div class="mock-poster__title"></div>
+                    <div class="mock-poster__sub"></div>
+                  </div>
+                </div>
+                <div class="mock-poster">
+                  <div class="mock-poster__art ph ph--b"></div>
+                  <div class="mock-poster__meta">
+                    <div class="mock-poster__title"></div>
+                    <div class="mock-poster__sub"></div>
+                  </div>
+                </div>
+                <div class="mock-poster">
+                  <div class="mock-poster__art ph ph--c"></div>
+                  <div class="mock-poster__meta">
+                    <div class="mock-poster__title"></div>
+                    <div class="mock-poster__sub"></div>
+                  </div>
+                </div>
+                <div class="mock-poster">
+                  <div class="mock-poster__art ph ph--d"></div>
+                  <div class="mock-poster__meta">
+                    <div class="mock-poster__title"></div>
+                    <div class="mock-poster__sub"></div>
+                  </div>
+                </div>
+                <div class="mock-poster">
+                  <div class="mock-poster__art ph ph--e"></div>
+                  <div class="mock-poster__meta">
+                    <div class="mock-poster__title"></div>
+                    <div class="mock-poster__sub"></div>
+                  </div>
+                </div>
+                <div class="mock-poster">
+                  <div class="mock-poster__art ph ph--a"></div>
+                  <div class="mock-poster__meta">
+                    <div class="mock-poster__title"></div>
+                    <div class="mock-poster__sub"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="shot__cap">隐私示意图：海报位只画版面色块，<b>不含任何真实海报或剧照</b>。</p>
+        </div>
+
+        <div>
+          <div class="mock">
+            <div class="mock__bar">
+              <span class="mock__dots"><i></i><i></i><i></i></span>
+              <span class="mock__title">发现 — 榜单 / 演员作品（示意图）</span>
+            </div>
+            <div class="mock__body">
+              <div class="mock-head">
+                <span class="mock-head__title">榜单 TOP 6</span>
+                <span class="mock-search"></span>
+              </div>
+              <div class="mock-rows">
+                <div class="mock-row">
+                  <span class="mock-row__no"></span>
+                  <span class="mock-row__name"></span>
+                  <span class="mock-row__badge"></span>
+                  <span class="mock-row__meta"></span>
+                </div>
+                <div class="mock-row">
+                  <span class="mock-row__no"></span>
+                  <span class="mock-row__name"></span>
+                  <span class="mock-row__badge"></span>
+                  <span class="mock-row__meta"></span>
+                </div>
+                <div class="mock-row">
+                  <span class="mock-row__no"></span>
+                  <span class="mock-row__name"></span>
+                  <span class="mock-row__badge"></span>
+                  <span class="mock-row__meta"></span>
+                </div>
+                <div class="mock-row">
+                  <span class="mock-row__no"></span>
+                  <span class="mock-row__name"></span>
+                  <span class="mock-row__badge"></span>
+                  <span class="mock-row__meta"></span>
+                </div>
+                <div class="mock-row">
+                  <span class="mock-row__no"></span>
+                  <span class="mock-row__name"></span>
+                  <span class="mock-row__badge"></span>
+                  <span class="mock-row__meta"></span>
+                </div>
+                <div class="mock-row">
+                  <span class="mock-row__no"></span>
+                  <span class="mock-row__name"></span>
+                  <span class="mock-row__badge"></span>
+                  <span class="mock-row__meta"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="shot__cap">隐私示意图：榜单与演员作品页在这里只画「编号 + 名称条 + 徽章」的列表版式，
+            <b>不展示任何演员照片、影片封面与片名文字</b>。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" id="music">
+    <div class="wrap">
+      <div class="section__head">
+        <span class="section__eyebrow">音乐库</span>
+        <h2>曲库是本地文件，<br>播放器是认真做的</h2>
+        <p>扫描目录读标签，曲库 / 专辑 / 歌手 / 歌单 / 收藏 / 播放历史六层结构；全屏播放器带动态歌词与唱片动效。</p>
+      </div>
+
+      <div class="feat-grid" style="margin-top:0">
+        <div class="feat">
+          <h4><i>库</i>目录即曲库</h4>
+          <p>指向一个音乐目录就建好曲库，标签读不全时用文件名兜底；专辑封面优先读内嵌图，没有就用目录里的图片。</p>
+        </div>
+        <div class="feat">
+          <h4><i>词</i>歌词与刮削</h4>
+          <p>优先读同名 LRC，缺了在线刮削；简体 / 繁体 / 跳字三种情况都能命中同一首歌。</p>
+        </div>
+        <div class="feat">
+          <h4><i>播</i>队列与历史</h4>
+          <p>播放队列可插队、可整单替换，播放历史与收藏各成一路；后台播放不打断切页。</p>
+        </div>
+      </div>
+
+      <div class="shot">
+        <div class="mock mock--dark">
+          <div class="mock__bar">
+            <span class="mock__dots"><i></i><i></i><i></i></span>
+            <span class="mock__title">音乐 — 全屏播放器（示意图）</span>
+          </div>
+          <div class="mock__body">
+            <div class="mock-player">
+              <div class="mock-player__cover"></div>
+              <div class="mock-player__info">
+                <div class="mock-player__title"></div>
+                <div class="mock-player__artist"></div>
+                <div class="mock-player__bar"><i></i></div>
+                <div class="mock-player__lyric">
+                  <span></span><span></span><span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="shot__cap">隐私示意图：封面位画的是唱片占位，<b>不使用任何真实专辑封面</b>。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="files">
+    <div class="wrap">
+      <div class="section__head">
+        <span class="section__eyebrow">文件 · 传输 · 同步</span>
+        <h2>文件系统是你自己的，<br>只是多了一层好用的界面</h2>
+        <p>不做虚拟盘符抽象——浏览的就是磁盘上真实存在的目录；上传下载走分片与 Range，断点能续。</p>
+      </div>
+
+      <div class="feat-grid" style="margin-top:0">
+        <div class="feat">
+          <h4><i>览</i>网格与列表</h4>
+          <p>网格视图看缩略图、列表视图看大小与时间；统一目录选择器可以一层层返回上级，不用重新进。</p>
+        </div>
+        <div class="feat">
+          <h4><i>传</i>分片上传与断点</h4>
+          <p>大文件切片上传，中断后按已传分片续传；下载支持 Range 与 ETag，播放器拖进度条不会整段重下。</p>
+        </div>
+        <div class="feat">
+          <h4><i>回</i>回收站与日志</h4>
+          <p>删除先进回收站，路径与时间都记着；文件操作日志按时间倒读分页，翻多久都不会卡。</p>
+        </div>
+        <div class="feat">
+          <h4><i>同</i>多端目录同步</h4>
+          <p>按文件夹建同步计划，双向 / 仅上传 / 仅下载三种方向，冲突策略可选；定时任务按间隔或固定时间跑。</p>
+        </div>
+        <div class="feat">
+          <h4><i>设</i>设备与任务</h4>
+          <p>传输应用列出已连的设备与在跑的任务，进度、速度、剩余时间一目了然，卡住的任务可以单独停。</p>
+        </div>
+        <div class="feat">
+          <h4><i>权</i>路径级权限</h4>
+          <p>子账号能看哪个目录、能用哪个应用都是单独配的；越界路径直接被内核拦掉，不靠前端藏按钮。</p>
+        </div>
+      </div>
+
+      <div class="shot">
+        <div class="mock">
+          <div class="mock__bar">
+            <span class="mock__dots"><i></i><i></i><i></i></span>
+            <span class="mock__title">文件 — 网格视图（示意图）</span>
+          </div>
+          <div class="mock__body">
+            <div class="mock-filter">
+              <span class="mock-chip mock-chip--on">网格</span>
+              <span class="mock-chip">列表</span>
+              <span class="mock-chip">最近访问</span>
+              <span class="mock-chip">收藏</span>
+            </div>
+            <div class="mock-files">
+              <div class="mock-file"><div class="mock-file__ico"></div><div class="mock-file__name"></div></div>
+              <div class="mock-file"><div class="mock-file__ico"></div><div class="mock-file__name"></div></div>
+              <div class="mock-file"><div class="mock-file__ico"></div><div class="mock-file__name"></div></div>
+              <div class="mock-file"><div class="mock-file__ico"></div><div class="mock-file__name"></div></div>
+              <div class="mock-file"><div class="mock-file__ico"></div><div class="mock-file__name"></div></div>
+              <div class="mock-file"><div class="mock-file__ico"></div><div class="mock-file__name"></div></div>
+              <div class="mock-file"><div class="mock-file__ico"></div><div class="mock-file__name"></div></div>
+              <div class="mock-file"><div class="mock-file__ico"></div><div class="mock-file__name"></div></div>
+            </div>
+          </div>
+        </div>
+        <p class="shot__cap">示意图：只画图标网格版式，不显示任何真实文件名与目录结构。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" id="more">
+    <div class="wrap">
+      <div class="section__head">
+        <span class="section__eyebrow">其余能力</span>
+        <h2>该有的都有，而且都在本地</h2>
+        <p>除了三大核心，还有下载、博客与 AI 播客、监控、终端、账号与设置，各自是独立应用。</p>
+      </div>
+
+      <div class="feat-grid" style="margin-top:0">
+        <div class="feat">
+          <h4><i>下</i>内置下载器</h4>
+          <p>随包带 transmission-daemon 与中文 Web UI，不用另装；也支持连你已有的 Transmission RPC。退出前先发 <code>stopped</code> 公告再停进程，不会被 tracker 当成换了做种位置。</p>
+        </div>
+        <div class="feat">
+          <h4><i>博</i>博客与 AI 播客</h4>
+          <p>AI 新闻聚合、文稿生成、TTS 朗读与播放队列；翻译与语音合成模型不随包分发时，页面上有下载按钮，国内走 ModelScope 与 HF 镜像，三源自动回退。</p>
+        </div>
+        <div class="feat">
+          <h4><i>监</i>监控与任务</h4>
+          <p>实时 CPU / 内存 / 磁盘 / 网络；任务中心能看到索引、转码、识别队列的进度与失败原因，日志按时间倒读真分页。</p>
+        </div>
+        <div class="feat">
+          <h4><i>终</i>Web 终端</h4>
+          <p>浏览器里就能开 shell，敏感命令有拦截；不用为了看个目录再装远程桌面。</p>
+        </div>
+        <div class="feat">
+          <h4><i>户</i>多账号与 2FA</h4>
+          <p>子账号 + 权限域（应用级白名单 + 路径级权限），支持两步验证；超管也没有跨用户看照片的例外。</p>
+        </div>
+        <div class="feat">
+          <h4><i>约</i>契约驱动开发</h4>
+          <p>OpenAPI / 应用清单 / 文案表是唯一真源，一条命令生成客户端 DTO、SDK、API 文档与多语言骨架；生成物不一致会在门禁里报错。</p>
+        </div>
+      </div>
+
+      <div class="shot">
+        <div class="mock mock--dark">
+          <div class="mock__bar">
+            <span class="mock__dots"><i></i><i></i><i></i></span>
+            <span class="mock__title">下载 — 任务列表（示意图）</span>
+          </div>
+          <div class="mock__body">
+            <div class="mock-dl">
+              <div class="mock-dl__row">
+                <div class="mock-dl__name"></div>
+                <div class="mock-dl__bar"><i style="width:72%"></i></div>
+                <div class="mock-dl__pct"></div>
+              </div>
+              <div class="mock-dl__row">
+                <div class="mock-dl__name"></div>
+                <div class="mock-dl__bar"><i style="width:41%"></i></div>
+                <div class="mock-dl__pct"></div>
+              </div>
+              <div class="mock-dl__row">
+                <div class="mock-dl__name"></div>
+                <div class="mock-dl__bar"><i style="width:93%"></i></div>
+                <div class="mock-dl__pct"></div>
+              </div>
+              <div class="mock-dl__row">
+                <div class="mock-dl__name"></div>
+                <div class="mock-dl__bar"><i style="width:18%"></i></div>
+                <div class="mock-dl__pct"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="shot__cap">示意图：下载任务列表只画进度条版式，<b>不显示任何真实种子名称</b>。</p>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi"><b>402</b><span>条 API 路径（OpenAPI 单一真源）</span></div>
+        <div class="kpi"><b>14</b><span>个内置应用，各自独立页面栈</span></div>
+        <div class="kpi"><b>6 端</b><span>桌面 / 平板 / 手机 / TV / Web / AppleTV</span></div>
+        <div class="kpi"><b>2 语言</b><span>中英文同步维护，2630 条文案键</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="clients">
+    <div class="wrap">
+      <div class="section__head">
+        <span class="section__eyebrow">全端覆盖</span>
+        <h2>同一套服务端，<br>六种终端</h2>
+        <p>桌面、平板、手机、TV、网页与 Apple TV 由同一份 Flutter 代码与同一份导航契约驱动；账号、权限、播放进度全部互通。</p>
+      </div>
+
+      <div class="tiles">
+        <div class="tile">
+          <div class="tile__ico">服</div>
+          <h3>Windows 服务端</h3>
+          <p>常驻托盘的服务核心，提供全部 API、任务队列与存储管理。安装包 559 MB，运行时与本地模型内置。</p>
+        </div>
+        <div class="tile">
+          <div class="tile__ico">桌</div>
+          <h3>Windows 桌面端</h3>
+          <p>主客户端管全部应用，二级侧栏与页面栈按桌面形态排布；绿色包解压即用，不用再装一遍运行时。</p>
+        </div>
+        <div class="tile">
+          <div class="tile__ico">手</div>
+          <h3>Android 手机 / 平板</h3>
+          <p>arm64 单包，平板走大屏布局；相册滚动加载、播放器手势与横屏适配都单独调过。</p>
+        </div>
+        <div class="tile">
+          <div class="tile__ico">视</div>
+          <h3>TV 与网页端</h3>
+          <p>Android TV 大屏遥控器操作；浏览器直接访问服务端地址即可管理，零安装。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" id="download">
+    <div class="wrap">
+      <div class="section__head">
+        <span class="section__eyebrow">下载</span>
+        <h2>ColaNasOs v1.0.0</h2>
+        <p>首个公开版本：相册 / 影视 / 音乐 / 文件 / 发现 / 下载 / 同步 / 博客 / 监控 / 终端 / 用户 / 设置，
+           服务端 + Windows 客户端 + 安卓端。三端都在 GitHub Releases，点包名直达下载。</p>
+      </div>
+
+      <div class="dl-table">
+        <div class="dl-table__head">
+          <span>终端</span><span>安装包</span><span>大小</span><span>下载</span>
+        </div>
+        <div class="dl-row">
+          <span>Windows 服务端 x64</span>
+          <span>ColaNasOs-Setup-1.0.0.exe</span>
+          <span>559.2 MB</span>
+          <div class="dl-links">
+            <a href="https://github.com/colaKot/ColaNasOs/releases/download/v1.0.0/ColaNasOs-Setup-1.0.0.exe" target="_blank" rel="noopener noreferrer">下载</a>
+            <a class="dl-mirror" href="https://ghfast.top/https://github.com/colaKot/ColaNasOs/releases/download/v1.0.0/ColaNasOs-Setup-1.0.0.exe" target="_blank" rel="noopener noreferrer">加速</a>
+          </div>
+        </div>
+        <div class="dl-row">
+          <span>Windows 桌面端 x64</span>
+          <span>ColaNasOs-1.0.0-windows-x64.zip</span>
+          <span>37.3 MB</span>
+          <div class="dl-links">
+            <a href="https://github.com/colaKot/ColaNasOs/releases/download/v1.0.0/ColaNasOs-1.0.0-windows-x64.zip" target="_blank" rel="noopener noreferrer">下载</a>
+            <a class="dl-mirror" href="https://ghfast.top/https://github.com/colaKot/ColaNasOs/releases/download/v1.0.0/ColaNasOs-1.0.0-windows-x64.zip" target="_blank" rel="noopener noreferrer">加速</a>
+          </div>
+        </div>
+        <div class="dl-row">
+          <span>Android 手机 / 平板 arm64</span>
+          <span>ColaNasOs-1.0.0-arm64.apk</span>
+          <span>42.0 MB</span>
+          <div class="dl-links">
+            <a href="https://github.com/colaKot/ColaNasOs/releases/download/v1.0.0/ColaNasOs-1.0.0-arm64.apk" target="_blank" rel="noopener noreferrer">下载</a>
+            <a class="dl-mirror" href="https://ghfast.top/https://github.com/colaKot/ColaNasOs/releases/download/v1.0.0/ColaNasOs-1.0.0-arm64.apk" target="_blank" rel="noopener noreferrer">加速</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="note">
+        安装包统一发布在 GitHub Releases：<a href="https://github.com/colaKot/ColaNasOs/releases" target="_blank" rel="noopener noreferrer">github.com/colaKot/ColaNasOs/releases</a>，
+        历史版本与校验信息都在该页面。<br>
+        国内直连慢时点「加速」：走公共镜像 <code>ghfast.top</code> 中转，文件与 GitHub 完全一致（同一份字节流）。
+        若某个镜像临时不可用，把链接里的 <code>https://github.com/</code> 换成 <code>https://gh-proxy.com/</code> 前缀即可。<br>
+        服务端只支持 Windows x64；客户端与安卓包按终端分开下载，装哪个用哪个。翻译与语音合成两个模型（约 1.4 GB）
+        不随安装包分发，在应用内点一下按钮按需下载即可。
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="apps">
+    <div class="wrap">
+      <div class="section__head">
+        <span class="section__eyebrow">内置应用</span>
+        <h2>14 个独立应用，一个服务端托底</h2>
+        <p>每项功能都是独立 App：自己的图标、独立页面栈、独立的服务端 API 命名空间。
+           默认列表由服务端下发，层级菜单来自同一份应用清单，六端保持一致。</p>
+      </div>
+
+      <div class="apps-grid">
+        <div class="app"><span class="app__ico">相</span><div><h4>相册</h4><p>时间轴 / 人脸 / 记忆<br><code>photo</code></p></div></div>
+        <div class="app"><span class="app__ico">文</span><div><h4>文件</h4><p>浏览 / 上传 / 回收站<br><code>files</code></p></div></div>
+        <div class="app"><span class="app__ico">影</span><div><h4>影视</h4><p>多库 / 刮削 / 播放<br><code>video</code></p></div></div>
+        <div class="app"><span class="app__ico">发</span><div><h4>发现</h4><p>榜单 / PT / RSS<br><code>discover</code></p></div></div>
+        <div class="app"><span class="app__ico">乐</span><div><h4>音乐</h4><p>曲库 / 歌词 / 播放器<br><code>music</code></p></div></div>
+        <div class="app"><span class="app__ico">博</span><div><h4>博客</h4><p>AI 新闻 / 播客 / TTS<br><code>blog</code></p></div></div>
+        <div class="app"><span class="app__ico">监</span><div><h4>监控</h4><p>硬件 / 任务队列<br><code>monitor</code></p></div></div>
+        <div class="app"><span class="app__ico">同</span><div><h4>同步</h4><p>目录同步计划<br><code>sync</code></p></div></div>
+        <div class="app"><span class="app__ico">传</span><div><h4>传输</h4><p>设备与传输任务<br><code>transfer</code></p></div></div>
+        <div class="app"><span class="app__ico">下</span><div><h4>下载</h4><p>内置 transmission<br><code>transmission</code></p></div></div>
+        <div class="app"><span class="app__ico">户</span><div><h4>用户</h4><p>子账号 / 权限域<br><code>accounts</code></p></div></div>
+        <div class="app"><span class="app__ico">终</span><div><h4>终端</h4><p>Web shell / 命令拦截<br><code>terminal</code></p></div></div>
+        <div class="app"><span class="app__ico">设</span><div><h4>设置</h4><p>全局 / 模块 / 多语言<br><code>settings</code></p></div></div>
+        <div class="app"><span class="app__ico">智</span><div><h4>智能</h4><p>规划中<br><code>ai</code></p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" id="github">
+    <div class="wrap">
+      <div class="section__head">
+        <span class="section__eyebrow">开源与许可</span>
+        <h2>代码、issue 与发布包<br>都在 GitHub</h2>
+        <p>ColaNasOs 以 GNU GPL v3.0 发布，欢迎 Star、提交 Issue 与 PR。源码、构建脚本与文档都在仓库里。</p>
+      </div>
+
+      <div class="repo-card">
+        <div class="repo-card__head">
+          <svg viewBox="0 0 16 16" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          <a href="https://github.com/colaKot/ColaNasOs" target="_blank" rel="noopener noreferrer">colaKot / ColaNasOs</a>
+        </div>
+        <p>Windows NAS 系统：AI 相册、影视库、文件与多端同步三大核心，外加下载、博客与 AI 播客、监控、终端与账号。
+           服务端 Electron + Fastify + SQLite，客户端一套 Flutter 代码六端共用，契约驱动生成全链路。</p>
+        <div class="repo-card__links">
+          <a class="btn btn--line" href="https://github.com/colaKot/ColaNasOs" target="_blank" rel="noopener noreferrer">仓库主页</a>
+          <a class="btn btn--line" href="https://github.com/colaKot/ColaNasOs/releases" target="_blank" rel="noopener noreferrer">Releases</a>
+          <a class="btn btn--line" href="https://github.com/colaKot/ColaNasOs/issues" target="_blank" rel="noopener noreferrer">Issues</a>
+          <a class="btn btn--line" href="https://github.com/colaKot/ColaNasOs/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">许可证全文</a>
+        </div>
+      </div>
+
+      <div class="note">
+        <b style="color:var(--ink-2)">GPL-3.0</b>：本项目以 GNU GPL v3.0 分发，版权归 colaKot 所有（© 2026）。
+        任何再分发者均须保留版权声明与许可证全文；若把本软件（含修改版）对外分发或提供下载，
+        须一并提供对应的完整源代码（GPL-3.0 §3 / §5）。本站是面向用户的介绍，完整源代码以 GitHub 仓库为准。
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="credits">
+    <div class="wrap">
+      <div class="section__head">
+        <span class="section__eyebrow">第三方资源与致谢</span>
+        <h2>站在谁的肩膀上</h2>
+        <p>产品与业务是自己写的，底座上用了不少优秀的开源项目与模型，来源与许可一并说明。</p>
+      </div>
+
+      <div class="credits">
+        <div class="credit">
+          <div class="credit__name">Transmission<span>内置下载器 · GPL-3.0</span></div>
+          <div class="credit__body">
+            随包分发 Windows 版 <code>transmission-daemon</code>（取自官方 4.1.4 安装包，原样提取未修改）与官方 Web 界面静态文件；
+            另内置 <b>Transmission Web Control</b>（v1.6.1，MIT）作为中文界面。版权归 Transmission 项目作者所有。
+          </div>
+        </div>
+
+        <div class="credit">
+          <div class="credit__name">FFmpeg / ffprobe<span>转码与抽帧 · GPL-2.0+</span></div>
+          <div class="credit__body">
+            使用 Jellyfin 定制构建（含 x264 / x265），用于转码、抽帧与缩略图生成；分发时按 GPL 提供对应源码获取方式。
+          </div>
+        </div>
+
+        <div class="credit">
+          <div class="credit__name">llama.cpp<span>本地文本推理 · MIT</span></div>
+          <div class="credit__body">
+            用其 <code>llama-server</code> 与 <code>llama-tts</code> 在本机跑 GGUF 模型，承担短文本翻译与语音合成。
+          </div>
+        </div>
+
+        <div class="credit">
+          <div class="credit__name">AI 模型<span>各自许可 · 本地推理</span></div>
+          <div class="credit__body">
+            人脸检测与对齐、<b>EdgeFace</b> 人脸特征、<b>Places365</b> 场景分类、<b>CLIP</b> 图文对齐、
+            <b>PP-OCR</b> 文字识别、活动识别，以及 <b>Qwen3</b> 系列的翻译与 TTS 模型；
+            版权归各自作者所有，本项目仅按各自许可证在本机推理使用，<b>不上传任何图片到外部服务</b>。
+          </div>
+        </div>
+
+        <div class="credit">
+          <div class="credit__name">图标<span>Flutter 内置</span></div>
+          <div class="credit__body">
+            界面图标使用 Flutter 内置的 Material Icons 与 Cupertino Icons，未做修改，按其各自许可使用。
+          </div>
+        </div>
+
+        <div class="credit">
+          <div class="credit__name">本页配图<span>示意图</span></div>
+          <div class="credit__body">
+            本页所有界面配图均为 <b>CSS 绘制的版面示意图</b>，用于说明各板块的布局与信息层级；
+            <b>不包含任何真实照片、人像、影片海报、剧照或种子名称</b>。
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-cols">
+      <div>
+        <div class="footer-brand">
+          <span class="footer-brand__mark">C</span>
+          <span class="footer-brand__name">ColaNasOs</span>
+        </div>
+        <p>
+          Windows NAS 系统：AI 相册、影视库、文件与多端同步，照片影音文件一套服务端多端共用。
+          由广州番禺粤饮越泳软件开发工作室维护，以 GPL-3.0 发布。
+        </p>
+      </div>
+      <div>
+        <h4>本站导航</h4>
+        <ul class="footer-links">
+          <li><a href="index.html">首页</a></li>
+          <li><a href="#core">核心功能</a></li>
+          <li><a href="#server">Windows NAS</a></li>
+          <li><a href="#photo">AI 相册</a></li>
+          <li><a href="#movie">影视库</a></li>
+          <li><a href="#apps">内置应用</a></li>
+          <li><a href="#download">下载</a></li>
+          <li><a href="#credits">第三方致谢</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>相关链接</h4>
+        <ul class="footer-links">
+          <li><a href="https://github.com/colaKot/ColaNasOs" target="_blank" rel="noopener noreferrer">GitHub 仓库</a></li>
+          <li><a href="https://github.com/colaKot/ColaNasOs/releases" target="_blank" rel="noopener noreferrer">Releases 下载</a></li>
+          <li><a href="https://www.gexuan.net/" target="_blank" rel="noopener noreferrer">工作室官网</a></li>
+          <li><a href="mailto:cola23@126.com">cola23@126.com</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <div class="icp">
+        广州番禺粤饮越泳软件开发工作室
+        <span class="sep">|</span>
+        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">粤ICP备18009785号</a>
+      </div>
+      <div class="copyright">© 2026 colaKot　·　GPL-3.0</div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
