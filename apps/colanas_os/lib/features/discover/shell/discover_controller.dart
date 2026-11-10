@@ -521,6 +521,8 @@ class DiscoverController extends GetxController {
     final res = await _api.favoriteToggle(mediaId: id, on: on);
     if (res.success) {
       browseItems[index] = {...item, 'favorited': on};
+      // 待下载 / 已下载是另外两个列表，不刷新的话刚收藏的电影看不见
+      await loadFavorites();
     }
   }
 

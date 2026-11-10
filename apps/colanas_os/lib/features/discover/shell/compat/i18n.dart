@@ -228,6 +228,7 @@ const Map<String, String> kCompatZhCN = <String, String>{
   'discover_task_resume': "继续",
   'discover_task_retry': "重试",
   'discover_task_to_favorite': "移到待下载",
+  'transmission.downloading': "下载中",
   'discover_tasks': "下载任务",
   'discover_tasks_empty': "暂无下载任务",
   'discover_title': "影视发现",

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 // 从参考实现原样搬运：以下 lint 属于参考源码风格，保持 1:1 不改写。
 // ignore_for_file: use_null_aware_elements, unnecessary_underscores, use_build_context_synchronously, unused_element, dead_code, dead_null_aware_expression
 import '../../photo/folder_picker.dart';
@@ -1802,13 +1804,27 @@ class _AddFeedDialogState extends State<_AddFeedDialog> {
 }
 
 // ==================== 任务 ====================
-class _TasksTab extends StatelessWidget {
+class _TasksTab extends StatefulWidget {
   const _TasksTab(this.c);
 
   final DiscoverController c;
 
   @override
+  State<_TasksTab> createState() => _TasksTabState();
+}
+
+class _TasksTabState extends State<_TasksTab> {
+  @override
+  void initState() {
+    super.initState();
+    // 收藏可能是在别的页点的，切到「任务」时重新拉一次，
+    // 否则待下载列表一直停在进入应用那一刻的快照。
+    unawaited(widget.c.loadFavorites());
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final c = widget.c;
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
@@ -2472,7 +2488,10 @@ class _SettingsTabState extends State<_SettingsTab> {
                 ),
                 const SizedBox(height: 8),
                 // ⭐ 原「择种规则」并入这里的三项（画质/HDR/音轨门槛上面已有）
+                // 两个输入框必须等高：左边有 helperText、右边没有时，
+                // Row 默认居中会把右边整体抬高，看起来就没水平对齐。
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: TextField(
@@ -2489,8 +2508,12 @@ class _SettingsTabState extends State<_SettingsTab> {
                       child: TextField(
                         controller: _minSeeders,
                         keyboardType: TextInputType.number,
-                        decoration:
-                            InputDecoration(labelText: 'discover_rule_min_seeders'.tr),
+                        decoration: InputDecoration(
+                          labelText: 'discover_rule_min_seeders'.tr,
+                          // 占位 helper：与左边等高，输入框才能对齐
+                          helperText: ' ',
+                          helperStyle: const TextStyle(fontSize: 11),
+                        ),
                       ),
                     ),
                   ],
