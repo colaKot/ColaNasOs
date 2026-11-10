@@ -88,12 +88,12 @@ Map<String, String> get _imageHeaders {
         groups.putIfAbsent(rank, () => <PhotoChapterPage>[]).add(day);
       }
       final picks = <PhotoChapterPage>[];
-      for (var rank = 0; rank < 6 && picks.length < 3; rank += 1) {
+      for (var rank = 0; rank < 6 && picks.length < 4; rank += 1) {
         final pool = groups[rank];
         if (pool == null || pool.isEmpty) continue;
         pool.shuffle(rnd);
         for (final day in pool) {
-          if (picks.length >= 3) break;
+          if (picks.length >= 4) break;
           picks.add(day);
         }
       }
@@ -368,57 +368,51 @@ Map<String, String> get _imageHeaders {
   Widget _onThisDay(List<PhotoHomeOnThisDay> days) {
     // 只画真实存在的年份，不拿「查看全部年份」占位块去补格子：
     // 往年的今天没照片就空着，全部年份走标题栏右上角那个「查看全部」。
-    final shown = days.take(3).toList(growable: false);
+    final shown = days.take(4).toList(growable: false);
+    return _fourColumnRow([
+      for (final d in shown)
+        _memoryTile(
+          height: 240,
+          path: d.items.isEmpty ? '' : d.items.first.path,
+          title: tr('photo.home.yearPhotos', {
+            'year': '${d.year}',
+            'count': '${d.photoCount}',
+          }),
+          subtitle: d.date,
+          onTap: () => widget.onNavigate('onThisDay'),
+        ),
+    ]);
+  }
+
+  Widget _newMemoryRow() {
+    return _fourColumnRow([
+      for (final d in _newMemories)
+        _memoryTile(
+          path: d.cover.path,
+          title: d.date,
+          subtitle: tr('photo.home.memorySub', {
+            'count': '${d.photoCount}',
+            'place': d.place,
+          }),
+          onTap: () => widget.onNavigate('memory'),
+        ),
+    ]);
+  }
+
+  /// 固定 4 列：不足 4 个右侧留空，不拉伸单个卡片
+  /// （用 Expanded 会把只有 1 张的卡片撑成整行大图）。
+  Widget _fourColumnRow(List<Widget> cards) {
     return LayoutBuilder(
       builder: (context, c) {
-        // 按 3 列的宽度算格子宽，但**不拉伸**：只有 1 年时就是一个正常大小的卡片，
-        // 右边留白（用 Expanded 会把它撑成整行大图）。
-        final w = ((c.maxWidth - 24) / 3).clamp(150.0, double.infinity);
+        // 4 列 + 3 道 12 间距，正好铺满可用宽度，不会横向溢出
+        final w = math.max(0.0, (c.maxWidth - 36) / 4);
+        final shown = cards.take(4).toList(growable: false);
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (var i = 0; i < shown.length; i += 1) ...[
-              SizedBox(
-                width: w,
-                child: _memoryTile(
-                  height: 240,
-                  path: shown[i].items.isEmpty ? '' : shown[i].items.first.path,
-                  title: tr('photo.home.yearPhotos', {
-                    'year': '${shown[i].year}',
-                    'count': '${shown[i].photoCount}',
-                  }),
-                  subtitle: shown[i].date,
-                  onTap: () => widget.onNavigate('onThisDay'),
-                ),
-              ),
-              if (i < shown.length - 1) const SizedBox(width: 12),
-            ],
-          ],
-        );
-      },
-    );
-  }
-  Widget _newMemoryRow() {
-    // 与那年今日同一套格子宽度：不足 3 个时右侧留白，不把单张卡片拉成整行大图
-    return LayoutBuilder(
-      builder: (context, c) {
-        final w = ((c.maxWidth - 24) / 3).clamp(150.0, double.infinity);
-        return Row(
-          children: [
-            for (var i = 0; i < _newMemories.length; i += 1) ...[
-              SizedBox(
-                width: w,
-                child: _memoryTile(
-                  path: _newMemories[i].cover.path,
-                  title: _newMemories[i].date,
-                  subtitle: tr('photo.home.memorySub', {
-                    'count': '${_newMemories[i].photoCount}',
-                    'place': _newMemories[i].place,
-                  }),
-                  onTap: () => widget.onNavigate('memory'),
-                ),
-              ),
-              if (i < _newMemories.length - 1) const SizedBox(width: 12),
+            for (var i = 0; i < 4; i += 1) ...[
+              SizedBox(width: w, child: i < shown.length ? shown[i] : null),
+              if (i < 3) const SizedBox(width: 12),
             ],
           ],
         );
