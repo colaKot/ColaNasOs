@@ -78,6 +78,19 @@ export function registerTransmissionWebUi(
   k: KernelApi,
   deps: WebUiDeps,
 ): void {
+  // 🔴 官方 Web UI 3.00 的 jQuery 用的是非标准 `Content-Type: json`
+  //    （javascript/remote.js 里 `contentType: 'json'`），Fastify 默认只认
+  //    application/json / text/plain，会直接 415 —— 页面能打开但**一条下载信息都没有**。
+  //    在 onRequest 阶段（早于 content type parser）把请求头规范掉最可靠：
+  //    非标准 media type 注册成 parser 在部分 Fastify 版本里仍会被判非法。
+  app.addHook('onRequest', async (req) => {
+    if (!req.url.startsWith('/transmission/')) return;
+    const ct = req.headers['content-type'];
+    if (typeof ct === 'string' && /^json(;|$)/i.test(ct.trim())) {
+      req.headers['content-type'] = 'application/json';
+    }
+  });
+
   const authorized = async (req: FastifyRequest): Promise<boolean> => {
     const cookie = readCookie(req.headers.cookie, COOKIE);
     if (!cookie) return false;
@@ -152,8 +165,10 @@ export function registerTransmissionWebUi(
     const cfg = await deps.cfg();
     if (!cfg?.url) return reply.code(503).send({ error: 'transmission 未配置' });
 
+    const rawType = String(req.headers['content-type'] || 'application/json').trim();
     const headers: Record<string, string> = {
-      'content-type': String(req.headers['content-type'] || 'application/json'),
+      // 官方前端的 `json` 不是合法媒体类型，daemon 只认 application/json。
+      'content-type': /^json(;|$)/i.test(rawType) ? 'application/json' : rawType,
     };
     const session = req.headers['x-transmission-session-id'];
     if (session) headers['x-transmission-session-id'] = String(session);

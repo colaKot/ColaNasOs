@@ -1103,6 +1103,10 @@ class ColanasClient:
         """新增 / 更新订阅"""
         return self._request("POST", "/api/v1/pt/subscriptions/upsert", params, "body")
 
+    def pt_torrent_action(self, **params):
+        """批量暂停 / 开始 / 移除 Transmission 种子（移除不删本地数据）"""
+        return self._request("POST", "/api/v1/pt/torrents/action", params, "body")
+
     def pt_torrents(self, **params):
         """Transmission 实时任务（下载中 / 暂停 / 做种）"""
         return self._request("GET", "/api/v1/pt/torrents", params, "query")

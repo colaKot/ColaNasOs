@@ -2113,6 +2113,12 @@ class ApiClient {
     return _asMap(_decode(res));
   }
 
+  /// 批量暂停 / 开始 / 移除 Transmission 种子（移除不删本地数据）
+  Future<Map<String, dynamic>> ptTorrentAction({required Map<String, dynamic> body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/pt/torrents/action'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body)));
+    return _asMap(_decode(res));
+  }
+
   /// 下载目录与筛选设置（发现设置页）
   Future<PtDownloadSettingsResponse> ptDownloadSettingsGet() async {
     final res = await transport.send('GET', _uri('/api/v1/pt/download/settings'), headers: await _headers());

@@ -1367,6 +1367,11 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/pt/subscriptions/upsert', params, 'body');
   }
 
+  /** 批量暂停 / 开始 / 移除 Transmission 种子（移除不删本地数据） */
+  async ptTorrentAction(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/pt/torrents/action', params, 'body');
+  }
+
   /** Transmission 实时任务（下载中 / 暂停 / 做种） */
   async ptTorrents(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/pt/torrents', params, 'query');

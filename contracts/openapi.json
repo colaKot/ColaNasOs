@@ -29551,6 +29551,121 @@
         }
       }
     },
+    "/api/v1/pt/torrents/action": {
+      "post": {
+        "operationId": "ptTorrentAction",
+        "summary": "批量暂停 / 开始 / 移除 Transmission 种子（移除不删本地数据）",
+        "tags": [
+          "pt"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "hashes",
+                  "action"
+                ],
+                "properties": {
+                  "hashes": {
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "type": "string"
+                    }
+                  },
+                  "action": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "pause"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "resume"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "remove"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "succeeded",
+                    "failed",
+                    "message"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "succeeded": {
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/pt/download/settings": {
       "get": {
         "operationId": "ptDownloadSettingsGet",

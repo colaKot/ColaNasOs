@@ -1,7 +1,7 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**397 个路径 / 423 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**398 个路径 / 424 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
@@ -16,7 +16,7 @@
 - **其他**（`other`）· 2 个操作 · [跳转](#other)
 - **相册**（`photo`）· 131 个操作 · [跳转](#photo)
 - **player**（`player`）· 2 个操作 · [跳转](#player)
-- **pt**（`pt`）· 25 个操作 · [跳转](#pt)
+- **pt**（`pt`）· 26 个操作 · [跳转](#pt)
 - **RSS 订阅**（`rss`）· 14 个操作 · [跳转](#rss)
 - **同步**（`sync`）· 17 个操作 · [跳转](#sync)
 - **系统监控**（`system`）· 20 个操作 · [跳转](#system)
@@ -1993,6 +1993,13 @@ PT 站点列表（不返回 cookie 明文） · `ptSiteList`
 Transmission 实时任务（下载中 / 暂停 / 做种） · `ptTorrents`
 
 - 响应：200 object
+
+#### `POST /api/v1/pt/torrents/action`
+
+批量暂停 / 开始 / 移除 Transmission 种子（移除不删本地数据） · `ptTorrentAction`
+
+- 请求体：`hashes` array<string> · **必填**<br>`action` enum(pause, resume, remove) · **必填**
+- 响应：200 object · 错误 400
 
 #### `POST /api/v1/pt/transmission/test`
 

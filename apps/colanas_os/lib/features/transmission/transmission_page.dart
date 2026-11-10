@@ -35,6 +35,9 @@ class _TransmissionPageState extends State<TransmissionPage> {
   bool _ready = true;
   List<Map<String, dynamic>> _items = const [];
 
+  /// 多选：存 info hash；轮询刷新后按新列表清掉已消失的任务
+  final Set<String> _selected = <String>{};
+
   /// 5 秒轮询：下载进度不动就没意义了，但也别太频繁（transmission RPC 会排队）
   Timer? _timer;
 
@@ -65,8 +68,10 @@ class _TransmissionPageState extends State<TransmissionPage> {
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
+      final hashes = list.map((e) => (e['hash'] ?? '').toString()).toSet();
       setState(() {
         _items = list;
+        _selected.retainWhere(hashes.contains);
         _hint = (res['message'] ?? '').toString();
         _webPath = (res['webPath'] ?? '').toString();
         _webTicket = (res['webTicket'] ?? '').toString();
@@ -155,7 +160,13 @@ class _TransmissionPageState extends State<TransmissionPage> {
             ),
           if (down.isNotEmpty) _section(tr('transmission.downloading'), down),
           if (paused.isNotEmpty) _section(tr('transmission.paused'), paused),
-          if (seeding.isNotEmpty) _section(tr('transmission.seeding'), seeding),
+          // 下载完成后 Transmission 自动转为做种（上传），全部默认开启，无需手动开关。
+          // 即使暂时没有上传任务也把栏目摆出来，用户才知道这个状态在哪看。
+          _section(
+            tr('transmission.uploading'),
+            seeding,
+            hint: tr('transmission.autoUploadHint'),
+          ),
         ],
         ),
       );
@@ -178,8 +189,116 @@ class _TransmissionPageState extends State<TransmissionPage> {
           ),
         ],
       ),
-      body: body,
+      body: Column(
+        children: [
+          _batchBar(),
+          Expanded(child: body),
+        ],
+      ),
     );
+  }
+
+  /// 批量操作栏：有选中才出现，暂停 / 开始 / 删除一次打给服务端（单条 RPC 带多个 ids）。
+  Widget _batchBar() {
+    if (_selected.isEmpty) return const SizedBox.shrink();
+    return Material(
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: NasTokens.spaceMd,
+            vertical: 4,
+          ),
+          child: Row(
+            children: [
+              Text(
+                '${tr('transmission.selectedCount')} ${_selected.length}',
+                style: TextStyle(fontSize: NasTokens.fontCaption),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.select_all, size: 20),
+                tooltip: tr('transmission.selectAll'),
+                onPressed: _selectAll,
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                tooltip: tr('transmission.cancelSelect'),
+                onPressed: () => setState(_selected.clear),
+              ),
+              IconButton(
+                icon: const Icon(Icons.pause, size: 20),
+                tooltip: tr('transmission.batchPause'),
+                onPressed: () => _runAction(_selected.toList(), 'pause'),
+              ),
+              IconButton(
+                icon: const Icon(Icons.play_arrow, size: 20),
+                tooltip: tr('transmission.batchStart'),
+                onPressed: () => _runAction(_selected.toList(), 'resume'),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20),
+                tooltip: tr('transmission.batchRemove'),
+                onPressed: () => _runAction(_selected.toList(), 'remove'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _selectAll() {
+    setState(() {
+      _selected
+        ..clear()
+        ..addAll(
+          _items
+              .map((t) => (t['hash'] ?? '').toString())
+              .where((h) => h.isNotEmpty),
+        );
+    });
+  }
+
+  Future<void> _runAction(List<String> hashes, String action) async {
+    if (hashes.isEmpty) return;
+    if (action == 'remove') {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(tr('transmission.batchRemove')),
+          content: Text(tr('transmission.removeConfirm')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('common.cancel')),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('common.confirm')),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    try {
+      final res = await ApiSession.instance.client.ptTorrentAction(
+        body: {'hashes': hashes, 'action': action},
+      );
+      if (res['ok'] != true) {
+        throw StateError((res['message'] ?? '').toString());
+      }
+      if (!mounted) return;
+      setState(_selected.clear);
+      await _load(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${tr('transmission.actionFailed')}: $e')),
+      );
+    }
   }
 
   static bool _isLoopback(String url) {
@@ -218,7 +337,11 @@ class _TransmissionPageState extends State<TransmissionPage> {
     }
   }
 
-  Widget _section(String title, List<Map<String, dynamic>> rows) {
+  Widget _section(
+    String title,
+    List<Map<String, dynamic>> rows, {
+    String? hint,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -249,6 +372,22 @@ class _TransmissionPageState extends State<TransmissionPage> {
             ],
           ),
         ),
+        if (hint != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              NasTokens.spaceMd,
+              0,
+              NasTokens.spaceMd,
+              NasTokens.spaceXs,
+            ),
+            child: Text(
+              hint,
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: context.nasTextSecondary,
+              ),
+            ),
+          ),
         for (final t in rows) _row(t),
       ],
     );
@@ -278,9 +417,34 @@ class _TransmissionPageState extends State<TransmissionPage> {
           '${ratio.toStringAsFixed(2)} · ↑ ${_speed(rateUp)}';
     }
 
+    final hash = (t['hash'] ?? '').toString();
+    final checked = _selected.contains(hash);
+    void toggle() => setState(() {
+          if (checked) {
+            _selected.remove(hash);
+          } else {
+            _selected.add(hash);
+          }
+        });
+
     return ListTile(
       dense: true,
-      leading: _thumb(t),
+      selected: checked,
+      leading: SizedBox(
+        width: 92,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Checkbox(
+              value: checked,
+              onChanged: (_) => toggle(),
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            _thumb(t),
+          ],
+        ),
+      ),
       title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
         sub,
@@ -293,12 +457,34 @@ class _TransmissionPageState extends State<TransmissionPage> {
               : context.nasTextSecondary,
         ),
       ),
-      trailing: _downloading.contains(status)
-          ? SizedBox(
-              width: 44,
+      onTap: toggle,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_downloading.contains(status))
+            SizedBox(
+              width: 36,
               child: LinearProgressIndicator(value: percent, minHeight: 4),
-            )
-          : null,
+            ),
+          PopupMenuButton<String>(
+            onSelected: (a) => _runAction([hash], a),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'pause',
+                child: Text(tr('transmission.batchPause')),
+              ),
+              PopupMenuItem(
+                value: 'resume',
+                child: Text(tr('transmission.batchStart')),
+              ),
+              PopupMenuItem(
+                value: 'remove',
+                child: Text(tr('transmission.batchRemove')),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

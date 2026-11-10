@@ -117,14 +117,20 @@ export async function addTorrent(
 export async function torrentAction(
   cfg: TransmissionConfig,
   action: 'start' | 'stop' | 'remove',
-  hash: string,
+  hash: string | string[],
   opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {},
 ): Promise<TransmissionResult> {
   if (!cfg.url) return { ok: false, message: 'transmission url not configured' };
-  if (!hash) return { ok: false, message: 'torrent hash required' };
+  const ids = (Array.isArray(hash) ? hash : [hash])
+    .map((h) => String(h || '').trim())
+    .filter(Boolean)
+    // Transmission 4.x 的批量动作只认数字 id；传 hashString 会返回 success 但状态不变。
+    .map((h) => (/^\d+$/.test(h) ? Number(h) : h));
+  if (!ids.length) return { ok: false, message: 'torrent hash required' };
   const method =
     action === 'start' ? 'torrent-start' : action === 'stop' ? 'torrent-stop' : 'torrent-remove';
-  const args: Record<string, unknown> = { ids: [hash] };
+  // 一次 RPC 带多个 ids：批量操作不必逐个往返。
+  const args: Record<string, unknown> = { ids };
   if (action === 'remove') args['delete-local-data'] = false;
   try {
     const payload = { method, arguments: args };
@@ -196,6 +202,7 @@ export async function torrentGet(
       ok: true,
       message: 'ok',
       items: list.map((t) => ({
+        id: Number(t.id ?? 0),
         hashString: String(t.hashString ?? ''),
         status: Number(t.status ?? 0),
         percentDone: Number(t.percentDone ?? 0),
@@ -212,6 +219,8 @@ export async function torrentGet(
 }
 
 export interface TorrentInfo {
+  /** Transmission 内部数字 id：批量 start/stop/remove 必须用它，hash 字符串不生效 */
+  id: number;
   hashString: string;
   name: string;
   /** Transmission: 0=暂停 1~2=校验 3~4=下载 5~6=做种 */
@@ -240,6 +249,7 @@ export async function torrentList(
     method: 'torrent-get',
     arguments: {
       fields: [
+        'id',
         'hashString',
         'name',
         'status',
@@ -270,6 +280,7 @@ export async function torrentList(
       ok: true,
       message: 'ok',
       items: list.map((t) => ({
+        id: Number(t.id ?? 0),
         hashString: String(t.hashString ?? ''),
         name: String(t.name ?? ''),
         status: Number(t.status ?? 0),

@@ -1859,6 +1859,78 @@ export const pt: ServerModule = {
       },
     );
 
+    // ---------------------------------------------------------------- 下载器：批量种子操作
+    app.post(
+      '/api/v1/pt/torrents/action',
+      secured('pt:write', {
+        schema: {
+          operationId: 'ptTorrentAction',
+          tags: TAG,
+          summary: '批量暂停 / 开始 / 移除 Transmission 种子（移除不删本地数据）',
+          body: Type.Object({
+            hashes: Type.Array(Type.String({ minLength: 1, maxLength: 64 }), {
+              minItems: 1,
+              maxItems: 200,
+            }),
+            action: Type.Union([
+              Type.Literal('pause'),
+              Type.Literal('resume'),
+              Type.Literal('remove'),
+            ]),
+          }),
+          response: {
+            200: Type.Object({
+              ok: Type.Boolean(),
+              succeeded: Type.Integer(),
+              failed: Type.Integer(),
+              message: Type.String(),
+            }),
+            400: ErrorResponse,
+          },
+        },
+      }),
+      async (req: FastifyRequest, reply: FastifyReply) => {
+        const b = (req.body || {}) as { hashes?: string[]; action?: string };
+        const hashes = (b.hashes || [])
+          .map((h) => String(h || '').trim())
+          .filter(Boolean)
+          .slice(0, 200);
+        if (!hashes.length) {
+          return reply.code(400).send({ error: Err.badRequest, message: 'hashes required' });
+        }
+        const cfg = await resolveTransmission();
+        if (!cfg) {
+          return reply
+            .code(400)
+            .send({ error: Err.badRequest, message: 'transmission not configured' });
+        }
+        const action = b.action === 'pause' ? 'stop' : b.action === 'resume' ? 'start' : 'remove';
+        // hashString 不能直接用于批量动作（返回 success 但不生效），先换成数字 id。
+        const list = await torrentList(cfg);
+        const idByHash = new Map(list.items.map((t) => [t.hashString, t.id]));
+        const ids = hashes
+          .map((h) => idByHash.get(h))
+          .filter((id): id is number => typeof id === 'number' && id > 0)
+          .map(String);
+        if (!ids.length) {
+          return reply.code(400).send({ error: Err.badRequest, message: 'torrents not found' });
+        }
+        const res = await torrentAction(cfg, action, ids);
+        if (!res.ok) {
+          return reply.code(400).send({ error: Err.badRequest, message: res.message });
+        }
+        // 同步本地台账，避免「下载」列表状态与下载器不一致。
+        const nextStatus =
+          b.action === 'pause' ? 'paused' : b.action === 'resume' ? 'added' : 'removed';
+        const values = hashes.map((h) => sql`${h}`);
+        await sql`
+          update pt_downloads set status = ${nextStatus}, message = ${res.message}
+           where uid = ${uidOf(req)} and info_hash in (${sql.join(values, sql`, `)})
+        `.execute(k.db);
+        return { ok: true, succeeded: ids.length, failed: 0, message: res.message };
+      },
+    );
+
     // ---------------------------------------------------------------- 下载目录 / 筛选（发现设置页）
     app.get(
       '/api/v1/pt/download/settings',

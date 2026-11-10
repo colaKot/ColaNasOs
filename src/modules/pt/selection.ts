@@ -164,13 +164,43 @@ export function qualityHeight(title: string): number | null {
   return null;
 }
 
-/** 0 无 / 1 HDR / 2 HDR10 / 3 HDR10+ / 4 杜比视界 */
+/** 0 无 / 1 HDR / 2 HDR10 / 3 HDR10+ / 4 杜比视界（硬过滤门槛用） */
 export function hdrLevel(title: string): number {
   const t = String(title || '').toUpperCase();
   if (/(DOLBY\s*VISION|DOVI|\bDV\b|杜比视界)/.test(t)) return 4;
   if (/HDR10\+/.test(t)) return 3;
   if (/HDR10(?!\+)/.test(t)) return 2;
   if (/\bHDR\b/.test(t)) return 1;
+  return 0;
+}
+
+/**
+ * 择种排序用的 HDR 等级，比门槛更细：
+ *   DV+HDR(5) > DV / 杜比视界 / DoVi(4) > HDR10+(3) > HDR10(2) > HDR(1) > 无(0)。
+ * 只影响顺序，**不改变** applySmartFilter 里「HDR 及以上」这类门槛的判定。
+ */
+export function hdrSortRank(title: string): number {
+  const t = String(title || '').toUpperCase();
+  const dv = /(DOLBY\s*VISION|DOVI|\bDV\b|杜比视界)/.test(t);
+  const hdr10plus = /HDR10\+/.test(t);
+  const hdr10 = /HDR10(?!\+)/.test(t);
+  const hdr = hdr10plus || hdr10 || /\bHDR\b/.test(t);
+  // 同时带 HDR 标记的杜比视界片源排最前；只写 DV 的次之。
+  if (dv) return hdr ? 5 : 4;
+  if (hdr10plus) return 3;
+  if (hdr10) return 2;
+  if (hdr) return 1;
+  return 0;
+}
+
+/**
+ * 编码偏好：H.265 / HEVC / x265 优于 H.264 / AVC / x264。
+ * 只在分辨率与 HDR 等级都相同（例如都是 DV）时才参与比较。
+ */
+export function codecRank(title: string): number {
+  const t = String(title || '').toUpperCase();
+  if (/\b(X265|H[.\s-]?265|HEVC)\b/.test(t)) return 2;
+  if (/\b(X264|H[.\s-]?264|AVC)\b/.test(t)) return 1;
   return 0;
 }
 
@@ -307,12 +337,31 @@ function resolutionRank(rule: PtRule, resolution: string | null | undefined): nu
   return idx < 0 ? 999 : idx;
 }
 
-/** 排序：分辨率偏好 → 做种降序 → 体积升序 → 发布时间降序 */
+/**
+ * 择种优先级（从高到低）：
+ * 1. 分辨率偏好（默认 2160p > 1080p > 720p > 480p）
+ * 2. HDR 等级（DV+HDR > DV/杜比/DoVi > HDR10+ > HDR10 > HDR > 无）
+ * 3. 编码（H.265/HEVC/x265 > H.264/AVC/x264 > 未标注）
+ * 4. 做种数降序
+ * 5. 体积升序
+ * 6. 发布时间降序
+ */
 export function sortCandidates(rule: PtRule, candidates: PtCandidate[]): PtCandidate[] {
   return [...candidates].sort((a, b) => {
     const ra = resolutionRank(rule, a.resolution);
     const rb = resolutionRank(rule, b.resolution);
     if (ra !== rb) return ra - rb;
+
+    // 同为首选分辨率时按 HDR 等级挑：DV+HDR > DV/杜比/DoVi > HDR10+ > HDR10 > HDR。
+    // 之前只当做种数排序，结果常常选到做种多但只是普通 HDR 的版本。
+    const ha = hdrSortRank(a.title);
+    const hb = hdrSortRank(b.title);
+    if (ha !== hb) return hb - ha;
+
+    // 分辨率、HDR 都相同时（比如都是 DV），265 优于 264。
+    const ca = codecRank(a.title);
+    const cb = codecRank(b.title);
+    if (ca !== cb) return cb - ca;
 
     const sa = a.seeders == null ? -1 : Number(a.seeders);
     const sb = b.seeders == null ? -1 : Number(b.seeders);
