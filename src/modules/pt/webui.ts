@@ -45,6 +45,10 @@ const MIME: Record<string, string> = {
 export function transmissionWebDir(): string {
   const candidates = [
     process.env.COLANAS_TRANSMISSION_WEB_DIR || '',
+    // 中文 Web UI（MIT，transmission-web-control）：官方 3.00 前端没有语言机制，
+    // 中文用户打开是整页英文；优先用带 zh_CN 语言包的中文前端，缺了再回退官方包。
+    path.resolve(process.cwd(), 'vendor', 'transmission-web-control'),
+    path.resolve(__dirname, '..', '..', '..', 'vendor', 'transmission-web-control'),
     path.resolve(process.cwd(), 'vendor', 'transmission-web'),
     path.resolve(__dirname, '..', '..', '..', 'vendor', 'transmission-web'),
   ].filter(Boolean);

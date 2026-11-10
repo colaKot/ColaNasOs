@@ -240,7 +240,7 @@ class _TransmissionPageState extends State<TransmissionPage> {
               IconButton(
                 icon: const Icon(Icons.delete_outline, size: 20),
                 tooltip: tr('transmission.batchRemove'),
-                onPressed: () => _runAction(_selected.toList(), 'remove'),
+                onPressed: () => _confirmRemove(_selected.toList()),
               ),
             ],
           ),
@@ -261,31 +261,19 @@ class _TransmissionPageState extends State<TransmissionPage> {
     });
   }
 
-  Future<void> _runAction(List<String> hashes, String action) async {
+  Future<void> _runAction(
+    List<String> hashes,
+    String action, {
+    bool deleteLocalData = false,
+  }) async {
     if (hashes.isEmpty) return;
-    if (action == 'remove') {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(tr('transmission.batchRemove')),
-          content: Text(tr('transmission.removeConfirm')),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(tr('common.cancel')),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(tr('common.confirm')),
-            ),
-          ],
-        ),
-      );
-      if (ok != true) return;
-    }
     try {
       final res = await ApiSession.instance.client.ptTorrentAction(
-        body: {'hashes': hashes, 'action': action},
+        body: {
+          'hashes': hashes,
+          'action': action,
+          if (action == 'remove') 'deleteLocalData': deleteLocalData,
+        },
       );
       if (res['ok'] != true) {
         throw StateError((res['message'] ?? '').toString());
@@ -298,6 +286,48 @@ class _TransmissionPageState extends State<TransmissionPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${tr('transmission.actionFailed')}: $e')),
       );
+    }
+  }
+
+  /// 删除前二次确认；开关默认关闭 = 只删任务记录，不动已下载文件。
+  Future<void> _confirmRemove(List<String> hashes) async {
+    if (hashes.isEmpty) return;
+    var deleteFiles = false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text(tr('transmission.batchRemove')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(tr('transmission.removeConfirm')),
+              CheckboxListTile(
+                value: deleteFiles,
+                onChanged: (v) => setLocal(() => deleteFiles = v == true),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(tr('transmission.removeFiles')),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('common.cancel')),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('common.confirm')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok == true) {
+      await _runAction(hashes, 'remove', deleteLocalData: deleteFiles);
     }
   }
 
@@ -405,7 +435,7 @@ class _TransmissionPageState extends State<TransmissionPage> {
 
     String sub;
     if (err.isNotEmpty) {
-      sub = err;
+      sub = _errorText(err);
     } else if (_downloading.contains(status)) {
       sub = '${(percent * 100).toStringAsFixed(1)}% · ↓ ${_speed(rateDown)}'
           '${size > 0 ? ' · ${_size(size)}' : ''}';
@@ -446,46 +476,68 @@ class _TransmissionPageState extends State<TransmissionPage> {
         ),
       ),
       title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(
-        sub,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontSize: NasTokens.fontCaption,
-          color: err.isNotEmpty
-              ? Theme.of(context).colorScheme.error
-              : context.nasTextSecondary,
-        ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            sub,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: NasTokens.fontCaption,
+              color: err.isNotEmpty
+                  ? Theme.of(context).colorScheme.error
+                  : context.nasTextSecondary,
+            ),
+          ),
+          if (_downloading.contains(status))
+            Padding(
+              padding: const EdgeInsets.only(top: 3, right: 8),
+              child: LinearProgressIndicator(value: percent, minHeight: 3),
+            ),
+        ],
       ),
       onTap: toggle,
+      // 暂停/开始只留一个按钮，按当前状态自动切换；删除直接露出，不再塞进「更多」。
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_downloading.contains(status))
-            SizedBox(
-              width: 36,
-              child: LinearProgressIndicator(value: percent, minHeight: 4),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: _paused.contains(status)
+                ? tr('transmission.batchStart')
+                : tr('transmission.batchPause'),
+            icon: Icon(
+              _paused.contains(status) ? Icons.play_arrow : Icons.pause,
+              size: 20,
             ),
-          PopupMenuButton<String>(
-            onSelected: (a) => _runAction([hash], a),
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'pause',
-                child: Text(tr('transmission.batchPause')),
-              ),
-              PopupMenuItem(
-                value: 'resume',
-                child: Text(tr('transmission.batchStart')),
-              ),
-              PopupMenuItem(
-                value: 'remove',
-                child: Text(tr('transmission.batchRemove')),
-              ),
-            ],
+            onPressed: () => _runAction(
+              [hash],
+              _paused.contains(status) ? 'resume' : 'pause',
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: tr('transmission.batchRemove'),
+            icon: const Icon(Icons.delete_outline, size: 20),
+            onPressed: () => _confirmRemove([hash]),
           ),
         ],
       ),
     );
+  }
+
+  /// Transmission 的 errorString 直接是英文（多来自 tracker），常见的做中文映射，
+  /// 避免用户看到「You already are downloading the same torrent…」一头雾水。
+  String _errorText(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return s;
+    if (s.contains('already are downloading the same torrent') ||
+        s.contains('You already are downloading')) {
+      return tr('transmission.errDuplicate');
+    }
+    return s;
   }
 
   /// 片名：优先台账里的影视标题，其次种子名

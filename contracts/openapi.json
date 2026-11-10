@@ -29600,6 +29600,9 @@
                         ]
                       }
                     ]
+                  },
+                  "deleteLocalData": {
+                    "type": "boolean"
                   }
                 }
               }

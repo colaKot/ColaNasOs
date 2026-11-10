@@ -1877,6 +1877,8 @@ export const pt: ServerModule = {
               Type.Literal('resume'),
               Type.Literal('remove'),
             ]),
+            /** remove 时是否连本地已下载文件一起删（默认 false，只删任务记录） */
+            deleteLocalData: Type.Optional(Type.Boolean()),
           }),
           response: {
             200: Type.Object({
@@ -1890,7 +1892,11 @@ export const pt: ServerModule = {
         },
       }),
       async (req: FastifyRequest, reply: FastifyReply) => {
-        const b = (req.body || {}) as { hashes?: string[]; action?: string };
+        const b = (req.body || {}) as {
+          hashes?: string[];
+          action?: string;
+          deleteLocalData?: boolean;
+        };
         const hashes = (b.hashes || [])
           .map((h) => String(h || '').trim())
           .filter(Boolean)
@@ -1915,7 +1921,9 @@ export const pt: ServerModule = {
         if (!ids.length) {
           return reply.code(400).send({ error: Err.badRequest, message: 'torrents not found' });
         }
-        const res = await torrentAction(cfg, action, ids);
+        const res = await torrentAction(cfg, action, ids, {
+          deleteLocalData: b.deleteLocalData === true,
+        });
         if (!res.ok) {
           return reply.code(400).send({ error: Err.badRequest, message: res.message });
         }

@@ -118,7 +118,12 @@ export async function torrentAction(
   cfg: TransmissionConfig,
   action: 'start' | 'stop' | 'remove',
   hash: string | string[],
-  opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+  opts: {
+    timeoutMs?: number;
+    fetchImpl?: typeof fetch;
+    /** remove 时是否连本地已下载文件一起删（默认 false，只删任务记录） */
+    deleteLocalData?: boolean;
+  } = {},
 ): Promise<TransmissionResult> {
   if (!cfg.url) return { ok: false, message: 'transmission url not configured' };
   const ids = (Array.isArray(hash) ? hash : [hash])
@@ -131,7 +136,7 @@ export async function torrentAction(
     action === 'start' ? 'torrent-start' : action === 'stop' ? 'torrent-stop' : 'torrent-remove';
   // 一次 RPC 带多个 ids：批量操作不必逐个往返。
   const args: Record<string, unknown> = { ids };
-  if (action === 'remove') args['delete-local-data'] = false;
+  if (action === 'remove') args['delete-local-data'] = opts.deleteLocalData === true;
   try {
     const payload = { method, arguments: args };
     let res = await rpc(cfg, payload, opts);

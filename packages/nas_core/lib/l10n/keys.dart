@@ -141,6 +141,24 @@ class I18nKeys {
   static const appTransmission = 'app.transmission';
   // ---- transmission ----
   static const transmissionRatio = 'transmission.ratio';
+  static const transmissionFullUi = 'transmission.fullUi';
+  static const transmissionOpenFailed = 'transmission.openFailed';
+  static const transmissionUploading = 'transmission.uploading';
+  static const transmissionAutoUploadHint = 'transmission.autoUploadHint';
+  static const transmissionSelectAll = 'transmission.selectAll';
+  static const transmissionSelectedCount = 'transmission.selectedCount';
+  static const transmissionCancelSelect = 'transmission.cancelSelect';
+  static const transmissionBatchPause = 'transmission.batchPause';
+  static const transmissionBatchStart = 'transmission.batchStart';
+  static const transmissionBatchRemove = 'transmission.batchRemove';
+  static const transmissionRemoveConfirm = 'transmission.removeConfirm';
+  static const transmissionRemoveFiles = 'transmission.removeFiles';
+  static const transmissionErrDuplicate = 'transmission.errDuplicate';
+  static const transmissionActionFailed = 'transmission.actionFailed';
+  // ---- ui ----
+  static const uiBook020 = 'ui.book.020';
+  static const uiBookHd9c32a = 'ui.book.hd9c32a';
+  // ---- transmission ----
   static const transmissionSeeding = 'transmission.seeding';
   static const transmissionPaused = 'transmission.paused';
   static const transmissionDownloading = 'transmission.downloading';
@@ -2637,4 +2655,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2597;
+const int i18nKeyCount = 2613;

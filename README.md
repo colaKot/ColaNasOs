@@ -72,7 +72,10 @@ GPL-3.0。第三方组件见 `docs/06-产品与运维.md` 的「第三方上游�
   取自官方 `transmission-4.1.4-x64.msi`，原样提取、未做修改；`vendor/transmission-web/` 是官方 Web 界面静态文件（3.00）。
   两者均来自 [transmission/transmission](https://github.com/transmission/transmission)，按 **GPL-3.0** 使用，
   版权归 Transmission 项目作者所有（详见两个目录下的 `NOTICE.md`）。内核在用户未配置外部 RPC 时自动拉起该 daemon，
-  并同源代理官方 Web UI —— 应用内称为 **内置 transmission 下载器**，也支持连接用户自己填写的 Transmission RPC。
+  并同源代理 Web UI —— 应用内称为 **内置 transmission 下载器**，也支持连接用户自己填写的 Transmission RPC。
+- **Transmission Web Control**：`vendor/transmission-web-control/` 内置中文 Web UI（v1.6.1，MIT），
+  用于「下载器 → 完整界面」。官方 Transmission Web UI 3.00 没有语言机制（整页英文），4.x 官方版也无内置中文，
+  因此优先使用该中文前端，缺失时回退官方包。
 - **FFmpeg / ffprobe**：`vendor/ffmpeg/`（Jellyfin 定制构建，GPL-2.0+，含 x264/x265），用于转码、抽帧与缩略图；
   分发时按 GPL 提供对应源码获取方式。
 - **llama.cpp**：`vendor/llama/` 的 `llama-server` / `llama-tts`，用于本地 GGUF 模型推理。

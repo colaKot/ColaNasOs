@@ -1998,7 +1998,7 @@ Transmission 实时任务（下载中 / 暂停 / 做种） · `ptTorrents`
 
 批量暂停 / 开始 / 移除 Transmission 种子（移除不删本地数据） · `ptTorrentAction`
 
-- 请求体：`hashes` array<string> · **必填**<br>`action` enum(pause, resume, remove) · **必填**
+- 请求体：`hashes` array<string> · **必填**<br>`action` enum(pause, resume, remove) · **必填**<br>`deleteLocalData` boolean · 可选
 - 响应：200 object · 错误 400
 
 #### `POST /api/v1/pt/transmission/test`
