@@ -1731,83 +1731,148 @@ class _RssTabState extends State<_RssTab> {
                         final fallback =
                             (c.downloadFilter['movie_save_path'] ?? '').toString();
                         final dir = own.isNotEmpty ? own : fallback;
+                        final auto = f['auto_download'] == 1 || f['auto_download'] == true;
+                        final immediate = f['immediate'] == 1 || f['immediate'] == true;
+                        final fid = f['id'] is int ? f['id'] as int : null;
                         return Card(
-                        child: ListTile(
-                          title: Text((f['name'] ?? '') as String),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Column(
                             children: [
-                              Text(
-                                  '${f['url_masked'] ?? ''} · ${f['last_fetch_status'] ?? '-'}'),
-                              Text(
-                                dir.isEmpty
-                                    ? 'discover_rss_no_dir'.tr
-                                    : '${'discover_rss_dir'.tr}：$dir',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 11),
+                              ListTile(
+                                title: Text((f['name'] ?? '') as String),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                        '${f['url_masked'] ?? ''} · ${f['last_fetch_status'] ?? '-'}'),
+                                    Text(
+                                      dir.isEmpty
+                                          ? 'discover_rss_no_dir'.tr
+                                          : '${'discover_rss_dir'.tr}：$dir',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.refresh),
+                                    tooltip: 'discover_rss_refresh_one'.tr,
+                                    onPressed: () async {
+                                      if (fid != null) await c.refreshFeed(fid);
+                                    },
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline),
+                                    onPressed: () async {
+                                      if (fid != null) await c.deleteFeed(fid);
+                                    },
+                                  ),
+                                ]),
+                              ),
+                              // 两个开关都是「改完立刻生效」：立刻开始还会把该源
+                              // 已在下载器里、还没下完的种子一起 start / stop。
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: SwitchListTile(
+                                      dense: true,
+                                      visualDensity: VisualDensity.compact,
+                                      contentPadding: const EdgeInsets.only(left: 12),
+                                      title: Text('discover_rss_auto_download'.tr,
+                                          style: const TextStyle(fontSize: 13)),
+                                      subtitle: Text('discover_rss_auto_hint'.tr,
+                                          style: const TextStyle(fontSize: 11)),
+                                      value: auto,
+                                      onChanged: fid == null
+                                          ? null
+                                          : (v) async {
+                                              final n = await c.setFeedSettings(fid,
+                                                  autoDownload: v);
+                                              if (!context.mounted) return;
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                    content: Text(n > 0
+                                                        ? 'discover_feed_submitted'.tr
+                                                            .replaceAll('{n}', '$n')
+                                                        : 'discover_saved'.tr)),
+                                              );
+                                            },
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: SwitchListTile(
+                                      dense: true,
+                                      visualDensity: VisualDensity.compact,
+                                      contentPadding: const EdgeInsets.only(right: 8),
+                                      title: Text('discover_rss_immediate_short'.tr,
+                                          style: const TextStyle(fontSize: 13)),
+                                      subtitle: Text('discover_rss_immediate_short_hint'.tr,
+                                          style: const TextStyle(fontSize: 11)),
+                                      value: immediate,
+                                      onChanged: fid == null
+                                          ? null
+                                          : (v) async {
+                                              final n = await c.setFeedSettings(fid,
+                                                  immediate: v);
+                                              if (!context.mounted) return;
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(
+                                                    content: Text(n > 0
+                                                        ? 'discover_feed_applied'.tr
+                                                            .replaceAll('{n}', '$n')
+                                                        : 'discover_saved'.tr)),
+                                              );
+                                            },
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Tooltip(
-                              message: 'discover_rss_auto_download'.tr,
-                              child: Switch(
-                                value: f['auto_download'] == 1 || f['auto_download'] == true,
-                                onChanged: (v) async {
-                                  final id = f['id'];
-                                  if (id is int) await c.setFeedAuto(id, v);
-                                },
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.refresh),
-                              tooltip: 'discover_rss_refresh_one'.tr,
-                              onPressed: () async {
-                                final id = f['id'];
-                                if (id is int) await c.refreshFeed(id);
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () async {
-                                final id = f['id'];
-                                if (id is int) await c.deleteFeed(id);
-                              },
-                            ),
-                          ]),
-                        ),
-                      );
+                        );
                       })
                   .toList(),
             )),
         const SizedBox(height: 12),
         Text('discover_rss_entries'.tr, style: Theme.of(context).textTheme.titleMedium),
+        Padding(
+          padding: const EdgeInsets.only(top: 2, bottom: 6),
+          child: Text('discover_rss_entries_hint'.tr,
+              style: Theme.of(context).textTheme.bodySmall),
+        ),
         Obx(() => Column(
               children: c.entries
-                  .map((e) => Card(
-                        child: ListTile(
-                          title: Text((e['title'] ?? '') as String,
-                              maxLines: 2, overflow: TextOverflow.ellipsis),
-                          subtitle: Text('${e['feed_name'] ?? ''} · ${rssEntryStateLabel((e['state'] ?? '').toString())}'),
-                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                            IconButton(
-                              icon: const Icon(Icons.check),
-                              onPressed: () async {
-                                final id = e['id'];
-                                if (id is int) await c.entryAction(id, 'confirm');
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () async {
-                                final id = e['id'];
-                                if (id is int) await c.entryAction(id, 'reject');
-                              },
-                            ),
-                          ]),
-                        ),
-                      ))
+                  .map((e) {
+                        final state = (e['state'] ?? '').toString().toLowerCase();
+                        final pending = state == 'pending' || state.isEmpty;
+                        final id = e['id'];
+                        return Card(
+                          child: ListTile(
+                            dense: true,
+                            title: Text((e['title'] ?? '') as String,
+                                maxLines: 2, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(
+                                '${e['feed_name'] ?? ''} · ${rssEntryStateLabel(state)}'),
+                            // 正常情况下条目会自动进下载器，这里只给「没加种」的
+                            // 留一个手动补下（比如当时自动加种失败 / 源关过自动加种）
+                            trailing: pending
+                                ? TextButton.icon(
+                                    onPressed: id is int
+                                        ? () async {
+                                            final messenger = ScaffoldMessenger.of(context);
+                                            await c.entryAction(id, 'confirm');
+                                            messenger.showSnackBar(SnackBar(
+                                                content: Text('discover_rss_added'.tr)));
+                                          }
+                                        : null,
+                                    icon: const Icon(Icons.download, size: 16),
+                                    label: Text('discover_rss_add_one'.tr),
+                                  )
+                                : null,
+                          ),
+                        );
+                      })
                   .toList(),
             )),
         const SizedBox(height: 16),

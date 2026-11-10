@@ -502,6 +502,13 @@ class CompatApi {
         'enabled': b['enabled'] == true,
       });
     }
+    if (path == '/api/rss/feeds/settings') {
+      return _api.rssFeedSettings(body: <String, dynamic>{
+        'id': _rawId(b['id']),
+        if (b['auto_download'] != null) 'autoDownload': b['auto_download'] == true,
+        if (b['immediate'] != null) 'immediate': b['immediate'] == true,
+      });
+    }
     if (path == '/api/rss/entries') {
       final res = _ensureItems(await _api.rssItems(
         feedId: q['feedId'],
@@ -513,6 +520,9 @@ class CompatApi {
         final m = _asMap(e);
         return <String, dynamic>{
           ...m,
+          // 参考页拿 `id` 做行操作；本项目条目主键是 guid，映射成 int 才能一进一出
+          // （以前压根没给 id，列表上的确认/拒绝按钮点了什么都不会发生）
+          'id': _numId((m['guid'] ?? '').toString()),
           'feed_name': m['feed_title'] ?? m['feedTitle'] ?? '',
         };
       }).toList();
@@ -522,7 +532,7 @@ class CompatApi {
         RegExp(r'^/api/rss/entries/([^/]+)/(confirm|reject)$').firstMatch(path);
     if (entryAction != null) {
       return _api.rssEntryAction(body: <String, dynamic>{
-        'id': _rawId(entryAction.group(1)!),
+        'id': _pathId(entryAction.group(1)!),
         'action': entryAction.group(2)!,
       });
     }

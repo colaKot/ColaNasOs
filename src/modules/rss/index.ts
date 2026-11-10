@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { Type } from '@sinclair/typebox';
 import { sql } from 'kysely';
 import { secured } from '../../../kernel/route';
-import { addTorrent } from '../pt/transmission';
+import { addTorrent, torrentAction, torrentList } from '../pt/transmission';
 import { fetchTorrentBytes } from '../pt/mteam';
 import {
   defaultDownloadDir,
@@ -506,6 +506,67 @@ export const rss: ServerModule = {
       return { hash, message: res.message };
     };
 
+    /**
+     * 把源里「待加种」的条目加进下载器。
+     * 刷新订阅、以及打开「自动加种」开关时共用 —— 后者是为了「改完立刻生效」：
+     * 不刷新一次的话，已经抓下来的条目要等下一轮刷新才会动，用户会觉得开关没用。
+     */
+    const autoSubmitPending = async (
+      feed: { id?: string | null; save_path?: string | null; paused_default?: number | null },
+      uid: string,
+      limit = 10,
+    ): Promise<number> => {
+      if (!feed?.id) return 0;
+      const pending = (
+        await sql<any>`
+          select i.guid, i.title, i.size_bytes, i.info_hash, i.enclosure_url
+            from rss_items i
+           where i.feed_id = ${feed.id}
+             and coalesce(i.enclosure_url, '') <> ''
+             and coalesce(i.state, 'Pending') = 'Pending'
+             and not exists (
+               select 1 from rss_downloaded d
+                where d.feed_id = i.feed_id and d.guid = i.guid
+             )
+           order by i.published desc
+           limit ${limit}
+        `.execute(k.db)
+      ).rows;
+      let submitted = 0;
+      for (const it of pending) {
+        const sent = await submitFeedTorrent(feed, {
+          url: String(it.enclosure_url),
+          guid: String(it.guid),
+          title: String(it.title || ''),
+          uid,
+        });
+        if (!sent.hash) {
+          // 失败必须留痕：否则表现是「开了自动加种但什么都不发生」，
+          // 页面和日志都查不出原因（2026-11-10 排查过一轮）。
+          k.log.warn(
+            { feedId: feed.id, guid: it.guid, message: sent.message },
+            'rss auto download failed',
+          );
+          continue;
+        }
+        await sql`
+          insert into rss_downloaded
+            (id, uid, feed_id, guid, info_hash, title, size_bytes,
+             enclosure_url, download_task_id, created_at)
+          values (${crypto.randomBytes(8).toString('base64url')}, ${uid},
+                  ${feed.id}, ${it.guid}, ${it.info_hash ?? sent.hash},
+                  ${it.title ?? null}, ${it.size_bytes ?? null},
+                  ${it.enclosure_url}, ${sent.hash}, ${now()})
+        `.execute(k.db);
+        await sql`
+          update rss_items set state = 'Confirmed', state_updated_at = ${now()}
+           where feed_id = ${feed.id} and guid = ${it.guid}
+        `.execute(k.db);
+        submitted += 1;
+      }
+      return submitted;
+    };
+
     app.post(
       '/api/v1/rss/feeds',
       secured('rss:write', {
@@ -545,9 +606,10 @@ export const rss: ServerModule = {
         const savePath = String((body as { savePath?: string }).savePath || '').trim();
         const pausedDefault = (body as { immediate?: boolean }).immediate === false ? 1 : 0;
         await sql`
-          insert into rss_feeds (id, url, title, last_fetch, created_at, save_path, paused_default)
+          insert into rss_feeds
+            (id, url, title, last_fetch, created_at, save_path, paused_default, auto_download)
           values (${id}, ${body.url || ''}, ${title}, ${null}, ${now()},
-                  ${savePath || null}, ${pausedDefault})
+                  ${savePath || null}, ${pausedDefault}, 1)
         `.execute(k.db);
 
         // 内联 xml 的订阅没有 url 可供后续抓取，因此添加时就把条目落库
@@ -563,7 +625,8 @@ export const rss: ServerModule = {
           lastFetchStatus: '',
           lastFetch: null,
           createdAt: now(),
-          autoDownload: false,
+          // 新源默认自动加种（按源里的「立刻开始」决定是否暂停）
+          autoDownload: true,
           savePath,
           immediate: pausedDefault === 0,
         };
@@ -672,55 +735,9 @@ export const rss: ServerModule = {
           fed += 1;
           await sql`update rss_feeds set last_fetch = ${now()} where id = ${feed.id}`.execute(k.db);
 
-          // 该源开了「自动下载」：把还没处理过、带种子地址的新条目直接加种。
-          // 目录与该源自己的「立即下载」设置一致（不加 paused 就是只挂种子）。
+          // 该源开了「自动加种」：把待加种的条目直接丢进下载器。
           if (Number(feed.auto_download || 0) === 1) {
-            const uid = String(req.user?.sub || '');
-            const pending = (
-              await sql<any>`
-                select i.guid, i.title, i.size_bytes, i.info_hash, i.enclosure_url
-                  from rss_items i
-                 where i.feed_id = ${feed.id}
-                   and coalesce(i.enclosure_url, '') <> ''
-                   and coalesce(i.state, 'Pending') = 'Pending'
-                   and not exists (
-                     select 1 from rss_downloaded d
-                      where d.feed_id = i.feed_id and d.guid = i.guid
-                   )
-                 order by i.published desc
-                 limit 10
-              `.execute(k.db)
-            ).rows;
-            for (const it of pending) {
-              const sent = await submitFeedTorrent(feed, {
-                url: String(it.enclosure_url),
-                guid: String(it.guid),
-                title: String(it.title || ''),
-                uid,
-              });
-              if (!sent.hash) {
-                // 失败必须留痕：否则表现是「开了自动下载但什么都不发生」，
-                // 页面和日志都查不出原因（2026-11-10 排查过一轮）。
-                k.log.warn(
-                  { feedId: feed.id, guid: it.guid, message: sent.message },
-                  'rss auto download failed',
-                );
-                continue;
-              }
-              await sql`
-                insert into rss_downloaded
-                  (id, uid, feed_id, guid, info_hash, title, size_bytes,
-                   enclosure_url, download_task_id, created_at)
-                values (${crypto.randomBytes(8).toString('base64url')}, ${uid},
-                        ${feed.id}, ${it.guid}, ${it.info_hash ?? sent.hash},
-                        ${it.title ?? null}, ${it.size_bytes ?? null},
-                        ${it.enclosure_url}, ${sent.hash}, ${now()})
-              `.execute(k.db);
-              await sql`
-                update rss_items set state = 'Confirmed', state_updated_at = ${now()}
-                 where feed_id = ${feed.id} and guid = ${it.guid}
-              `.execute(k.db);
-            }
+            await autoSubmitPending(feed, String(req.user?.sub || ''));
           }
         }
 
@@ -990,6 +1007,113 @@ export const rss: ServerModule = {
            where id = ${b.id || ''}
         `.execute(k.db);
         return { ok: true };
+      },
+    );
+
+    /**
+     * 源设置：自动加种 / 立刻开始，改完立刻生效。
+     *
+     * 「立刻开始」不是只影响以后：这个源已经加进下载器的种子会被一起
+     * start / stop（正在下的才动，已经下完在做种的不去停它）。
+     */
+    app.post(
+      '/api/v1/rss/feeds/settings',
+      secured('rss:write', {
+        schema: {
+          operationId: 'rssFeedSettings',
+          tags: TAG,
+          summary: '修改 RSS 源设置（自动加种 / 立刻开始），立即生效',
+          body: Type.Object({
+            id: Type.String({ minLength: 1 }),
+            autoDownload: Type.Optional(Type.Boolean()),
+            /** true = 加种后立即开始；false = 只挂种子、保持暂停 */
+            immediate: Type.Optional(Type.Boolean()),
+          }),
+          response: {
+            200: Type.Object({
+              ok: Type.Boolean(),
+              /** 被一起开始 / 暂停的种子数 */
+              applied: Type.Integer(),
+              message: Type.Optional(Type.String()),
+            }),
+          },
+        },
+      }),
+      async (req) => {
+        const b = (req.body || {}) as { id?: string; autoDownload?: boolean; immediate?: boolean };
+        const id = String(b.id || '');
+        if (!id) return { ok: false, applied: 0, message: 'id required' };
+
+        const uid = String(req.user?.sub || '');
+        const feed = (
+          await sql<any>`select * from rss_feeds where id = ${id}`.execute(k.db)
+        ).rows[0];
+        if (!feed) return { ok: false, applied: 0, message: 'feed not found' };
+
+        let applied = 0;
+        if (b.autoDownload !== undefined) {
+          await sql`
+            update rss_feeds set auto_download = ${b.autoDownload ? 1 : 0} where id = ${id}
+          `.execute(k.db);
+          feed.auto_download = b.autoDownload ? 1 : 0;
+          // 打开开关就立刻生效：先抓一次源（顺带把老条目的种子地址补上），
+          // 再把待加种的条目丢进下载器 —— 否则用户得自己再点一次刷新，
+          // 看不出这个开关到底做了什么。
+          if (b.autoDownload === true) {
+            try {
+              if (feed.url) {
+                const parsed = parseRss(await fetchXml(String(feed.url)));
+                await insertItems(id, parsed.items);
+                await sql`update rss_feeds set last_fetch = ${now()} where id = ${id}`.execute(
+                  k.db,
+                );
+              }
+            } catch (err) {
+              k.log.warn({ err: String(err), id }, 'rss feed settings: refresh failed');
+            }
+            try {
+              applied += await autoSubmitPending(feed, uid);
+            } catch (err) {
+              k.log.warn({ err: String(err), id }, 'rss feed settings: auto submit failed');
+            }
+          }
+        }
+        if (b.immediate === undefined) return { ok: true, applied, message: '' };
+
+        await sql`
+          update rss_feeds set paused_default = ${b.immediate ? 0 : 1} where id = ${id}
+        `.execute(k.db);
+
+        // 已加进下载器的种子跟着切：只动「还没下完」的，
+        // 下完在做种的不去 stop（不然会把上传也停掉）。
+        try {
+          const hashes = (
+            await sql<{ info_hash: string }>`
+              select distinct info_hash from rss_downloaded
+               where feed_id = ${id} and coalesce(info_hash, '') <> ''
+            `.execute(k.db)
+          ).rows.map((r) => String(r.info_hash).toLowerCase());
+          if (hashes.length) {
+            const cfg = await resolveTransmission(k);
+            if (cfg) {
+              const list = await torrentList(cfg);
+              const byHash = new Map(
+                list.items.map((t) => [String(t.hashString).toLowerCase(), t]),
+              );
+              const ids = hashes
+                .map((h) => byHash.get(h))
+                .filter((t): t is NonNullable<typeof t> => !!t && t.percentDone < 1)
+                .map((t) => String(t.id));
+              if (ids.length) {
+                const res = await torrentAction(cfg, b.immediate ? 'start' : 'stop', ids);
+                applied = res.ok ? ids.length : 0;
+              }
+            }
+          }
+        } catch (err) {
+          k.log.warn({ err: String(err), id }, 'rss feed settings: apply to torrents failed');
+        }
+        return { ok: true, applied };
       },
     );
 

@@ -2245,6 +2245,12 @@ class ApiClient {
     return _asMap(_decode(res));
   }
 
+  /// 修改 RSS 源设置（自动加种 / 立刻开始），立即生效
+  Future<Map<String, dynamic>> rssFeedSettings({required Map<String, dynamic> body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/rss/feeds/settings'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body)));
+    return _asMap(_decode(res));
+  }
+
   /// RSS 自动下载规则（按账号隔离）
   Future<Map<String, dynamic>> rssRuleList() async {
     final res = await transport.send('GET', _uri('/api/v1/rss/rules'), headers: await _headers());

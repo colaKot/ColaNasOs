@@ -1,7 +1,7 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**398 个路径 / 424 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**399 个路径 / 425 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
@@ -17,7 +17,7 @@
 - **相册**（`photo`）· 131 个操作 · [跳转](#photo)
 - **player**（`player`）· 2 个操作 · [跳转](#player)
 - **pt**（`pt`）· 26 个操作 · [跳转](#pt)
-- **RSS 订阅**（`rss`）· 14 个操作 · [跳转](#rss)
+- **RSS 订阅**（`rss`）· 15 个操作 · [跳转](#rss)
 - **同步**（`sync`）· 17 个操作 · [跳转](#sync)
 - **系统监控**（`system`）· 20 个操作 · [跳转](#system)
 - **tasks**（`tasks`）· 5 个操作 · [跳转](#tasks)
@@ -2070,6 +2070,13 @@ Transmission 实时任务（下载中 / 暂停 / 做种） · `ptTorrents`
 取消订阅（级联删条目） · `rssRemoveFeed`
 
 - 请求体：`id` string · **必填**
+- 响应：200 object
+
+#### `POST /api/v1/rss/feeds/settings`
+
+修改 RSS 源设置（自动加种 / 立刻开始），立即生效 · `rssFeedSettings`
+
+- 请求体：`id` string · **必填**<br>`autoDownload` boolean · 可选<br>`immediate` boolean · 可选
 - 响应：200 object
 
 #### `GET /api/v1/rss/items`

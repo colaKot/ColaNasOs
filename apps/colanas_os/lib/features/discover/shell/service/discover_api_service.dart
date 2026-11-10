@@ -339,6 +339,25 @@ class DiscoverApiService extends BaseApiService {
     );
   }
 
+  /// 源设置：自动加种 / 立刻开始。改完服务端会立刻把该源已在下载器的种子
+  /// start / stop，返回值里的 applied 是被改动的任务数。
+  Future<ApiResponse<Map<String, dynamic>>> setFeedSettings(
+    int id, {
+    bool? autoDownload,
+    bool? immediate,
+  }) {
+    return apiPost<Map<String, dynamic>>(
+      '/api/rss/feeds/settings',
+      body: <String, dynamic>{
+        'id': id,
+        if (autoDownload != null) 'auto_download': autoDownload,
+        if (immediate != null) 'immediate': immediate,
+      },
+      dataParser: (json, code) => json,
+      timeout: const Duration(seconds: 60),
+    );
+  }
+
   Future<ApiResponse<Map<String, dynamic>>> listEntries({String? state}) {
     return apiGet<Map<String, dynamic>>(
       '/api/rss/entries',

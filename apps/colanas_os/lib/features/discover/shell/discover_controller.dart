@@ -499,6 +499,15 @@ class DiscoverController extends GetxController {
     await loadFeeds();
   }
 
+  /// 改源的「自动加种 / 立刻开始」；返回被一起 start/stop 的任务数，
+  /// 界面据此提示「已应用到 N 个任务」。
+  Future<int> setFeedSettings(int id, {bool? autoDownload, bool? immediate}) async {
+    final res = await _api.setFeedSettings(id, autoDownload: autoDownload, immediate: immediate);
+    await loadFeeds();
+    if (!res.success || res.data == null) return 0;
+    return (res.data!['applied'] as num?)?.toInt() ?? 0;
+  }
+
   Future<void> loadEntries({String? state}) async {
     final res = await _api.listEntries(state: state);
     if (res.success && res.data != null) {
