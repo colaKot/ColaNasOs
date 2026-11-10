@@ -6,9 +6,9 @@ import 'package:flutter/services.dart';
 import '../../compat/getx.dart';
 import '../../compat/host.dart';
 import '../../compat/list_batch_ops.dart';
-import '../../list/models/music_list_models.dart';
-import '../../play_service/controller/music_play_service_controller.dart';
-import '../../sub_list/controller/music_sub_list_controller.dart';
+import '../../list/models/cola_list_models.dart';
+import '../../play_service/controller/cola_player_controller.dart';
+import '../../sub_list/controller/cola_sub_list_controller.dart';
 import '../models/music_detail_models.dart';
 import '../service/music_detail_api_service.dart';
 

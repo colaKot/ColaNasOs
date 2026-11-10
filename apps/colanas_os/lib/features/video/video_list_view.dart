@@ -6,8 +6,14 @@ import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
+import '../../shell/app_widgets.dart';
+import 'detail/video_detail_router.dart';
 import 'video_card.dart';
-import 'video_detail_page.dart';
+import 'cola_video_detail_page.dart';
+import 'video_genre_labels.dart';
+import 'video_item_actions.dart';
+import 'video_jp_filters.dart';
+import 'video_region_labels.dart';
 import 'video_scrape_dialogs.dart';
 
 /// 影片列表（一个影库 / 全部库 / 某个人 / 某个类型）。
@@ -30,6 +36,9 @@ class VideoListView extends StatefulWidget {
     this.initialGenre,
     this.initialFlag,
     this.embedded = false,
+    this.embeddedHeader,
+    this.jp = false,
+    this.initialJpFilter,
   });
 
   final String? libraryId;
@@ -39,6 +48,17 @@ class VideoListView extends StatefulWidget {
   final String? initialGenre;
   final String? initialFlag;
   final bool embedded;
+
+  /// 嵌入且**作为三级页**时显示的页内标题（人物作品列表用）。
+  /// 二级内容区不需要：那时标题在外壳顶栏上，这里留空就不画。
+  final String? embeddedHeader;
+
+  /// 日本电影库：四维筛选（分辨率 / 标签 / 来源 / 题材）也在顶栏筛选按钮里；
+  /// 所有库都不显示「已刮削 N 部」计数行，给网格腾出高度。
+  final bool jp;
+
+  /// 从演员页切过来时的初始筛选（只作初值，之后各视图独立）
+  final VideoJpFilter? initialJpFilter;
 
   @override
   State<VideoListView> createState() => _VideoListViewState();
@@ -73,6 +93,16 @@ class _VideoListViewState extends State<VideoListView> {
   bool? _watched;
   bool? _scrapedFilter;
 
+  /// 日本库专用筛选（空串 = 全部）。「题材」复用 `_genres`（单选 → 集合里最多一个），
+  /// 这样通用筛选面板和这一行永远是同一份状态，不会互相打架。
+  String _resolution = '';
+  String _jpTag = '';
+  String _sourceId = '';
+
+  /// 筛选选项 + 条数：点开筛选入口时按需拉一次，之后复用
+  VideoFacetsResponse? _facets;
+  Future<VideoFacetsResponse?>? _facetsPending;
+
   double _scale = 1.0;
   bool _fanart = false;
 
@@ -92,6 +122,18 @@ class _VideoListViewState extends State<VideoListView> {
     _scale = (savedScale / 100.0).clamp(0.7, 1.15);
     _fanart = SettingsStore.instance.getBool(_keyFanart) ?? false;
     if ((widget.initialGenre ?? '').isNotEmpty) _genres.add(widget.initialGenre!);
+    // 演员页切过来时沿用同一份筛选，避免两个视图口径不一致
+    final jf = widget.initialJpFilter;
+    if (jf != null) {
+      _resolution = jf.resolution;
+      _jpTag = jf.jpTag;
+      _sourceId = jf.sourceId;
+      if (jf.genre.isNotEmpty) {
+        _genres
+          ..clear()
+          ..add(jf.genre);
+      }
+    }
     _scroll.addListener(_onScroll);
     _load();
   }
@@ -138,6 +180,9 @@ class _VideoListViewState extends State<VideoListView> {
         flag: widget.initialFlag,
         watched: _watched == null ? null : (_watched! ? 'true' : 'false'),
         scraped: _scrapedFilter == null ? null : (_scrapedFilter! ? 'true' : 'false'),
+        resolution: _resolution.isEmpty ? null : _resolution,
+        jpTag: _jpTag.isEmpty ? null : _jpTag,
+        sourceId: _sourceId.isEmpty ? null : _sourceId,
         cursor: more ? _nextCursor : null,
         limit: _pageSize,
       );
@@ -148,7 +193,11 @@ class _VideoListViewState extends State<VideoListView> {
         _loading = false;
         _loadingMore = false;
       });
-      if (!more) unawaited(_loadCount());
+      if (!more) {
+        unawaited(_loadCount());
+        // facets 供筛选面板出选项，首屏就拉一次；有缓存时直接命中不发请求
+        unawaited(_loadFacets());
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -298,12 +347,7 @@ class _VideoListViewState extends State<VideoListView> {
             ),
           ),
           const SizedBox(width: NasTokens.spaceXs),
-          _iconBtn(
-            context,
-            Icons.sort_by_alpha,
-            tr('video.list.sort'),
-            _openSortSheet,
-          ),
+          // 筛选放排序前面：先收窄范围再决定怎么排，是更自然的操作顺序
           _iconBtn(
             context,
             Icons.filter_alt_outlined,
@@ -313,7 +357,16 @@ class _VideoListViewState extends State<VideoListView> {
                 _genres.isNotEmpty ||
                 _regions.isNotEmpty ||
                 _watched != null ||
-                _scrapedFilter != null,
+                _scrapedFilter != null ||
+                _resolution.isNotEmpty ||
+                _jpTag.isNotEmpty ||
+                _sourceId.isNotEmpty,
+          ),
+          _iconBtn(
+            context,
+            Icons.sort_by_alpha,
+            tr('video.list.sort'),
+            _openSortSheet,
           ),
           _iconBtn(
             context,
@@ -376,16 +429,45 @@ class _VideoListViewState extends State<VideoListView> {
     );
   }
 
-  Widget _countLine(BuildContext context) {
-    if (_total == 0) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(NasTokens.spaceMd, 0, NasTokens.spaceMd, NasTokens.spaceXs),
-      child: Text(
-        tr('video.list.count', {'count': '$_total', 'scraped': '$_scraped'}),
-        style: TextStyle(fontSize: NasTokens.fontMicro, color: context.nasTextSecondary),
-      ),
-    );
+  // ---------------------------------------------------------------- 筛选面板辅助
+
+  /// 当前「题材」：通用筛选面板是复选，这一行只认第一个（单选语义）
+  String get _jpGenre => _genres.isEmpty ? '' : _genres.first;
+
+  String _jpTagLabel(String key) => switch (key) {
+    'uncensored' => tr('video.filter.uncensored'),
+    'cracked' => tr('video.filter.cracked'),
+    'ltx' => tr('video.filter.ltx'),
+    _ => key,
+  };
+
+  /// 选项 + 条数只在第一次点开时拉；同时点两下也只会发一次请求
+  Future<VideoFacetsResponse?> _loadFacets() {
+    final cached = _facets;
+    if (cached != null) return Future<VideoFacetsResponse?>.value(cached);
+    final pending = _facetsPending;
+    if (pending != null) return pending;
+    final fut = () async {
+      try {
+        final f = await ApiSession.instance.client.videoFacets(libraryId: widget.libraryId);
+        if (mounted) setState(() => _facets = f);
+        return f;
+      } catch (_) {
+        // 选项接口失败不该阻断筛选：面板退化成「没有条数」，选择照常生效
+        return null;
+      } finally {
+        _facetsPending = null;
+      }
+    }();
+    _facetsPending = fut;
+    return fut;
   }
+
+  String _jpValueLabelOfKey(String key) => switch (key) {
+    '4k' => tr('video.filter.res4k'),
+    '1080' => tr('video.filter.res1080'),
+    _ => key,
+  };
 
   // ---------------------------------------------------------------- 排序 / 筛选 / 缩放
 
@@ -452,7 +534,23 @@ class _VideoListViewState extends State<VideoListView> {
       // 取不到就只给「无年份 / 已刮削」这几个固定项
     }
     if (!mounted) return;
+    // 日本库的四维选项来自 facets，打开面板前先确保拿到（首屏已异步拉过一次）
+    await _loadFacets();
+    if (!mounted) return;
+    final facets = _facets;
     final yearsSorted = years.toList()..sort((a, b) => b.compareTo(a));
+    // 面板里是就地改状态（chips 直接操作 Set）。点取消要把试选的条件退回去，
+    // 否则「关掉面板」和「确定」看起来没区别，是很容易踩的坑。
+    final snapshot = (
+      years: _years.toSet(),
+      genres: _genres.toSet(),
+      regions: _regions.toSet(),
+      watched: _watched,
+      scraped: _scrapedFilter,
+      resolution: _resolution,
+      jpTag: _jpTag,
+      sourceId: _sourceId,
+    );
     final result = await showModalBottomSheet<bool>(
       context: context,
       showDragHandle: true,
@@ -461,7 +559,13 @@ class _VideoListViewState extends State<VideoListView> {
         return SafeArea(
           child: StatefulBuilder(
             builder: (ctx, setLocal) {
-              Widget chips(String label, Iterable<String> values, Set<String> target, {String? emptyLabel}) {
+              Widget chips(
+                String label,
+                Iterable<String> values,
+                Set<String> target, {
+                String? emptyLabel,
+                String Function(String)? labelBuilder,
+              }) {
                 final list = values.toList();
                 return Padding(
                   padding: const EdgeInsets.only(bottom: NasTokens.spaceSm),
@@ -481,7 +585,7 @@ class _VideoListViewState extends State<VideoListView> {
                           ),
                           for (final v in list)
                             NasChip(
-                              label: Text(v),
+                              label: Text(labelBuilder == null ? v : labelBuilder(v)),
                               selected: target.contains(v),
                               onSelected: (on) => setLocal(() {
                                 if (on) {
@@ -510,6 +614,154 @@ class _VideoListViewState extends State<VideoListView> {
                 );
               }
 
+              /// 地区：同一个国家在库里可能同时存着中英两种写法（真库
+              /// 「日本」709 条 + "Japan" 179 条），先按 canonical 合并成一项，
+              /// 显示名跟随界面语言；选中时把整组写法一起提交，
+              /// 服务端 `likeJson` 是 OR，两种写法都能命中。
+              Widget regionChips(
+                String label,
+                List<RegionOption> options,
+                Set<String> target,
+              ) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: NasTokens.spaceSm),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          NasChip(
+                            label: Text(tr('video.list.filter.all')),
+                            selected: target.isEmpty,
+                            onSelected: (_) => setLocal(target.clear),
+                          ),
+                          for (final opt in options)
+                            NasChip(
+                              label: Text(opt.label),
+                              selected: opt.queryValues.any(target.contains),
+                              onSelected: (on) => setLocal(() {
+                                final vals = opt.queryValues;
+                                if (on) {
+                                  target.addAll(vals);
+                                } else {
+                                  target.removeAll(vals);
+                                }
+                              }),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              /// 日本库四维（单选）：分组样式与上面的通用 chips 一致，
+              /// 只是内容换成分辨率 / 标签 / 来源 / 题材。
+              Widget facetChips(
+                String label,
+                List<(String, String)> values,
+                String current,
+                ValueChanged<String> onPick,
+              ) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: NasTokens.spaceSm),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(label,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          NasChip(
+                            label: Text(tr('video.filter.all')),
+                            selected: current.isEmpty,
+                            onSelected: (_) => setLocal(() => onPick('')),
+                          ),
+                          for (final (v, l) in values)
+                            NasChip(
+                              label: Text(l),
+                              selected: current == v,
+                              onSelected: (_) => setLocal(() => onPick(v)),
+                            ),
+                          if (values.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                tr('video.filter.noOptions'),
+                                style: TextStyle(
+                                  fontSize: NasTokens.fontCaption,
+                                  color: Theme.of(ctx)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              Widget jpFacets() {
+                final resOpts = <(String, String)>[
+                  for (final r
+                      in facets?.resolutions ?? const <VideoFacetCount>[])
+                    (r.key, _jpValueLabelOfKey(r.key)),
+                ];
+                final tagOpts = <(String, String)>[
+                  for (final t in facets?.tags ?? const <VideoFacetCount>[])
+                    (t.key, _jpTagLabel(t.key)),
+                ];
+                final sources = facets?.sources ?? const <VideoSourceFacet>[];
+                final sourceOpts = <(String, String)>[
+                  for (var i = 0; i < sources.length; i += 1)
+                    (
+                      sources[i].id,
+                      tr('video.filter.sourceN', {'n': '${i + 1}'}),
+                    ),
+                ];
+                final genreOpts = <(String, String)>[
+                  for (final g in facets?.genres ?? const <VideoGenreFacet>[])
+                    (g.name, genreLabel(g.name)),
+                ];
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 普通库大多只有分辨率：没数据的维度不摆出来，免得面板里
+                    // 一水儿的「暂无可选项」。已选中的值要兜底显示，方便清掉。
+                    if (resOpts.isNotEmpty || _resolution.isNotEmpty)
+                      facetChips(tr('video.filter.resolution'), resOpts,
+                          _resolution, (v) => _resolution = v),
+                    if (tagOpts.isNotEmpty || _jpTag.isNotEmpty)
+                      facetChips(tr('video.filter.tag'), tagOpts, _jpTag,
+                          (v) => _jpTag = v),
+                    if (sourceOpts.length > 1 || _sourceId.isNotEmpty)
+                      facetChips(tr('video.filter.source'), sourceOpts, _sourceId,
+                          (v) => _sourceId = v),
+                    // 普通库的「类型」由下面通用 chips 管（可多选）；
+                    // 日本库的题材是单选，且口径要跟演员页一致，才单独列一组。
+                    if (widget.jp &&
+                        (genreOpts.isNotEmpty || _jpGenre.isNotEmpty))
+                      facetChips(tr('video.filter.genre'), genreOpts, _jpGenre,
+                          (v) {
+                        _genres
+                          ..clear()
+                          ..addAll(v.isEmpty ? const <String>[] : [v]);
+                      }),
+                    const SizedBox(height: NasTokens.spaceXs),
+                  ],
+                );
+              }
+
               return SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(
                   NasTokens.spaceMd,
@@ -520,7 +772,12 @@ class _VideoListViewState extends State<VideoListView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (years.isEmpty && genres.isEmpty && regions.isEmpty)
+                    // 四维（有数据的）放最上面，其余通用维度照旧
+                    jpFacets(),
+                    if (!widget.jp &&
+                        years.isEmpty &&
+                        genres.isEmpty &&
+                        regions.isEmpty)
                       Padding(
                         padding: const EdgeInsets.only(bottom: NasTokens.spaceSm),
                         child: Text(
@@ -533,8 +790,22 @@ class _VideoListViewState extends State<VideoListView> {
                       ),
                     chips(tr('video.list.filter.years'), yearsSorted, _years,
                         emptyLabel: tr('video.list.filter.noYear')),
-                    chips(tr('video.list.filter.genres'), genres.toList()..sort(), _genres),
-                    chips(tr('video.list.filter.regions'), regions.toList()..sort(), _regions),
+                    // 日本库的「类型」由顶栏那一行（按数量排序的前 30 个题材）负责，
+                    // 这里再放一份 200 条样本抽出来的类型列表只会互相打架。
+                    if (!widget.jp)
+                      chips(
+                        tr('video.list.filter.genres'),
+                        genres.toList()
+                          ..sort((a, b) =>
+                              genreLabel(a).compareTo(genreLabel(b))),
+                        _genres,
+                        labelBuilder: genreLabel,
+                      ),
+                    regionChips(
+                      tr('video.list.filter.regions'),
+                      groupRegions(regions, I18n.instance.locale),
+                      _regions,
+                    ),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
@@ -571,6 +842,11 @@ class _VideoListViewState extends State<VideoListView> {
                             _regions.clear();
                             _watched = null;
                             _scrapedFilter = null;
+                            // 「重置」= 清空所有筛选，日本库那行也要一起归零，
+                            // 否则按钮写着重置、列表还少一截
+                            _resolution = '';
+                            _jpTag = '';
+                            _sourceId = '';
                           }),
                           icon: const Icon(Icons.refresh, size: 18),
                           label: Text(tr('video.list.reset')),
@@ -590,7 +866,26 @@ class _VideoListViewState extends State<VideoListView> {
         );
       },
     );
-    if (result != true) return;
+    if (result != true) {
+      if (!mounted) return;
+      setState(() {
+        _years
+          ..clear()
+          ..addAll(snapshot.years);
+        _genres
+          ..clear()
+          ..addAll(snapshot.genres);
+        _regions
+          ..clear()
+          ..addAll(snapshot.regions);
+        _watched = snapshot.watched;
+        _scrapedFilter = snapshot.scraped;
+        _resolution = snapshot.resolution;
+        _jpTag = snapshot.jpTag;
+        _sourceId = snapshot.sourceId;
+      });
+      return;
+    }
     await _load();
   }
 
@@ -766,15 +1061,7 @@ class _VideoListViewState extends State<VideoListView> {
                   });
                   return;
                 }
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => VideoDetailPage(
-                      item: item,
-                      posterUrl: videoPosterUrl(item),
-                      headers: videoArtHeaders,
-                    ),
-                  ),
-                );
+                openVideoDetail(context, item);
               },
               onMore: () => _showCardMenu(item),
               ),
@@ -837,6 +1124,16 @@ class _VideoListViewState extends State<VideoListView> {
               title: Text(tr('video.action.excludeScrape')),
               onTap: () => Navigator.pop(ctx, 'exclude'),
             ),
+            const Divider(),
+            ListTile(
+              leading: Icon(
+                Icons.delete_outline,
+                size: 22,
+                color: Theme.of(ctx).colorScheme.error,
+              ),
+              title: Text(tr('common.delete')),
+              onTap: () => Navigator.pop(ctx, 'delete'),
+            ),
           ],
         ),
       ),
@@ -889,6 +1186,13 @@ class _VideoListViewState extends State<VideoListView> {
       icon: Icons.block,
       onSelected: () => _videoAction('exclude', item),
     ),
+    const NasMenuEntry.divider(),
+    NasMenuEntry(
+      label: tr('common.delete'),
+      icon: Icons.delete_outline,
+      danger: true,
+      onSelected: () => _videoAction('delete', item),
+    ),
   ];
 
   /// 长按菜单与右键菜单共用的动作分发（原来内联在 _showCardMenu 里）
@@ -905,15 +1209,7 @@ class _VideoListViewState extends State<VideoListView> {
         });
       case 'detail':
         if (!mounted) return;
-        await Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => VideoDetailPage(
-              item: item,
-              posterUrl: videoPosterUrl(item),
-              headers: videoArtHeaders,
-            ),
-          ),
-        );
+        openVideoDetail(context, item);
       case 'scrape':
         await _scrapeOne(item);
       case 'match':
@@ -942,6 +1238,11 @@ class _VideoListViewState extends State<VideoListView> {
           if (!mounted) return;
           NasSnack.show(context, '$e');
         }
+      case 'delete':
+        final toTrash = await confirmVideoDelete(context);
+        if (toTrash == null || !mounted) return;
+        await deleteVideoItemsNow(context, [item.id], toTrash: toTrash);
+        await _load();
     }
   }
 
@@ -1006,7 +1307,7 @@ class _VideoListViewState extends State<VideoListView> {
     final body = Column(
       children: [
         _toolbar(context),
-        _countLine(context),
+        // 所有库：筛选全在顶栏按钮里，也不显示「已刮削 N 部」，高度留给网格。
         if (_selectionMode) _selectionBar(context),
         Expanded(
           child: _loading
@@ -1034,7 +1335,52 @@ class _VideoListViewState extends State<VideoListView> {
           ),
       ],
     );
-    if (widget.embedded) return body;
+    if (widget.embedded) {
+      final header = widget.embeddedHeader;
+      if (header == null) return body;
+      // 三级页：不画 AppBar（返回在外壳上），但得自己给标题与底色 —— 它是叠在
+      // 上一页之上的，透明会漏字（`scaffoldBackgroundColor` 在本项目是透明的）。
+      return Material(
+        color: Colors.transparent,
+        child: Stack(
+          children: [
+            Positioned.fill(child: context.nasStyle.background),
+            Positioned.fill(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      NasTokens.spaceMd,
+                      NasTokens.spaceSm,
+                      NasTokens.spaceXs,
+                      0,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            header,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: NasTokens.fontSubtitle,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        NasRefreshButton(onPressed: () => _load()),
+                      ],
+                    ),
+                  ),
+                  Expanded(child: body),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: Text(widget.title ?? tr('app.video'))),
       body: body,
@@ -1048,13 +1394,25 @@ Future<void> openVideoListByPerson(
   required String kind,
   required String name,
 }) {
-  return Navigator.of(context).push(
-    MaterialPageRoute<void>(
-      builder: (_) => VideoListView(
-        title: name,
-        initialActor: kind == 'actor' ? name : null,
-        initialDirector: kind == 'director' ? name : null,
+  VideoListView build({required bool embedded}) => VideoListView(
+    title: name,
+    embedded: embedded,
+    embeddedHeader: embedded ? name : null,
+    initialActor: kind == 'actor' ? name : null,
+    initialDirector: kind == 'director' ? name : null,
+  );
+
+  final router = VideoDetailRouter.instance;
+  if (router.embeddableFrom(context)) {
+    router.open(
+      VideoDetailEntry(
+        tag: 'person:$kind:$name',
+        build: (_) => build(embedded: true),
       ),
-    ),
+    );
+    return Future<void>.value();
+  }
+  return Navigator.of(context).push(
+    MaterialPageRoute<void>(builder: (_) => build(embedded: false)),
   );
 }

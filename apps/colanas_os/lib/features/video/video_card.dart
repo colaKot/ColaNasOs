@@ -3,7 +3,7 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
-import 'video_detail_page.dart';
+import 'video_genre_labels.dart';
 
 /// 影视海报卡的统一实现（首页横滑、列表网格、详情相关页共用）。
 ///
@@ -77,7 +77,7 @@ String videoMetaLine(VideoItem item) {
   if (codec.contains('265') || codec.contains('hevc')) parts.add('H.265');
   final minutes = ((item.durationMs ?? 0) / 60000).round();
   if (minutes > 0) parts.add(tr('video.detail.minutes', {'count': '$minutes'}));
-  if (item.genres.isNotEmpty) parts.add(item.genres.first);
+  if (item.genres.isNotEmpty) parts.add(genreLabel(item.genres.first));
   return parts.join(' · ');
 }
 
@@ -694,27 +694,9 @@ class VideoHeroCard extends StatelessWidget {
   }
 }
 
-/// 打开影片详情（统一入口）。
-///
-/// 为什么留一个函数而不是各处直接 push：详情页需要同时传 `item` 与海报地址，
-/// 而海报地址的推导（刮削海报 / 首帧回退）只应该有一份实现。
-Future<void> openVideoDetail(BuildContext context, VideoItem item) {
-  return openVideoDetailOn(Navigator.of(context), item);
-}
-
-/// 同上，但直接收 [NavigatorState]：在 `await` 之后调用时，
-/// 先取好 navigator 再 await，就不会触发 `use_build_context_synchronously`。
-Future<void> openVideoDetailOn(NavigatorState navigator, VideoItem item) {
-  return navigator.push(
-    MaterialPageRoute<void>(
-      builder: (_) => VideoDetailPage(
-        item: item,
-        posterUrl: videoPosterUrl(item),
-        headers: videoArtHeaders,
-      ),
-    ),
-  );
-}
+// 统一入口 `openVideoDetail` / `openVideoDetailOn` 已挪到 `cola_video_detail_page.dart`：
+// 那里才知道影视壳是否挂载（走三级页叠层 / 退回整页 push），
+// 留两份实现会同时被 import 造成 ambiguous_import。
 
 /// 画质徽章行（4K / HDR / DV / Atmos）。详情页与列表卡片共用同一套判断口径。
 class MediaFlagsRow extends StatelessWidget {

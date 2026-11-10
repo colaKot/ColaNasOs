@@ -12,8 +12,23 @@ import '../../core/session.dart';
 import 'player_page.dart';
 import 'video_card.dart';
 import 'video_collection_picker.dart';
+import 'video_jp_pages.dart';
 import 'video_list_view.dart';
 import 'video_scrape_dialogs.dart';
+import 'detail/video_detail_router.dart';
+
+/// 演职人员名清洗。
+///
+/// NFO / 刮削偶尔把「名字 头像地址 TMDB-id」拼成一整串塞进 actors / directors
+/// （实测《超人》的导演就是这样），直接展示会把整条 URL 打到页面上，
+/// 拿去当演员筛选条件也永远匹配不到。这里只剥掉地址与纯数字 id，**不动名字里的空格**
+/// （`Grace Chan` / `Ryan J. Pezdirc` 这种必须原样保留）。
+String videoPersonName(String raw) {
+  var s = raw.trim();
+  s = s.replaceAll(RegExp(r'\s*https?://\S+'), '');
+  s = s.replaceAll(RegExp(r'\s+\d{3,}$'), '');
+  return s.trim();
+}
 
 /// 字幕下拉框显示名：内嵌字幕轨没有有效语言（常见 `und`）时显示「内嵌字幕 N」，
 /// 不要把 `#embedded:N` 直接丢给用户。
@@ -24,7 +39,9 @@ String _subtitleLabel(VideoSubtitleFile sub) {
     return tr('player.embeddedSubtitle', {'n': '$n'});
   }
   final lang = sub.lang;
-  if (lang == null || lang.isEmpty || lang.toLowerCase() == 'und') return sub.name;
+  if (lang == null || lang.isEmpty || lang.toLowerCase() == 'und') {
+    return sub.name;
+  }
   return '${sub.name}（$lang）';
 }
 
@@ -41,6 +58,7 @@ class VideoDetailPage extends StatefulWidget {
     required this.item,
     required this.posterUrl,
     required this.headers,
+    this.embedded = false,
   });
 
   final VideoItem item;
@@ -48,6 +66,10 @@ class VideoDetailPage extends StatefulWidget {
   /// 兼容旧调用点；内部一律按 item 自己算海报地址（刮削海报优先）
   final String posterUrl;
   final Map<String, String> headers;
+
+  /// true = 作为三级页放进影视壳的内容区：
+  /// 不画自己的 AppBar（操作改挂右上角浮层），返回交给外壳（`ShellBack`）。
+  final bool embedded;
 
   @override
   State<VideoDetailPage> createState() => VideoDetailPageState();
@@ -77,7 +99,9 @@ class VideoDetailPageState extends State<VideoDetailPage> {
   }
 
   Future<void> _loadActorInfo() async {
-    final names = [..._item.directors, ..._item.actors];
+    final names = [
+      for (final n in [..._item.directors, ..._item.actors]) videoPersonName(n),
+    ];
     if (names.isEmpty) return;
     try {
       final res = await ApiSession.instance.client.videoActorAvatars(
@@ -485,74 +509,77 @@ class VideoDetailPageState extends State<VideoDetailPage> {
 
     return Scaffold(
       // 背景是模糊封面，内容从顶上压下来；AppBar 只留返回与菜单
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        foregroundColor: Colors.white,
-        title: const SizedBox.shrink(),
-        flexibleSpace: IgnorePointer(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: 0.5),
-                  Colors.transparent,
-                ],
+      extendBodyBehindAppBar: !widget.embedded,
+      // 嵌入模式不画 AppBar：顶栏由外壳提供，操作改挂右上角浮层
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              foregroundColor: Colors.white,
+              title: const SizedBox.shrink(),
+              flexibleSpace: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.5),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
               ),
+              actions: [
+                IconButton(
+                  tooltip: tr('video.action.scrape'),
+                  onPressed: _busy ? null : () => _scrape(),
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (v) {
+                    switch (v) {
+                      case 'force':
+                        _scrape(force: true);
+                      case 'match':
+                        _manualMatch();
+                      case 'cleanup':
+                        _cleanup();
+                      case 'exclude':
+                        _exclude();
+                      case 'copyPath':
+                        _copyPath();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'force',
+                      child: Text(tr('video.action.scrapeForce')),
+                    ),
+                    PopupMenuItem(
+                      value: 'match',
+                      child: Text(tr('video.action.matchTmdb')),
+                    ),
+                    PopupMenuItem(
+                      value: 'cleanup',
+                      child: Text(tr('video.action.scrapeCleanup')),
+                    ),
+                    PopupMenuItem(
+                      value: 'exclude',
+                      child: Text(tr('video.action.excludeScrape')),
+                    ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem(
+                      value: 'copyPath',
+                      child: Text(tr('video.action.copyPath')),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ),
-        ),
-        actions: [
-          IconButton(
-            tooltip: tr('video.action.scrape'),
-            onPressed: _busy ? null : () => _scrape(),
-            icon: const Icon(Icons.auto_awesome_outlined),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (v) {
-              switch (v) {
-                case 'force':
-                  _scrape(force: true);
-                case 'match':
-                  _manualMatch();
-                case 'cleanup':
-                  _cleanup();
-                case 'exclude':
-                  _exclude();
-                case 'copyPath':
-                  _copyPath();
-              }
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'force',
-                child: Text(tr('video.action.scrapeForce')),
-              ),
-              PopupMenuItem(
-                value: 'match',
-                child: Text(tr('video.action.matchTmdb')),
-              ),
-              PopupMenuItem(
-                value: 'cleanup',
-                child: Text(tr('video.action.scrapeCleanup')),
-              ),
-              PopupMenuItem(
-                value: 'exclude',
-                child: Text(tr('video.action.excludeScrape')),
-              ),
-              const PopupMenuDivider(),
-              PopupMenuItem(
-                value: 'copyPath',
-                child: Text(tr('video.action.copyPath')),
-              ),
-            ],
-          ),
-        ],
-      ),
       body: Stack(
         children: [
           Positioned.fill(child: _backdrop(context, item)),
@@ -561,9 +588,12 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             child: ListView(
               padding: EdgeInsets.fromLTRB(
                 hPad,
-                MediaQuery.of(context).padding.top +
-                    kToolbarHeight +
-                    NasTokens.spaceSm,
+                // 嵌入模式没有自己的 AppBar，不用再为它留一条高度
+                widget.embedded
+                    ? NasTokens.spaceSm
+                    : MediaQuery.of(context).padding.top +
+                          kToolbarHeight +
+                          NasTokens.spaceSm,
                 hPad,
                 NasTokens.spaceXl,
               ),
@@ -595,7 +625,69 @@ class VideoDetailPageState extends State<VideoDetailPage> {
               ],
             ),
           ),
+          if (widget.embedded)
+            Positioned(top: 8, right: 8, child: _floatingActions(context)),
         ],
+      ),
+    );
+  }
+
+  /// 嵌入模式的浮层操作：刮削 + 更多菜单，黑色半透明胶囊保证在封面上也看得清
+  Widget _floatingActions(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.35),
+      borderRadius: BorderRadius.circular(999),
+      child: IconTheme(
+        data: const IconThemeData(color: Colors.white),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            IconButton(
+              tooltip: tr('video.action.scrape'),
+              onPressed: _busy ? null : () => _scrape(),
+              icon: const Icon(Icons.auto_awesome_outlined),
+            ),
+            PopupMenuButton<String>(
+              onSelected: (v) {
+                switch (v) {
+                  case 'force':
+                    _scrape(force: true);
+                  case 'match':
+                    _manualMatch();
+                  case 'cleanup':
+                    _cleanup();
+                  case 'exclude':
+                    _exclude();
+                  case 'copyPath':
+                    _copyPath();
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'force',
+                  child: Text(tr('video.action.scrapeForce')),
+                ),
+                PopupMenuItem(
+                  value: 'match',
+                  child: Text(tr('video.action.matchTmdb')),
+                ),
+                PopupMenuItem(
+                  value: 'cleanup',
+                  child: Text(tr('video.action.scrapeCleanup')),
+                ),
+                PopupMenuItem(
+                  value: 'exclude',
+                  child: Text(tr('video.action.excludeScrape')),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'copyPath',
+                  child: Text(tr('video.action.copyPath')),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1044,10 +1136,10 @@ class VideoDetailPageState extends State<VideoDetailPage> {
   Widget _peopleSection(BuildContext context) {
     final people = <(String, String, String)>[
       for (final name in _item.directors)
-        (name, 'director', tr('video.detail.director')),
+        (videoPersonName(name), 'director', tr('video.detail.director')),
       for (final name in _item.actors)
-        (name, 'actor', tr('video.detail.actor')),
-    ];
+        (videoPersonName(name), 'actor', tr('video.detail.actor')),
+    ].where((p) => p.$1.isNotEmpty).toList();
     if (people.isEmpty) return const SizedBox.shrink();
 
     final scheme = Theme.of(context).colorScheme;
@@ -1074,8 +1166,19 @@ class VideoDetailPageState extends State<VideoDetailPage> {
 
               return InkWell(
                 borderRadius: BorderRadius.circular(40),
-                onTap: () =>
-                    openVideoListByPerson(context, kind: kind, name: name),
+                // 日本库：演员页有身高 / 三围 / 生日，必须进日本演员页；
+                // 普通库走「某人的作品」。
+                onTap: () {
+                  if (VideoDetailRouter.instance.isJpLibrary(_item.libraryId)) {
+                    openVideoJpActor(
+                      context,
+                      name: name,
+                      libraryId: _item.libraryId,
+                    );
+                  } else {
+                    openVideoListByPerson(context, kind: kind, name: name);
+                  }
+                },
                 child: SizedBox(
                   width: 76,
                   child: Column(
@@ -1084,10 +1187,11 @@ class VideoDetailPageState extends State<VideoDetailPage> {
                         child: SizedBox(
                           width: 64,
                           height: 64,
+                          // 不要 fallbackText：没头像时它会把这个名字按 64×64 画成
+                          // 一个个巨字（还被裁掉），远不如一个人形图标干净。
                           child: NasCoverImage(
                             url: avatar.isEmpty ? null : avatar,
                             icon: Icons.person_outline,
-                            fallbackText: name,
                             cacheWidth: 128,
                           ),
                         ),
@@ -1188,15 +1292,8 @@ class VideoDetailPageState extends State<VideoDetailPage> {
         borderRadius: BorderRadius.circular(8),
         onTap: current
             ? null
-            : () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => VideoDetailPage(
-                    item: ep,
-                    posterUrl: videoPosterUrl(ep),
-                    headers: widget.headers,
-                  ),
-                ),
-              ),
+            // 切集也走统一入口：嵌入模式下压在同一个三级栈里，不会盖住左栏
+            : () => openVideoDetailOn(Navigator.of(context), ep),
         child: Container(
           width: 52,
           height: 40,
@@ -1391,4 +1488,63 @@ class VideoDetailPageState extends State<VideoDetailPage> {
       ),
     );
   }
+}
+
+/// 打开影视详情的统一入口。
+///
+/// 影视壳挂载时走**三级页**（内容区叠层，左侧一二级栏保留、返回走外壳）；
+/// 壳不在时（桌面卡片 / 独立窗口）或调用方本身在整页路由里时，退回整页 push。
+Future<void> openVideoDetail(BuildContext context, VideoItem item) {
+  final router = VideoDetailRouter.instance;
+  if (router.embeddableFrom(context)) {
+    router.open(
+      VideoDetailEntry(
+        tag: 'video:${item.id}',
+        build: (_) => VideoDetailPage(
+          item: item,
+          posterUrl: videoPosterUrl(item),
+          headers: videoArtHeaders,
+          embedded: true,
+        ),
+      ),
+    );
+    return Future<void>.value();
+  }
+  return openVideoDetailOn(Navigator.of(context), item);
+}
+
+/// 同上，但直接收 [NavigatorState]：在 `await` 之后调用时，
+/// 先取好 navigator 再 await，就不会触发 `use_build_context_synchronously`。
+///
+/// 拿不到 context 就无法判断调用方是不是在整页路由里，所以**只在内容区调用**；
+/// 页面自己知道自己在哪（详情页切集、列表页点卡片），不需要再猜。
+Future<void> openVideoDetailOn(NavigatorState navigator, VideoItem item) {
+  final router = VideoDetailRouter.instance;
+  if (router.attached) {
+    router.open(
+      VideoDetailEntry(
+        tag: 'video:${item.id}',
+        build: (_) => VideoDetailPage(
+          item: item,
+          posterUrl: videoPosterUrl(item),
+          headers: videoArtHeaders,
+          embedded: true,
+        ),
+      ),
+    );
+    return Future<void>.value();
+  }
+  return _pushVideoDetail(navigator, item);
+}
+
+Future<void> _pushVideoDetail(NavigatorState navigator, VideoItem item) {
+  return navigator.push(
+    MaterialPageRoute<void>(
+      builder: (_) => VideoDetailPage(
+        item: item,
+        posterUrl: videoPosterUrl(item),
+        headers: videoArtHeaders,
+      ),
+    ),
+  );
 }

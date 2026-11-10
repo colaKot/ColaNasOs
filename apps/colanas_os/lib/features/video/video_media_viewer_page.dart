@@ -6,6 +6,7 @@ import 'package:nas_ui/nas_ui.dart';
 import '../../core/session.dart';
 import '../photo/photo_download.dart';
 import 'video_card.dart';
+import 'cola_video_detail_page.dart';
 
 /// 图片库 / 混合库的全屏浏览。
 ///

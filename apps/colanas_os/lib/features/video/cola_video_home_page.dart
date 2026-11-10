@@ -6,8 +6,9 @@ import '../../core/session.dart';
 import '../../core/scan_refresh.dart';
 import '../../shell/mobile_frame.dart';
 import 'video_card.dart';
-import 'video_detail_page.dart';
+import 'cola_video_detail_page.dart';
 import 'video_image_library_page.dart';
+import 'video_item_actions.dart';
 import 'video_jp_pages.dart';
 import 'video_list_view.dart';
 import 'video_media_viewer_page.dart';
@@ -18,9 +19,13 @@ import 'video_media_viewer_page.dart';
 /// 无限网格当首页，语义是「查找」；参考实现是「编辑精选」式的浏览页，
 /// 看着完全不像，问题就出在这里 —— 不是样式细节，是信息架构不同。
 class VideoHomePage extends StatefulWidget {
-  const VideoHomePage({super.key, this.embedded = false});
+  const VideoHomePage({super.key, this.embedded = false, this.onNavigate});
 
   final bool embedded;
+
+  /// 点「来源」卡片时切二级菜单（传 `NavSelection.select`）。
+  /// 左栏本来就有每个库的入口，桌面再推一整页等于重复造一个入口、还盖住左栏。
+  final void Function(String key)? onNavigate;
 
   @override
   State<VideoHomePage> createState() => _VideoHomePageState();
@@ -110,15 +115,7 @@ class _VideoHomePageState extends State<VideoHomePage> {
       openMediaViewer(context, items: [item], initialIndex: 0);
       return;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => VideoDetailPage(
-          item: item,
-          posterUrl: videoPosterUrl(item),
-          headers: videoArtHeaders,
-        ),
-      ),
-    );
+    openVideoDetail(context, item);
   }
 
   void _openAt(List<VideoItem> items, int index) {
@@ -131,6 +128,12 @@ class _VideoHomePageState extends State<VideoHomePage> {
   }
 
   void _openLibrary(String id, String name, String libType) {
+    // 有外壳就切菜单项，让左栏高亮跟着走（点完还能看到自己站在哪个库）
+    final onNavigate = widget.onNavigate;
+    if (onNavigate != null) {
+      onNavigate('lib:$id');
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => libType == 'jp_movie'
@@ -397,6 +400,26 @@ class _VideoHomePageState extends State<VideoHomePage> {
     );
   }
 
+  /// 首页卡片也用全站统一的影片动作。图片条目不刮削、打开走本页的媒体查看器。
+  Future<void> _runItemAction(VideoItem item, String action) async {
+    if (action == VideoItemAction.detail) {
+      _openItem(item);
+      return;
+    }
+    final changed = await runVideoItemAction(context, action, item);
+    if (changed && mounted) await _load();
+  }
+
+  Future<void> _showItemActions(VideoItem item) async {
+    final action = await showVideoItemActionSheet(
+      context,
+      item,
+      allowScrape: item.mediaType != 'image',
+    );
+    if (action == null || !mounted) return;
+    await _runItemAction(item, action);
+  }
+
   // ---------------------------------------------------------------- 推荐
 
   Widget _recommendSection(BuildContext context, List<VideoItem> items) {
@@ -413,15 +436,28 @@ class _VideoHomePageState extends State<VideoHomePage> {
             padding: const EdgeInsets.symmetric(horizontal: NasTokens.spaceMd),
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(width: NasTokens.spaceSm),
-            itemBuilder: (context, i) => SizedBox(
-              height: cardW / (16 / 9),
-              child: VideoHeroCard(
-                item: items[i],
-                width: cardW,
-                onTap: () => _openItem(items[i]),
-                onMore: () => _openItem(items[i]),
-              ),
-            ),
+            itemBuilder: (context, i) {
+              final item = items[i];
+              return SizedBox(
+                height: cardW / (16 / 9),
+                child: NasContextMenuRegion(
+                  entries: videoItemMenuEntries(
+                    item,
+                    onAction: (a) => _runItemAction(item, a),
+                    allowScrape: item.mediaType != 'image',
+                  ),
+                  child: GestureDetector(
+                    onLongPress: () => _showItemActions(item),
+                    child: VideoHeroCard(
+                      item: item,
+                      width: cardW,
+                      onTap: () => _openItem(item),
+                      onMore: () => _showItemActions(item),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ],
@@ -471,13 +507,26 @@ class _VideoHomePageState extends State<VideoHomePage> {
             padding: const EdgeInsets.symmetric(horizontal: NasTokens.spaceMd),
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(width: NasTokens.spaceSm),
-            itemBuilder: (context, i) => VideoPosterCard(
-              item: items[i],
-              width: cardW,
-              progress: progressOf?.call(items[i]),
-              onTap: () => _openAt(items, i),
-              onMore: () => _openAt(items, i),
-            ),
+            itemBuilder: (context, i) {
+              final item = items[i];
+              return NasContextMenuRegion(
+                entries: videoItemMenuEntries(
+                  item,
+                  onAction: (a) => _runItemAction(item, a),
+                  allowScrape: item.mediaType != 'image',
+                ),
+                child: GestureDetector(
+                  onLongPress: () => _showItemActions(item),
+                  child: VideoPosterCard(
+                    item: item,
+                    width: cardW,
+                    progress: progressOf?.call(item),
+                    onTap: () => _openAt(items, i),
+                    onMore: () => _showItemActions(item),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ],

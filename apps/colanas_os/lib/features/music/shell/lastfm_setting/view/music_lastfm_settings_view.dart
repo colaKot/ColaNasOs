@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../compat/api_controller.dart';
+import '../../compat/cola_api_controller.dart';
 import '../../compat/getx.dart';
 import '../../compat/host.dart';
 import '../../detail/models/music_detail_models.dart';

@@ -12,10 +12,10 @@ import 'compat/i18n.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/display_labels.dart';
-import 'compat/api_controller.dart';
-import 'compat/context_menu_util.dart';
-import 'compat/device_utils.dart';
-import 'compat/custom_context_menu_item.dart';
+import 'compat/cola_api_controller.dart';
+import 'compat/cola_context_menu_util.dart';
+import 'compat/cola_device_utils.dart';
+import 'compat/cola_custom_context_menu_item.dart';
 import 'discover_controller.dart';
 
 /// 影视发现应用壳。

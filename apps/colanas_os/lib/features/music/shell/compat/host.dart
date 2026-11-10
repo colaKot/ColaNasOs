@@ -26,8 +26,8 @@ import 'download.dart';
 import 'i18n_music.dart';
 
 /// 让 `import compat/host.dart` 的地方也能拿到资源服务（唯一定义在
-/// `local_web_asset_server.dart`，避免两处同名冲突）。
-export 'local_web_asset_server.dart';
+/// `cola_local_web_asset_server.dart`，避免两处同名冲突）。
+export 'cola_local_web_asset_server.dart';
 
 /// 订阅「音乐库扫描完成」（服务端 `scan.done`，domain=music）。
 ///

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../shell/app_widgets.dart';
+import '../../shell/shell_back.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +12,8 @@ import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import '../photo/photo_download.dart';
 import 'video_card.dart';
+import 'cola_video_detail_page.dart';
+import 'video_item_actions.dart';
 import 'video_media_viewer_page.dart';
 
 /// 图片库 / 混合库的专用浏览页。
@@ -46,7 +49,6 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
   String? _error;
   List<VideoItem> _items = const [];
   String? _cursor;
-  int _total = 0;
 
   bool _folderMode = true;
   bool _waterfall = false;
@@ -141,7 +143,6 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
         _loadingMore = false;
       });
       if (!more) {
-        unawaited(_loadCount());
         unawaited(_loadFolders());
       }
     } catch (e) {
@@ -151,24 +152,6 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
         _loading = false;
         _loadingMore = false;
       });
-    }
-  }
-
-  Future<void> _loadCount() async {
-    try {
-      final res = await ApiSession.instance.client.videoListCount(
-        libraryId: widget.libraryId,
-        q: _isSearching ? _query : null,
-        letter: _letter.isEmpty ? null : _letter,
-        folderPath: _folderPath.isEmpty ? null : _folderPath,
-        folderMode: _folderMode || _isSearching
-            ? (_isSearching ? 'subtree' : 'exact')
-            : null,
-      );
-      if (!mounted) return;
-      setState(() => _total = res.total);
-    } catch (_) {
-      /* 计数失败不影响内容 */
     }
   }
 
@@ -269,36 +252,6 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
     openVideoDetail(context, item);
   }
 
-  Future<void> _deleteItem(VideoItem item) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(tr('video.media.delete')),
-        content: Text(tr('video.dup.deleteConfirm', {'count': '1'})),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(tr('common.cancel')),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tr('common.delete')),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    try {
-      await ApiSession.instance.client.videoItemsDelete(
-        body: VideoDeleteItemsBody(ids: [item.id]),
-      );
-      await _load(reset: true);
-    } catch (e) {
-      if (!mounted) return;
-      NasSnack.show(context, '$e');
-    }
-  }
-
   Future<void> _deleteFolder(VideoImageFolderNode folder) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -368,14 +321,46 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
             value: 'download',
             child: Text(tr('video.media.download')),
           ),
+        // 图片没有 NFO / TMDB，刮削和已看只对影片开放
+        if (item.mediaType == 'video') ...[
+          PopupMenuItem(
+            value: VideoItemAction.watched,
+            child: Text(
+              tr(
+                item.watched
+                    ? 'video.action.markUnwatched'
+                    : 'video.action.markWatched',
+              ),
+            ),
+          ),
+          PopupMenuItem(
+            value: VideoItemAction.scrape,
+            child: Text(tr('video.action.scrape')),
+          ),
+        ],
+        PopupMenuItem(
+          value: VideoItemAction.copyPath,
+          child: Text(tr('video.action.copyPath')),
+        ),
         const PopupMenuDivider(),
-        PopupMenuItem(value: 'delete', child: Text(tr('video.media.delete'))),
+        PopupMenuItem(
+          value: VideoItemAction.delete,
+          child: Text(tr('common.delete')),
+        ),
       ],
     );
     if (!mounted || v == null) return;
-    if (v == 'open') await _openItem(item, index);
-    if (v == 'download') await _downloadItem(item);
-    if (v == 'delete') await _deleteItem(item);
+    if (v == 'open') {
+      await _openItem(item, index);
+      return;
+    }
+    if (v == 'download') {
+      await _downloadItem(item);
+      return;
+    }
+    // 删除 / 刮削 / 已看 / 复制路径与其它列表共用同一套动作与确认框
+    final changed = await runVideoItemAction(context, v, item);
+    if (changed && mounted) await _load(reset: true);
   }
 
   Future<void> _showFolderMenu(VideoImageFolderNode folder, Offset pos) async {
@@ -402,6 +387,14 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
 
   @override
   Widget build(BuildContext context) {
+    return SubPageScope(
+      active: _folderMode && _parentPath != null,
+      onBack: () => _goUp(),
+      child: _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     final body = Column(
       children: [
         _toolbar(context),
@@ -446,13 +439,6 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
                   icon: const Icon(Icons.arrow_back),
                 ),
               Expanded(child: _breadcrumb(context)),
-              Text(
-                '$_total',
-                style: TextStyle(
-                  fontSize: NasTokens.fontCaption,
-                  color: context.nasTextSecondary,
-                ),
-              ),
               const SizedBox(width: NasTokens.spaceXs),
               IconButton(
                 tooltip: _folderMode
@@ -503,6 +489,16 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
                 ),
               ),
               const SizedBox(width: NasTokens.spaceXs),
+              // 首字母筛选收进按钮：不再常驻一整行 chip，给网格多留高度
+              if (_sortBy == 'name')
+                IconButton(
+                  tooltip: tr('video.media.letterFilter'),
+                  onPressed: _openLetterSheet,
+                  icon: Icon(
+                    Icons.filter_alt_outlined,
+                    color: _letter.isNotEmpty ? scheme.primary : null,
+                  ),
+                ),
               IconButton(
                 tooltip: tr('video.media.sort'),
                 onPressed: _showSortSheet,
@@ -536,51 +532,58 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
               ),
             ],
           ),
-          if (_sortBy == 'name') _letterBar(context),
         ],
       ),
     );
   }
 
-  Widget _letterBar(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final letters = ['', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''), '#'];
-    return SizedBox(
-      height: 32,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        itemCount: letters.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 4),
-        itemBuilder: (ctx, i) {
-          final l = letters[i];
-          final active = _letter == l;
-          return InkWell(
-            borderRadius: BorderRadius.circular(6),
-            onTap: () {
-              setState(() => _letter = l);
-              SettingsStore.instance.setString(_k('letter'), l);
-              _load(reset: true);
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              decoration: BoxDecoration(
-                color: active ? scheme.primary.withValues(alpha: 0.16) : null,
-                borderRadius: BorderRadius.circular(6),
+  /// 首字母筛选面板：样式与其它影视列表的筛选面板一致（chip + 点选即生效）。
+  Future<void> _openLetterSheet() async {
+    const letters = ['', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K',
+      'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y',
+      'Z', '#'];
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            NasTokens.spaceMd,
+            0,
+            NasTokens.spaceMd,
+            NasTokens.spaceMd,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                tr('video.media.letterFilter'),
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
-              child: Text(
-                l.isEmpty ? tr('video.list.filter.all') : l,
-                style: TextStyle(
-                  fontSize: NasTokens.fontCaption,
-                  color: active ? scheme.primary : null,
-                  fontWeight: active ? FontWeight.w700 : null,
-                ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final l in letters)
+                    NasChip(
+                      label: Text(
+                        l.isEmpty ? tr('video.list.filter.all') : l,
+                      ),
+                      selected: _letter == l,
+                      onSelected: (_) => Navigator.pop(ctx, l),
+                    ),
+                ],
               ),
-            ),
-          );
-        },
+            ],
+          ),
+        ),
       ),
     );
+    if (picked == null || !mounted) return;
+    setState(() => _letter = picked);
+    SettingsStore.instance.setString(_k('letter'), picked);
+    await _load(reset: true);
   }
 
   Widget _breadcrumb(BuildContext context) {

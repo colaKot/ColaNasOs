@@ -3,8 +3,9 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
+import 'detail/video_detail_router.dart';
 import 'video_card.dart';
-import 'video_detail_page.dart';
+import 'cola_video_detail_page.dart';
 
 /// 剧集详情：一部剧 → 按季分组的集列表。
 ///
@@ -17,12 +18,17 @@ class VideoSeriesDetailPage extends StatefulWidget {
     this.coverId,
     this.posterUrl,
     this.headers = const {},
+    this.embedded = false,
   });
 
   final String name;
   final String? coverId;
   final String? posterUrl;
   final Map<String, String> headers;
+
+  /// true = 作为三级页放进影视壳的内容区：不画自己的 AppBar，
+  /// 返回交给外壳（`ShellBack`），底色用外壳同款背景（`nasStyle.background`）。
+  final bool embedded;
 
   @override
   State<VideoSeriesDetailPage> createState() => _VideoSeriesDetailPageState();
@@ -76,43 +82,60 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.name, overflow: TextOverflow.ellipsis)),
-      body: _loading
-          ? const NasLoading()
-          : _error != null
-              ? NasErrorState(message: _error!, onRetry: _load)
-              : _items.isEmpty
-                  ? ListView(
-                      children: [
-                        NasEmptyState(title: tr('video.nav.emptyFiles'), icon: Icons.video_library_outlined),
-                      ],
-                    )
-                  : ListView(
-                      padding: const EdgeInsets.all(NasTokens.spaceMd),
-                      children: [
-                        _header(context),
-                        const SizedBox(height: NasTokens.spaceMd),
-                        for (final entry in _bySeason.entries) ...[
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceXs),
-                            child: Text(
-                              tr('video.seasonEpisodes', {
-                                'season': '${entry.key}',
-                                'episodes': '${entry.value.length}',
-                              }),
-                              style: const TextStyle(
-                                fontSize: NasTokens.fontSubtitle,
-                                fontWeight: FontWeight.w600,
-                              ),
+    final body = _loading
+        ? const NasLoading()
+        : _error != null
+            ? NasErrorState(message: _error!, onRetry: _load)
+            : _items.isEmpty
+                ? ListView(
+                    children: [
+                      NasEmptyState(title: tr('video.nav.emptyFiles'), icon: Icons.video_library_outlined),
+                    ],
+                  )
+                : ListView(
+                    padding: const EdgeInsets.all(NasTokens.spaceMd),
+                    children: [
+                      _header(context),
+                      const SizedBox(height: NasTokens.spaceMd),
+                      for (final entry in _bySeason.entries) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceXs),
+                          child: Text(
+                            tr('video.seasonEpisodes', {
+                              'season': '${entry.key}',
+                              'episodes': '${entry.value.length}',
+                            }),
+                            style: const TextStyle(
+                              fontSize: NasTokens.fontSubtitle,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                          for (final ep in entry.value) _episodeTile(context, ep),
-                          _gapLine(context, entry.key),
-                          const SizedBox(height: NasTokens.spaceSm),
-                        ],
+                        ),
+                        for (final ep in entry.value) _episodeTile(context, ep),
+                        _gapLine(context, entry.key),
+                        const SizedBox(height: NasTokens.spaceSm),
                       ],
-                    ),
+                    ],
+                  );
+
+    if (!widget.embedded) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.name, overflow: TextOverflow.ellipsis)),
+        body: body,
+      );
+    }
+
+    // 三级页：顶栏与返回交给外壳，自己必须铺一层**不透明**底色 ——
+    // 本项目的 `scaffoldBackgroundColor` 是透明的（背景由 NasStyle 铺在 MaterialApp 底层），
+    // 不铺就会跟下面的列表文字叠在一起。
+    return Material(
+      color: Colors.transparent,
+      child: Stack(
+        children: [
+          Positioned.fill(child: context.nasStyle.background),
+          Positioned.fill(child: body),
+        ],
+      ),
     );
   }
 
@@ -201,15 +224,7 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
         style: TextStyle(fontSize: NasTokens.fontMicro, color: context.nasTextSecondary),
       ),
       onTap: () async {
-        await Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => VideoDetailPage(
-              item: ep,
-              posterUrl: videoPosterUrl(ep),
-              headers: videoArtHeaders,
-            ),
-          ),
-        );
+        openVideoDetail(context, ep);
         if (mounted) await _load();
       },
     );
@@ -232,4 +247,42 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
       ),
     );
   }
+}
+
+/// 打开剧集详情的统一入口（与 `openVideoDetail` 同口径）。
+///
+/// 影视壳挂载时进三级页叠层；否则退回整页 push。
+Future<void> openVideoSeries(
+  BuildContext context, {
+  required String name,
+  String? coverId,
+  String? posterUrl,
+  Map<String, String> headers = const {},
+}) {
+  final router = VideoDetailRouter.instance;
+  if (router.embeddableFrom(context)) {
+    router.open(
+      VideoDetailEntry(
+        tag: 'series:$name',
+        build: (_) => VideoSeriesDetailPage(
+          name: name,
+          coverId: coverId,
+          posterUrl: posterUrl,
+          headers: headers,
+          embedded: true,
+        ),
+      ),
+    );
+    return Future<void>.value();
+  }
+  return Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => VideoSeriesDetailPage(
+        name: name,
+        coverId: coverId,
+        posterUrl: posterUrl,
+        headers: headers,
+      ),
+    ),
+  );
 }

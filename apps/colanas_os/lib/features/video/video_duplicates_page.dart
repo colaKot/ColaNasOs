@@ -11,6 +11,7 @@ import '../../core/client_log.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import 'video_card.dart';
+import 'cola_video_detail_page.dart';
 
 /// 重复视频（影片查重）。
 ///
@@ -626,7 +627,7 @@ class _VideoDuplicatesPageState extends State<VideoDuplicatesPage> {
     final url = _artUrl(item, size: (width * 2).round());
     final resolution = (item.width != null && item.height != null)
         ? '${item.width}×${item.height}'
-        : tr('ui.book.hd9c32a');
+        : tr('common.unknown');
     final meta = [
       formatBytes(item.size),
       resolution,
