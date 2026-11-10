@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -19,6 +19,10 @@ let starting: Promise<string | null> | null = null;
 let restarts = 0;
 let lastError = '';
 let currentPort = 0;
+/** 内核重启后复用的那个 daemon 的 pid（不是本进程 spawn 的，但仍是我们拉起来的） */
+let adoptedPid = 0;
+/** `<configDir>/daemon.json`：记录我们拉起的 daemon 的 pid/port，跨内核重启有效 */
+let infoPath = '';
 
 /** 找内置二进制：env → 仓库 vendor → 安装包 resources；都没有则回空（退化为探测外部 daemon） */
 export function daemonBinPath(): string {
@@ -52,6 +56,101 @@ export function daemonRpcUrl(): string {
 
 export function daemonStatus(): { running: boolean; url: string; error: string } {
   return { running: !!child && !child.killed, url: daemonRpcUrl(), error: lastError };
+}
+
+
+interface DaemonInfo {
+  pid: number;
+  port: number;
+}
+
+function writeDaemonInfo(pid: number, port: number): void {
+  if (!infoPath) return;
+  try {
+    fs.mkdirSync(path.dirname(infoPath), { recursive: true });
+    fs.writeFileSync(infoPath, JSON.stringify({ pid, port }), 'utf8');
+  } catch {
+    /* 写不了标记文件只影响「退出时能不能停掉」，不影响做种 */
+  }
+}
+
+function readDaemonInfo(): DaemonInfo | null {
+  if (!infoPath) return null;
+  try {
+    const raw = JSON.parse(fs.readFileSync(infoPath, 'utf8')) as DaemonInfo;
+    return raw && Number(raw.pid) > 0 ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearDaemonInfo(): void {
+  if (!infoPath) return;
+  try {
+    fs.unlinkSync(infoPath);
+  } catch {
+    /* 已经没了 */
+  }
+}
+
+/**
+ * 端口上正在 LISTENING 的进程 pid（Windows netstat）。
+ * 「退出应用要停掉下载器」靠它把端口换回 pid —— 复用来的实例没有 ChildProcess 句柄。
+ */
+function pidOnPort(port: number): number {
+  if (!port || process.platform !== 'win32') return 0;
+  try {
+    const r = spawnSync('netstat', ['-ano', '-p', 'TCP'], {
+      encoding: 'utf8',
+      windowsHide: true,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    // 端口要带边界：光用 includes(':9091') 会误命中 19091 / 29091 这些备用端口。
+    const bound = new RegExp(`:${port}(?=\\s|$)`, 'i');
+    for (const line of String(r.stdout || '').split(/\r?\n/)) {
+      if (!bound.test(line) || !/LISTENING/i.test(line)) continue;
+      const parts = line.trim().split(/\s+/);
+      const pid = Number(parts[parts.length - 1]);
+      if (pid > 0) return pid;
+    }
+  } catch {
+    /* 拿不到就当没有 */
+  }
+  return 0;
+}
+
+/**
+ * 端口上的 transmission 是不是「我们拉起来的」：问它自己的 config-dir。
+ *
+ * 用 session-get 的 `config-dir` 判断，比查进程命令行轻得多，也不用碰 WMI ——
+ * 用户自己装的 transmission 用别处的配置目录，绝不会被我们的退出流程误杀。
+ */
+async function isOurInstance(port: number): Promise<boolean> {
+  if (!port || !infoPath) return false;
+  const want = path.dirname(infoPath).replace(/\\/g, '/').toLowerCase();
+  const url = `http://127.0.0.1:${port}/transmission/rpc`;
+  const ask = async (sessionId?: string): Promise<boolean> => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(sessionId ? { 'x-transmission-session-id': sessionId } : {}),
+      },
+      body: JSON.stringify({ method: 'session-get' }),
+    });
+    const sid = res.headers.get('x-transmission-session-id');
+    if (res.status === 409 && sid) return ask(sid);
+    const j = (await res.json()) as { arguments?: Record<string, unknown> };
+    const got = String(j?.arguments?.['config-dir'] || '')
+      .replace(/\\/g, '/')
+      .toLowerCase();
+    return !!got && got === want;
+  };
+  try {
+    return await ask();
+  } catch {
+    return false;
+  }
 }
 
 async function probe(url: string, timeoutMs = 1500): Promise<boolean> {
@@ -97,17 +196,31 @@ export async function ensureDaemon(opts: {
 
   starting = (async () => {
     const bin = daemonBinPath();
+    const configDir = path.join(opts.dataDir, 'transmission');
+    infoPath = path.join(configDir, 'daemon.json');
     const port = await pickPort(opts.port ?? 9091);
     if (currentPort && (await probe(`http://127.0.0.1:${port}/transmission/rpc`, 800))) {
-      // 复用已有实例（可能是用户自己装的，也可能是上次残留）
-      if (!child) return `http://127.0.0.1:${port}/transmission/rpc`;
+      // 复用已有实例：可能是内核重启前我们拉起的那个（标记文件还在），
+      // 也可能是用户自己装的 transmission。只有前者记成「我们的」，
+      // 退出应用时才敢停；外部的一律不动。
+      if (!child) {
+        if (await isOurInstance(port)) {
+          const pid = pidOnPort(port);
+          adoptedPid = pid;
+          // 补写标记：旧版本内核留下的 daemon 没有 daemon.json，
+          // 认回来的这一步顺便把它补上，之后「退出应用」才停得掉。
+          if (pid) writeDaemonInfo(pid, port);
+        } else {
+          adoptedPid = 0;
+        }
+        return `http://127.0.0.1:${port}/transmission/rpc`;
+      }
     }
     if (!bin) {
       lastError = '没找到内置 transmission-daemon 二进制';
       return null;
     }
 
-    const configDir = path.join(opts.dataDir, 'transmission');
     try {
       fs.mkdirSync(configDir, { recursive: true });
       fs.mkdirSync(opts.downloadDir, { recursive: true });
@@ -126,7 +239,7 @@ export async function ensureDaemon(opts: {
     ];
     // 输出落文件：detached 之后没有管道可读，daemon 崩了要能从日志里看原因
     const logFile = path.join(configDir, 'daemon.log');
-    let outFd: number | 'ignore' = 'ignore';
+    let outFd: number | 'ignore';
     try {
       outFd = fs.openSync(logFile, 'a');
     } catch {
@@ -153,7 +266,11 @@ export async function ensureDaemon(opts: {
     }
     child = proc;
     currentPort = port;
+    adoptedPid = 0;
     lastError = '';
+    // 记下 pid/port：内核重启后新进程靠它认回「这是我们拉起来的 daemon」，
+    // 用户退出应用时才知道该停谁（外部 transmission 则不会写这个文件）。
+    if (proc.pid) writeDaemonInfo(proc.pid, port);
 
     const readTail = (): string => {
       try {
@@ -196,34 +313,63 @@ export async function ensureDaemon(opts: {
  * 优雅停止：先让所有活动种子停下来（Transmission 会向 tracker 发 event=stopped），
  * 再杀进程。
  *
- * 为什么需要：直接 kill 时 tracker 仍认为这个 peer 活着；下次启动 daemon 重新
- * announce，M-Team 这类 PT 站会判「同一个种子已在别处下载 / 做种位置过多」——
- * 用户明明只在这台机器下过。
+ * 谁调用：
+ * - 用户**退出应用**：外壳 → 内核 app.close() → pt 模块 onClose → 这里；
+ * - 内核被 kill（开发期改代码重启、崩溃重启）：**不会**走到这里，daemon 继续做种。
  *
- * 注意：内核重启**不再**调用它（见 pt/index.ts 的 onClose）。daemon 现在是
- * detached 常驻进程，内核重启不影响做种，也就不会给 tracker 制造新 session。
- * 这个函数留给「真要停下载器」的场景。
+ * 能停的对象有两类：
+ * - 本进程刚 spawn 的（`child`）；
+ * - 内核重启前我们拉起、这次复用的（`adoptedPid`，靠 `<configDir>/daemon.json` 认回）。
+ * 用户自己装的 transmission 没有标记文件，碰都不碰。
  */
 export async function stopDaemonGracefully(): Promise<void> {
-  if (!child) return;
-  const url = daemonRpcUrl();
+  const info = readDaemonInfo();
+  const port = currentPort || info?.port || 0;
+  // 复用来的实例没有 ChildProcess 句柄：按「端口上现在是谁」拿 pid，
+  // 并且要求它就是我们记下的那个，避免 pid 复用杀错进程。
+  const reusedPid = port ? pidOnPort(port) : 0;
+  // 复用的实例必须确实占着这个端口，且 pid 与「本次认回的」或「标记文件里的」
+  // 一致，否则 pid 被别的进程复用时会误杀。
+  const confirmed =
+    reusedPid && (adoptedPid === reusedPid || info?.pid === reusedPid) ? reusedPid : 0;
+  const pid = child?.pid || confirmed;
+  const url = daemonRpcUrl() || (port ? `http://127.0.0.1:${port}/transmission/rpc` : '');
+  if (!url && !pid) return;
+
   try {
-    // 动态 require 避免 daemon ↔ transmission 的顶层循环依赖
-    const { torrentList, torrentAction } = await import('./transmission');
-    const list = await torrentList({ url });
-    // 批量动作必须用**数字 id**：传 hashString 会返回 success 但状态不变
-    // （4.1.4 上实测过），等于没停，tracker 那边就留下一个死 session。
-    const ids = list.items.filter((t) => t.status !== 0).map((t) => String(t.id));
-    if (ids.length > 0) await torrentAction({ url }, 'stop', ids);
-    // 给 tracker 的 stopped 公告一点时间发出去
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    if (url) {
+      // 动态 require 避免 daemon ↔ transmission 的顶层循环依赖
+      const { torrentList, torrentAction } = await import('./transmission');
+      const list = await torrentList({ url });
+      // 批量动作必须用**数字 id**：传 hashString 会返回 success 但状态不变
+      // （4.1.4 上实测过），等于没停，tracker 那边就留下一个死 session。
+      const ids = list.items.filter((t) => t.status !== 0).map((t) => String(t.id));
+      if (ids.length > 0) await torrentAction({ url }, 'stop', ids);
+      // 给 tracker 的 stopped 公告一点时间发出去
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
   } catch {
     /* 尽力而为：停不掉就直接杀 */
   }
-  stopDaemon();
+
+  if (child) {
+    stopDaemon();
+    return;
+  }
+  // 复用来的实例：本进程没有句柄，只能按 pid 杀（pid 已确认是端口上这个 daemon）
+  if (pid) {
+    try {
+      process.kill(pid);
+    } catch {
+      /* 已经退了 */
+    }
+  }
+  adoptedPid = 0;
+  currentPort = 0;
+  clearDaemonInfo();
 }
 
-/** 停止 daemon 进程（内核退出时**不再自动调用**，见文件末尾说明） */
+/** 停止本进程 spawn 的 daemon（内核退出时**不再自动调用**，见文件末尾说明） */
 export function stopDaemon(): void {
   if (!child) return;
   try {
@@ -233,6 +379,8 @@ export function stopDaemon(): void {
   }
   child = null;
   currentPort = 0;
+  adoptedPid = 0;
+  clearDaemonInfo();
 }
 
 // 内核退出**不带走 daemon**。

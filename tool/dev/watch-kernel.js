@@ -28,7 +28,9 @@ const electronExe = path.join(
 const tsc = path.join(root, 'node_modules', 'typescript', 'bin', 'tsc');
 const entry = path.join(root, 'dist', 'electron', 'kernel-host.js');
 
-const PORT = process.env.PORT || '7788';
+// 开发内核默认 7888（正式服务端是 7788）。默认值写 7788 时，直接跑这个脚本
+// 而不经 dev.bat，端口自愈会把**正在用的正式内核**当残留进程 kill 掉。
+const PORT = process.env.PORT || '7888';
 const WATCH_DIRS = ['src', 'kernel', 'electron'];
 const DEBOUNCE_MS = 800;
 
@@ -216,6 +218,17 @@ function watch(dir) {
 async function shutdown() {
   log('正在退出…');
   await stopKernel();
+  // 整个开发环境退出时把内置 transmission 一起停掉（种子先发 stopped 再杀）。
+  // 注意：**重启内核**不会走这里，那时 daemon 继续做种，tracker 不会多出一条 session。
+  try {
+    spawnSync(process.execPath, [path.join(__dirname, 'stop-daemon.js')], {
+      stdio: 'inherit',
+      windowsHide: true,
+      timeout: 10000,
+    });
+  } catch {
+    /* 停不掉就交给下次启动时探测 */
+  }
   process.exit(0);
 }
 

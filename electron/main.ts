@@ -167,6 +167,41 @@ function stopKernel(): void {
   kernel = null;
 }
 
+/**
+ * 退出应用前让内核优雅收尾：停种子（向 tracker 发 stopped）→ 杀内置 transmission。
+ *
+ * 为什么必须由外壳发起：daemon 是 detached 常驻进程，内核被 kill（开发期重启、
+ * 崩溃重启）时**故意不动它**，否则每次重启都是一次新的 tracker 请求，PT 站会
+ * 累计成「多个做种位置」。只有用户真的退出应用，才需要把下载器一起停掉 ——
+ * 「因为软件才拉起来的，退软件就该一起退」。
+ *
+ * 内核回 `shutdown-done` 后立刻退出；最多等 4s（发 stopped + 落日志足够），
+ * 超时就直接杀，别把退出流程卡死。
+ */
+async function shutdownKernelGracefully(timeoutMs = 4000): Promise<void> {
+  const proc = kernel;
+  if (!proc) return;
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    proc.once('message', (msg: unknown) => {
+      if ((msg as { type?: string } | null)?.type === 'shutdown-done') finish();
+    });
+    proc.once('exit', finish);
+    try {
+      proc.postMessage({ type: 'shutdown' });
+    } catch {
+      finish();
+    }
+  });
+}
+
 function createWindow(): void {
   if (win) {
     showWindow();
@@ -361,7 +396,8 @@ function rebuildTrayMenu(): void {
       {
         label: '退出',
         click: () => {
-          quitting = true;
+          // 别在这里置 quitting：before-quit 靠它判断「第一次退出」，
+          // 提前置 true 会把停种子 / 停内置下载器的优雅关闭整段跳过。
           app.quit();
         },
       },
@@ -413,8 +449,20 @@ app.on('window-all-closed', () => {
   /* keep running in tray */
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (e) => {
+  if (quitting) return;
+  // 先拦住这次退出，等内核把下载器停干净（最多 4s）再真正退出。
+  // 不拦的话 Electron 会立刻走进程销毁，内核来不及发 tracker 的 stopped。
+  e.preventDefault();
   quitting = true;
   if (watchdogTimer) clearInterval(watchdogTimer);
-  stopKernel();
+  void (async () => {
+    try {
+      await shutdownKernelGracefully();
+    } catch {
+      /* 内核已崩/已退：忽略 */
+    }
+    stopKernel();
+    app.exit(0);
+  })();
 });
