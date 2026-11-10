@@ -8494,6 +8494,11 @@
           "cover": {
             "$ref": "#/components/schemas/PhotoMemoryPick"
           },
+          "coverScore": {
+            "minimum": 0,
+            "maximum": 6,
+            "type": "integer"
+          },
           "picks": {
             "type": "array",
             "items": {

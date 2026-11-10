@@ -62,8 +62,8 @@ Map<String, String> get _imageHeaders {
         ApiSession.instance.client.photoChapterBook(year: year, locale: 'zh-CN'),
         ApiSession.instance.client.photoChapterBook(year: year - 1, locale: 'zh-CN'),
       ]);
-      // 先把符合条件的日子全收齐，再每次打开随机换一批 —— 以前固定取
-      // 「今年最早的前 3 天」，服务端按日期升序返回，于是常年是同样三张。
+      // 先收齐符合要求的日子；服务端按日期升序返回，以前提前截 3 条＝常年同样三张。
+      // 现在按封面质量分档，优先「横屏 + 前 5 人脸」，同档内每次打开随机轮换。
       final candidates = <PhotoChapterPage>[];
       for (final book in books) {
         for (final day in book.days) {
@@ -72,8 +72,31 @@ Map<String, String> get _imageHeaders {
           }
         }
       }
-      candidates.shuffle(math.Random(DateTime.now().microsecondsSinceEpoch));
-      final picks = candidates.take(3).toList();
+      final rnd = math.Random(DateTime.now().microsecondsSinceEpoch);
+      final groups = <int, List<PhotoChapterPage>>{};
+      for (final day in candidates) {
+        // coverScore：6 横+top5人脸 / 5 竖+top5 / 4 横+有人 / 3 竖+有人 /
+        //             2 横无人 / 1 竖无人。横屏整体压过竖屏，内部再按人脸档。
+        final rank = switch (day.coverScore ?? 0) {
+          6 => 0,
+          4 => 1,
+          2 => 2,
+          5 => 3,
+          3 => 4,
+          _ => 5,
+        };
+        groups.putIfAbsent(rank, () => <PhotoChapterPage>[]).add(day);
+      }
+      final picks = <PhotoChapterPage>[];
+      for (var rank = 0; rank < 6 && picks.length < 3; rank += 1) {
+        final pool = groups[rank];
+        if (pool == null || pool.isEmpty) continue;
+        pool.shuffle(rnd);
+        for (final day in pool) {
+          if (picks.length >= 3) break;
+          picks.add(day);
+        }
+      }
       if (!mounted) return;
       setState(() {
         _summary = summary;

@@ -2290,6 +2290,7 @@ export type PhotoChapterPage = {
   "date": string;
   "photoCount": number;
   "cover": PhotoMemoryPick;
+  "coverScore"?: number;
   "picks": PhotoMemoryPick[];
   "place": string;
   "scenes": string[];

@@ -6,7 +6,7 @@ import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
 import 'annual/photo_annual_report.dart';
-import 'photo_viewer_page.dart';
+import 'photo_video_page.dart';
 
 /// 相册「记忆」：人生章节 + 候选记忆（确认 / 忽略）。
 ///
@@ -568,8 +568,7 @@ Map<String, String> _authHeaders() {
 String _thumb(String path, {int size = 480}) =>
     _mediaUrls().thumbnail(path, size: size);
 
-/// 章节接口只给 id + path，没有 media_kind；视频按扩展名认，
-/// 交给查看器显示播放按钮 / 抽帧封面。
+/// 章节接口只给 id + path，没有 media_kind；视频按扩展名认。
 bool _isVideoPath(String path) {
   final p = path.toLowerCase();
   return const <String>[
@@ -577,33 +576,21 @@ bool _isVideoPath(String path) {
   ].any((ext) => p.endsWith(ext));
 }
 
-List<ViewerPhoto> _viewerPhotosOf(PhotoChapterPage page) {
-  // 封面不一定在 picks 里（两者排序口径不同），放首位再补其余，避免点大图找不到自己
-  final all = <PhotoMemoryPick>[
-    page.cover,
-    ...page.picks.where((p) => p.id != page.cover.id),
-  ];
-  return [
-    for (final p in all)
-      ViewerPhoto(
-        id: p.id,
-        path: p.path,
-        takenAt: p.takenAt,
-        mediaKind: _isVideoPath(p.path) ? 'video' : 'image',
-      ),
-  ];
-}
+/// 大图候选顺序：封面放首位，再补当天精选里没重复的（两者排序口径不同）。
+List<PhotoMemoryPick> _photosOf(PhotoChapterPage page) => [
+      page.cover,
+      ...page.picks.where((p) => p.id != page.cover.id),
+    ];
 
-/// 点书页大图 / 底部缩略图 → 统一查看器。
-/// 左右按钮、键盘左右键、手机滑动、视频播放都在查看器里，这里不重复实现。
-void _openPick(BuildContext context, PhotoChapterPage page, String id) {
-  final photos = _viewerPhotosOf(page);
-  final index = photos.indexWhere((p) => p.id == id);
-  openPhotoViewer(
-    context,
-    photos: photos,
-    initialIndex: index < 0 ? 0 : index,
-    title: page.date,
+/// 只有视频才进播放器；图片一律在书页里就地换大图，不弹全屏。
+void _playVideo(BuildContext context, PhotoMemoryPick pick) {
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => PhotoVideoPage(
+        url: _mediaUrls().file(pick.path),
+        title: pick.path.split('/').last,
+      ),
+    ),
   );
 }
 
@@ -796,6 +783,8 @@ class _ChapterTabState extends State<_ChapterTab> {
   String? _error;
   PhotoChapterBook? _book;
   int _index = 0;
+  // 当前这一天里看第几张照片（键盘 / 滑动 / 点缩略图改它）
+  int _photoIndex = 0;
   late int _year;
 
   @override
@@ -810,6 +799,7 @@ class _ChapterTabState extends State<_ChapterTab> {
       _loading = true;
       _error = null;
       _index = 0;
+      _photoIndex = 0;
     });
     try {
       final book = await ApiSession.instance.client.photoChapterBook(
@@ -835,16 +825,33 @@ class _ChapterTabState extends State<_ChapterTab> {
     }
   }
 
+  // 只有底部左右按钮翻到上/下一段记忆；换天后回到该天的封面
   void _prev() {
     final days = _book?.days ?? const [];
     if (days.isEmpty) return;
-    setState(() => _index = (_index - 1).clamp(0, days.length - 1));
+    setState(() {
+      _index = (_index - 1).clamp(0, days.length - 1);
+      _photoIndex = 0;
+    });
   }
 
   void _next() {
     final days = _book?.days ?? const [];
     if (days.isEmpty) return;
-    setState(() => _index = (_index + 1).clamp(0, days.length - 1));
+    setState(() {
+      _index = (_index + 1).clamp(0, days.length - 1);
+      _photoIndex = 0;
+    });
+  }
+
+  void _selectPhoto(int i, int total) {
+    if (total <= 0) return;
+    setState(() => _photoIndex = i.clamp(0, total - 1));
+  }
+
+  void _stepPhoto(int delta, int total) {
+    if (total <= 0) return;
+    setState(() => _photoIndex = (_photoIndex + delta).clamp(0, total - 1));
   }
 
   @override
@@ -854,6 +861,8 @@ class _ChapterTabState extends State<_ChapterTab> {
 
     final book = _book;
     final days = book?.days ?? const <PhotoChapterPage>[];
+    final photos =
+        days.isEmpty ? <PhotoMemoryPick>[] : _photosOf(days[_index]);
 
     return Column(
       children: [
@@ -910,15 +919,27 @@ class _ChapterTabState extends State<_ChapterTab> {
                 )
               : CallbackShortcuts(
                   bindings: {
-                    const SingleActivator(LogicalKeyboardKey.arrowLeft): _prev,
-                    const SingleActivator(LogicalKeyboardKey.arrowRight): _next,
-                    const SingleActivator(LogicalKeyboardKey.pageUp): _prev,
-                    const SingleActivator(LogicalKeyboardKey.pageDown): _next,
-                    const SingleActivator(LogicalKeyboardKey.space): _next,
+                    // 键盘左右看的是「这一天里的上一张 / 下一张」，不是翻到下一段记忆
+                    const SingleActivator(LogicalKeyboardKey.arrowLeft):
+                        () => _stepPhoto(-1, photos.length),
+                    const SingleActivator(LogicalKeyboardKey.arrowRight):
+                        () => _stepPhoto(1, photos.length),
+                    const SingleActivator(LogicalKeyboardKey.pageUp):
+                        () => _stepPhoto(-1, photos.length),
+                    const SingleActivator(LogicalKeyboardKey.pageDown):
+                        () => _stepPhoto(1, photos.length),
+                    const SingleActivator(LogicalKeyboardKey.space):
+                        () => _stepPhoto(1, photos.length),
                   },
                   child: Focus(
                     autofocus: true,
-                    child: _ChapterSpread(page: days[_index]),
+                    child: _ChapterSpread(
+                      page: days[_index],
+                      photos: photos,
+                      photoIndex: _photoIndex,
+                      onSelectPhoto: (i) => _selectPhoto(i, photos.length),
+                      onStepPhoto: (d) => _stepPhoto(d, photos.length),
+                    ),
                   ),
                 ),
         ),
@@ -951,16 +972,32 @@ class _ChapterTabState extends State<_ChapterTab> {
 
 /// 一张书页摊开：左页大图 + 本日精选，右页影像日记 + 地点 + 标签。
 class _ChapterSpread extends StatelessWidget {
-  const _ChapterSpread({required this.page});
+  const _ChapterSpread({
+    required this.page,
+    required this.photos,
+    required this.photoIndex,
+    required this.onSelectPhoto,
+    required this.onStepPhoto,
+  });
 
   final PhotoChapterPage page;
+  final List<PhotoMemoryPick> photos;
+  final int photoIndex;
+  final ValueChanged<int> onSelectPhoto;
+  final ValueChanged<int> onStepPhoto;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, c) {
         final wide = c.maxWidth >= 760;
-        final left = _LeftPage(page: page);
+        final left = _LeftPage(
+          page: page,
+          photos: photos,
+          photoIndex: photoIndex,
+          onSelectPhoto: onSelectPhoto,
+          onStepPhoto: onStepPhoto,
+        );
         final right = _RightPage(page: page);
         if (wide) {
           return Padding(
@@ -989,12 +1026,26 @@ class _ChapterSpread extends StatelessWidget {
 }
 
 class _LeftPage extends StatelessWidget {
-  const _LeftPage({required this.page});
+  const _LeftPage({
+    required this.page,
+    required this.photos,
+    required this.photoIndex,
+    required this.onSelectPhoto,
+    required this.onStepPhoto,
+  });
 
   final PhotoChapterPage page;
+  final List<PhotoMemoryPick> photos;
+  final int photoIndex;
+  final ValueChanged<int> onSelectPhoto;
+  final ValueChanged<int> onStepPhoto;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final safe = photos.isEmpty ? 0 : photoIndex.clamp(0, photos.length - 1);
+    final current = photos.isEmpty ? page.cover : photos[safe];
+    final video = _isVideoPath(current.path);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1011,20 +1062,48 @@ class _LeftPage extends StatelessWidget {
                   fontSize: NasTokens.fontCaption,
                 ),
               ),
+              const Spacer(),
+              if (photos.length > 1)
+                Text(
+                  '${safe + 1} / ${photos.length}',
+                  style: TextStyle(
+                    color: context.nasTextSecondary,
+                    fontSize: NasTokens.fontCaption,
+                  ),
+                ),
             ],
           ),
         ),
         Expanded(
           child: GestureDetector(
-            onTap: () => _openPick(context, page, page.cover.id),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(NasTokens.radiusMd),
-              child: NasCoverImage(
-                url: _thumb(page.cover.path, size: 1200),
-                headers: _authHeaders(),
-                cacheWidth: 1200,
-                icon: Icons.broken_image_outlined,
-              ),
+            // 左右滑动只在这一天的照片之间切换，不换记忆
+            onHorizontalDragEnd: (d) {
+              final v = d.primaryVelocity ?? 0;
+              if (v.abs() < 120) return;
+              onStepPhoto(v < 0 ? 1 : -1);
+            },
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(NasTokens.radiusMd),
+                    child: NasCoverImage(
+                      url: _thumb(current.path, size: 1200),
+                      headers: _authHeaders(),
+                      cacheWidth: 1200,
+                      icon: Icons.broken_image_outlined,
+                    ),
+                  ),
+                ),
+                if (video)
+                  Center(
+                    child: IconButton.filled(
+                      iconSize: 40,
+                      onPressed: () => _playVideo(context, current),
+                      icon: const Icon(Icons.play_arrow),
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -1038,12 +1117,24 @@ class _LeftPage extends StatelessWidget {
                 const SizedBox(width: NasTokens.spaceXs),
             itemBuilder: (context, i) {
               final pick = page.picks[i];
+              final selected = pick.id == current.id;
               return GestureDetector(
-                onTap: () => _openPick(context, page, pick.id),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-                  child: SizedBox(
-                    width: 72,
+                // 点小图只替换上面的大图，不弹全屏
+                onTap: () {
+                  final idx = photos.indexWhere((p) => p.id == pick.id);
+                  onSelectPhoto(idx < 0 ? 0 : idx);
+                },
+                child: Container(
+                  width: 72,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+                    border: Border.all(
+                      color: selected ? scheme.primary : Colors.transparent,
+                      width: 2,
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(NasTokens.radiusSm),
                     child: NasCoverImage(
                       url: _thumb(pick.path, size: 200),
                       headers: _authHeaders(),

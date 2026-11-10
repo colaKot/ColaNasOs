@@ -7694,6 +7694,7 @@ class PhotoChapterPage {
   final String date;
   final int photoCount;
   final PhotoMemoryPick cover;
+  final int? coverScore;
   final List<PhotoMemoryPick> picks;
   final String place;
   final List<String> scenes;
@@ -7705,6 +7706,7 @@ class PhotoChapterPage {
     required this.date,
     required this.photoCount,
     required this.cover,
+    this.coverScore,
     required this.picks,
     required this.place,
     required this.scenes,
@@ -7717,6 +7719,7 @@ class PhotoChapterPage {
         date: json['date'] as String,
         photoCount: json['photoCount'] as int,
         cover: PhotoMemoryPick.fromJson(json['cover'] as Map<String, dynamic>),
+        coverScore: json['coverScore'] == null ? null : json['coverScore'] as int,
         picks: (json['picks'] as List<dynamic>).map((e) => PhotoMemoryPick.fromJson(e as Map<String, dynamic>)).toList(),
         place: json['place'] as String,
         scenes: (json['scenes'] as List<dynamic>).cast<String>(),
@@ -7729,6 +7732,7 @@ class PhotoChapterPage {
         'date': date,
         'photoCount': photoCount,
         'cover': cover.toJson(),
+        if (coverScore != null) 'coverScore': coverScore!,
         'picks': picks.map((e) => e.toJson()).toList(),
         'place': place,
         'scenes': scenes,

@@ -57,6 +57,9 @@ const ChapterPage = Type.Object(
     date: Type.String(),
     photoCount: Type.Integer(),
     cover: Type.Ref(PickRef),
+    // 封面在 coverRanker 里的档位分（6=横屏+前5人脸 … 1=竖屏无人脸）。
+    // 首页「发现新记忆」据此优先挑横屏、人脸多的那一天。
+    coverScore: Type.Optional(Type.Integer({ minimum: 0, maximum: 6 })),
     picks: Type.Array(Type.Ref(PickRef)),
     place: Type.String(),
     scenes: Type.Array(Type.String()),
@@ -548,6 +551,7 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
           date: day,
           photoCount: list.length,
           cover: { id: cover.id, path: cover.rel_path, takenAt: Number(cover.taken_at) },
+          coverScore: coverOf(cover.id),
           picks,
           place,
           scenes,
