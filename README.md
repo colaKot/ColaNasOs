@@ -32,7 +32,7 @@ Electron 44.9.3（外壳）+ `utilityProcess` 内核（TypeScript / Fastify / Ky
 dev.bat
 ```
 
-- 内核 7788（改服务端 1s 内自动重启）+ Flutter 页面 5173（保存即热重载）。
+- 开发内核 **7888**（改服务端 1s 内自动重启）+ Flutter 页面 5173（保存即热重载）；正式服务端固定 7788，两套互不干扰。
 - 只有需要验证「桌面形态 / 生产配置」时才用 `start.bat`（Electron 壳 + 无 dev-token / 无 CORS）。
 - 交付或验收需要刷新 `apps/colanas_os/build/web` 时用 `build-web.bat`。
 
@@ -66,16 +66,35 @@ GPL-3.0。第三方组件见 `docs/06-产品与运维.md` 的「第三方上游�
 
 界面图标使用 Flutter 内置的 Material Icons 与 Cupertino Icons。
 
-相册智能分析在本地推理，使用以下开源模型，版权归各自作者所有，按各自许可证使用：
+### 随包分发的第三方二进制
 
-| 模型 | 用途 |
-| --- | --- |
-| faceLandMark | 人脸关键点 |
-| EdgeFace | 人脸特征向量 |
-| PP-OCRv6 | 文字识别 |
-| Places365 | 场景分类 |
-| CLIP | 语义与相似度 |
-| DETR | 活动检测 |
+- **Transmission**：`vendor/transmission-win/` 随包分发 Windows 版 `transmission-daemon.exe` 及其运行依赖 DLL，
+  取自官方 `transmission-4.1.4-x64.msi`，原样提取、未做修改；`vendor/transmission-web/` 是官方 Web 界面静态文件（3.00）。
+  两者均来自 [transmission/transmission](https://github.com/transmission/transmission)，按 **GPL-3.0** 使用，
+  版权归 Transmission 项目作者所有（详见两个目录下的 `NOTICE.md`）。内核在用户未配置外部 RPC 时自动拉起该 daemon，
+  并同源代理官方 Web UI —— 应用内称为 **内置 transmission 下载器**，也支持连接用户自己填写的 Transmission RPC。
+- **FFmpeg / ffprobe**：`vendor/ffmpeg/`（Jellyfin 定制构建，GPL-2.0+，含 x264/x265），用于转码、抽帧与缩略图；
+  分发时按 GPL 提供对应源码获取方式。
+- **llama.cpp**：`vendor/llama/` 的 `llama-server` / `llama-tts`，用于本地 GGUF 模型推理。
+- 其它随包资源：`vendor/geo/` 的地名库、`vendor/voices/` 的内置参考音色。
+
+完整版本与许可口径见 `docs/06-产品与运维.md` 的「第三方上游与许可清单」。
+
+### 本地推理模型
+
+以下模型全部在用户本机离线推理，位于 `vendor/models/`，随安装包分发（不入库）；
+版权归各自作者所有，按各自许可证使用：
+
+| 模型 / 目录 | 用途 | 运行时 |
+| --- | --- | --- |
+| `faces/faceLandMark` | 人脸检测与 106 点关键点、人脸对齐 | ONNX Runtime |
+| `faces/edgeface` | 512 维人脸特征向量（聚类 / 检索） | ONNX Runtime |
+| `places365`（ResNet50） | 365 类场景分类 | ONNX Runtime |
+| `clip`（视觉塔 + 文本嵌入） | 语义检索、场景打分与图像特征 | ONNX Runtime |
+| `ppocrv6`（det / cls / rec） | 图片文字识别 | ONNX Runtime |
+| `activity`（零样本视觉编码器 + 候选标签文本嵌入） | 活动 / 事件识别 | ONNX Runtime |
+| `mt`（Qwen3-1.7B GGUF） | 本地短文本翻译 | llama.cpp `llama-server` |
+| `qwen3-tts`（Qwen3-TTS-12Hz-1.7B GGUF） | 语音合成（配合内置音色） | llama.cpp `llama-tts` |
 
 ## 状态
 

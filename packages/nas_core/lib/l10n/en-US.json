@@ -140,7 +140,7 @@
     "transmission.emptyHint": "Add torrents from Discover → PT / RSS and they will show up here",
     "transmission.empty": "No downloads",
     "transmission.external": "External downloader",
-    "transmission.builtin": "Built-in downloader",
+    "transmission.builtin": "Built-in Transmission downloader",
     "transmission.webUiMissing": "Bundled Web UI is missing: check vendor/transmission-web",
     "app.video": "Videos",
     "audio.channelName": "ColaNasOs playback",

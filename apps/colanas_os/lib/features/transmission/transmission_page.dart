@@ -71,7 +71,9 @@ class _TransmissionPageState extends State<TransmissionPage> {
         _webPath = (res['webPath'] ?? '').toString();
         _webTicket = (res['webTicket'] ?? '').toString();
         _webReady = res['webReady'] == true;
-        _source = _hint.contains('内置下载器')
+        // 与服务端 /pt/torrents 的 message 前缀保持一致；用「内置 transmission」
+        // 做关键字，避免以后微调标签文案又要同步改这里。
+        _source = _hint.contains('内置 transmission')
             ? tr('transmission.builtin')
             : _hint.contains('自动发现')
                 ? tr('transmission.external')

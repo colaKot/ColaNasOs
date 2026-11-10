@@ -66,12 +66,16 @@ export async function addTorrent(
     downloadDir?: string;
     /** true = 只加种不开始（RSS「不立即下载」时用：先把种子挂上去，等用户手动开始） */
     paused?: boolean;
+    /** 内核代抓后的 .torrent 二进制 base64；提供时走 metainfo，不让下载器自己 fetch URL */
+    metainfo?: string;
   } = {},
 ): Promise<TransmissionResult> {
   if (!cfg.url) return { ok: false, message: 'transmission url not configured' };
-  if (!filename) return { ok: false, message: 'torrent url required' };
+  if (!opts.metainfo && !filename) return { ok: false, message: 'torrent url required' };
 
-  const args: Record<string, unknown> = { filename, paused: opts.paused === true };
+  const args: Record<string, unknown> = opts.metainfo
+    ? { metainfo: opts.metainfo, paused: opts.paused === true }
+    : { filename, paused: opts.paused === true };
   // download-dir 是「下载器所在机器」的绝对路径；单机 NAS 口径下由服务端
   // 把影视库根解析成绝对路径再传，跨机部署不保证一致。
   if (opts.downloadDir) args['download-dir'] = opts.downloadDir;

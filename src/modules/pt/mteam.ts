@@ -71,6 +71,86 @@ export function parseMTeam(json: unknown, baseUrl: string, apiKey: string): MTea
   return out;
 }
 
+/**
+ * 换取 M-Team 种子的**完整下载直链**。
+ *
+ * 2026-10 起 `/api/torrent/download/{id}?apiKey=...`（本项目旧写法）已不再可用，
+ * 必须 POST `/api/torrent/genDlToken`；它只接受 form-urlencoded（发 JSON 会回「參數錯誤」），
+ * 返回的 `data` 是形如 `https://api.m-team.cc/api/rss/dlv2?sign=...` 的直链，不是 token。
+ */
+export async function genDlToken(opts: {
+  baseUrl: string;
+  apiKey: string;
+  torrentId: string;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}): Promise<string | null> {
+  const base = String(opts.baseUrl || '').replace(/\/$/, '');
+  if (!base || !opts.apiKey || !opts.torrentId) return null;
+  const doFetch = opts.fetchImpl ?? fetch;
+  const controller = new globalThis.AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(3000, opts.timeoutMs ?? 12_000));
+  try {
+    const res = await doFetch(`${base}/api/torrent/genDlToken`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'x-api-key': opts.apiKey,
+        'user-agent': 'Mozilla/5.0 (compatible; ColaNasOs/1.0)',
+      },
+      body: new URLSearchParams({ id: opts.torrentId }).toString(),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { code?: number | string; data?: unknown } | null;
+    const code = Number(json?.code ?? 0);
+    if (code !== 0 && !json?.data) return null;
+    const url = typeof json?.data === 'string' ? json.data.trim() : '';
+    return /^https?:\/\//i.test(url) ? url : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * 由内核代抓 .torrent 二进制。站点下载接口要鉴权，直接把 URL 交给 Transmission
+ * 让它自己 fetch 会拿到错误 JSON/HTML，下载器只报 "invalid or corrupt torrent file"。
+ */
+export async function fetchTorrentBytes(opts: {
+  url: string;
+  apiKey?: string;
+  cookie?: string;
+  userAgent?: string;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}): Promise<Buffer | null> {
+  const url = String(opts.url || '').trim();
+  if (!/^https?:\/\//i.test(url)) return null;
+  const headers: Record<string, string> = {
+    'user-agent': opts.userAgent || 'Mozilla/5.0 (compatible; ColaNasOs/1.0)',
+    accept: 'application/x-bittorrent, */*',
+  };
+  if (opts.apiKey) headers['x-api-key'] = opts.apiKey;
+  if (opts.cookie) headers.cookie = opts.cookie;
+  const doFetch = opts.fetchImpl ?? fetch;
+  const controller = new globalThis.AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(3000, opts.timeoutMs ?? 20_000));
+  try {
+    const res = await doFetch(url, { signal: controller.signal, headers });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    // bencode 种子以 'd' 开头；鉴权失败返回的 JSON/HTML 不该再交给下载器。
+    if (buf.length < 32 || buf[0] !== 0x64) return null;
+    return buf;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function searchMTeam(
   opts: MTeamOptions,
   kind: 'movie' | 'tv' | 'animation' | 'documentary' | 'all' = 'all',

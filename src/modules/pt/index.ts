@@ -17,7 +17,7 @@ import {
   type PtRule,
 } from './selection';
 import { resolutionOf, searchSite } from './search';
-import { searchMTeam } from './mteam';
+import { searchMTeam, genDlToken, fetchTorrentBytes } from './mteam';
 import {
   addTorrent,
   torrentAction,
@@ -25,6 +25,7 @@ import {
   torrentList,
   transmissionStatus,
   type TransmissionConfig,
+  type TransmissionResult,
 } from './transmission';
 import { filesRoot, resolveAnyPath } from '../files/fs-root';
 import { normalizeConfig, tmdbGet } from '../discover/tmdb';
@@ -439,6 +440,62 @@ export const pt: ServerModule = {
     /** 下载目录 / 筛选设置（单键存储；未配置时用 DEFAULT_DOWNLOAD） */
     const readDownload = (): typeof DEFAULT_DOWNLOAD =>
       normalizeDownload(k.config.get<Record<string, unknown>>(DOWNLOAD_KEY));
+
+    /**
+     * 加种统一入口：内核代抓 .torrent → base64(metainfo) 交给 Transmission。
+     *
+     * 把站点下载 URL 直接当 filename 交给下载器是行不通的：PT 站的下载接口要鉴权，
+     * M-Team 还得先 genDlToken 换完整直链（旧写法 /api/torrent/download/{id}?apiKey=
+     * 已失效），下载器自己 fetch 只会拿到错误 JSON/HTML，
+     * 报 "invalid or corrupt torrent file"。所以一律由内核带凭据抓取种子内容。
+     */
+    const submitTorrent = async (
+      cfg: TransmissionConfig,
+      c: { siteId: string; torrentId: string; url?: string | null },
+      opts: { downloadDir?: string; paused?: boolean } = {},
+    ): Promise<TransmissionResult> => {
+      const site = (await sites()).find((s) => s.id === c.siteId);
+      const fallbackUrl = String(c.url || '').trim();
+      const apiKey = site?.kind === 'mteam' ? cookieOf(site.api_key_enc) : undefined;
+      let url = fallbackUrl;
+      if (site?.kind === 'mteam' && apiKey && c.torrentId) {
+        const direct = await genDlToken({
+          baseUrl: site.base_url,
+          apiKey,
+          torrentId: c.torrentId,
+          timeoutMs: Number(site.timeout_ms) || undefined,
+        });
+        if (direct) url = direct;
+      }
+      let metainfo: string | null = null;
+      if (url) {
+        const bytes = await fetchTorrentBytes({
+          url,
+          apiKey,
+          cookie: cookieOf(site?.cookie_enc ?? null),
+          userAgent: site?.ua ?? undefined,
+          timeoutMs: Number(site?.timeout_ms) || undefined,
+        });
+        if (bytes) metainfo = bytes.toString('base64');
+      }
+      if (metainfo) {
+        return addTorrent(cfg, '', {
+          metainfo,
+          downloadDir: opts.downloadDir,
+          paused: opts.paused,
+        });
+      }
+      // 代抓失败时退回让下载器自己拉（保留旧行为），日志里留痕便于定位。
+      k.log.warn(
+        { siteId: c.siteId, torrentId: c.torrentId, gotDirectLink: url !== fallbackUrl },
+        'pt submit: torrent fetch failed, falling back to url',
+      );
+      if (!fallbackUrl) return { ok: false, message: 'torrent fetch failed: no download link' };
+      return addTorrent(cfg, fallbackUrl, {
+        downloadDir: opts.downloadDir,
+        paused: opts.paused,
+      });
+    };
 
     /**
      * 「参与自动下载的站点」默认值兜底。
@@ -1448,7 +1505,8 @@ export const pt: ServerModule = {
       }
 
       const candidate = result.selected as PtCandidate & { siteId: string; downloadUrl?: string };
-      const cfg = transmissionCfg();
+      // 同上：没手填 RPC 地址也要能自动拉起内置 transmission，否则只给候选、不加种。
+      const cfg = await resolveTransmission();
       const dl = readDownload();
       const downloadDir =
         Number(sub.season) > 0
@@ -1461,9 +1519,15 @@ export const pt: ServerModule = {
       if (!dl.autoDownload) {
         message = '自动下载已关闭：只给出候选';
       } else if (cfg && candidate.downloadUrl) {
-        const added = await addTorrent(cfg, candidate.downloadUrl, {
-          downloadDir: downloadDir || undefined,
-        });
+        const added = await submitTorrent(
+          cfg,
+          {
+            siteId: candidate.siteId,
+            torrentId: candidate.torrentId,
+            url: candidate.downloadUrl,
+          },
+          { downloadDir: downloadDir || undefined },
+        );
         status = added.ok ? 'added' : 'failed';
         message = added.message;
         infoHash = added.hash ?? null;
@@ -1679,7 +1743,7 @@ export const pt: ServerModule = {
           // 说清楚在用哪个下载器，否则用户不知道消息从哪来
           message:
             downloaderMode === 'embedded'
-              ? `${res.message}（内置下载器 ${cfg.url}）`
+              ? `${res.message}（内置 transmission 下载器 ${cfg.url}）`
               : configured
                 ? res.message
                 : `${res.message}（自动发现 ${cfg.url}）`,
@@ -1739,7 +1803,7 @@ export const pt: ServerModule = {
           `.execute(k.db)
         ).rows[0];
         if (!row) return reply.code(404).send({ error: Err.notFound, message: 'download not found' });
-        const cfg = transmissionCfg();
+        const cfg = await resolveTransmission();
         if (!cfg) {
           return reply.code(400).send({ error: Err.badRequest, message: 'transmission not configured' });
         }
@@ -1753,7 +1817,15 @@ export const pt: ServerModule = {
           }
           const dl = readDownload();
           const dir = await libraryDir(dl.movieLibraryId);
-          const added = await addTorrent(cfg, url, dir ? { downloadDir: dir } : {});
+          const added = await submitTorrent(
+            cfg,
+            {
+              siteId: String(row.site_id || ''),
+              torrentId: String(row.torrent_id || ''),
+              url,
+            },
+            dir ? { downloadDir: dir } : {},
+          );
           const nextStatus = added.ok ? 'added' : 'failed';
           await sql`
             update pt_downloads
@@ -1899,7 +1971,7 @@ export const pt: ServerModule = {
         },
       }),
       async () => {
-        const cfg = transmissionCfg();
+        const cfg = await resolveTransmission();
         if (!cfg) return { ok: false, message: 'transmission url not configured' };
         return transmissionStatus(cfg);
       },
@@ -1978,7 +2050,16 @@ export const pt: ServerModule = {
         `.execute(k.db)
       ).rows;
       const meta = await catalogMeta();
-      const cfg = transmissionCfg();
+      // 用户没在设置里填 RPC 地址时，这里会拉起随包的内置 transmission daemon。
+      // 只用 transmissionCfg() 会拿到 null，导致整轮扫描在搜索之前就被跳过（历史坑）。
+      const cfg = await resolveTransmission();
+      if (!cfg) {
+        k.log.warn({ uid }, 'pt favorite scan: no transmission downloader available');
+        return {
+          scanned: rows.length, submitted: 0, owned: 0,
+          skipped: rows.length, auto_download: true,
+        };
+      }
       const tmdbCfg = normalizeConfig(k.config.get('discover.tmdb'));
       // 规则直接取设置页的实时值（不是订阅表里的快照），改完筛选下一轮就生效。
       const rule: PtRule = {
@@ -2049,7 +2130,11 @@ export const pt: ServerModule = {
           }
         }
 
-        if (!title || !cfg) { skipped += 1; continue; }
+        if (!title) {
+          skipped += 1;
+          k.log.warn({ uid, tmdbId: r.tmdb_id }, 'pt favorite scan: missing title');
+          continue;
+        }
         const media: PtMedia = {
           title,
           originalTitle: originalTitle || null,
@@ -2072,22 +2157,32 @@ export const pt: ServerModule = {
           | null;
         if (!c?.downloadUrl) {
           skipped += 1;
-          if (results.length > 0) {
-            k.log.info(
-              { uid, tmdbId: r.tmdb_id, reason: picked.reason },
-              'pt favorite scan: candidates all filtered out',
-            );
-          }
+          k.log.info(
+            {
+              uid, tmdbId: r.tmdb_id, found: results.length,
+              excluded: picked.excluded.length, reason: picked.reason,
+            },
+            'pt favorite scan: no candidate selected',
+          );
           continue;
         }
         // 电视剧落到剧集库，电影落到电影库（之前一律用电影库）。
         const dir = await libraryDir(
           String(r.media_type) === 'tv' ? dl.tvLibraryId : dl.movieLibraryId,
         );
-        const added = await addTorrent(cfg, String(c.downloadUrl), {
-          downloadDir: dir || undefined,
-        });
-        if (!added.ok) { skipped += 1; continue; }
+        const added = await submitTorrent(
+          cfg,
+          { siteId: c.siteId, torrentId: c.torrentId, url: c.downloadUrl },
+          { downloadDir: dir || undefined },
+        );
+        if (!added.ok) {
+          skipped += 1;
+          k.log.warn(
+            { uid, tmdbId: r.tmdb_id, message: added.message },
+            'pt favorite scan: add torrent failed',
+          );
+          continue;
+        }
         const id = crypto.randomBytes(8).toString('base64url');
         // 任务卡上同时留「为什么选它」和下载器返回信息，便于回查筛选是否生效。
         const message = `${picked.reason}｜${added.message}`.slice(0, 300);
@@ -2351,7 +2446,7 @@ export const pt: ServerModule = {
         if (existing && !['failed', 'removed'].includes(String(existing.status))) {
           return { task: taskOf(existing), submitted: true, duplicated: true };
         }
-        const cfg = transmissionCfg();
+        const cfg = await resolveTransmission();
         const dl = readDownload();
         const downloadDir = (b.savePath || '').trim() ||
           (Number(b.season) > 0
@@ -2361,9 +2456,15 @@ export const pt: ServerModule = {
         let message = '未配置 transmission：只给出候选';
         let infoHash: string | null = cand.info_hash ?? null;
         if (cfg && cand.download_url) {
-          const added = await addTorrent(cfg, String(cand.download_url), {
-            downloadDir: downloadDir || undefined,
-          });
+          const added = await submitTorrent(
+            cfg,
+            {
+              siteId: String(cand.site_id || ''),
+              torrentId: String(cand.torrent_id || ''),
+              url: String(cand.download_url || ''),
+            },
+            { downloadDir: downloadDir || undefined },
+          );
           status = added.ok ? 'added' : 'failed';
           message = added.message;
           infoHash = added.hash ?? infoHash;
@@ -2435,7 +2536,7 @@ export const pt: ServerModule = {
         },
       }),
       async (req: FastifyRequest) => {
-        const cfg = transmissionCfg();
+        const cfg = await resolveTransmission();
         if (!cfg) return { updated: 0, finished: 0, message: 'transmission not configured' };
         const rows = (
           await sql<any>`

@@ -140,7 +140,7 @@
     "transmission.emptyHint": "在「发现 → PT / RSS」里加种后会出现在这里",
     "transmission.empty": "暂无下载任务",
     "transmission.external": "外部下载器",
-    "transmission.builtin": "内置下载器",
+    "transmission.builtin": "内置 transmission 下载器",
     "transmission.webUiMissing": "内置 Web UI 静态包缺失：请检查 vendor/transmission-web",
     "app.video": "影视",
     "audio.channelName": "ColaNasOs 播放",

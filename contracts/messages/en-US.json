@@ -116,7 +116,7 @@
     "app.transfer": "Transfers",
     "app.transmission": "Downloads",
     "transmission.empty": "No downloads",
-    "transmission.builtin": "Built-in downloader",
+    "transmission.builtin": "Built-in Transmission downloader",
     "transmission.external": "External downloader",
     "transmission.webUiMissing": "Bundled Web UI is missing: check vendor/transmission-web",
     "transmission.emptyHint": "Add torrents from Discover → PT / RSS and they will show up here",
