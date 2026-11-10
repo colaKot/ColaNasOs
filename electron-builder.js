@@ -25,11 +25,11 @@ const extraResources = [
   },
   {
     // 一键下载脚本必须随包：files 里显式排除了 tool/**，而内核用
-    // process.resourcesPath/tool/tts-model.js 以 Node 模式拉起它。
-    // 只有 14KB，精简包也带上（精简包用户同样可以按需补模型）。
+    // process.resourcesPath/tool/*.js 以 Node 模式拉起它们。
+    // 两个都只有十几 KB，精简包也带上（精简包用户同样可以按需补模型）。
     from: 'tool',
     to: 'tool',
-    filter: ['tts-model.js'],
+    filter: ['tts-model.js', 'mt-model.js'],
   },
   {
     // 内置 transmission-daemon（Windows 官方 MSI 里取出的二进制 + 4 个 DLL）：

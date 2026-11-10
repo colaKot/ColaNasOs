@@ -651,6 +651,48 @@
           }
         }
       },
+      "BlogMtModelResponse": {
+        "type": "object",
+        "required": [
+          "installed",
+          "downloading",
+          "percent",
+          "phase",
+          "task",
+          "error",
+          "modelDir",
+          "sizeMb"
+        ],
+        "properties": {
+          "installed": {
+            "type": "boolean"
+          },
+          "downloading": {
+            "type": "boolean"
+          },
+          "percent": {
+            "type": "number"
+          },
+          "phase": {
+            "description": "当前阶段的人话描述（排障用，UI 不直接展示）",
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "modelDir": {
+            "type": "string",
+            "nullable": true
+          },
+          "sizeMb": {
+            "type": "integer"
+          }
+        }
+      },
       "BlogPreviewResponse": {
         "type": "object",
         "required": [
@@ -16256,6 +16298,84 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/BlogTtsModelResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/mt/model": {
+      "get": {
+        "operationId": "blogMtModel",
+        "summary": "本地翻译模型下载状态（实时探测磁盘）",
+        "tags": [
+          "blog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogMtModelResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/mt/model/download": {
+      "post": {
+        "operationId": "blogMtModelDownload",
+        "summary": "下载本地翻译模型（后台执行，前端轮询进度）",
+        "tags": [
+          "blog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogMtModelResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/mt/model/cancel": {
+      "post": {
+        "operationId": "blogMtModelCancel",
+        "summary": "取消翻译模型下载（已下部分保留，下次续传）",
+        "tags": [
+          "blog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogMtModelResponse"
                 }
               }
             }

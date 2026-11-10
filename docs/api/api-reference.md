@@ -1,13 +1,13 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**399 个路径 / 425 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**402 个路径 / 428 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
 - **子账号与权限**（`accounts`）· 21 个操作 · [跳转](#accounts)
 - **认证与账号**（`auth`）· 1 个操作 · [跳转](#auth)
-- **blog**（`blog`）· 20 个操作 · [跳转](#blog)
+- **blog**（`blog`）· 23 个操作 · [跳转](#blog)
 - **discover**（`discover`）· 23 个操作 · [跳转](#discover)
 - **events**（`events`）· 1 个操作 · [跳转](#events)
 - **文件**（`files`）· 18 个操作 · [跳转](#files)
@@ -213,6 +213,24 @@ IP 黑名单 · `securityIpList`
 
 - 请求体：（空对象）
 - 响应：200 `BlogGenerateResponse` · 错误 409 / 503
+
+#### `GET /api/v1/blog/mt/model`
+
+本地翻译模型下载状态（实时探测磁盘） · `blogMtModel`
+
+- 响应：200 `BlogMtModelResponse`
+
+#### `POST /api/v1/blog/mt/model/cancel`
+
+取消翻译模型下载（已下部分保留，下次续传） · `blogMtModelCancel`
+
+- 响应：200 `BlogMtModelResponse`
+
+#### `POST /api/v1/blog/mt/model/download`
+
+下载本地翻译模型（后台执行，前端轮询进度） · `blogMtModelDownload`
+
+- 响应：200 `BlogMtModelResponse`
 
 #### `GET /api/v1/blog/news`
 

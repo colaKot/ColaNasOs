@@ -10,9 +10,11 @@
  *   npm run mt:model -- --model=0.6b # 下 0.6B（378MB，速度快但专名常错）
  *   npm run mt:model -- --check      # 只体检
  *   npm run mt:model -- --to=D:\models\mt
+ *   node tool/mt-model.js --json --dest=<dir>    # 内核用：NDJSON 事件流
  *
- * 源只有 ModelScope：HuggingFace / hf-mirror 在国内实测都不通（2026-11-06），
- * ModelScope 直连 20MB/s 以上。
+ * 多源自动适配（国内优先，失败逐个换）：
+ *   ModelScope（国内直连 20MB/s）→ hf-mirror.com（国内可用镜像）→ huggingface.co
+ * 三个都失败才报错，由内核转成界面提示。
  */
 
 const fs = require('node:fs');
@@ -21,13 +23,39 @@ const https = require('node:https');
 const http = require('node:http');
 
 const ROOT = path.join(__dirname, '..');
+const ARGV = process.argv.slice(2);
+const JSON_OUT = ARGV.includes('--json');
 const MODELS = {
   '0.6b': { repo: 'unsloth/Qwen3-0.6B-GGUF', file: 'Qwen3-0.6B-Q4_K_M.gguf', mb: 378 },
   '1.7b': { repo: 'unsloth/Qwen3-1.7B-GGUF', file: 'Qwen3-1.7B-Q4_K_M.gguf', mb: 1056 },
 };
 
+/** 逐个尝试，前一个失败自动换下一个；顺序按国内可达性排 */
+const SOURCES = [
+  {
+    id: 'modelscope',
+    label: 'ModelScope',
+    url: (m) => `https://modelscope.cn/models/${m.repo}/resolve/master/${m.file}`,
+  },
+  {
+    id: 'hf-mirror',
+    label: 'HF 镜像',
+    url: (m) => `https://hf-mirror.com/${m.repo}/resolve/main/${m.file}`,
+  },
+  {
+    id: 'huggingface',
+    label: 'HuggingFace',
+    url: (m) => `https://huggingface.co/${m.repo}/resolve/main/${m.file}`,
+  },
+];
+
+/** --json 时 stdout 只走 NDJSON，人类文本一律 stderr，避免污染事件流 */
 function report(line) {
-  process.stdout.write(`${line}\n`);
+  (JSON_OUT ? process.stderr : process.stdout).write(`${line}\n`);
+}
+
+function emit(obj) {
+  if (JSON_OUT) process.stdout.write(`${JSON.stringify(obj)}\n`);
 }
 
 function human(n) {
@@ -41,8 +69,8 @@ function human(n) {
   return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)}${units[i]}`;
 }
 
-/** 带跳转跟随与续传的下载（ModelScope 会 302 到 OSS） */
-function download(url, dest) {
+/** 带跳转跟随、断点续传与进度回调的下载（ModelScope 会 302 到 OSS） */
+function download(url, dest, onProgress) {
   return new Promise((resolve, reject) => {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     let start = fs.existsSync(dest) ? fs.statSync(dest).size : 0;
@@ -64,9 +92,9 @@ function download(url, dest) {
         }
         if (code !== 200 && code !== 206) {
           res.resume();
-          return reject(new Error(`HTTP ${code}：${u.slice(0, 120)}`));
+          return reject(new Error(`HTTP ${code}`));
         }
-        if (code === 200 && start > 0) start = 0;
+        if (code === 200 && start > 0) start = 0; // 服务器不支持续传，重头写
         const total = Number(res.headers['content-length'] || 0) + start;
         let got = start;
         const ws = fs.createWriteStream(dest, { flags: start > 0 ? 'a' : 'w' });
@@ -74,16 +102,20 @@ function download(url, dest) {
         res.on('data', (chunk) => {
           got += chunk.length;
           const now = Date.now();
-          if (now - last > 500 && total > 0) {
+          if (now - last > 250) {
             last = now;
-            process.stdout.write(
-              `\r    ${((got / total) * 100).toFixed(1)}%  ${human(got)} / ${human(total)}`,
-            );
+            if (onProgress) onProgress(got, total);
+            else if (total > 0) {
+              process.stdout.write(
+                `\r    ${((got / total) * 100).toFixed(1)}%  ${human(got)} / ${human(total)}`,
+              );
+            }
           }
         });
         res.pipe(ws);
         ws.on('finish', () => {
-          process.stdout.write(`\r${' '.repeat(52)}\r`);
+          if (!onProgress) process.stdout.write(`${' '.repeat(52)}\r`);
+          if (onProgress) onProgress(total || got, total || got);
           ws.close(() => resolve(dest));
         });
         ws.on('error', reject);
@@ -97,9 +129,9 @@ function download(url, dest) {
 }
 
 function targetDir(argv) {
-  const hit = argv.find((a) => a.startsWith('--to='));
+  const hit = argv.find((a) => a.startsWith('--to=') || a.startsWith('--dest='));
   if (!hit) return path.join(ROOT, 'vendor', 'models', 'mt');
-  return path.resolve(hit.slice('--to='.length));
+  return path.resolve(hit.slice(hit.indexOf('=') + 1));
 }
 
 function pickModel(argv) {
@@ -110,12 +142,26 @@ function pickModel(argv) {
   return m;
 }
 
+/** 完整 GGUF：大小达到标称的 80% 且文件头是 GGUF（防错误页/半截文件） */
+function isGguf(file, mb) {
+  try {
+    if (!fs.existsSync(file)) return false;
+    if (fs.statSync(file).size < mb * 1024 * 1024 * 0.8) return false;
+    const magic = Buffer.alloc(4);
+    const fd = fs.openSync(file, 'r');
+    fs.readSync(fd, magic, 0, 4, 0);
+    fs.closeSync(fd);
+    return magic.toString('utf8') === 'GGUF';
+  } catch {
+    return false;
+  }
+}
+
 function check(dir) {
   let found = 0;
   for (const [key, m] of Object.entries(MODELS)) {
     const file = path.join(dir, m.file);
-    const ok = fs.existsSync(file) && fs.statSync(file).size > m.mb * 1024 * 1024 * 0.8;
-    if (ok) {
+    if (isGguf(file, m.mb)) {
       found += 1;
       report(`✓ ${key}  ${m.file}  ${human(fs.statSync(file).size)}`);
     } else {
@@ -131,29 +177,68 @@ function check(dir) {
 }
 
 async function main() {
-  const argv = process.argv.slice(2);
-  const dir = targetDir(argv);
-  if (argv.includes('--check')) return check(dir);
-  const m = pickModel(argv);
+  const dir = targetDir(ARGV);
+  const m = pickModel(ARGV);
   const dest = path.join(dir, m.file);
-  if (fs.existsSync(dest) && fs.statSync(dest).size > m.mb * 1024 * 1024 * 0.8) {
-    report(`[模型] 已存在：${path.relative(ROOT, dest)}（${human(fs.statSync(dest).size)}）`);
-    return check(dir);
+
+  if (ARGV.includes('--check')) {
+    check(dir);
+    emit({ type: 'done', installed: isGguf(dest, m.mb), dir, file: dest });
+    return;
   }
-  const url = `https://modelscope.cn/models/${m.repo}/resolve/master/${m.file}`;
+  if (isGguf(dest, m.mb)) {
+    report(`[模型] 已存在：${dest}`);
+    emit({ type: 'done', installed: true, dir, file: dest, reused: true });
+    return;
+  }
+
+  emit({ type: 'phase', index: 1, total: 1, task: 'model', label: '翻译模型' });
   report(`[模型] 下载 ${m.file}（约 ${m.mb}MB）`);
-  await download(url, dest);
-  const size = fs.statSync(dest).size;
-  const magic = Buffer.alloc(4);
-  const fd = fs.openSync(dest, 'r');
-  fs.readSync(fd, magic, 0, 4, 0);
-  fs.closeSync(fd);
-  if (magic.toString('utf8') !== 'GGUF') throw new Error('下载文件不是 GGUF（可能拿到的是错误页）');
-  report(`[模型] 完成：${human(size)}`);
-  check(dir);
+
+  let lastErr = null;
+  for (const src of SOURCES) {
+    try {
+      report(`[模型] 尝试 ${src.label}`);
+      await download(src.url(m), dest, (got, total) => {
+        const percent = total > 0 ? Math.min(99.9, (got / total) * 100) : 0;
+        emit({
+          type: 'progress',
+          percent: Math.round(percent * 10) / 10,
+          task: 'model',
+          label: '翻译模型',
+          bytes: got,
+          totalBytes: total,
+          source: src.id,
+        });
+      });
+      if (!isGguf(dest, m.mb)) throw new Error('下载文件不是完整 GGUF（可能拿到错误页）');
+      report(`[模型] 完成：${human(fs.statSync(dest).size)}（来自 ${src.label}）`);
+      emit({ type: 'done', installed: true, dir, file: dest, source: src.id });
+      check(dir);
+      return;
+    } catch (e) {
+      lastErr = e;
+      report(`    ${src.label} 失败：${e.message}`);
+      // 只清理「明显是错误页」的碎片；正常半截文件留给下一个源续传
+      try {
+        if (fs.existsSync(dest) && fs.statSync(dest).size < 1024 * 1024) fs.rmSync(dest, { force: true });
+      } catch {
+        // 删不掉就算了，下一个源会从头覆盖
+      }
+      emit({
+        type: 'phase',
+        index: 1,
+        total: 1,
+        task: 'model',
+        label: `切换下载源（${src.label} 不可用）`,
+      });
+    }
+  }
+  throw new Error(`所有下载源都失败：${lastErr ? lastErr.message : '未知错误'}`);
 }
 
 main().catch((e) => {
   report(`\n[失败] ${e.message}`);
+  emit({ type: 'error', message: e.message });
   process.exit(1);
 });

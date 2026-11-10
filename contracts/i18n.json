@@ -276,6 +276,24 @@
       "error": {}
     },
     "blog.loading": {},
+    "blog.mt.model.cancel": {},
+    "blog.mt.model.cancelled": {},
+    "blog.mt.model.dir": {
+      "dir": {}
+    },
+    "blog.mt.model.download": {},
+    "blog.mt.model.downloading": {
+      "percent": {}
+    },
+    "blog.mt.model.failed": {
+      "error": {}
+    },
+    "blog.mt.model.hint": {},
+    "blog.mt.model.installed": {},
+    "blog.mt.model.phase.model": {},
+    "blog.mt.model.retry": {},
+    "blog.mt.model.switching": {},
+    "blog.mt.model.title": {},
     "blog.nav.aiNews": {},
     "blog.nav.content": {},
     "blog.plan.enable": {},

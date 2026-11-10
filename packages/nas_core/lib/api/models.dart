@@ -650,6 +650,50 @@ class BlogTtsModelResponse {
       };
 }
 
+class BlogMtModelResponse {
+  final bool installed;
+  final bool downloading;
+  final double percent;
+  final String phase;
+  final String task;
+  final String? error;
+  final String? modelDir;
+  final int sizeMb;
+
+  const BlogMtModelResponse({
+    required this.installed,
+    required this.downloading,
+    required this.percent,
+    required this.phase,
+    required this.task,
+    required this.error,
+    required this.modelDir,
+    required this.sizeMb,
+  });
+
+  factory BlogMtModelResponse.fromJson(Map<String, dynamic> json) => BlogMtModelResponse(
+        installed: json['installed'] as bool,
+        downloading: json['downloading'] as bool,
+        percent: (json['percent'] as num).toDouble(),
+        phase: json['phase'] as String,
+        task: json['task'] as String,
+        error: json['error'] as String?,
+        modelDir: json['modelDir'] as String?,
+        sizeMb: json['sizeMb'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'installed': installed,
+        'downloading': downloading,
+        'percent': percent,
+        'phase': phase,
+        'task': task,
+        'error': error,
+        'modelDir': modelDir,
+        'sizeMb': sizeMb,
+      };
+}
+
 class BlogPreviewResponse {
   final String url;
   final int expiresInSec;

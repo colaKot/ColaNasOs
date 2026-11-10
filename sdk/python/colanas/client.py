@@ -95,6 +95,18 @@ class ColanasClient:
         """立即生成一期（后台执行）"""
         return self._request("POST", "/api/v1/blog/generate", params, "body")
 
+    def blog_mt_model(self, **params):
+        """本地翻译模型下载状态（实时探测磁盘）"""
+        return self._request("GET", "/api/v1/blog/mt/model", params, "query")
+
+    def blog_mt_model_cancel(self, **params):
+        """取消翻译模型下载（已下部分保留，下次续传）"""
+        return self._request("POST", "/api/v1/blog/mt/model/cancel", params, "body")
+
+    def blog_mt_model_download(self, **params):
+        """下载本地翻译模型（后台执行，前端轮询进度）"""
+        return self._request("POST", "/api/v1/blog/mt/model/download", params, "body")
+
     def blog_news(self, **params):
         """预览当前设置会抓到的新闻（不生成音频）"""
         return self._request("GET", "/api/v1/blog/news", params, "query")

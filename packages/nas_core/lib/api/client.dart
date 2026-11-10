@@ -275,6 +275,24 @@ class ApiClient {
     return BlogTtsModelResponse.fromJson(_asMap(_decode(res)));
   }
 
+  /// 本地翻译模型下载状态（实时探测磁盘）
+  Future<BlogMtModelResponse> blogMtModel() async {
+    final res = await transport.send('GET', _uri('/api/v1/blog/mt/model'), headers: await _headers());
+    return BlogMtModelResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 下载本地翻译模型（后台执行，前端轮询进度）
+  Future<BlogMtModelResponse> blogMtModelDownload() async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/mt/model/download'), headers: await _headers());
+    return BlogMtModelResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 取消翻译模型下载（已下部分保留，下次续传）
+  Future<BlogMtModelResponse> blogMtModelCancel() async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/mt/model/cancel'), headers: await _headers());
+    return BlogMtModelResponse.fromJson(_asMap(_decode(res)));
+  }
+
   /// AI 新闻设置
   Future<BlogSettingsResponse> blogSettings() async {
     final res = await transport.send('GET', _uri('/api/v1/blog/settings'), headers: await _headers());

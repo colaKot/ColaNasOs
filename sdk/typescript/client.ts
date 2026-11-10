@@ -107,6 +107,21 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/blog/generate', params, 'body');
   }
 
+  /** 本地翻译模型下载状态（实时探测磁盘） */
+  async blogMtModel(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/mt/model', params, 'query');
+  }
+
+  /** 取消翻译模型下载（已下部分保留，下次续传） */
+  async blogMtModelCancel(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/mt/model/cancel', params, 'body');
+  }
+
+  /** 下载本地翻译模型（后台执行，前端轮询进度） */
+  async blogMtModelDownload(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/mt/model/download', params, 'body');
+  }
+
   /** 预览当前设置会抓到的新闻（不生成音频） */
   async blogNews(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/blog/news', params, 'query');

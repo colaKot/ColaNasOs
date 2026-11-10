@@ -168,6 +168,17 @@ export type BlogTtsModelResponse = {
   "modelDir": string;
 };
 
+export type BlogMtModelResponse = {
+  "installed": boolean;
+  "downloading": boolean;
+  "percent": number;
+  "phase": string;
+  "task": string;
+  "error": string;
+  "modelDir": string;
+  "sizeMb": number;
+};
+
 export type BlogPreviewResponse = {
   "url": string;
   "expiresInSec": number;

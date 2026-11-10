@@ -244,6 +244,24 @@ export const BlogTtsModelResponse = Type.Object(
   { $id: 'BlogTtsModelResponse' },
 );
 
+/** 本地翻译模型（Qwen3-1.7B GGUF）的一键下载状态，口径同上：实时探测磁盘，不存标记 */
+export const BlogMtModelResponse = Type.Object(
+  {
+    installed: Type.Boolean(),
+    downloading: Type.Boolean(),
+    /** 0~100 */
+    percent: Type.Number(),
+    phase: Type.String({ description: '当前阶段的人话描述（排障用，UI 不直接展示）' }),
+    /** model / done / error / idle：前端据此选本地化文案 */
+    task: Type.String(),
+    error: Type.Union([Type.String(), Type.Null()]),
+    modelDir: Type.Union([Type.String(), Type.Null()]),
+    /** 标称体积（MB），界面显示「约 1.0GB」用 */
+    sizeMb: Type.Integer(),
+  },
+  { $id: 'BlogMtModelResponse' },
+);
+
 export const BlogPreviewResponse = Type.Object(
   { url: Type.String(), expiresInSec: Type.Integer(), cached: Type.Boolean() },
   { $id: 'BlogPreviewResponse' },
@@ -323,6 +341,7 @@ export const BLOG_SCHEMAS = [
   BlogPreviewBody,
   BlogWarmupResponse,
   BlogTtsModelResponse,
+  BlogMtModelResponse,
   BlogPreviewResponse,
   BlogAudioUrlResponse,
   BlogIdQuery,

@@ -79,6 +79,11 @@ class _AiNewsPageState extends State<AiNewsPage> {
   Timer? _modelPoll;
   bool _modelBusy = false;
 
+  // ---- 本地翻译模型（Qwen3-1.7B GGUF）：与语音模型同样的「实时探测磁盘」口径
+  BlogMtModelResponse? _mt;
+  Timer? _mtPoll;
+  bool _mtBusy = false;
+
   final TextEditingController _keyCtrl = TextEditingController();
   final TextEditingController _baseCtrl = TextEditingController();
   final TextEditingController _modelCtrl = TextEditingController();
@@ -107,6 +112,7 @@ class _AiNewsPageState extends State<AiNewsPage> {
   void dispose() {
     _poll?.cancel();
     _modelPoll?.cancel();
+    _mtPoll?.cancel();
     // 不要 dispose _player：它是全局单例，切页面 / 熄屏 / 最小化都要继续播。
     // 试听是页内短音频，销毁前必须**先同步 pause**，否则 Web 端那个 <video>
     // 元素会留在 globalContext 里继续出声（以前「刷新还在播」就是这么来的）。
@@ -152,6 +158,13 @@ class _AiNewsPageState extends State<AiNewsPage> {
       } catch (_) {
         model = null;
       }
+      // 翻译模型同样兜底：老服务端没有这个接口时，页面其余部分照常可用
+      BlogMtModelResponse? mt;
+      try {
+        mt = await client.blogMtModel();
+      } catch (_) {
+        mt = null;
+      }
       // 音色清单来自服务端磁盘扫描（内置 3 段 + 用户上传），不能在前端写死
       final voices = await client.blogVoices().catchError(
             (_) => const BlogVoiceListResponse(items: [], defaultVoice: 'default'),
@@ -164,10 +177,12 @@ class _AiNewsPageState extends State<AiNewsPage> {
         _episodes = episodes.items;
         _total = episodes.total;
         _model = model;
+        _mt = mt;
         _loading = false;
       });
       // 刷新页面时下载还在跑（下载是服务端后台进程），继续接上进度
       if (model?.downloading == true) _startModelPolling();
+      if (mt?.downloading == true) _startMtPolling();
       // 正在生成的那一期：刷新页面后继续显示进度
       final running = episodes.items.where((e) => e.status == 'pending' || e.status == 'running');
       if (running.isNotEmpty) {
@@ -341,6 +356,56 @@ class _AiNewsPageState extends State<AiNewsPage> {
     try {
       final m = await ApiSession.instance.client.blogTtsModelCancel();
       if (mounted) setState(() => _model = m);
+    } catch (_) {
+      // 取消失败也不把界面卡在「下载中」
+    }
+  }
+
+  // ------------------------------------------------------------------ 翻译模型
+
+  void _startMtPolling() {
+    _mtPoll?.cancel();
+    _mtPoll = Timer.periodic(const Duration(seconds: 1), (_) => _refreshMt());
+  }
+
+  Future<void> _refreshMt() async {
+    try {
+      final m = await ApiSession.instance.client.blogMtModel();
+      if (!mounted) return;
+      setState(() => _mt = m);
+      if (!m.downloading) {
+        _mtPoll?.cancel();
+        _mtPoll = null;
+      }
+    } catch (_) {
+      // 网络抖动：下一轮再试
+    }
+  }
+
+  Future<void> _downloadMt() async {
+    if (_mtBusy) return;
+    setState(() => _mtBusy = true);
+    try {
+      final m = await ApiSession.instance.client.blogMtModelDownload();
+      if (!mounted) return;
+      setState(() => _mt = m);
+      if (m.downloading) _startMtPolling();
+    } catch (e) {
+      // 服务端三源都失败时会把原因放在这里；直接弹出来，别让用户只看到按钮没反应
+      if (mounted) {
+        NasSnack.show(context, tr('blog.mt.model.failed', {'error': '$e'}), error: true);
+      }
+    } finally {
+      if (mounted) setState(() => _mtBusy = false);
+    }
+  }
+
+  Future<void> _cancelMt() async {
+    _mtPoll?.cancel();
+    _mtPoll = null;
+    try {
+      final m = await ApiSession.instance.client.blogMtModelCancel();
+      if (mounted) setState(() => _mt = m);
     } catch (_) {
       // 取消失败也不把界面卡在「下载中」
     }
@@ -601,6 +666,7 @@ class _AiNewsPageState extends State<AiNewsPage> {
         final page = _page.clamp(0, pages - 1);
         final visible = _episodes;
         final modelReady = _model?.installed ?? false;
+        final mtReady = _mt?.installed ?? false;
 
         return Column(
           children: [
@@ -616,6 +682,10 @@ class _AiNewsPageState extends State<AiNewsPage> {
                   if (!modelReady) ...[
                     const SizedBox(height: NasTokens.spaceMd),
                     _modelCard(context),
+                  ],
+                  if (!mtReady) ...[
+                    const SizedBox(height: NasTokens.spaceMd),
+                    _mtCard(context),
                   ],
                   if (_settings?.ttsAvailable == false && modelReady) ...[
                     const SizedBox(height: NasTokens.spaceMd),
@@ -670,6 +740,10 @@ class _AiNewsPageState extends State<AiNewsPage> {
                   if (modelReady) ...[
                     const SizedBox(height: NasTokens.spaceMd),
                     _modelCard(context),
+                  ],
+                  if (mtReady) ...[
+                    const SizedBox(height: NasTokens.spaceMd),
+                    _mtCard(context),
                   ],
                   const SizedBox(height: NasTokens.spaceXl),
                 ],
@@ -1037,6 +1111,115 @@ class _AiNewsPageState extends State<AiNewsPage> {
                     )
                   : const Icon(Icons.download),
               label: Text(tr(failed ? 'blog.tts.model.retry' : 'blog.tts.model.download')),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 本地翻译模型卡片：下载源在国内/国外自动切换（ModelScope → HF 镜像 → HuggingFace），
+  /// 三个都失败才报错，错误原文直接展示，用户能看出是网络还是别的。
+  Widget _mtCard(BuildContext context) {
+    final m = _mt;
+    final installed = m?.installed ?? false;
+    final downloading = m?.downloading ?? false;
+    final dir = m?.modelDir;
+    final errorText = m?.error ?? '';
+    final failed = errorText.isNotEmpty && !installed;
+    final cancelled = !installed && !downloading && !failed && (m?.percent ?? 0) > 0;
+    final percent = (m?.percent ?? 0.0).clamp(0.0, 100.0);
+    final switching = (m?.phase ?? '').startsWith('切换下载源');
+    final percentLabel = switching
+        ? tr('blog.mt.model.switching')
+        : tr('blog.mt.model.downloading', {'percent': percent.toStringAsFixed(1)});
+
+    return NasCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _cardTitle(context, tr('blog.mt.model.title')),
+          if (installed) ...[
+            Row(
+              children: [
+                Icon(Icons.check_circle_outline, size: 18, color: context.nasSuccess),
+                const SizedBox(width: NasTokens.spaceSm),
+                Expanded(
+                  child: Text(
+                    tr('blog.mt.model.installed'),
+                    style: TextStyle(
+                      color: context.nasSuccess,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (dir != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                tr('blog.mt.model.dir', {'dir': dir}),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: NasTokens.fontCaption,
+                  color: context.nasTextSecondary,
+                ),
+              ),
+            ],
+          ] else if (downloading) ...[
+            Text(percentLabel),
+            const SizedBox(height: NasTokens.spaceSm),
+            _ThinBar(value: percent / 100, height: 6),
+            const SizedBox(height: NasTokens.spaceSm),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _cancelMt,
+                icon: const Icon(Icons.close, size: 18),
+                label: Text(tr('blog.mt.model.cancel')),
+              ),
+            ),
+          ] else ...[
+            Text(
+              tr('blog.mt.model.hint'),
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: context.nasTextSecondary,
+              ),
+            ),
+            if (failed) ...[
+              const SizedBox(height: 4),
+              Text(
+                tr('blog.mt.model.failed', {'error': errorText}),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: NasTokens.fontCaption,
+                  color: context.nasDanger,
+                ),
+              ),
+            ] else if (cancelled) ...[
+              const SizedBox(height: 4),
+              Text(
+                tr('blog.mt.model.cancelled'),
+                style: TextStyle(
+                  fontSize: NasTokens.fontCaption,
+                  color: context.nasWarning,
+                ),
+              ),
+            ],
+            const SizedBox(height: NasTokens.spaceSm),
+            FilledButton.icon(
+              onPressed: _mtBusy ? null : _downloadMt,
+              icon: _mtBusy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.download),
+              label: Text(tr(failed ? 'blog.mt.model.retry' : 'blog.mt.model.download')),
             ),
           ],
         ],

@@ -40,6 +40,7 @@ import { startBlogSchedule } from './schedule';
 import { resolveTtsPaths } from '../../../kernel/tts/paths';
 import { MAX_VOICE_BYTES, removeUserVoice, saveUserVoice } from '../../../kernel/tts/voices';
 import { ttsModel } from '../../../kernel/tts/download';
+import { mtModel } from '../../../kernel/llm/download';
 import type { ServerModule } from '../../../kernel/types';
 
 const TAG = ['blog'];
@@ -86,6 +87,7 @@ export const blog: ServerModule = {
     // 一键下载的落点：装机版 resources/ 多半只读，模型统一写到用户数据目录。
     // 这一步同时把 <dataDir>/tts 注入 paths.ts 的搜索根，status() 每次实时探测它。
     ttsModel.configure(k.paths.dataDir);
+    mtModel.configure(k.paths.dataDir);
 
     await ensureSettingsRow(k);
     // 老库的 Key 存在 blog_settings.api_key，搬到全局 llm 配置（只搬一次）
@@ -154,6 +156,48 @@ export const blog: ServerModule = {
         },
       }),
       async () => ttsModel.cancel(),
+    );
+
+    // 本地翻译模型（Qwen3-1.7B GGUF，约 1.0GB）：口径与语音模型一致。
+    // 多源自动切换在 tool/mt-model.js 里（ModelScope → HF 镜像 → HuggingFace），
+    // 全失败才报错，前端把 error 弹出来提示用户。
+    app.get(
+      '/api/v1/blog/mt/model',
+      secured('blog:read', {
+        schema: {
+          operationId: 'blogMtModel',
+          tags: TAG,
+          summary: '本地翻译模型下载状态（实时探测磁盘）',
+          response: { 200: { $ref: 'BlogMtModelResponse#' } },
+        },
+      }),
+      async () => mtModel.status(),
+    );
+
+    app.post(
+      '/api/v1/blog/mt/model/download',
+      secured('blog:write', {
+        schema: {
+          operationId: 'blogMtModelDownload',
+          tags: TAG,
+          summary: '下载本地翻译模型（后台执行，前端轮询进度）',
+          response: { 200: { $ref: 'BlogMtModelResponse#' } },
+        },
+      }),
+      async () => mtModel.start(),
+    );
+
+    app.post(
+      '/api/v1/blog/mt/model/cancel',
+      secured('blog:write', {
+        schema: {
+          operationId: 'blogMtModelCancel',
+          tags: TAG,
+          summary: '取消翻译模型下载（已下部分保留，下次续传）',
+          response: { 200: { $ref: 'BlogMtModelResponse#' } },
+        },
+      }),
+      async () => mtModel.cancel(),
     );
 
     app.get(
