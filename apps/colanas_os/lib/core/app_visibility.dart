@@ -1,6 +1,7 @@
 import 'package:nas_core/nas_core.dart';
 
 import 'endpoint_host.dart';
+import 'session.dart';
 
 /// 「这个 App 在当前客户端能不能看见」。
 ///
@@ -40,9 +41,46 @@ bool appVisibleOnThisClient(AppDescriptor app) {
   return here == ClientEndpoint.mobile && app.supports(ClientEndpoint.tablet);
 }
 
-/// 过滤一批入口。
+/// 过滤一批入口（只看端形态）。
 List<AppDescriptor> visibleAppsOnThisClient(Iterable<AppDescriptor> apps) =>
     apps.where(appVisibleOnThisClient).toList(growable: false);
+
+/// 应用 id → 权限域：没配应用白名单时，按账号 scopes 兜底推导可见应用。
+const Map<String, String> kAppScopeDomain = <String, String>{
+  'photo': 'photo',
+  'files': 'files',
+  'video': 'video',
+  'discover': 'discover',
+  'music': 'music',
+  'blog': 'blog',
+  'ai': 'photo',
+  'monitor': 'system',
+  'sync': 'sync',
+  'transfer': 'pt',
+  'transmission': 'pt',
+  'accounts': 'user',
+  'terminal': 'system',
+  'settings': 'system',
+};
+
+/// 「这个 App 对当前登录用户可不可见」。
+///
+/// 超级管理员一律放行（所有限制对它不生效）；配了应用白名单就按白名单，
+/// 没配则按 scopes 推导 —— 只给了影视 / 音乐，其它入口就一个都不显示。
+bool appVisibleToCurrentUser(AppDescriptor app) {
+  final s = ApiSession.instance;
+  if (s.isAdmin) return true;
+  final allowed = s.allowedApps;
+  if (allowed != null) return allowed.contains(app.id);
+  final domain = kAppScopeDomain[app.id];
+  if (domain == null) return true;
+  return s.scopes.contains('$domain:read') || s.scopes.contains('$domain:write');
+}
+
+/// 导航与工作台共用的最终可见列表（端形态 + 账号授权）。
+List<AppDescriptor> visibleAppsForCurrentUser(Iterable<AppDescriptor> apps) => apps
+    .where((a) => appVisibleOnThisClient(a) && appVisibleToCurrentUser(a))
+    .toList(growable: false);
 
 /// 是否是「手机 App」（原生 Android / iOS 构建）。
 ///

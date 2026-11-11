@@ -37,7 +37,7 @@ export function contentMd5Of(abs: string): Promise<string> {
  *
  * 历史库里三种形态都真实存在，不能只按一种猜：
  *  ① **绝对路径**（老库 / 库根本身在 filesRoot 之外，例如
- *     `G:/gnascab/gexuan/Photos/...`）——真库 19089 行全是这种；
+ *     `D:/Photos/IMG_001.JPG`）——真库 19089 行全是这种；
  *  ② 相对 filesRoot（新库 / 冒烟库，例如 `photos/IMG_001.JPG`）；
  *  ③ 相对相册库根（`D:/Photos` 那种外挂盘）。
  * 拼出候选后取真实存在的那个；三种都失败时返回第一种，让读文件报错而不是静默算错。

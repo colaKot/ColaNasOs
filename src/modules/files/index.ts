@@ -6,6 +6,7 @@ import { Err } from '../../../kernel/errors';
 import { filesRoot, listBrowsableRoots, resolveWriteTarget, toPosix } from './fs-root';
 import * as S from './schemas';
 import { listHandler, type ListQuery } from './list';
+import { dirVisible, visibilityOf } from './visibility';
 import { downloadHandler, type DownloadQuery } from './download';
 import {
   CHUNK_BODY_LIMIT,
@@ -210,7 +211,12 @@ export const files: ServerModule = {
           response: { 200: ref('FilesListResponse') },
         },
       }),
-      async (req) => listHandler((req.query || {}) as ListQuery, k.log),
+      async (req) =>
+        listHandler(
+          (req.query || {}) as ListQuery,
+          k.log,
+          visibilityOf(k.config, req.user),
+        ),
     );
 
     // 目录选择器的「我的电脑」：盘符 + 文件根 + 已登记来源根（SMB 共享）。
@@ -225,10 +231,13 @@ export const files: ServerModule = {
           response: { 200: ref('FilesRootsResponse') },
         },
       }),
-      async () => ({
-        home: toPosix(filesRoot()),
-        roots: listBrowsableRoots(),
-      }),
+      async (req) => {
+        const vis = visibilityOf(k.config, req.user);
+        return {
+          home: toPosix(filesRoot()),
+          roots: listBrowsableRoots().filter((r) => dirVisible(vis, r.path)),
+        };
+      },
     );
 
     app.post(

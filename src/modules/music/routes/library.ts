@@ -10,6 +10,7 @@ import {
   registerExtraRoot,
   resolveInRoot,
 } from '../../files/fs-root';
+import { pathVisible, visibilityOf } from '../../files/visibility';
 import { scanMusicLibrary, type MusicLibraryRow } from '../scan';
 import { transcodeCacheDir } from '../transcode';
 import { Err } from '../../../../kernel/errors';
@@ -177,12 +178,16 @@ export async function registerMusicLibrary(app: FastifyInstance, k: KernelApi, h
           response: { 200: h.ref('MusicLibraryListResponse') },
         },
       }),
-      async () => {
+      async (req) => {
+        const vis = visibilityOf(k.config, req.user);
         const res = await sql<MusicLibraryRow>`
           select * from music_libraries order by created_at, name limit 500
         `.execute(k.db);
+        // 只显示来源目录落在授权范围内的库；超级管理员不受限。
         return {
-          items: res.rows.map((r) => ({
+          items: res.rows
+            .filter((r) => pathVisible(vis, r.root_path))
+            .map((r) => ({
             id: r.id,
             name: r.name,
             path: r.root_path,

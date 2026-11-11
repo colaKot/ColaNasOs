@@ -38,8 +38,6 @@ class _AccountsPageState extends State<AccountsPage> {
 
   bool _policyLoading = false;
   String? _policyError;
-  bool _appRestricted = false;
-  final Set<String> _allowedApps = <String>{};
   List<Map<String, dynamic>> _policyPaths = const [];
   bool _policySaving = false;
 
@@ -138,7 +136,6 @@ class _AccountsPageState extends State<AccountsPage> {
     try {
       final res = await ApiSession.instance.client.userPolicyGet(uid: uid);
       if (!mounted) return;
-      final apps = res['allowedApps'];
       final paths = (res['paths'] as List<dynamic>? ?? const [])
           .whereType<Map>()
           .map(
@@ -151,10 +148,6 @@ class _AccountsPageState extends State<AccountsPage> {
           )
           .toList();
       setState(() {
-        _appRestricted = apps is List;
-        _allowedApps
-          ..clear()
-          ..addAll(apps is List ? apps.map((e) => '$e') : const <String>[]);
         _policyPaths = paths;
         _policyLoading = false;
       });
@@ -170,17 +163,14 @@ class _AccountsPageState extends State<AccountsPage> {
   Future<void> _savePolicy() async {
     final user = _selectedUser;
     if (user == null) return;
-    if (_appRestricted && _allowedApps.isEmpty) {
-      NasSnack.show(context, tr('accounts.policy.noApps'));
-      return;
-    }
     setState(() => _policySaving = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ApiSession.instance.client.userPolicySet(
         body: <String, dynamic>{
+          // 不传 allowedApps：服务端按「未传 = 保持不变」处理，应用白名单
+          // 由创建账号时的权限选择决定，本页只改目录授权。
           'uid': '${user['id']}',
-          'allowedApps': _appRestricted ? _allowedApps.toList() : null,
           'paths': _policyPaths
               .where((p) => '${p['path'] ?? ''}'.trim().isNotEmpty)
               .map(
@@ -1073,47 +1063,8 @@ class _AccountsPageState extends State<AccountsPage> {
     return ListView(
       padding: const EdgeInsets.all(NasTokens.spaceLg),
       children: [
-        Text(
-          tr('accounts.policy.apps'),
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          title: Text(tr('accounts.policy.restrict')),
-          value: _appRestricted,
-          onChanged: (v) => setState(() => _appRestricted = v),
-        ),
-        if (_appRestricted)
-          Wrap(
-            spacing: NasTokens.spaceXs,
-            runSpacing: NasTokens.spaceXs,
-            children: [
-              for (final app in AppRegistry.apps.where((a) => a.available))
-                NasChip(
-                  label: Text(tr(app.nameKey)),
-                  selected: _allowedApps.contains(app.id),
-                  onSelected: (on) => setState(() {
-                    if (on) {
-                      _allowedApps.add(app.id);
-                    } else {
-                      _allowedApps.remove(app.id);
-                    }
-                  }),
-                ),
-            ],
-          ),
-        const SizedBox(height: NasTokens.spaceXs),
-        Text(
-          tr('accounts.policy.appsHint'),
-          style: TextStyle(
-            fontSize: NasTokens.fontCaption,
-            color: context.nasTextSecondary,
-          ),
-        ),
-        const SizedBox(height: NasTokens.spaceMd),
-        const Divider(height: 1),
-        const SizedBox(height: NasTokens.spaceMd),
+        // 应用白名单不在这里配：创建账号时的权限选择已决定可见应用，
+        // 服务端 `/me` 会把已有白名单带回来；本页只管目录授权。
         Row(
           children: [
             Expanded(

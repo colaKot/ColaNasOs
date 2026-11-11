@@ -103,9 +103,9 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // 工作台的应用卡要和导航一致：契约 endpoints 不包含当前端的入口不显示
+    // 工作台的应用卡要和导航一致：端形态 + 当前账号授权，两处共用同一套判定
     final apps = _applyOrder(
-      visibleAppsOnThisClient(AppRegistry.apps.where((a) => a.available)),
+      visibleAppsForCurrentUser(AppRegistry.apps.where((a) => a.available)),
     );
 
     return LayoutBuilder(
@@ -663,7 +663,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _moveApp(String fromId, String toId) async {
     if (fromId == toId) return;
     final ids = _applyOrder(
-      visibleAppsOnThisClient(AppRegistry.apps.where((a) => a.available)),
+      visibleAppsForCurrentUser(AppRegistry.apps.where((a) => a.available)),
     ).map((a) => a.id).toList();
     final from = ids.indexOf(fromId);
     final to = ids.indexOf(toId);

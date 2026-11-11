@@ -3,7 +3,7 @@ import { Type } from '@sinclair/typebox';
 import { sql } from 'kysely';
 import { secured } from '../../../kernel/route';
 import { isSealed, openSecret, sealSecret } from '../../../kernel/secret-box';
-import { readPolicy, writePolicy, type AccessPolicy } from '../../../kernel/access-policy';
+import { isFullAccess, readPolicy, writePolicy, type AccessPolicy } from '../../../kernel/access-policy';
 import type { ServerModule } from '../../../kernel/types';
 import { Err } from '../../../kernel/errors';
 import { hashApiToken, newApiToken } from './api-token';
@@ -607,6 +607,33 @@ export const accounts: ServerModule = {
         `.execute(k.db);
         await writeEvent('login', user.id, user.username, req);
         return { token, scopes, user: { id: user.id, username: user.username } };
+      },
+    );
+
+    // 当前登录用户的授权快照：客户端据此隐藏未授权应用、裁剪目录选择器。
+    // `hide: true` = 不进 OpenAPI，避免为这么一个只读接口重跑整套生成链；
+    // 路径在 /api/v1/auth 下（应用白名单的基础通道），只需 JWT、不额外要 scope。
+    app.get(
+      '/api/v1/auth/me',
+      { schema: { hide: true } },
+      async (req) => {
+        const user = (req as { user?: { sub?: string; scopes?: string[]; ownerAdmin?: boolean } })
+          .user;
+        const uid = String(user?.sub ?? '');
+        const rows = (
+          await sql<{ username: string }>`
+            select username from auth_users where id = ${uid}
+          `.execute(k.db)
+        ).rows;
+        const policy = readPolicy(k.config, uid);
+        return {
+          id: uid,
+          username: rows[0]?.username ?? '',
+          scopes: user?.scopes ?? [],
+          isAdmin: isFullAccess(user),
+          allowedApps: policy.apps ?? null,
+          pathRules: policy.paths ?? [],
+        };
       },
     );
 

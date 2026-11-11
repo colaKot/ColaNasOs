@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { pathVisible, pathWhere, visibilityOf } from '../../files/visibility';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sql } from 'kysely';
@@ -502,6 +503,7 @@ export async function registerMusicCompat(
     const desc = String(body.sort_order ?? body.sortOrder ?? 'asc').toLowerCase() === 'desc';
 
     let where = sql`1 = 1`;
+        where = sql`${where} and (${pathWhere(visibilityOf(k.config, req.user), 'rel_path')})`;
     const searchClause = musicSearchWhere(TRACK_SEARCH_COLS, search);
     if (searchClause) where = sql`${where} and ${searchClause}`;
     if (artists.length > 0) where = sql`${where} and (${anyEq('t.artist', artists)})`;
@@ -632,6 +634,7 @@ export async function registerMusicCompat(
       const body = (req.body || {}) as Record<string, unknown>;
       const sources = asStringArray(body.sourceList ?? body.source_list);
       let where = sql`1 = 1`;
+        where = sql`${where} and (${pathWhere(visibilityOf(k.config, req.user), 'rel_path')})`;
       if (sources.length > 0) {
         const libIds = await libraryIdsOfSources(sources);
         where = libIds.length
@@ -1659,7 +1662,8 @@ p{margin:0;color:#5b5b66;line-height:1.7}</style></head><body><div class="card">
     };
   };
 
-  app.post('/api/v1/music/compat/source/list', hidden('music:read'), async () => {
+  app.post('/api/v1/music/compat/source/list', hidden('music:read'), async (req) => {
+    const vis = visibilityOf(k.config, req.user);
     const rows = await sql<{
       index_id: number;
       root_path: string;
@@ -1673,7 +1677,7 @@ p{margin:0;color:#5b5b66;line-height:1.7}</style></head><body><div class="card">
              scan_when_start, scan_when_change, scan_interval_ms
         from music_libraries order by created_at, name limit 500
     `.execute(k.db);
-    return rows.rows.map(sourceOf);
+    return rows.rows.filter((r) => pathVisible(vis, r.root_path)).map(sourceOf);
   });
 
   app.post('/api/v1/music/compat/source/add', hidden('music:write'), async (req: FastifyRequest) => {

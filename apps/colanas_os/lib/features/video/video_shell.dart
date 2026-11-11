@@ -227,8 +227,6 @@ class _VideoShellPageState extends State<VideoShellPage> {
         return const VideoHistoryPage();
       case 'favorites':
         return const VideoFavoritesPage();
-      case 'series':
-        return const VideoSeriesPage();
       case 'browse':
         return const VideoMediaBrowserPage();
       case 'jp_rank':
@@ -256,90 +254,6 @@ class _VideoShellPageState extends State<VideoShellPage> {
       default:
         return VideoPage(embedded: true, onNavigate: _selection.select);
     }
-  }
-}
-
-/// 剧集浏览：剧名 + 季 / 集数（点击进剧集详情）
-class VideoSeriesPage extends StatefulWidget {
-  const VideoSeriesPage({super.key});
-
-  @override
-  State<VideoSeriesPage> createState() => _VideoSeriesPageState();
-}
-
-class _VideoSeriesPageState extends State<VideoSeriesPage> {
-  bool _loading = true;
-  String? _error;
-  List<VideoSeriesItem> _items = const [];
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      final res = await ApiSession.instance.client.videoSeriesList(limit: 200);
-      if (!mounted) return;
-      setState(() {
-        _items = res.items;
-        _loading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = '$e';
-        _loading = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return NasAsyncView<List<VideoSeriesItem>>(
-      loading: _loading,
-      error: _error,
-      onRetry: _load,
-      data: _items,
-      isEmpty: (items) => items.isEmpty,
-      empty: NasEmptyState(
-        title: tr('video.nav.emptyFiles'),
-        icon: Icons.video_library_outlined,
-      ),
-      builder: (items) => ListView.separated(
-        padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceSm),
-        itemCount: items.length,
-        separatorBuilder: (_, _) => const Divider(height: 1),
-        itemBuilder: (context, i) {
-          final s = items[i];
-          return ListTile(
-            leading: const Icon(Icons.video_library_outlined),
-            title: Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text(
-              tr('video.seasonsEpisodes', {
-                'seasons': '${s.seasons}',
-                'episodes': '${s.episodes}',
-              }),
-            ),
-            // 三级页：点出去留在内容区，左栏不消失
-            onTap: () => openVideoSeries(
-              context,
-              name: s.name,
-              coverId: s.coverId,
-              headers: {
-                if (ApiSession.instance.token != null)
-                  'authorization': 'Bearer ${ApiSession.instance.token}',
-              },
-            ),
-          );
-        },
-      ),
-    );
   }
 }
 

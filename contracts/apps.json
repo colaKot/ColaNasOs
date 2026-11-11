@@ -309,11 +309,6 @@
                 "when": "hasJpLibrary"
               },
               {
-                "id": "series",
-                "labelKey": "video.nav.series",
-                "icon": "video_library_outlined"
-              },
-              {
                 "id": "browse",
                 "labelKey": "video.browse.title",
                 "icon": "photo_library_outlined"

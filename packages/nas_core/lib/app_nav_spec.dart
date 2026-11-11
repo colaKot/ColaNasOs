@@ -197,7 +197,6 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
           NavItemSpec(id: 'favorites', labelKey: 'nav.favorites', icon: 'favorite_outline'),
           NavItemSpec(id: 'jp_rank', labelKey: 'video.nav.jpRank', icon: 'leaderboard_outlined', when: 'hasJpLibrary'),
           NavItemSpec(id: 'jp_actor', labelKey: 'video.nav.jpActor', icon: 'people_outline', when: 'hasJpLibrary'),
-          NavItemSpec(id: 'series', labelKey: 'video.nav.series', icon: 'video_library_outlined'),
           NavItemSpec(id: 'browse', labelKey: 'video.browse.title', icon: 'photo_library_outlined'),
         ],
       ),

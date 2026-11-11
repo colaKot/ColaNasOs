@@ -60,6 +60,15 @@ class ApiSession {
   String? token;
   String? username;
 
+  /// 当前账号的授权快照（服务端 `/api/v1/auth/me`，故意不进契约）。
+  /// `null` = 没配应用白名单，按 scopes 兜底；空集 = 一个应用都不给。
+  /// 登录 / 恢复会话时都会刷新，管理员改了授权后子账号重开客户端即生效。
+  Set<String>? allowedApps;
+  bool isAdminFromServer = false;
+  final HttpTransport _accessHttp = HttpTransport(
+    timeout: const Duration(seconds: 8),
+  );
+
   /// 图片/封面这类**不走 ApiClient** 的请求要自己带 token
   /// （`Image.network` / `NasCoverImage` 的 `headers` 参数）。
   ///
@@ -98,6 +107,8 @@ class ApiSession {
         // 避免每个页面都显示一条「ApiError(401 …)」。
         token = null;
         username = null;
+        allowedApps = null;
+        isAdminFromServer = false;
         authState.value = false;
         events.stop();
         _clearToken();
@@ -152,6 +163,7 @@ class ApiSession {
           // 探一次：token 可能还在有效期内但已被服务端作废。
           // 401 会被 Transport 清掉，这里据此决定要不要走密码兜底。
           if (await _probeSession()) {
+            await refreshAccess();
             await loadServerInfo();
             events.start();
             return true;
@@ -253,8 +265,11 @@ class ApiSession {
         await SettingsStore.instance.setString('auth.password', password);
       }
     }
-    if (token != null) await loadServerInfo();
-    if (token != null) events.start();
+    if (token != null) {
+      await refreshAccess();
+      await loadServerInfo();
+      events.start();
+    }
   }
 
   /// 读取服务端公开展示信息（欢迎语 / 主机名）；失败不阻断登录
@@ -285,14 +300,36 @@ class ApiSession {
     }
   }
 
-  /// 管理员 = scopes 含 `*`（与内核 `hasScope` 同一口径）
-  bool get isAdmin => scopes.contains('*');
+  /// 管理员 = scopes 含 `*`（与内核 `hasScope` 同一口径）；
+  /// 访问令牌还要看签发账号是否全权，这一项由 `/me` 的 `isAdmin` 补上。
+  bool get isAdmin => scopes.contains('*') || isAdminFromServer;
+
+  /// 拉取当前账号的授权快照。失败不阻断登录：退回 scopes 推导。
+  Future<void> refreshAccess() async {
+    try {
+      final res = await _accessHttp.send(
+        'GET',
+        Uri.parse('$baseUrl/api/v1/auth/me'),
+        headers: authHeaders,
+      );
+      if (!res.isOk) return;
+      final data = res.json;
+      if (data is! Map) return;
+      final apps = data['allowedApps'];
+      allowedApps = apps is List ? apps.map((e) => '$e').toSet() : null;
+      isAdminFromServer = data['isAdmin'] == true;
+    } catch (_) {
+      // 老服务端没有这个接口 / 暂时不可达：保持按 scopes 推导
+    }
+  }
 
   /// 主动登出：同时关闭自动登录（用户明确表达了「不要记住我」）
   Future<void> logout() async {
     events.stop();
     token = null;
     username = null;
+    allowedApps = null;
+    isAdminFromServer = false;
     authState.value = false;
     // 登出只清凭证，不改「自动登录」偏好：下次打开仍应预填账号，用户勾过就继续记住
     await _clearSavedToken();

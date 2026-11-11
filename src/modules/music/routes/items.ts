@@ -1,4 +1,5 @@
 import { sql } from 'kysely';
+import { pathWhere, visibilityOf } from '../../files/visibility';
 import { secured } from '../../../../kernel/route';
 import { Err } from '../../../../kernel/errors';
 import {
@@ -76,6 +77,7 @@ export async function registerMusicItems(app: FastifyInstance, k: KernelApi, h: 
         const cmp = sql.raw(desc ? '<' : '>');
 
         let where = sql`1 = 1`;
+        where = sql`${where} and (${pathWhere(visibilityOf(k.config, req.user), 'rel_path')})`;
         if (q.libraryId) where = sql`${where} and library_id = ${q.libraryId}`;
         if (q.artist) where = sql`${where} and artist = ${q.artist}`;
         if (q.album) where = sql`${where} and album = ${q.album}`;

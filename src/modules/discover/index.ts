@@ -5,6 +5,7 @@ import { sql } from 'kysely';
 import { secured } from '../../../kernel/route';
 import type { KernelApi, ServerModule } from '../../../kernel/types';
 import { filesRoot, resolveInRoot } from '../files/fs-root';
+import { pathVisible, visibilityOf } from '../files/visibility';
 import { registerDiscoverApi } from './api';
 import { registerDoubanRoutes } from './douban-routes';
 import type { FastifyRequest } from 'fastify';
@@ -307,7 +308,8 @@ export const discover: ServerModule = {
           },
         },
       }),
-      async () => {
+      async (req) => {
+        const vis = visibilityOf(k.config, req.user);
         const rows = (
           await sql<any>`
             select l.id as library_id, l.name as library_name, l.lib_type,
@@ -322,7 +324,7 @@ export const discover: ServerModule = {
         for (const r of rows) {
           const path = String(r.path || '');
           const key = `${r.library_id}:${path}`;
-          if (!path || seen.has(key)) continue;
+          if (!path || !pathVisible(vis, path) || seen.has(key)) continue;
           seen.add(key);
           const libType = String(r.lib_type || 'movie');
           const mediaType =

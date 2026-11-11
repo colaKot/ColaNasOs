@@ -150,16 +150,11 @@ class _AppShellState extends State<AppShell> {
     'settings': const SettingsPage(),
   };
 
-  static List<AppDescriptor> get _apps => AppRegistry.apps
-      .where(
-        (a) =>
-            a.available &&
-            _pageById.containsKey(a.id) &&
-            // 契约的 endpoints 之前没人用，等于所有端都看到全部入口；
-            // 现在按当前客户端过滤（见 core/app_visibility.dart）
-            appVisibleOnThisClient(a),
-      )
-      .toList(growable: false);
+  static List<AppDescriptor> get _apps => visibleAppsForCurrentUser(
+    AppRegistry.apps.where(
+      (a) => a.available && _pageById.containsKey(a.id),
+    ),
+  );
 
   /// 页面顺序：工作台在最前，其余按契约顺序
   static List<String> get _ids => ['home', for (final a in _apps) a.id];

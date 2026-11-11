@@ -12,6 +12,7 @@ import {
   registerExtraRoot,
   resolveInRoot,
 } from '../../files/fs-root';
+import { dirVisible, pathVisible, visibilityOf } from '../../files/visibility';
 import { scanLibrary, type LibraryRow } from '../scan';
 import { Err } from '../../../../kernel/errors';
 import type { FastifyRequest } from 'fastify';
@@ -101,6 +102,7 @@ export async function registerPhotoLibrary(app: FastifyInstance, k: KernelApi, h
         },
       }),
       async (req, reply) => {
+        const vis = visibilityOf(k.config, req.user);
         const body = (req.body || {}) as { name?: string; path?: string };
         const name = (body.name || '').trim();
         const raw = (body.path || '').trim();
@@ -125,6 +127,11 @@ export async function registerPhotoLibrary(app: FastifyInstance, k: KernelApi, h
         }
         if (!rel) {
           return reply.code(400).send({ error: Err.badRequest, message: 'path must be a subdirectory' });
+        }
+        // 目录选择器已按授权裁剪，这里再兜一次：手填 / 直接调接口也必须落在授权目录内。
+        // 超级管理员不受限。
+        if (!pathVisible(vis, abs)) {
+          return reply.code(403).send({ error: Err.forbidden, message: 'path not authorized' });
         }
         let st;
         try {
@@ -233,6 +240,7 @@ export async function registerPhotoLibrary(app: FastifyInstance, k: KernelApi, h
         },
       }),
       async (req: FastifyRequest) => {
+        const vis = visibilityOf(k.config, req.user);
         const owner = String(req.user?.sub || '');
         // 每用户一个相册库：历史遗留的公共库（owner_id = ''）认领给第一个访问的用户，
         // 之后不再有「公共库」概念，也不再要求用户自己创建库。
@@ -246,14 +254,17 @@ export async function registerPhotoLibrary(app: FastifyInstance, k: KernelApi, h
           if (isAbsoluteInput(row.root_path)) registerExtraRoot(row.root_path);
         }
         return {
-          items: res.rows.map((r) => ({
-            id: r.id,
-            name: r.name,
-            path: r.root_path,
-            items: Number(r.items) || 0,
-            createdAt: r.created_at,
-            lastScanAt: r.last_scan_at,
-          })),
+          // 只显示源目录落在授权范围内的相册库；超级管理员不受限。
+          items: res.rows
+            .filter((r) => pathVisible(vis, r.root_path))
+            .map((r) => ({
+              id: r.id,
+              name: r.name,
+              path: r.root_path,
+              items: Number(r.items) || 0,
+              createdAt: r.created_at,
+              lastScanAt: r.last_scan_at,
+            })),
         };
       },
     );
@@ -349,7 +360,8 @@ export async function registerPhotoLibrary(app: FastifyInstance, k: KernelApi, h
           response: { 200: h.ref('PhotoFsRoots') },
         },
       }),
-      async () => {
+      async (req) => {
+        const vis = visibilityOf(k.config, req.user);
         const roots: string[] = [];
         if (process.platform === 'win32') {
           for (const d of 'CDEFGHIJKLMNOPQRSTUVWXYZ') {
@@ -363,7 +375,8 @@ export async function registerPhotoLibrary(app: FastifyInstance, k: KernelApi, h
         } else {
           roots.push('/');
         }
-        return { items: roots };
+        // 子账号只能看到通往授权目录的那些盘；超级管理员不受限。
+        return { items: roots.filter((p) => dirVisible(vis, p)) };
       },
     );
 
@@ -382,6 +395,7 @@ export async function registerPhotoLibrary(app: FastifyInstance, k: KernelApi, h
         const q = (req.query || {}) as { path?: string };
         const raw = (q.path || '').trim();
         const slash = (v: string) => v.split(path.sep).join('/');
+        const vis = visibilityOf(k.config, req.user);
 
         if (!raw) {
           const roots: { name: string; path: string }[] = [];
@@ -397,7 +411,7 @@ export async function registerPhotoLibrary(app: FastifyInstance, k: KernelApi, h
           } else {
             roots.push({ name: '/', path: '/' });
           }
-          return { path: '', parent: null, dirs: roots };
+          return { path: '', parent: null, dirs: roots.filter((d) => dirVisible(vis, d.path)) };
         }
 
         const abs = path.resolve(absoluteInput(raw));
@@ -410,15 +424,21 @@ export async function registerPhotoLibrary(app: FastifyInstance, k: KernelApi, h
         if (!st.isDirectory()) {
           return reply.code(400).send({ error: Err.badRequest, message: 'path is not a directory' });
         }
+        // 手输路径也不给绕过：不在授权目录链上的目录直接列空。
+        if (!dirVisible(vis, abs)) {
+          return { path: slash(abs), parent: null, dirs: [] };
+        }
         const dirs = fs
           .readdirSync(abs, { withFileTypes: true })
           .filter((e) => e.isDirectory())
           .map((e) => ({ name: e.name, path: slash(path.join(abs, e.name)) }))
+          .filter((d) => dirVisible(vis, d.path))
           .sort((a, b) => a.name.localeCompare(b.name));
         const parentAbs = path.dirname(abs);
         return {
           path: slash(abs),
-          parent: parentAbs === abs ? null : slash(parentAbs),
+          parent:
+            parentAbs !== abs && dirVisible(vis, parentAbs) ? slash(parentAbs) : null,
           dirs,
         };
       },

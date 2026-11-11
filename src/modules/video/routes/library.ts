@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import { Type } from '@sinclair/typebox';
 import { secured } from '../../../../kernel/route';
+import { pathVisible, visibilityOf } from '../../files/visibility';
 import { scanVideoLibrary, type VideoLibraryRow } from '../scan';
 import { libTypeOf, normalizeLibType } from '../media-type';
 import {
@@ -376,7 +377,8 @@ export async function registerVideoLibrary(
         response: { 200: h.ref('VideoLibraryListResponse') },
       },
     }),
-    async () => {
+    async (req) => {
+      const vis = visibilityOf(k.config, req.user);
       const res = await sql<VideoLibraryRow>`
         select * from video_libraries
          order by coalesce(sort_order, 0) asc, created_at asc, name asc
@@ -386,9 +388,23 @@ export async function registerVideoLibrary(
         k.db,
         res.rows.map((r) => r.id),
       );
-      return {
-        items: res.rows.map((r) => libraryItemOf(r, byLib.get(r.id) ?? [])),
-      };
+      // 只有源目录落在授权范围内才显示这个库，且只带回被授权的那些源。
+      // 超级管理员不受限（vis.unrestricted）。
+      const items = res.rows
+        .map((r) => ({ row: r, sources: byLib.get(r.id) ?? [] }))
+        .filter(({ row, sources }) =>
+          vis.unrestricted ||
+          (sources.length > 0
+            ? sources.some((s) => pathVisible(vis, s.root_path))
+            : pathVisible(vis, row.root_path)),
+        )
+        .map(({ row, sources }) =>
+          libraryItemOf(
+            row,
+            vis.unrestricted ? sources : sources.filter((s) => pathVisible(vis, s.root_path)),
+          ),
+        );
+      return { items };
     },
   );
 
