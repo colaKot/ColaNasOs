@@ -257,12 +257,18 @@ export async function registerVideoLibrary(
       if (!name) {
         return reply.code(400).send({ error: Err.badRequest, message: 'name required' });
       }
-      if (body.libType !== undefined && normalizeLibType(body.libType) !== libTypeOf(lib)) {
+      const curType = libTypeOf(lib);
+      // 库类型决定扫描 / 列表 / 删除的全部行为，创建后不可改。
+      // 唯一例外：电视剧 ↔ 短剧——两者除播放器是否上下切集之外完全同路，
+      // 允许互换；否则想把已有的剧库改成短剧就只能删库重建，进度和刮削结果全丢。
+      const wantedType = body.libType === undefined ? curType : normalizeLibType(body.libType);
+      const isDrama = (t: string) => t === 'tv' || t === 'short_tv';
+      if (wantedType !== curType && !(isDrama(wantedType) && isDrama(curType))) {
         return reply
           .code(400)
           .send({ error: Err.badRequest, message: 'library type is immutable' });
       }
-      const libType = libTypeOf(lib);
+      const libType = wantedType;
 
       const hasSources =
         Array.isArray(body.sources) && body.sources.length > 0;
