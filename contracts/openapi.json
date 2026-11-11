@@ -14377,12 +14377,12 @@
                 ],
                 "properties": {
                   "username": {
-                    "minLength": 2,
-                    "maxLength": 32,
+                    "minLength": 1,
+                    "maxLength": 64,
                     "type": "string"
                   },
                   "password": {
-                    "minLength": 6,
+                    "minLength": 1,
                     "maxLength": 256,
                     "type": "string"
                   },
@@ -15322,12 +15322,12 @@
                     "type": "string"
                   },
                   "username": {
-                    "minLength": 2,
-                    "maxLength": 32,
+                    "minLength": 1,
+                    "maxLength": 64,
                     "type": "string"
                   },
                   "password": {
-                    "minLength": 6,
+                    "minLength": 1,
                     "maxLength": 256,
                     "type": "string"
                   },
