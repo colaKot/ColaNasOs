@@ -78,10 +78,34 @@ function jsonList(raw: string | null | undefined): string[] {
   }
 }
 
+const CJK_TITLE = /[\u3400-\u9fff]/;
+
+/** 发布名里自带的中文片名（未刮削时的兜底），没有中文返回空串 */
+function zhFromFileTitle(raw: string): string {
+  const s = String(raw || '');
+  if (!CJK_TITLE.test(s)) return '';
+  // \x5B/[ \x5D/] \u3010/【 \u3011/】：字符类里直接写 \[ 会被 no-useless-escape 报错
+  const bracket = /[\x5B\u3010]([^\x5D\u3011]*[\u3400-\u9fff][^\x5D\u3011]*)[\x5D\u3011]/.exec(s);
+  if (bracket && String(bracket[1] || '').trim().length >= 2) {
+    return String(bracket[1]).trim();
+  }
+  const segs = s.match(/[\u3400-\u9fff][\u3400-\u9fff0-9A-Za-z·：:，,、\s]*/g) || [];
+  let best = '';
+  for (const seg of segs) {
+    const t = seg.trim().replace(/[\s.,·:：，、]+$/, '').trim();
+    if (t.length >= 2 && t.length <= 40 && t.length > best.length) best = t;
+  }
+  return best;
+}
+
 /** 对外展示用的片名：刮削名优先，没有才回退文件名去扩展名 */
 export function displayTitleOf(r: MediaRow): string {
   const nfo = String(r.nfo_name ?? '').trim();
-  return nfo || r.title;
+  if (nfo) return nfo;
+  // 还没刮削时，文件名里自带的中文片名（国产 / 译制片很常见）优先展示，
+  // 别把一整串英文发布名甩给用户；纯英文文件名保持原样，等刮削补中文名。
+  const file = String(r.title ?? '').trim();
+  return zhFromFileTitle(file) || file;
 }
 
 /**

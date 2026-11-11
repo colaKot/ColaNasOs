@@ -30,6 +30,24 @@ import {
 } from './sources';
 import { VIDEO_MIGRATIONS } from './migrations';
 import { makeVideoHelpers } from './helpers';
+
+/**
+ * 库里还有没刮过的条目吗（判据与 `video.scrape.auto` 候选集一致）。
+ * 只取是否存在，limit 1，比 count(*) 便宜。
+ */
+async function hasPendingScrape(db: any, libraryId: string): Promise<boolean> {
+  const rows = (
+    await sql<{ n: number }>`
+      select 1 as n from video_items
+       where library_id = ${libraryId}
+         and media_type = 'video'
+         and nfo_updated_at is null
+         and coalesce(match_nfo, 1) <> 0
+       limit 1
+    `.execute(db)
+  ).rows;
+  return rows.length > 0;
+}
 import { registerVideoLibrary } from './routes/library';
 import { registerVideoItems } from './routes/items';
 import { registerVideoFacets } from './routes/facets';
@@ -221,9 +239,13 @@ export const video: ServerModule = {
         },
         onFiles: (done, total) => void ctx.progress(pct, done, total),
       });
-      // 入库即刮：只在这一轮真的新增了条目时排队，且必须由库上的 auto_scrape 显式打开。
+      // 入库即刮：本轮有新增，或库里还留着「没刮过」的条目（清空刮削结果 /
+      // 上次联网失败后文件没变的情况）都要排队。且必须由库上的 auto_scrape 显式打开：
       // 复用 scrape_enabled 会让所有存量库在下次扫描后突然开始联网——那是替用户做决定。
-      if (r.added > 0 && Number(row.auto_scrape) === 1) {
+      if (
+        Number(row.auto_scrape) === 1 &&
+        (r.added > 0 || (await hasPendingScrape(k.db, libraryId)))
+      ) {
         void k.tasks
           .enqueueIfIdle('video.scrape.auto', { libraryId }, { maxAttempts: 1 })
           .catch(() => null);
@@ -492,9 +514,12 @@ export const video: ServerModule = {
           prune: true,
         });
         // 下载完成后文件监控直接扫、不经过 video.scan 任务，挂在任务里的
-        // 自动刮削钩子碰不到。判据与任务版一致：真有新增 + 库显式开了「入库即刮」。
-        // enqueueIfIdle 自带去重，多子目录连续触发也只排一次。
-        if (result.added > 0 && Number(lib.auto_scrape) === 1) {
+        // 自动刮削钩子碰不到。判据与任务版一致：真有新增，或还有没刮过的存量条目
+        // + 库显式开了「入库即刮」。enqueueIfIdle 自带去重，多子目录连续触发也只排一次。
+        if (
+          Number(lib.auto_scrape) === 1 &&
+          (result.added > 0 || (await hasPendingScrape(k.db, lib.id)))
+        ) {
           void k.tasks
             .enqueueIfIdle('video.scrape.auto', { libraryId: lib.id }, { maxAttempts: 1 })
             .catch(() => null);
