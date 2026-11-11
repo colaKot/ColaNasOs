@@ -708,31 +708,24 @@ class _AccountsPageState extends State<AccountsPage> {
     });
   }
 
-  /// 选一个目录并折算成「相对文件根」的规则路径；选到根外就提示并放弃。
+  /// 选一个目录：文件根内折算成相对路径（兼容既有规则），根外的盘符 / UNC
+  /// 目录按绝对路径原样保存 —— 文件页本来就支持绝对路径浏览，服务端
+  /// `normalizePath` 两边都会加成 `/D:/...` 的同一种形式，前缀匹配照样生效。
   Future<String?> _pickPolicyDir() async {
     final abs = await showFolderPicker(
       context,
       title: tr('accounts.policy.pickDir'),
     );
-    if (abs == null || abs.trim().isEmpty) return null;
+    final picked = abs?.trim();
+    if (picked == null || picked.isEmpty) return null;
     String home;
     try {
       home = (await ApiSession.instance.client.filesRoots()).home;
-    } catch (e) {
-      if (mounted) NasSnack.show(context, '$e');
-      return null;
+    } catch (_) {
+      // 拿不到文件根也别挡着选目录：退回绝对路径，规则照样能生效。
+      return picked;
     }
-    final rel = filesRelativePath(abs, home);
-    if (rel == null) {
-      if (mounted) {
-        NasSnack.show(
-          context,
-          tr('accounts.policy.outsideRoot', {'home': home}),
-        );
-      }
-      return null;
-    }
-    return rel;
+    return filesRelativePath(picked, home) ?? picked;
   }
 
   /// 编辑某条路径允许的动作（查看 / 下载 / 改名移动 / 删除 / 上传）
@@ -2332,9 +2325,9 @@ Widget _actionChips(
 
 /// 绝对路径 → 相对「文件根」的规则路径（`D:/Nas/media` + `D:/Nas` → `/media`）。
 ///
-/// 目录授权里存的是**相对文件根**的路径（`PathRule.path`），而公共目录选择器
-/// 返回的是绝对路径（盘符 / 挂载点开头），必须折算一次。
-/// 不在根内 / 根为空返回 null —— 调用方负责提示，不要静默截成 `/`。
+/// 目录授权里，文件根内的规则存**相对文件根**的路径（`PathRule.path`），
+/// 而公共目录选择器返回的是绝对路径（盘符 / 挂载点开头），所以折算一次。
+/// 不在根内 / 根为空返回 null —— 调用方会退回保存绝对路径，不要静默截成 `/`。
 ///
 /// 比较时忽略大小写与斜杠方向：Windows 上 `D:\Nas` 与 `d:/nas` 是同一个目录。
 String? filesRelativePath(String absolute, String root) {

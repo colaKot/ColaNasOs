@@ -82,9 +82,6 @@
     "accounts.policy.appsHint": {},
     "accounts.policy.fullAccessHint": {},
     "accounts.policy.noApps": {},
-    "accounts.policy.outsideRoot": {
-      "home": {}
-    },
     "accounts.policy.path": {},
     "accounts.policy.pathEmpty": {},
     "accounts.policy.pathHint": {},

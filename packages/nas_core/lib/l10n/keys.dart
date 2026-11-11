@@ -71,7 +71,6 @@ class I18nKeys {
   static const accountsPolicyAppsHint = 'accounts.policy.appsHint';
   static const accountsPolicyFullAccessHint = 'accounts.policy.fullAccessHint';
   static const accountsPolicyNoApps = 'accounts.policy.noApps';
-  static const accountsPolicyOutsideRoot = 'accounts.policy.outsideRoot';
   static const accountsPolicyPath = 'accounts.policy.path';
   static const accountsPolicyPathEmpty = 'accounts.policy.pathEmpty';
   static const accountsPolicyPathHint = 'accounts.policy.pathHint';
@@ -2724,4 +2723,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2679;
+const int i18nKeyCount = 2678;
