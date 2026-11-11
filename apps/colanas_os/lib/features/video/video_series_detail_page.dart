@@ -177,13 +177,13 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
             ],
           );
         }
-        return _content(context, bundle, mode, c.maxWidth);
+        return _content(context, bundle, mode);
       },
     );
 
     if (!widget.embedded) {
-      // 桌面 / 平板走整页全屏：自带顶栏。标题优先用中文剧名，
-      // 与头部主标题保持同一个名字（`series` 列是英文发布名）。
+      // 壳没挂载 / 调用方已是整页路由时才走这里：自带顶栏。
+      // 标题优先用中文剧名，与头部主标题保持同一个名字（`series` 列是英文发布名）。
       final sample = bundle?.sample;
       return Scaffold(
         appBar: AppBar(
@@ -250,7 +250,6 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
     BuildContext context,
     SeriesBundle b,
     LayoutMode mode,
-    double maxWidth,
   ) {
     // 单季已在 build 里直接落到单集详情，这里只可能是多季的选季页。
     final seasons = b.bySeason;
@@ -259,12 +258,8 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
     final resumeHint = _resumeHint(b);
     final playing = (b.progress[resume?.id] ?? 0) > 0;
 
-    final base = switch (mode) {
-      LayoutMode.expanded => 48.0,
-      LayoutMode.medium => 32.0,
-      LayoutMode.compact => 16.0,
-    };
-    final hPad = maxWidth > 1170 ? (maxWidth - 1080) / 2 : base;
+    // 内容铺满三级页：与影片详情同口径，不再按 1080 限宽居中。
+    const double hPad = 16.0;
 
     final meta = <String>[
       if ((sample?.year ?? 0) > 0) '${sample!.year}',

@@ -562,13 +562,9 @@ class VideoDetailPageState extends State<VideoDetailPage> {
                 // 断点用**内容区宽度**而不是屏幕宽度：外壳左侧有一二级栏，
                 // 拿屏幕宽会在大窗口下误判成桌面（海报突然变超大）。
                 final mode = layoutFor(c.maxWidth);
-                // 宽屏限制最大内容宽度并居中（PRD：宽屏自动限制宽度居中）
-                final base = switch (mode) {
-                  LayoutMode.expanded => 48.0,
-                  LayoutMode.medium => 32.0,
-                  LayoutMode.compact => 16.0,
-                };
-                final hPad = c.maxWidth > 1170 ? (c.maxWidth - 1080) / 2 : base;
+                // 内容铺满三级页：不再按 1080 限宽居中，也不按档位加 48/32 的大边距。
+                // 用户 2026-11-11：「铺满三级页面，而不是只有一部分，就像手机一样」。
+                const double hPad = 16.0;
                 final top = widget.embedded
                     ? NasTokens.spaceSm
                     : MediaQuery.of(context).padding.top +
@@ -1218,9 +1214,10 @@ class VideoDetailPageState extends State<VideoDetailPage> {
 
 /// 打开影视详情的统一入口。
 ///
-/// **桌面 / 平板整页全屏**（用户 2026-11-11 要求：详情页恢复全屏）；
-/// **手机**（宽度 < 600）才在壳的内容区叠三级页 —— 那里左侧一二级栏本来就不占地方，
-/// 叠一层保留「一层层返回」的手感。壳没挂载时一律整页 push。
+/// 影视壳挂载、且调用方还在内容区时，一律叠成三级页（**所有尺寸**），
+/// 左侧一二级栏保持不动；只有壳没挂载、或调用方本身已是整页路由，
+/// 才退回整页 push。用户 2026-11-11 澄清：「全屏」指内容铺满三级页，
+/// 不是把整个窗口盖掉。
 Future<void> openVideoDetail(BuildContext context, VideoItem item) {
   final router = VideoDetailRouter.instance;
   if (router.embeddableFrom(context)) {
@@ -1237,19 +1234,17 @@ Future<void> openVideoDetail(BuildContext context, VideoItem item) {
     );
     return Future<void>.value();
   }
-  return openVideoDetailOn(Navigator.of(context), item);
+  return _pushVideoDetail(Navigator.of(context), item);
 }
 
 /// 同上，但直接收 [NavigatorState]：在 `await` 之后调用时，
 /// 先取好 navigator 再 await，就不会触发 `use_build_context_synchronously`。
 ///
-/// 拿不到 context 就无法判断调用方是不是在整页路由里，所以**只在内容区调用**；
-/// 页面自己知道自己在哪（详情页切集、列表页点卡片），不需要再猜。
+/// 这里只有 navigator、拿不到调用方所在的 route，所以按「影视壳是否挂载」
+/// 判定；调用点都在壳的内容区（列表 / 查重 / 详情页切集），不会误叠。
 Future<void> openVideoDetailOn(NavigatorState navigator, VideoItem item) {
   final router = VideoDetailRouter.instance;
-  // 宽屏要整页全屏：这里没有调用方 context，用 navigator 所在窗口的宽度判断，
-  // 口径与 `embeddableFrom` 一致（两边不一致会出现「有的入口叠、有的不叠」）。
-  if (router.attached && router.embedsAt(navigator.context)) {
+  if (router.attached) {
     router.open(
       VideoDetailEntry(
         tag: 'video:${item.id}',

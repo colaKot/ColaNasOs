@@ -62,32 +62,18 @@ class VideoDetailRouter {
 
   /// 调用方是否处在影视壳的内容区（= 可以叠三级页）。
   ///
+  /// **所有尺寸都叠层**（用户 2026-11-09：除播放器外不要全屏页）。
+  /// 2026-11-11 澄清：说的「全屏」是内容铺满三级页、不是整页 push 盖住窗口；
+  /// 一度按宽度把桌面改成整页路由，属于理解反了，已撤销。
   /// 整页 push 出来的页面（route 与外壳不同）一律返回 false，让调用方走整页详情，
   /// 否则详情会叠在被盖住的内容区里、看着像没反应。
   bool embeddableFrom(BuildContext context) {
     if (!attached) return false;
-    // 桌面 / 平板：详情页整页全屏（用户 2026-11-11 要求恢复全屏）。
-    // 之前是所有尺寸都叠在右侧内容区，大窗下详情被压成一窄条，加上左侧
-    // 一二级栏一起看就是「详情页不是详情页」。
-    // 只有手机（< 600，与 `NasTokens.breakpointTablet` 同值）继续叠层：
-    // 那里外壳本身就是整屏单列，叠一层才有「一层层返回」的意义。
-    if (!embedsAt(context)) return false;
     final route = ModalRoute.of(context);
     final shell = shellRoute;
     if (route == null || shell == null) return true;
     return identical(route, shell);
   }
-
-  /// 这个宽度下三级页该不该叠进内容区（只有手机叠）。
-  ///
-  /// 单独抽出来是因为 [openVideoDetailOn] 只有 `NavigatorState`、没有调用方
-  /// `BuildContext`，但必须用**同一个**判定，否则宽屏下两条入口行为不一致。
-  bool embedsAt(BuildContext context) =>
-      MediaQuery.sizeOf(context).width < _embedMaxWidth;
-
-  /// 手机宽度上限；与 `nas_ui` 的 `NasTokens.breakpointTablet` 同值。
-  /// 这里不 import nas_ui：本文件刻意只依赖 widgets，不把 UI 库拖进路由逻辑。
-  static const double _embedMaxWidth = 600;
 
   void open(VideoDetailEntry entry) {
     final current = top;
