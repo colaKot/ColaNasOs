@@ -71,6 +71,45 @@ global.fetch = async (url, init) => {
     }
     lastMethod = String(lastAdd?.method || '');
     lastArgs = (lastAdd && lastAdd.arguments) || {};
+    // torrent-get 必须按真实结构回（torrentList 读的是 arguments.torrents）：
+    // 以前不管什么方法都回 torrent-added，导致「删除前先看种子还在不在」
+    // 永远判成幽灵记录，于是跳过 torrent-remove 直接标 removed。
+    if (lastMethod === 'torrent-get') {
+      return new globalThis.Response(
+        JSON.stringify({
+          result: 'success',
+          arguments: {
+            torrents: [
+              {
+                id: 7,
+                hashString: 'abc123',
+                name: 'Movie 2024 1080p',
+                status: 4,
+                percentDone: 0.5,
+                rateDownload: 0,
+                rateUpload: 0,
+                totalSize: 1610612736,
+                downloadedEver: 805306368,
+                uploadRatio: 0,
+                eta: -1,
+                addedDate: 0,
+                error: 0,
+                errorString: '',
+                downloadDir: '',
+                peersConnected: 0,
+                peersSendingToUs: 0,
+                peersGettingFromUs: 0,
+                webseedsSendingToUs: 0,
+                seeders: 0,
+                leechers: 0,
+                maxConnectedPeers: 50,
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }
     addCount += 1;
     return new globalThis.Response(
       JSON.stringify({

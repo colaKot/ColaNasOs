@@ -226,6 +226,82 @@ export async function torrentGet(
   }
 }
 
+/** 单个种子的 peer 连接情况（「下载器」页面右上角那行数字用） */
+export interface TorrentPeers {
+  hashString: string;
+  /** 已连上的 peer 数（上传 + 下载都算） */
+  connected: number;
+  /** 正在给我上传的 peer 数（下载来源） */
+  sendingToUs: number;
+  /** 正在从我这里下载的 peer 数（上传对象） */
+  gettingFromUs: number;
+  /** 网页种子（http 直链）正在给我传的个数 */
+  webseeds: number;
+  /** tracker 报的种子 / 下载者总数 —— 「可以连接数」用 seeders + leechers */
+  seeders: number;
+  leechers: number;
+  /** 该种子允许的最大连接数（进度条分母的另一半） */
+  maxPeers: number;
+}
+
+/**
+ * 批量读 peer 连接情况。
+ *
+ * 为什么不塞进 `torrentList`：那条链路的返回体已经在契约里，加字段要重新生成
+ * openapi；这里单独走一条隐藏路由，只为「连接数」取一次，payload 很小。
+ */
+export async function torrentPeers(
+  cfg: TransmissionConfig,
+  opts: { timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+): Promise<{ ok: boolean; message: string; items: TorrentPeers[] }> {
+  if (!cfg.url) return { ok: false, message: 'transmission url not configured', items: [] };
+  const payload = {
+    method: 'torrent-get',
+    arguments: {
+      fields: [
+        'hashString',
+        'peersConnected',
+        'peersSendingToUs',
+        'peersGettingFromUs',
+        'webseedsSendingToUs',
+        'seeders',
+        'leechers',
+        'maxConnectedPeers',
+      ],
+    },
+  };
+  try {
+    let res = await rpc(cfg, payload, opts);
+    if (res.status === 409 && res.sessionId) {
+      res = await rpc(cfg, payload, { ...opts, sessionId: res.sessionId });
+    }
+    if (res.status !== 200 || res.json?.result !== 'success') {
+      return { ok: false, message: `transmission http ${res.status}`, items: [] };
+    }
+    const list = (res.json?.arguments?.torrents ?? []) as Array<Record<string, unknown>>;
+    return {
+      ok: true,
+      message: 'ok',
+      items: list.map((t) => ({
+        hashString: String(t.hashString ?? ''),
+        connected: Number(t.peersConnected ?? 0),
+        sendingToUs: Number(t.peersSendingToUs ?? 0),
+        gettingFromUs: Number(t.peersGettingFromUs ?? 0),
+        webseeds: Number(t.webseedsSendingToUs ?? 0),
+        seeders: Number(t.seeders ?? 0),
+        leechers: Number(t.leechers ?? 0),
+        maxPeers: Number(t.maxConnectedPeers ?? 0),
+      })),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      message: String((err as Error)?.message || err).slice(0, 160),
+      items: [],
+    };
+  }
+}
+
 export interface TorrentInfo {
   /** Transmission 内部数字 id：批量 start/stop/remove 必须用它，hash 字符串不生效 */
   id: number;

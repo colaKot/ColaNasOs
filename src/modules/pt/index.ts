@@ -23,6 +23,7 @@ import {
   torrentAction,
   torrentGet,
   torrentList,
+  torrentPeers,
   transmissionStatus,
   type TransmissionConfig,
   type TransmissionResult,
@@ -1259,14 +1260,18 @@ export const pt: ServerModule = {
           b.maxSizeBytes === undefined ? dl.maxSizeBytes : Number(b.maxSizeBytes) || 0;
         const excludedKeywords = b.excludedKeywords ?? dl.excludedKeywords;
         if (b.id) {
+          // 不能写 `case when ${b.libraryId === undefined}` —— 布尔值绑不进 SQLite，
+          // 更新订阅时（前端没传 libraryId）会直接 500。改成拼一段条件 SQL。
+          const setLibrary = b.libraryId === undefined
+            ? sql`library_id = library_id`
+            : sql`library_id = ${b.libraryId ? String(b.libraryId) : null}`;
           await sql`
             update pt_subscriptions
                set media_title = ${finalTitle}, media_year = ${b.mediaYear ?? null},
                    media_id = coalesce(${mediaId}, media_id),
                    media_type = ${mediaType},
                    rule_id = coalesce(${b.ruleId ?? null}, rule_id),
-                   library_id = case when ${b.libraryId === undefined} then library_id
-                                     else ${b.libraryId ? String(b.libraryId) : null} end,
+                   ${setLibrary},
                    poster_path = coalesce(${b.posterPath ?? null}, poster_path),
                    season = ${Number(b.season) || 0},
                    quality = ${quality}, hdr = ${hdr},
@@ -1779,6 +1784,36 @@ export const pt: ServerModule = {
               posterPath: extra?.posterPath ?? null,
             };
           }),
+        };
+      },
+    );
+
+    /**
+     * peer 连接数（隐藏路由，不进契约）：`/pt/torrents` 的返回体已经定稿，
+     * 往上加字段要重新生成 openapi；这里单独取一次，payload 只有几个数字。
+     *
+     * 「可以连接数」用 tracker 报的 seeders + leechers（整个 swarm 有多大），
+     * 拿不到就退回 maxConnectedPeers（本机允许的上限）。
+     */
+    app.get(
+      '/api/v1/pt/torrents/peers',
+      secured('pt:read', { schema: { hide: true } }),
+      async () => {
+        const cfg = await resolveTransmission();
+        if (!cfg) return { ok: false, items: [] as any[] };
+        const res = await torrentPeers(cfg);
+        return {
+          ok: res.ok,
+          items: res.items.map((p) => ({
+            hash: p.hashString,
+            connected: p.connected,
+            sendingToUs: p.sendingToUs,
+            gettingFromUs: p.gettingFromUs,
+            webseeds: p.webseeds,
+            seeders: p.seeders,
+            leechers: p.leechers,
+            maxPeers: p.maxPeers,
+          })),
         };
       },
     );

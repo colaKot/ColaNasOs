@@ -162,9 +162,28 @@
     "app.terminal": {},
     "app.transfer": {},
     "app.transmission": {},
+    "photo.memory.confirmAll": {
+      "count": {}
+    },
+    "photo.memory.confirmAllBody": {
+      "count": {}
+    },
+    "photo.memory.confirmAllDone": {
+      "count": {}
+    },
+    "transmission.peers": {
+      "connected": {},
+      "known": {}
+    },
+    "transmission.peersOnly": {
+      "connected": {}
+    },
     "transmission.ratio": {},
     "transmission.fullUi": {},
     "transmission.openFailed": {},
+    "transmission.sources": {
+      "count": {}
+    },
     "transmission.uploading": {},
     "transmission.autoUploadHint": {},
     "transmission.selectAll": {},
@@ -182,6 +201,9 @@
     "transmission.actionTimeout": {},
     "transmission.actionFailed": {},
     "transmission.completed": {},
+    "transmission.uploadingTo": {
+      "count": {}
+    },
     "ui.book.020": {},
     "ui.book.hd9c32a": {},
     "transmission.seeding": {},

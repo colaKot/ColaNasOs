@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nas_core/nas_core.dart';
@@ -38,6 +40,8 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
   int _page = 0;
   bool _hasMore = true;
   bool _loadingMore = false;
+  /// 「全部确认」跑批期间的忙碌态（按钮转圈 + 禁点）
+  bool _busy = false;
 
   @override
   void initState() {
@@ -162,6 +166,74 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
     }
   }
 
+  /// 全部确认（待确认页）。
+  ///
+  /// 候选是服务端「按天现算」的，一次只回 100 条，所以先分页把日期拉全，
+  /// 再走一次批量接口落库 —— 几百条候选逐条 POST 既慢又会反复重算候选集。
+  Future<void> _confirmAll() async {
+    final total = _data?.totalCandidates ?? 0;
+    if (total <= 0 || _busy) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('photo.memory.confirmAll')),
+        content: Text(tr('photo.memory.confirmAllBody', {'count': '$total'})),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('common.confirm')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      const pageLimit = 100;
+      final dates = <String>[];
+      for (var guard = 0; guard < 20; guard += 1) {
+        final data = await ApiSession.instance.client.photoMemories(
+          days: 3650,
+          minPhotos: 12,
+          limit: pageLimit,
+          offset: dates.length,
+        );
+        final page = data.candidates;
+        if (page.isEmpty) break;
+        dates.addAll(page.map((e) => e.date));
+        if (dates.length >= (data.totalCandidates ?? 0)) break;
+      }
+      if (dates.isEmpty) return;
+      final client = ApiSession.instance.client;
+      final token = ApiSession.instance.token;
+      await client.transport.send(
+        'POST',
+        Uri.parse('${client.baseUrl}/api/v1/photo/memories/save-many'),
+        headers: <String, String>{
+          'content-type': 'application/json',
+          if (token != null && token.isNotEmpty) 'authorization': 'Bearer $token',
+        },
+        body: utf8.encode(jsonEncode({'dates': dates})),
+      );
+      if (!mounted) return;
+      NasSnack.show(
+        context,
+        tr('photo.memory.confirmAllDone', {'count': '${dates.length}'}),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      NasSnack.show(context, '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   void _openChapter(int year, {String? date}) {
     setState(() {
       _chapterYear = year;
@@ -265,6 +337,25 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
             ],
           ],
         ),
+        if (_tab == 1 && (data?.totalCandidates ?? 0) > 0)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _busy ? null : _confirmAll,
+              icon: _busy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.done_all, size: 18),
+              label: Text(
+                tr('photo.memory.confirmAll', {
+                  'count': '${data?.totalCandidates ?? 0}',
+                }),
+              ),
+            ),
+          ),
         const SizedBox(height: 14),
         if (list.isEmpty)
           Padding(
@@ -288,9 +379,11 @@ class _PhotoMemoryPageState extends State<PhotoMemoryPage> {
                     date: item.date,
                   ),
                   onSave: _tab == 1 ? () => _save(item) : null,
-                  onIgnore: _tab == 1 ? () => _ignore(item) : null,
+                  // 已确认的记忆不提供「删除」：改成「忽略」（进已忽略列表，可恢复）。
+                  // 真要彻底删掉，去「已忽略」页里删 —— 那里删的是标记，不会碰照片。
+                  onIgnore: (_tab == 0 || _tab == 1) ? () => _ignore(item) : null,
                   onRestore: _tab == 2 ? () => _restore(item) : null,
-                  onRemove: _tab == 0 ? () => _remove(item) : null,
+                  onRemove: _tab == 2 ? () => _remove(item) : null,
                 ),
             ],
           ),

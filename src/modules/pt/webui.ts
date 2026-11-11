@@ -88,13 +88,33 @@ export function registerTransmissionWebUi(
   //    application/json / text/plain，会直接 415 —— 页面能打开但**一条下载信息都没有**。
   //    在 onRequest 阶段（早于 content type parser）把请求头规范掉最可靠：
   //    非标准 media type 注册成 parser 在部分 Fastify 版本里仍会被判非法。
+  //
+  // 🔴 2026-11-11 补充：内置的**中文前端**（transmission-web-control）更狠 ——
+  //    它 `$.ajax` 压根没设 contentType，jQuery 默认发
+  //    `application/x-www-form-urlencoded; charset=UTF-8`，body 却是 JSON 文本，
+  //    于是每一次 RPC 都是 415，页面打开后一直转圈「连不上服务器」。
+  //    RPC 的 body 本来就是 JSON（`JSON.stringify(data)`），统一改成 application/json。
   app.addHook('onRequest', async (req) => {
     if (!req.url.startsWith('/transmission/')) return;
-    const ct = req.headers['content-type'];
-    if (typeof ct === 'string' && /^json(;|$)/i.test(ct.trim())) {
+    // 加种子走 multipart，下面有专门的 buffer 解析器，别动它的类型
+    if (req.url.startsWith('/transmission/upload')) return;
+    // 第一次握手只探 session-id，没有 body：保持无 content-type，否则 Fastify
+    // 会拿「空 body + application/json」报错。
+    const len = Number(req.headers['content-length'] || 0);
+    const hasBody = len > 0 || req.headers['transfer-encoding'] !== undefined;
+    if (!hasBody) return;
+    const ct = String(req.headers['content-type'] || '').trim();
+    if (ct === '' || /^json(;|$)/i.test(ct) || /x-www-form-urlencoded/i.test(ct)) {
       req.headers['content-type'] = 'application/json';
     }
   });
+
+  // 加种子的 multipart 请求只做透传：不解析，原样交给 RPC 上游。
+  app.addContentTypeParser(
+    'multipart/form-data',
+    { parseAs: 'buffer', bodyLimit: 64 * 1024 * 1024 },
+    (_req, body, done) => done(null, body),
+  );
 
   const authorized = async (req: FastifyRequest): Promise<boolean> => {
     const cookie = readCookie(req.headers.cookie, COOKIE);
@@ -182,13 +202,25 @@ export function registerTransmissionWebUi(
         'Basic ' + Buffer.from(`${cfg.username}:${cfg.password ?? ''}`).toString('base64');
     }
 
-    let body: string | undefined;
+    let body: string | Uint8Array | undefined;
     if (req.method !== 'GET' && req.method !== 'HEAD') {
-      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {});
+      const raw = req.body as unknown;
+      // multipart（加种子）拿到的是 Buffer，不能 JSON.stringify 掉，原样透传
+      body = Buffer.isBuffer(raw)
+        ? new Uint8Array(raw)
+        : typeof raw === 'string'
+          ? raw
+          : JSON.stringify(raw ?? {});
     }
 
     try {
-      const res = await fetch(target, { method: req.method, headers, body });
+      // Buffer / Uint8Array 在 undici 里是合法 body，只是 TS 的 BodyInit 联合类型
+      // 在 Node 的 DOM lib 下认不出来，这里显式收窄。
+      const res = await fetch(target, {
+        method: req.method,
+        headers,
+        body: body as unknown as RequestInit['body'],
+      });
       const text = await res.text();
       const sid = res.headers.get('x-transmission-session-id');
       if (sid) reply.header('x-transmission-session-id', sid);

@@ -1169,6 +1169,38 @@ export async function registerPhotoMemories(app: any, k: KernelApi): Promise<voi
       return { ok: true, count: 1 };
     },
   );
+
+  /**
+   * 批量确认（隐藏路由，「全部确认」按钮用）。
+   *
+   * 为什么不直接循环调 save：候选记忆按天算，几百条就是一个几百次的往返，
+   * 而且每次都要重算一遍候选集。这里一次事务写完整批。
+   * 只认 `YYYY-MM-DD`，避免前端传脏值写进 marks 表。
+   */
+  app.post(
+    '/api/v1/photo/memories/save-many',
+    secured('photo:write', { schema: { hide: true } }),
+    async (req: FastifyRequest) => {
+      const body = (req.body || {}) as { dates?: unknown };
+      const dates = (Array.isArray(body.dates) ? body.dates : [])
+        .map((d) => String(d ?? '').trim())
+        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+      if (dates.length === 0) return { ok: true, count: 0 };
+      const uid = String(req.user?.sub || '');
+      const ts = Math.floor(Date.now() / 1000);
+      await k.db.transaction().execute(async (trx: any) => {
+        for (const day of dates) {
+          // 已经有备注的不覆盖备注，只把状态推到 saved
+          await sql`
+            insert into photo_memory_marks (id, owner_id, day, status, note, created_at, updated_at)
+            values (${crypto.randomUUID()}, ${uid}, ${day}, 'saved', '', ${ts}, ${ts})
+            on conflict(owner_id, day) do update set status = 'saved', updated_at = ${ts}
+          `.execute(trx);
+        }
+      });
+      return { ok: true, count: dates.length };
+    },
+  );
 }
 
 /** 某一天的记忆内容（与人生章节同一套打分与标签口径） */

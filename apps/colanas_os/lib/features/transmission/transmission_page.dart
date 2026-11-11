@@ -35,6 +35,11 @@ class _TransmissionPageState extends State<TransmissionPage> {
   bool _ready = true;
   List<Map<String, dynamic>> _items = const [];
 
+  /// hash → peer 连接情况（连接数 / 可连接数 / 上传给几个）。
+  /// 来自隐藏路由 `/pt/torrents/peers`：`/pt/torrents` 的返回体已在契约里，
+  /// 往上加字段要重新生成 openapi，所以单独取一次。
+  Map<String, Map<String, dynamic>> _peers = const {};
+
   /// 多选：存 info hash；轮询刷新后按新列表清掉已消失的任务
   final Set<String> _selected = <String>{};
 
@@ -66,7 +71,13 @@ class _TransmissionPageState extends State<TransmissionPage> {
       });
     }
     try {
-      final res = await ApiSession.instance.client.ptTorrents();
+      // 两件事并发：任务列表 + peer 连接数（后者失败不影响列表）
+      final results = await Future.wait<Object?>([
+        ApiSession.instance.client.ptTorrents(),
+        _fetchPeers(),
+      ]);
+      final res = results[0] as Map<String, dynamic>;
+      final peers = results[1] as Map<String, Map<String, dynamic>>?;
       if (!mounted) return;
       final list = (res['items'] as List? ?? const [])
           .whereType<Map>()
@@ -75,6 +86,7 @@ class _TransmissionPageState extends State<TransmissionPage> {
       final hashes = list.map((e) => (e['hash'] ?? '').toString()).toSet();
       setState(() {
         _items = list;
+        _peers = peers ?? const {};
         _selected.retainWhere(hashes.contains);
         _hint = (res['message'] ?? '').toString();
         _webPath = (res['webPath'] ?? '').toString();
@@ -119,6 +131,66 @@ class _TransmissionPageState extends State<TransmissionPage> {
     } catch (_) {
       /* 同步失败不影响列表展示，下次轮询还会再试 */
     }
+  }
+
+  /// peer 连接数：隐藏路由 `/pt/torrents/peers`（不进契约）。
+  /// 失败返回 null —— 少了这几个数字不影响任务列表，不能因此整页报错。
+  Future<Map<String, Map<String, dynamic>>?> _fetchPeers() async {
+    try {
+      final client = ApiSession.instance.client;
+      final token = ApiSession.instance.token;
+      final res = await client.transport.send(
+        'GET',
+        Uri.parse('${client.baseUrl}/api/v1/pt/torrents/peers'),
+        headers: <String, String>{
+          if (token != null && token.isNotEmpty) 'authorization': 'Bearer $token',
+        },
+      );
+      final data = res.json;
+      final out = <String, Map<String, dynamic>>{};
+      if (data is Map && data['items'] is List) {
+        for (final e in data['items'] as List) {
+          if (e is! Map) continue;
+          final hash = '${e['hash'] ?? ''}';
+          if (hash.isEmpty) continue;
+          out[hash] = Map<String, dynamic>.from(e);
+        }
+      }
+      return out;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 「连接 12/48」；tracker 没报 swarm 大小时不编分母，只写「连接 0」。
+  String _peerText(Map<String, dynamic>? p) {
+    if (p == null) return '';
+    final connected = (p['connected'] as num?)?.toInt() ?? 0;
+    final known = _knownOf(p);
+    return known > 0
+        ? tr('transmission.peers', {'connected': '$connected', 'known': '$known'})
+        : tr('transmission.peersOnly', {'connected': '$connected'});
+  }
+
+  /// swarm 规模：tracker 报的种子 + 下载者。为 0 表示不知道有多大。
+  int _knownOf(Map<String, dynamic> p) =>
+      ((p['seeders'] as num?)?.toInt() ?? 0) +
+      ((p['leechers'] as num?)?.toInt() ?? 0);
+
+  /// 一组种子的 peer 汇总（分组标题右边那行）。
+  String _peersSummary(List<Map<String, dynamic>> rows) {
+    var connected = 0;
+    var known = 0;
+    for (final t in rows) {
+      final p = _peers[(t['hash'] ?? '').toString()];
+      if (p == null) continue;
+      connected += (p['connected'] as num?)?.toInt() ?? 0;
+      known += _knownOf(p);
+    }
+    if (!rows.any((t) => _peers.containsKey('${t['hash']}'))) return '';
+    return known > 0
+        ? tr('transmission.peers', {'connected': '$connected', 'known': '$known'})
+        : tr('transmission.peersOnly', {'connected': '$connected'});
   }
 
   static const _downloading = <int>{1, 2, 3, 4};
@@ -186,7 +258,12 @@ class _TransmissionPageState extends State<TransmissionPage> {
                 ),
               ],
             ),
-          if (down.isNotEmpty) _section(tr('transmission.downloading'), down),
+          if (down.isNotEmpty)
+            _section(
+              tr('transmission.downloading'),
+              down,
+              trailing: _peersSummary(down),
+            ),
           if (paused.isNotEmpty) _section(tr('transmission.paused'), paused),
           // 下载完成后 Transmission 自动转为做种（上传），全部默认开启，无需手动开关。
           // 即使暂时没有上传任务也把栏目摆出来，用户才知道这个状态在哪看。
@@ -194,6 +271,7 @@ class _TransmissionPageState extends State<TransmissionPage> {
             tr('transmission.uploading'),
             seeding,
             hint: tr('transmission.autoUploadHint'),
+            trailing: _peersSummary(seeding),
           ),
         ],
         ),
@@ -433,6 +511,7 @@ class _TransmissionPageState extends State<TransmissionPage> {
     String title,
     List<Map<String, dynamic>> rows, {
     String? hint,
+    String? trailing,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -461,6 +540,16 @@ class _TransmissionPageState extends State<TransmissionPage> {
                   color: context.nasTextSecondary,
                 ),
               ),
+              if (trailing != null && trailing.isNotEmpty) ...[
+                const SizedBox(width: 10),
+                Text(
+                  trailing,
+                  style: TextStyle(
+                    fontSize: NasTokens.fontCaption,
+                    color: context.nasTextSecondary,
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -494,24 +583,40 @@ class _TransmissionPageState extends State<TransmissionPage> {
     final rateUp = (t['rateUpload'] as num?)?.toInt() ?? 0;
     final ratio = (t['uploadRatio'] as num?)?.toDouble() ?? 0;
     final err = (t['error'] ?? '').toString();
+    final peer = _peers[(t['hash'] ?? '').toString()];
+    // 「连接 12/48」和「来源 / 上传给」来自 peer 统计；拿不到就整段不显示，
+    // 不要显示「连接 0」骗人（那是真连上了但没数据，不是没连上）。
+    final peerText = _peerText(peer);
+    final srcCount = (peer?['sendingToUs'] as num?)?.toInt() ?? 0;
+    final dstCount = (peer?['gettingFromUs'] as num?)?.toInt() ?? 0;
 
     String sub;
     if (err.isNotEmpty) {
       sub = _errorText(err);
     } else if (_downloading.contains(status)) {
-      sub = '${(percent * 100).toStringAsFixed(1)}% · ↓ ${_speed(rateDown)}'
-          '${size > 0 ? ' · ${_size(size)}' : ''}';
+      sub = [
+        '${(percent * 100).toStringAsFixed(1)}%',
+        '↓ ${_speed(rateDown)}',
+        if (peerText.isNotEmpty) peerText,
+        if (srcCount > 0) tr('transmission.sources', {'count': '$srcCount'}),
+        if (size > 0) _size(size),
+      ].join(' · ');
     } else if (_paused.contains(status)) {
-      sub = '${tr('transmission.paused')} · ${(percent * 100).toStringAsFixed(1)}%'
-          '${size > 0 ? ' · ${_size(size)}' : ''}';
+      sub = [
+        tr('transmission.paused'),
+        '${(percent * 100).toStringAsFixed(1)}%',
+        if (size > 0) _size(size),
+      ].join(' · ');
     } else {
       // 下载完成 = 已落盘（percent 满）并转为做种；直接写「下载完成」，
       // 「做种」是 transmission 的后续动作，不放进标题。
-      sub = percent >= 1
-          ? '${tr('transmission.completed')} · ${tr('transmission.ratio')} '
-              '${ratio.toStringAsFixed(2)} · ↑ ${_speed(rateUp)}'
-          : '${tr('transmission.seeding')} · ${tr('transmission.ratio')} '
-              '${ratio.toStringAsFixed(2)} · ↑ ${_speed(rateUp)}';
+      sub = [
+        percent >= 1 ? tr('transmission.completed') : tr('transmission.seeding'),
+        '${tr('transmission.ratio')} ${ratio.toStringAsFixed(2)}',
+        '↑ ${_speed(rateUp)}',
+        if (peerText.isNotEmpty) peerText,
+        if (dstCount > 0) tr('transmission.uploadingTo', {'count': '$dstCount'}),
+      ].join(' · ');
     }
 
     final hash = (t['hash'] ?? '').toString();
