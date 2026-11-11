@@ -85,6 +85,139 @@ export async function searchTmdb(
   return toCandidates(payload, mediaType);
 }
 
+// ------------------------------------------------------------ 手动搜索的「编号」写法
+
+/**
+ * 手动搜索框里能直接定位到一条的写法。
+ *
+ * 用户经常手里已经有 TMDB / IMDb 的编号或链接，靠片名搜同名片（纪录片、翻拍）
+ * 很容易挑错，所以这些写法必须直连：
+ * - IMDb：`tt0137523`、`https://www.imdb.com/title/tt0137523/`
+ * - TMDB 链接：`https://www.themoviedb.org/movie/550`、`/tv/1399`
+ * - 前缀：`tmdb:550`、`movie:550`、`tv:1399`
+ * - 纯数字：当 TMDB id，类型先按调用方的来，404 再试另一种
+ */
+export type TmdbQueryRef =
+  | { kind: 'text'; q: string }
+  | { kind: 'imdb'; imdbId: string }
+  | { kind: 'id'; tmdbId: number; mediaType?: 'movie' | 'tv' };
+
+export function parseTmdbQuery(raw: unknown): TmdbQueryRef {
+  const q = String(raw ?? '').trim();
+  if (!q) return { kind: 'text', q };
+
+  // IMDb 编号优先：任何带 tt 编号的链接都算
+  const imdb = /\btt\d{6,10}\b/i.exec(q);
+  if (imdb) return { kind: 'imdb', imdbId: imdb[0].toLowerCase() };
+
+  // TMDB 链接：https://www.themoviedb.org/movie/550-the-fight-club
+  const link = /\b(movie|tv)\/(\d{1,9})\b/i.exec(q);
+  if (link) {
+    return {
+      kind: 'id',
+      tmdbId: Number(link[2]),
+      mediaType: link[1].toLowerCase() === 'tv' ? 'tv' : 'movie',
+    };
+  }
+
+  // 前缀写法：tmdb:550 / movie:550 / tv:1399（全角冒号也认）
+  const prefix = /^(tmdb|movie|tv)\s*[:：]\s*(\d{1,9})$/i.exec(q);
+  if (prefix) {
+    const tag = prefix[1].toLowerCase();
+    return {
+      kind: 'id',
+      tmdbId: Number(prefix[2]),
+      mediaType: tag === 'tv' ? 'tv' : tag === 'movie' ? 'movie' : undefined,
+    };
+  }
+
+  // 纯数字：当 TMDB id
+  if (/^\d{1,9}$/.test(q)) return { kind: 'id', tmdbId: Number(q) };
+
+  return { kind: 'text', q };
+}
+
+/** 详情 / find 结果 → 候选（手动匹配列表里的一行） */
+function candidateOf(
+  data: Record<string, unknown>,
+  mediaType: 'movie' | 'tv',
+): TmdbCandidate | null {
+  const id = Number(data?.id) || 0;
+  if (!id) return null;
+  return {
+    tmdbId: id,
+    mediaType,
+    title: String(data.title ?? data.name ?? '').trim(),
+    originalTitle: String(data.original_title ?? data.original_name ?? '').trim(),
+    year: yearOf(data.release_date ?? data.first_air_date),
+    score: num(data.vote_average) ?? null,
+    overview: String(data.overview ?? '').trim(),
+    posterPath: (data.poster_path as string) || null,
+  };
+}
+
+/** 按 id 取详情当候选；404 返回 null，好让调用方换另一种类型再试一次。 */
+async function candidateById(
+  cfg: TmdbConfig,
+  id: number,
+  mediaType: 'movie' | 'tv',
+): Promise<TmdbCandidate | null> {
+  try {
+    const data = (await tmdbGet(cfg, `/${mediaType}/${id}`)) as Record<string, unknown>;
+    return candidateOf(data, mediaType);
+  } catch (err) {
+    // 只有 404 才是「这个 id 不属于这种类型」，网络错误必须往上抛
+    if (/HTTP 404/.test(String((err as Error)?.message ?? err))) return null;
+    throw err;
+  }
+}
+
+/** IMDb → TMDB `/find`；期望的类型排前面，另一种也带上（同一部片可能两种都有） */
+async function findByImdb(
+  cfg: TmdbConfig,
+  imdbId: string,
+  prefer: 'movie' | 'tv',
+): Promise<TmdbCandidate[]> {
+  const payload = (await tmdbGet(cfg, `/find/${imdbId}`, {
+    external_source: 'imdb_id',
+  })) as Record<string, unknown>;
+  const pick = (list: unknown, type: 'movie' | 'tv') => {
+    const rows = Array.isArray(list) ? (list as Record<string, unknown>[]) : [];
+    return rows
+      .slice(0, 3)
+      .map((r) => candidateOf(r, type))
+      .filter((c): c is TmdbCandidate => c != null);
+  };
+  const movies = pick(payload.movie_results, 'movie');
+  const tvs = pick(payload.tv_results, 'tv');
+  return prefer === 'tv' ? [...tvs, ...movies] : [...movies, ...tvs];
+}
+
+/**
+ * 手动搜索的统一入口：编号 / 链接直连，其余走原来的关键字搜索。
+ */
+export async function resolveTmdbQuery(
+  cfg: TmdbConfig,
+  raw: unknown,
+  mediaType: 'movie' | 'tv',
+  year?: number,
+): Promise<TmdbCandidate[]> {
+  const parsed = parseTmdbQuery(raw);
+  if (parsed.kind === 'text') return searchTmdb(cfg, parsed.q, mediaType, year);
+  if (parsed.kind === 'imdb') return findByImdb(cfg, parsed.imdbId, mediaType);
+  const types: ('movie' | 'tv')[] = parsed.mediaType
+    ? [parsed.mediaType]
+    : [mediaType, mediaType === 'tv' ? 'movie' : 'tv'];
+  for (const t of types) {
+    const hit = await candidateById(cfg, parsed.tmdbId, t);
+    if (hit) return [hit];
+  }
+  // 纯数字也可能是片名 / 年份（"1984"）：id 查不到就退回关键字搜索。
+  // 明确写了 movie:/tv: 前缀的不退，那是用户点名要这个 id。
+  if (!parsed.mediaType) return searchTmdb(cfg, String(raw).trim(), mediaType, year);
+  return [];
+}
+
 /**
  * 详情 → NfoMeta。`mediaType` 与 `tmdbId` 必须匹配（TMDB 的 movie / tv id 空间独立）。
  */

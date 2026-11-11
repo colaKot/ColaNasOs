@@ -2626,7 +2626,7 @@
     "video.scrape.notConfigured": "TMDB API key missing, online scrape unavailable",
     "video.scrape.notfound": "No confident match, try manual matching",
     "video.scrape.saved": "Scrape settings saved",
-    "video.scrape.searchHint": "Title (year optional)",
+    "video.scrape.searchHint": "Title / TMDB ID / IMDb ID (tt…) / link",
     "video.scrape.searchTitle": "Manual match",
     "video.scrape.sidecarKept": "your hand-edited nfo was kept",
     "video.scrape.toSettings": "Settings",

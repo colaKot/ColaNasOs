@@ -2525,7 +2525,7 @@
     "video.scrape.notConfigured": "未配置 TMDB API Key，联网刮削不可用",
     "video.scrape.notfound": "没找到匹配的条目，请手动匹配",
     "video.scrape.saved": "刮削设置已保存",
-    "video.scrape.searchHint": "输入片名（可带年份）",
+    "video.scrape.searchHint": "片名 / TMDB ID / IMDb ID（tt…）/ 链接",
     "video.scrape.searchTitle": "手动匹配",
     "video.scrape.sidecarKept": "已保留你手改过的 nfo",
     "video.scrape.toSettings": "去设置",
