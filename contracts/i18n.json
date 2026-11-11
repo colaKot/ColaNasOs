@@ -168,6 +168,8 @@
     "app.terminal": {},
     "app.transfer": {},
     "app.transmission": {},
+    "common.collapse": {},
+    "common.expand": {},
     "photo.memory.confirmAll": {
       "count": {}
     },
@@ -2965,12 +2967,19 @@
       "count": {}
     },
     "video.delete.permanentHint": {},
+    "video.detail.about": {},
     "video.detail.actor": {},
+    "video.detail.audioSub": {},
+    "video.detail.baseInfo": {},
+    "video.detail.bitrate": {},
+    "video.detail.codec": {},
     "video.detail.director": {},
     "video.detail.episodes": {},
     "video.detail.file": {},
+    "video.detail.fileAndTech": {},
     "video.detail.fileLocation": {},
     "video.detail.fileSize": {},
+    "video.detail.format": {},
     "video.detail.genre": {},
     "video.detail.minutes": {
       "count": {}
@@ -2980,7 +2989,11 @@
     "video.detail.notScrapedHint": {},
     "video.detail.overview": {},
     "video.detail.people": {},
+    "video.detail.playEpisode": {
+      "n": {}
+    },
     "video.detail.region": {},
+    "video.detail.resolution": {},
     "video.detail.resumeEpisodeMinute": {
       "episode": {},
       "minute": {}
@@ -2993,6 +3006,7 @@
     "video.detail.score": {},
     "video.detail.source": {},
     "video.detail.studio": {},
+    "video.detail.subtitleType": {},
     "video.detail.trackAudio": {},
     "video.detail.trackSubtitle": {},
     "video.detail.trackVideo": {},
@@ -3216,6 +3230,8 @@
       "done": {},
       "total": {}
     },
+    "video.series.mainCast": {},
+    "video.series.overview": {},
     "video.shortPlay.hint": {},
     "video.list.count": {
       "count": {},

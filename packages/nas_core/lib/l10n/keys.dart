@@ -145,6 +145,9 @@ class I18nKeys {
   static const appTerminal = 'app.terminal';
   static const appTransfer = 'app.transfer';
   static const appTransmission = 'app.transmission';
+  // ---- common ----
+  static const commonCollapse = 'common.collapse';
+  static const commonExpand = 'common.expand';
   // ---- photo ----
   static const photoMemoryConfirmAll = 'photo.memory.confirmAll';
   static const photoMemoryConfirmAllBody = 'photo.memory.confirmAllBody';
@@ -2298,12 +2301,19 @@ class I18nKeys {
   static const videoDeleteDone = 'video.delete.done';
   static const videoDeleteDoneTrash = 'video.delete.doneTrash';
   static const videoDeletePermanentHint = 'video.delete.permanentHint';
+  static const videoDetailAbout = 'video.detail.about';
   static const videoDetailActor = 'video.detail.actor';
+  static const videoDetailAudioSub = 'video.detail.audioSub';
+  static const videoDetailBaseInfo = 'video.detail.baseInfo';
+  static const videoDetailBitrate = 'video.detail.bitrate';
+  static const videoDetailCodec = 'video.detail.codec';
   static const videoDetailDirector = 'video.detail.director';
   static const videoDetailEpisodes = 'video.detail.episodes';
   static const videoDetailFile = 'video.detail.file';
+  static const videoDetailFileAndTech = 'video.detail.fileAndTech';
   static const videoDetailFileLocation = 'video.detail.fileLocation';
   static const videoDetailFileSize = 'video.detail.fileSize';
+  static const videoDetailFormat = 'video.detail.format';
   static const videoDetailGenre = 'video.detail.genre';
   static const videoDetailMinutes = 'video.detail.minutes';
   static const videoDetailMovie = 'video.detail.movie';
@@ -2311,7 +2321,9 @@ class I18nKeys {
   static const videoDetailNotScrapedHint = 'video.detail.notScrapedHint';
   static const videoDetailOverview = 'video.detail.overview';
   static const videoDetailPeople = 'video.detail.people';
+  static const videoDetailPlayEpisode = 'video.detail.playEpisode';
   static const videoDetailRegion = 'video.detail.region';
+  static const videoDetailResolution = 'video.detail.resolution';
   static const videoDetailResumeEpisodeMinute = 'video.detail.resumeEpisodeMinute';
   static const videoDetailResumeMinute = 'video.detail.resumeMinute';
   static const videoDetailReleaseDate = 'video.detail.releaseDate';
@@ -2319,6 +2331,7 @@ class I18nKeys {
   static const videoDetailScore = 'video.detail.score';
   static const videoDetailSource = 'video.detail.source';
   static const videoDetailStudio = 'video.detail.studio';
+  static const videoDetailSubtitleType = 'video.detail.subtitleType';
   static const videoDetailTrackAudio = 'video.detail.trackAudio';
   static const videoDetailTrackSubtitle = 'video.detail.trackSubtitle';
   static const videoDetailTrackVideo = 'video.detail.trackVideo';
@@ -2479,6 +2492,8 @@ class I18nKeys {
   static const videoScrapeBulkCleaned = 'video.scrape.bulkCleaned';
   static const videoScrapeBulkExcluded = 'video.scrape.bulkExcluded';
   static const videoScrapeBulkRunning = 'video.scrape.bulkRunning';
+  static const videoSeriesMainCast = 'video.series.mainCast';
+  static const videoSeriesOverview = 'video.series.overview';
   static const videoShortPlayHint = 'video.shortPlay.hint';
   static const videoListCount = 'video.list.count';
   static const videoListFilter = 'video.list.filter';
@@ -2705,4 +2720,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2662;
+const int i18nKeyCount = 2676;

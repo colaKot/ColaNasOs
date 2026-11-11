@@ -2,22 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import 'cola_video_detail_page.dart';
+import 'detail/video_detail_kit.dart';
 import 'detail/video_detail_router.dart';
 import 'video_card.dart';
 import 'video_genre_labels.dart';
+import 'video_jp_pages.dart';
+import 'video_list_view.dart';
 import 'video_series_widgets.dart';
 import 'video_series_actions.dart';
 import 'short_play_page.dart';
 import 'library_types.dart';
 import 'series_display.dart';
 
-/// 剧详情 / 选季入口。
+/// 剧集总览页（一级 · 选季）。
 ///
-/// 只有一季：不再画「选集」中间页，这一层直接渲染单集详情（播放页）。
-/// 多季：只列季卡片，选完季直接落进该季的单集详情。
-/// 两条路径都不再经过「季详情 + 选集列表」那一层（用户 2026-11-11 要求）。
+/// 只有一季：不再画「选集」中间页，这一层直接渲染该季详情（= 单集详情页，
+/// 内部按季收敛选集网格）；多季：列季卡片，选完季落进该季的详情页。
+///
+/// 版式与电影详情共用 `VideoDetailHeader` / `VideoSection` / `VideoActorRail`，
+/// 三页一个设计语言（PRD 的核心诉求就是「拉齐信息层级」）。
 ///
 /// 从「剧集浏览」/ 电视剧库的剧卡片进来。缺集由服务端 `missing` 一并返回，
 /// 这里只标出来（不自动补），因为补集需要用户去下片。
@@ -51,6 +57,11 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
   String? _error;
   SeriesBundle? _bundle;
 
+  /// 演员名 → 头像（与电影详情同一个接口，一次批量问）
+  Map<String, Map<String, dynamic>> _actorInfo = const {};
+
+  bool _favBusy = false;
+
   /// 剧库的「海报大小」档位：季卡片跟剧库卡片用同一个尺寸，用户在剧库调大调小
   /// 之后进来看季不会突然变大变小（同一把 key，见 `VideoSeriesGridPage`）。
   double get _posterScale {
@@ -71,18 +82,26 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  /// 拉数据。[silent] = 不闪骨架屏（刷新 / 收藏 / 标记已看这类就地更新用）。
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
-      final b = await loadSeriesBundle(widget.name, libraryId: widget.libraryId);
+      final b = await loadSeriesBundle(
+        widget.name,
+        libraryId: widget.libraryId,
+      );
       if (!mounted) return;
       setState(() {
         _bundle = b;
         _loading = false;
+        _error = null;
       });
+      _loadActorInfo(b);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -92,10 +111,35 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
     }
   }
 
+  /// 演职头像：拿不到就只显示名字，不影响整页
+  Future<void> _loadActorInfo(SeriesBundle b) async {
+    final sample = b.sample;
+    if (sample == null) return;
+    final names = <String>[
+      for (final n in [...sample.directors, ...sample.actors])
+        if (videoPersonName(n).isNotEmpty) videoPersonName(n),
+    ];
+    if (names.isEmpty) return;
+    try {
+      final res = await ApiSession.instance.client.videoActorAvatars(
+        body: {'names': names.take(48).toList()},
+      );
+      if (!mounted) return;
+      final list = (res['items'] as List?) ?? const [];
+      final map = <String, Map<String, dynamic>>{};
+      for (final e in list) {
+        if (e is Map) map['${e['name'] ?? ''}'] = Map<String, dynamic>.from(e);
+      }
+      setState(() => _actorInfo = map);
+    } catch (_) {
+      // 头像缺失只影响观感
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bundle = _bundle;
-    // 只有一季 → 直接落到单集详情/播放页，不显示「选集」中间页。
+    // 只有一季 → 直接落到该季详情（= 单集详情页），不显示「选集」中间页。
     // 这一层仍是三级栈里的一层，返回由外壳统一处理。
     if (!_loading &&
         _error == null &&
@@ -111,24 +155,37 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
       );
     }
 
-    final body = _loading
-        ? const NasLoading()
-        : _error != null
-        ? NasErrorState(message: _error!, onRetry: _load)
-        : (_bundle == null || _bundle!.isEmpty)
-        ? ListView(
+    final body = LayoutBuilder(
+      builder: (context, c) {
+        final mode = layoutFor(c.maxWidth);
+        if (_loading) {
+          return Padding(
+            padding: const EdgeInsets.all(NasTokens.spaceMd),
+            child: VideoDetailSkeleton(mode: mode),
+          );
+        }
+        if (_error != null) {
+          return NasErrorState(message: _error!, onRetry: _load);
+        }
+        if (bundle == null || bundle.isEmpty) {
+          return ListView(
             children: [
               NasEmptyState(
                 title: tr('video.nav.emptyFiles'),
                 icon: Icons.video_library_outlined,
               ),
             ],
-          )
-        : _content(context, _bundle!);
+          );
+        }
+        return _content(context, bundle, mode, c.maxWidth);
+      },
+    );
 
     if (!widget.embedded) {
       return Scaffold(
-        appBar: AppBar(title: Text(widget.name, overflow: TextOverflow.ellipsis)),
+        appBar: AppBar(
+          title: Text(widget.name, overflow: TextOverflow.ellipsis),
+        ),
         body: body,
       );
     }
@@ -183,17 +240,35 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
     return tr('video.detail.resumeMinute', {'minute': '$minutes'});
   }
 
-  Widget _content(BuildContext context, SeriesBundle b) {
+  Widget _content(
+    BuildContext context,
+    SeriesBundle b,
+    LayoutMode mode,
+    double maxWidth,
+  ) {
     // 单季已在 build 里直接落到单集详情，这里只可能是多季的选季页。
     final seasons = b.bySeason;
     final sample = b.sample;
     final resume = b.resumeOf();
     final resumeHint = _resumeHint(b);
+    final playing = (b.progress[resume?.id] ?? 0) > 0;
+
+    final base = switch (mode) {
+      LayoutMode.expanded => 48.0,
+      LayoutMode.medium => 32.0,
+      LayoutMode.compact => 16.0,
+    };
+    final hPad = maxWidth > 1170 ? (maxWidth - 1080) / 2 : base;
 
     final meta = <String>[
       if ((sample?.year ?? 0) > 0) '${sample!.year}',
       if (sample != null) ...genreLabels(sample.genres.take(3)),
-      if ((sample?.regions ?? const []).isNotEmpty) sample!.regions.first,
+      if ((sample?.regions ?? const <String>[]).isNotEmpty)
+        sample!.regions.first,
+      tr('video.seasonsEpisodes', {
+        'seasons': '${seasons.length}',
+        'episodes': '${b.items.length}',
+      }),
     ];
 
     final gapNote = b.gaps.isEmpty
@@ -205,27 +280,40 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
                 .join(' / '),
           });
 
+    final overview = (sample?.overview ?? '').trim();
+    final people = sample == null
+        ? const <VideoPerson>[]
+        : videoPeopleOf(sample, avatarInfo: _actorInfo);
+
     return ListView(
-      padding: const EdgeInsets.all(NasTokens.spaceMd),
-      children: [
-        VideoSeriesHero(
+      padding: EdgeInsets.fromLTRB(hPad, NasTokens.spaceMd, hPad, 0),
+      children: <Widget>[
+        VideoDetailHeader(
           title: _displayName(sample?.series ?? widget.name, sample?.path),
-          subtitle: tr('video.seasonsEpisodes', {
-            'seasons': '${seasons.length}',
-            'episodes': '${b.items.length}',
-          }),
-          coverId: widget.coverId ?? sample?.id,
+          mode: mode,
+          originalTitle: sample?.originalName,
+          posterUrl: seriesArtUrl(
+            widget.coverId ?? sample?.id,
+            size: mode == LayoutMode.compact ? 320 : 480,
+          ),
+          posterText: _displayName(sample?.series ?? widget.name, sample?.path),
           meta: meta,
           score: sample?.score ?? 0,
-          overview: sample?.overview,
-          playLabel: (b.progress[resume?.id] ?? 0) > 0
-              ? tr('video.series.resume')
-              : tr('video.series.play'),
-          onPlay: resume == null ? null : () => _play(resume),
-          notice: gapNote,
+          badges: sample == null ? const <String>[] : videoFlagsOf(sample),
         ),
-        if (resumeHint != null) ...[
-          const SizedBox(height: 8),
+        if (overview.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 24),
+          VideoSection(
+            title: tr('video.series.overview'),
+            child: VideoExpandableText(overview),
+          ),
+        ],
+        // 继续播放放在简介**之后**（用户 2026-11-11 明确要求：先读介绍再播）。
+        // 这是它不进头部操作行的原因，别顺手挪回去。
+        const SizedBox(height: 14),
+        _actionRow(context, b, playing, resume),
+        if (resumeHint != null) ...<Widget>[
+          const SizedBox(height: 6),
           Text(
             resumeHint,
             style: TextStyle(
@@ -234,55 +322,211 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
             ),
           ),
         ],
-        const SizedBox(height: NasTokens.spaceLg),
-        _sectionTitle(context, tr('video.series.seasonList')),
-        const SizedBox(height: 10),
-        VideoSeasonGrid(
-          seasons: seasons,
-          progress: b.progress,
-          scale: _posterScale,
-          coverId: widget.coverId ?? sample?.id,
-          onTap: (s) => _openSeason(context, b, s),
-          // 季卡右键：本季标记已看 / 删除本季
-          menuEntries: (season, eps) => seasonMenuEntries(
-            context,
-            episodes: eps,
-            onChanged: () => _load(),
+        if (gapNote != null) ...<Widget>[
+          const SizedBox(height: 8),
+          Text(
+            gapNote,
+            style: TextStyle(
+              fontSize: NasTokens.fontMicro,
+              color: Theme.of(context).colorScheme.error,
+            ),
+          ),
+        ],
+        const SizedBox(height: 24),
+        VideoSection(
+          title: tr('video.series.seasonList'),
+          trailing: '${seasons.length}',
+          // 季卡是竖版海报网格，套一层深色卡反而把海报压暗
+          card: false,
+          child: VideoSeasonGrid(
+            seasons: seasons,
+            progress: b.progress,
+            scale: _posterScale,
+            coverId: widget.coverId ?? sample?.id,
+            onTap: (s) => _openSeason(context, b, s),
+            // 季卡右键：本季标记已看 / 删除本季
+            menuEntries: (season, eps) => seasonMenuEntries(
+              context,
+              episodes: eps,
+              onChanged: () => _load(silent: true),
+            ),
           ),
         ),
+        if (people.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 24),
+          VideoSection(
+            title: tr('video.series.mainCast'),
+            cardPadding: EdgeInsets.zero,
+            child: VideoActorRail(
+              people: people,
+              onTap: (p) => _openPerson(context, p),
+            ),
+          ),
+        ],
         const SizedBox(height: NasTokens.spaceXl),
       ],
     );
   }
 
-  /// 选完季直接进该季的单集详情/播放页：优先续播集，否则第一集。
+  /// 头部操作：继续播放 / 收藏（整部剧）/ 更多。
+  Widget _actionRow(
+    BuildContext context,
+    SeriesBundle b,
+    bool playing,
+    VideoItem? resume,
+  ) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        FilledButton.icon(
+          onPressed: resume == null ? null : () => _play(resume),
+          icon: const Icon(Icons.play_arrow, size: 20),
+          label: Text(
+            playing ? tr('video.series.resume') : tr('video.series.play'),
+          ),
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            shape: const StadiumBorder(),
+          ),
+        ),
+        _circleAction(
+          context,
+          icon: _allFavorited(b) ? Icons.favorite : Icons.favorite_border,
+          tooltip: _allFavorited(b)
+              ? tr('video.action.unfavorite')
+              : tr('video.action.favorite'),
+          active: _allFavorited(b),
+          onTap: _favBusy ? null : () => _toggleFavorite(b),
+        ),
+        _circleAction(
+          context,
+          icon: Icons.more_horiz,
+          tooltip: tr('video.card.more'),
+          onTap: () => _showMore(b),
+        ),
+      ],
+    );
+  }
+
+  bool _allFavorited(SeriesBundle b) =>
+      b.items.isNotEmpty && b.items.every((e) => e.favorite);
+
+  /// 收藏口径：一部剧 = 它的每一集。剧没有自己的收藏列，
+  /// 按集收藏才能让「收藏」筛选里看到这部剧。
+  Future<void> _toggleFavorite(SeriesBundle b) async {
+    final target = !_allFavorited(b);
+    setState(() => _favBusy = true);
+    try {
+      await ApiSession.instance.client.videoFavoriteSet(
+        body: VideoFavoriteBody(
+          ids: b.items.map((e) => e.id).toList(),
+          favorite: target,
+        ),
+      );
+      await _load(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      NasSnack.show(context, '$e');
+    } finally {
+      if (mounted) setState(() => _favBusy = false);
+    }
+  }
+
+  Widget _circleAction(
+    BuildContext context, {
+    required IconData icon,
+    required String tooltip,
+    VoidCallback? onTap,
+    bool active = false,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: active
+            ? scheme.primary.withValues(alpha: 0.16)
+            : scheme.surfaceContainerHighest.withValues(alpha: 0.7),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Icon(
+              icon,
+              size: 20,
+              color: active ? scheme.primary : scheme.onSurface,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showMore(SeriesBundle b) async {
+    final allWatched = b.items.isNotEmpty && b.items.every((e) => e.watched);
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: <Widget>[
+            ListTile(
+              leading: Icon(allWatched ? Icons.remove_done : Icons.done_all),
+              title: Text(
+                tr(
+                  allWatched
+                      ? 'video.action.markUnwatched'
+                      : 'video.action.markTvWatched',
+                ),
+              ),
+              onTap: () => Navigator.pop(ctx, 'watch'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.refresh),
+              title: Text(tr('common.refresh')),
+              onTap: () => Navigator.pop(ctx, 'refresh'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    switch (action) {
+      case 'watch':
+        await markVideos(
+          context,
+          b.items.map((e) => e.id).toList(),
+          watched: !allWatched,
+          count: b.items.length,
+          onChanged: () => _load(silent: true),
+        );
+      case 'refresh':
+        await _load(silent: true);
+    }
+  }
+
+  /// 选完季直接进该季的详情页（内部只列本季的集）：优先续播集，否则第一集。
   void _openSeason(BuildContext context, SeriesBundle b, int season) {
     final eps = b.episodesOf(season);
     if (eps.isEmpty) return;
     openVideoDetail(context, b.resumeOf(eps) ?? eps.first);
   }
 
-  Widget _sectionTitle(BuildContext context, String text, {String? trailing}) {
-    return Row(
-      children: [
-        Text(
-          text,
-          style: const TextStyle(
-            fontSize: NasTokens.fontSubtitle,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        if (trailing != null) ...[
-          const SizedBox(width: 8),
-          Text(
-            trailing,
-            style: TextStyle(
-              fontSize: NasTokens.fontCaption,
-              color: context.nasTextSecondary,
-            ),
-          ),
-        ],
-      ],
+  /// 演职人员点击：日本库进日本演员页，普通库进「某人的作品」。
+  void _openPerson(BuildContext context, VideoPerson person) {
+    if (VideoDetailRouter.instance.isJpLibrary(widget.libraryId)) {
+      openVideoJpActor(context, name: person.name, libraryId: widget.libraryId);
+      return;
+    }
+    openVideoListByPerson(
+      context,
+      kind: person.isDirector ? 'director' : 'actor',
+      name: person.name,
     );
   }
 
@@ -293,11 +537,11 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
         bundle.items.length > 1) {
       final idx = bundle.items.indexWhere((e) => e.id == ep.id);
       await openShortPlay(context, bundle.items, idx < 0 ? 0 : idx);
-      if (mounted) await _load();
+      if (mounted) await _load(silent: true);
       return;
     }
     await playVideoItemNow(context, ep);
-    if (mounted) await _load();
+    if (mounted) await _load(silent: true);
   }
 }
 

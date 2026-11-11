@@ -130,205 +130,15 @@ Future<void> playVideoItemNow(BuildContext context, VideoItem item) async {
   }
 }
 
-/// 剧 / 季详情页的头部：海报 + 标题 + 元信息 + 评分 + 播放按钮 + 简介。
-class VideoSeriesHero extends StatefulWidget {
-  const VideoSeriesHero({
-    super.key,
-    required this.title,
-    required this.coverId,
-    required this.meta,
-    required this.score,
-    required this.playLabel,
-    required this.onPlay,
-    this.subtitle,
-    this.overview,
-    this.notice,
-  });
-
-  final String title;
-
-  /// 标题下的一行小字（例如「第 1 季 · 26 集」）
-  final String? subtitle;
-
-  /// 封面用的 item id（剧里「有海报的那一集」）
-  final String? coverId;
-
-  final List<String> meta;
-  final double score;
-  final String playLabel;
-  final VoidCallback? onPlay;
-  final String? overview;
-
-  /// 缺集等提示（红色小字）
-  final String? notice;
-
-  @override
-  State<VideoSeriesHero> createState() => _VideoSeriesHeroState();
-}
-
-class _VideoSeriesHeroState extends State<VideoSeriesHero> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final wide = MediaQuery.of(context).size.width >= 820;
-    final posterW = wide ? 176.0 : 108.0;
-
-    final info = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Text(
-                widget.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: wide ? 26 : 20,
-                  height: 1.2,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-        if (widget.subtitle != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            widget.subtitle!,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: NasTokens.fontCaption,
-              color: context.nasTextSecondary,
-            ),
-          ),
-        ],
-        if (widget.meta.isNotEmpty || widget.score > 0) ...[
-          const SizedBox(height: 8),
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              // 评分放在信息行最前面：标题行右侧会被嵌入模式的浮层胶囊压住，
-              // 也容易在长标题下被挤掉（2026-11-11 实测漏画）。
-              if (widget.score > 0) ...[
-                Text(
-                  '★ ${widget.score.toStringAsFixed(1)}',
-                  style: TextStyle(
-                    fontSize: NasTokens.fontCaption,
-                    fontWeight: FontWeight.w700,
-                    color: scheme.primary,
-                  ),
-                ),
-                Text(
-                  ' · ',
-                  style: TextStyle(
-                    fontSize: NasTokens.fontCaption,
-                    color: context.nasTextSecondary,
-                  ),
-                ),
-              ],
-              for (var i = 0; i < widget.meta.length; i++) ...[
-                if (i > 0)
-                  Text(
-                    ' · ',
-                    style: TextStyle(
-                      fontSize: NasTokens.fontCaption,
-                      color: context.nasTextSecondary,
-                    ),
-                  ),
-                Text(
-                  widget.meta[i],
-                  style: TextStyle(
-                    fontSize: NasTokens.fontCaption,
-                    color: context.nasTextSecondary,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
-        if (widget.notice != null) ...[
-          const SizedBox(height: 6),
-          Text(
-            widget.notice!,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: NasTokens.fontMicro, color: scheme.error),
-          ),
-        ],
-      ],
-    );
-
-    final overview = (widget.overview ?? '').trim();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(NasTokens.radiusMd),
-              child: SizedBox(
-                width: posterW,
-                child: AspectRatio(
-                  aspectRatio: 2 / 3,
-                  child: SeriesCoverImage(
-                    artUrl: seriesArtUrl(
-                      widget.coverId,
-                      size: (posterW * 2).round(),
-                    ),
-                    posterUrl: episodeStillFallbackUrl(widget.coverId),
-                    fallbackText: widget.title,
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(width: wide ? 22 : 14),
-            Expanded(child: info),
-          ],
-        ),
-        if (overview.isNotEmpty) ...[
-          const SizedBox(height: NasTokens.spaceMd),
-          GestureDetector(
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Text(
-              overview,
-              maxLines: _expanded ? null : 4,
-              overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
-              style: const TextStyle(height: 1.6),
-            ),
-          ),
-        ],
-        // 继续播放放在简介下方（用户 2026-11-11 指定：介绍之后才是播放按钮）
-        if (widget.onPlay != null) ...[
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: widget.onPlay,
-            icon: const Icon(Icons.play_arrow, size: 20),
-            label: Text(widget.playLabel),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(0, 40),
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
 /// 剧集封面地址：`id` 是剧里「有海报的那一集」的 item id。
-String? seriesArtUrl(String? id, {int size = 0}) {
+///
+/// `kind` 默认竖版海报；首页推荐的横版剧卡用 `fanart`（服务端会退到 poster / thumb）。
+String? seriesArtUrl(String? id, {int size = 0, String kind = 'poster'}) {
   final cover = (id ?? '').trim();
   if (cover.isEmpty) return null;
   final sizeQ = size > 0 ? '&size=$size' : '';
   return '${ApiSession.instance.baseUrl}/api/v1/video/art'
-      '?id=${Uri.encodeComponent(cover)}&kind=poster$sizeQ';
+      '?id=${Uri.encodeComponent(cover)}&kind=$kind$sizeQ';
 }
 
 /// 某一集的首帧（刮削海报缺失时的兜底图）。
@@ -450,209 +260,12 @@ class PosterGridMetrics {
     final spacing = maxWidth < 480 ? 8.0 : 12.0;
     final baseWidth = (maxWidth < 480 ? 108.0 : 132.0) * scale;
     final columns = (maxWidth / baseWidth).floor().clamp(2, 9);
-    final itemWidth =
-        ((maxWidth - spacing * (columns - 1) - spacing) / columns)
-            .floorToDouble();
+    final itemWidth = ((maxWidth - spacing * (columns - 1) - spacing) / columns)
+        .floorToDouble();
     return PosterGridMetrics(
       spacing: spacing,
       columns: columns,
       itemWidth: itemWidth,
-    );
-  }
-}
-
-/// 集卡片网格：**正方形缩略图，一行 6 个**（用户 2026-11-11 指定）。
-///
-/// 列数按目标宽度算并夹在 3~6：桌面一行 6 个，窄屏（手机）退到 3 个，
-/// 不然 6 个方图在手机上只有 50 多点宽，什么都看不清。
-class VideoEpisodeGrid extends StatelessWidget {
-  const VideoEpisodeGrid({
-    super.key,
-    required this.episodes,
-    required this.progress,
-    this.onTap,
-  });
-
-  final List<VideoItem> episodes;
-  final Map<String, int> progress;
-  final void Function(VideoItem ep)? onTap;
-
-  /// 卡片下方两行文字（集号 + 名字）
-  static const _textBlock = 44.0;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        final maxWidth = c.maxWidth;
-        final spacing = maxWidth < 480 ? 8.0 : 12.0;
-        final baseWidth = maxWidth < 480 ? 110.0 : 168.0;
-        final columns = (maxWidth / baseWidth).floor().clamp(3, 6);
-        final w = ((maxWidth - spacing * (columns - 1)) / columns)
-            .floorToDouble();
-        final h = w + _textBlock;
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: EdgeInsets.zero,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            mainAxisSpacing: spacing,
-            crossAxisSpacing: spacing,
-            childAspectRatio: w / h,
-          ),
-          itemCount: episodes.length,
-          itemBuilder: (context, i) {
-            final ep = episodes[i];
-            return EpisodeCard(
-              ep: ep,
-              width: w,
-              percent: progress[ep.id] ?? 0,
-              onTap: onTap == null ? null : () => onTap!(ep),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-/// 单集卡片：**正方形**剧照 + 集号（一行）+ 名字（换行）。
-class EpisodeCard extends StatelessWidget {
-  const EpisodeCard({
-    super.key,
-    required this.ep,
-    required this.width,
-    this.percent = 0,
-    this.onTap,
-  });
-
-  final VideoItem ep;
-  final double width;
-  final int percent;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final epNo = ep.episode ?? 0;
-    final minutes = ((ep.durationMs ?? 0) / 60000).round();
-    final p = (percent.clamp(0, 100)) / 100.0;
-    // 集的 title 常常就是剧名（同一部剧每一集都一样），第二行写它等于重复四遍。
-    // 只有和剧名不同、或本来就没有剧名时才算「这是这一集自己的名字」。
-    // 比较前去掉空格 / 点 / 下划线：库里同一个东西会写成 `SEAL.Team` 和 `SEAL Team`。
-    final title = ep.title.trim();
-    final seriesName = (ep.series ?? '').trim();
-    final ownName =
-        title.isNotEmpty &&
-        (seriesName.isEmpty || _nameKey(title) != _nameKey(seriesName));
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-                  child: NasCoverImage(
-                    url: episodeStillUrl(ep, size: (width * 1.5).round()),
-                    headers: videoArtHeaders,
-                    fallbackText: epNo > 0
-                        ? tr('video.series.episode', {'n': '$epNo'})
-                        : title,
-                    icon: Icons.movie_outlined,
-                    cacheWidth: (width * 1.5).round(),
-                  ),
-                ),
-                // 右上：已看勾
-                if (ep.watched)
-                  Positioned(
-                    top: 5,
-                    right: 6,
-                    child: Icon(
-                      Icons.check_circle,
-                      size: 16,
-                      color: scheme.primary,
-                    ),
-                  ),
-                // 右下：时长
-                if (minutes > 0)
-                  Positioned(
-                    right: 6,
-                    bottom: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 1.5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        tr('video.detail.minutes', {'count': '$minutes'}),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          height: 1.2,
-                        ),
-                      ),
-                    ),
-                  ),
-                // 底部进度
-                if (p > 0)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(
-                        bottom: Radius.circular(NasTokens.radiusSm),
-                      ),
-                      child: LinearProgressIndicator(
-                        value: p,
-                        minHeight: 3,
-                        backgroundColor: Colors.black.withValues(alpha: 0.35),
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          scheme.primary,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 4),
-          // 集号单独一行，名字换行放下面（用户 2026-11-11 指定）
-          Text(
-            epNo > 0
-                ? tr('video.series.episode', {'n': '$epNo'})
-                : tr('video.series.episodeList'),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: NasTokens.fontCaption,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            ownName ? title : videoMetaLine(ep),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: NasTokens.fontMicro,
-              color: context.nasTextSecondary,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -707,7 +320,8 @@ class VideoSeasonGrid extends StatelessWidget {
           itemCount: entries.length,
           itemBuilder: (context, i) {
             final e = entries[i];
-            final menu = menuEntries?.call(e.key, e.value) ?? const <NasMenuEntry>[];
+            final menu =
+                menuEntries?.call(e.key, e.value) ?? const <NasMenuEntry>[];
             final card = SeasonPosterCard(
               season: e.key,
               episodes: e.value,
@@ -749,7 +363,6 @@ class SeasonPosterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cover = episodes.isEmpty ? null : episodes.first;
     final watched = episodes.where((e) => e.watched).length;
     final wantSize = (width * 2).round();
     final countLabel = tr('video.series.episodeCount', {
@@ -764,11 +377,9 @@ class SeasonPosterCard extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(NasTokens.radiusSm),
             child: SeriesCoverImage(
-              // 季封面用本季第一集的剧照（每季各不相同），没有才退到剧海报
-              artUrl: cover == null
-                  ? null
-                  : episodeStillUrl(cover, size: wantSize),
-              posterUrl: seriesArtUrl(coverId, size: wantSize),
+              // 季封面统一用剧海报；横版剧照 / 首帧都不拿来顶竖版封面
+              artUrl: seriesArtUrl(coverId, size: wantSize),
+              posterUrl: null,
               fallbackText: tr('video.series.season', {'n': '$season'}),
               cacheWidth: wantSize,
             ),
@@ -799,10 +410,7 @@ class SeasonPosterCard extends StatelessWidget {
               right: 6,
               child: Container(
                 constraints: const BoxConstraints(minWidth: 26),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 7,
-                  vertical: 3,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   color: const Color(0xFF2AA7B8).withValues(alpha: 0.92),
                   borderRadius: BorderRadius.circular(99),
@@ -874,12 +482,3 @@ class SeasonPosterCard extends StatelessWidget {
     );
   }
 }
-
-/// 集卡片的点击入口：直接起播，不再绕一层影片详情。
-void playEpisodeNow(BuildContext context, VideoItem ep) {
-  playVideoItemNow(context, ep);
-}
-
-/// 判断「这行文字是不是同一部剧的名字」用的归一化：忽略大小写与空格 / 点 / 下划线。
-String _nameKey(String s) =>
-    s.toLowerCase().replaceAll(RegExp(r'[\s._\-·]+'), '');
