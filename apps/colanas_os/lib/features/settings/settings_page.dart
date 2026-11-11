@@ -49,7 +49,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _proxyEnabled = false;
   bool _httpsEnabled = false;
 
-  // AI 服务（与博客页共用同一份配置：这里改了，博客页刷新就是新值）
+  // AI 服务（与播客页共用同一份配置：这里改了，播客页刷新就是新值）
   final _llmKeyCtrl = TextEditingController();
   final _llmBaseCtrl = TextEditingController();
   final _llmModelCtrl = TextEditingController();
@@ -506,7 +506,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  /// AI 服务：与「博客 → AI 新闻」页共用同一份 llm 配置（服务端 system.settings#llm）
+  /// AI 服务：与「播客 → AI 新闻」页共用同一份 llm 配置（服务端 system.settings#llm）
   Widget _llmSection() {
     return _section(tr('settings.llm.title'), [
       Text(

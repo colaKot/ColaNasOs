@@ -345,7 +345,7 @@ void main() {
 
   testWidgets('老库残留 Kokoro 音色 id：不崩且下拉 value 回到有效项', (tester) async {
     // 2026-11-06 真实事故：换 Qwen3-TTS 后音色改为磁盘扫描，老库里仍是 zf_001，
-    // DropdownButton 的 value 不在 items 里直接 assert 崩溃，整个博客页打不开。
+    // DropdownButton 的 value 不在 items 里直接 assert 崩溃，整个播客页打不开。
     _FakeTransport._settings['voice'] = 'zf_001';
     addTearDown(() => _FakeTransport._settings['voice'] = 'default');
 

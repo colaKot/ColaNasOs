@@ -397,7 +397,7 @@ export async function resynthesize(k: KernelApi, id: string): Promise<StartResul
 
 /** 只取生成需要的字段；避免为了一个 key 把整个 settings 结构拖进来 */
 async function readCfg(k: KernelApi) {
-  // 真源：系统设置里的 llm（设置页与博客页共用）。老库还没迁移时才回落到 api_* 列。
+  // 真源：系统设置里的 llm（设置页与播客页共用）。老库还没迁移时才回落到 api_* 列。
   const llm = readSystemSettings(k.config).llm;
   if (llm.apiKey) {
     return {

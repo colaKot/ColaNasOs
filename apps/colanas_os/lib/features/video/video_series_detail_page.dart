@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/settings_store.dart';
 import 'detail/video_detail_router.dart';
 import 'video_genre_labels.dart';
 import 'video_season_detail_page.dart';
@@ -40,6 +41,16 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
   bool _loading = true;
   String? _error;
   SeriesBundle? _bundle;
+
+  /// 剧库的「海报大小」档位：季卡片跟剧库卡片用同一个尺寸，用户在剧库调大调小
+  /// 之后进来看季不会突然变大变小（同一把 key，见 `VideoSeriesGridPage`）。
+  double get _posterScale {
+    final lib = widget.libraryId;
+    if (lib == null) return 1.0;
+    final saved =
+        SettingsStore.instance.getInt('video.lib.$lib.seriesScale') ?? 100;
+    return (saved / 100.0).clamp(0.7, 1.15);
+  }
 
   @override
   void initState() {
@@ -149,20 +160,20 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
         const SizedBox(height: NasTokens.spaceLg),
         if (multi) ...[
           _sectionTitle(context, tr('video.series.seasonList')),
-          const SizedBox(height: 4),
-          for (final entry in seasons.entries)
-            SeasonTile(
-              season: entry.key,
-              episodes: entry.value,
-              progress: b.progress,
-              onTap: () => openVideoSeason(
-                context,
-                name: widget.name,
-                season: entry.key,
-                libraryId: widget.libraryId,
-                coverId: widget.coverId,
-              ),
+          const SizedBox(height: 10),
+          VideoSeasonGrid(
+            seasons: seasons,
+            progress: b.progress,
+            scale: _posterScale,
+            coverId: widget.coverId ?? sample?.id,
+            onTap: (s) => openVideoSeason(
+              context,
+              name: widget.name,
+              season: s,
+              libraryId: widget.libraryId,
+              coverId: widget.coverId,
             ),
+          ),
         ] else ...[
           _sectionTitle(
             context,

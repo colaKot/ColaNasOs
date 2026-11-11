@@ -224,7 +224,7 @@ function changedFiles() {
     const p = line.trim().replace(/\\/g, '/');
     if (!p) continue;
     // 只把工程源码目录下的新文件算成改动。工作区里常有旁支草稿
-    // （AI 博客脚本、音频、临时稿），它们不会被任何门禁步骤消费，
+    // （AI 播客脚本、音频、临时稿），它们不会被任何门禁步骤消费，
     // 却会因为落在 `tool/` 下命中 FULL_TRIGGERS，把 --fast 推成 80 步全量。
     if (
       !/^(src|contracts|apps|packages|sdk|test|sidecars|web|resources|electron|kernel|tool\/check|tool\/smoke|tool\/gen)/.test(

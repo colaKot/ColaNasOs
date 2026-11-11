@@ -11,7 +11,7 @@ export const SYSTEM_SETTINGS_KEY = 'system.settings';
 
 /**
  * 大模型（AI 改写）配置。**唯一真源**：系统设置与 AI 播客页读写的是同一份，
- * 因此「在设置里填的 Key」和「博客页填的 Key」永远一致，不存在两处各存一份的问题。
+ * 因此「在设置里填的 Key」和「播客页填的 Key」永远一致，不存在两处各存一份的问题。
  */
 export interface LlmSettings {
   /** 开关：关掉就只用素材拼接，不调模型（省 token / 断网也能出稿） */

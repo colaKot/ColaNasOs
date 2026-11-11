@@ -263,7 +263,7 @@ export async function ensureSettingsRow(k: KernelApi): Promise<void> {
 
 export async function writeSettings(k: KernelApi, next: BlogSettings): Promise<void> {
   // 大模型配置写回全局（唯一真源）；blog_settings 的 api_* 列保留但不再读取为准，
-  // 这样从设置页改 Key，博客页刷新就是新值，反之亦然。
+  // 这样从设置页改 Key，播客页刷新就是新值，反之亦然。
   await writeSystemSettings(k.config, {
     llm: {
       enabled: next.llmEnabled,

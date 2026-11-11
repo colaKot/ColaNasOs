@@ -28,7 +28,7 @@
 | **文件** | 网格 / 列表视图、统一目录选择器（可返回上一层）、分片上传、Range / ETag 下载、回收站、文件操作日志 |
 | **传输 / 下载器** | 多端设备传输、内置 transmission 下载器与完整 Web UI、种子与规则管理 |
 | **同步** | 多端目录同步计划、冲突策略、定时任务 |
-| **AI 播客 / 博客** | AI 新闻聚合、文稿生成、TTS 朗读与播放队列 |
+| **AI 播客** | AI 新闻聚合、文稿生成、TTS 朗读与播放队列 |
 | **监控 / 终端 / 账号 / 设置** | 系统状态与任务队列、日志真分页、Web 终端、子账号与权限域、2FA、全局与模块设置、多语言 |
 
 服务端按域拆分为 `auth / photo / video / music / discover / rss / pt / files / transfer / sync / blog / system / media / videoPlayer / integrations`，每个域自带迁移、schema 与路由；文件监控（含 `.nfo` 变更）按库订阅，新增文件增量入库，避免整库重扫。

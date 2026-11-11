@@ -6,7 +6,7 @@ import 'detail/video_detail_router.dart';
 import 'video_genre_labels.dart';
 import 'video_series_widgets.dart';
 
-/// 季详情：某部剧的某一季 → 这一季的海报 / 介绍 / 继续播放 + 全部集（一行两列）。
+/// 季详情：某部剧的某一季 → 这一季的海报 / 介绍 / 继续播放 + 全部集（正方形，一行 6 个）。
 ///
 /// 从剧详情（多季）的季卡片进来。只有一季的剧不会走到这里：剧详情直接把集列出来。
 class VideoSeasonDetailPage extends StatefulWidget {

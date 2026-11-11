@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../shell/app_nav_shell.dart';
 import 'ai_news_page.dart';
 
-/// 博客：左侧二级导航 + 内容区。
+/// 播客：左侧二级导航 + 内容区。
 ///
 ///   AI 新闻（每天定时生成一期，可试听音色、调倍速、填 API Key）
 ///
