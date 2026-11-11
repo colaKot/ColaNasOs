@@ -3,12 +3,17 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/settings_store.dart';
+import 'cola_video_detail_page.dart';
 import 'detail/video_detail_router.dart';
+import 'video_card.dart';
 import 'video_genre_labels.dart';
-import 'video_season_detail_page.dart';
 import 'video_series_widgets.dart';
 
-/// 剧详情：一部剧 → 季列表（多季）或直接是该季的集列表（只有一季）。
+/// 剧详情 / 选季入口。
+///
+/// 只有一季：不再画「选集」中间页，这一层直接渲染单集详情（播放页）。
+/// 多季：只列季卡片，选完季直接落进该季的单集详情。
+/// 两条路径都不再经过「季详情 + 选集列表」那一层（用户 2026-11-11 要求）。
 ///
 /// 从「剧集浏览」/ 电视剧库的剧卡片进来。缺集由服务端 `missing` 一并返回，
 /// 这里只标出来（不自动补），因为补集需要用户去下片。
@@ -81,6 +86,23 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bundle = _bundle;
+    // 只有一季 → 直接落到单集详情/播放页，不显示「选集」中间页。
+    // 这一层仍是三级栈里的一层，返回由外壳统一处理。
+    if (!_loading &&
+        _error == null &&
+        bundle != null &&
+        !bundle.isEmpty &&
+        bundle.bySeason.length <= 1) {
+      final ep = bundle.resumeOf() ?? bundle.items.first;
+      return VideoDetailPage(
+        item: ep,
+        posterUrl: videoPosterUrl(ep),
+        headers: videoArtHeaders,
+        embedded: widget.embedded,
+      );
+    }
+
     final body = _loading
         ? const NasLoading()
         : _error != null
@@ -118,8 +140,8 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
   }
 
   Widget _content(BuildContext context, SeriesBundle b) {
+    // 单季已在 build 里直接落到单集详情，这里只可能是多季的选季页。
     final seasons = b.bySeason;
-    final multi = seasons.length > 1;
     final sample = b.sample;
     final resume = b.resumeOf();
 
@@ -158,38 +180,25 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
           notice: gapNote,
         ),
         const SizedBox(height: NasTokens.spaceLg),
-        if (multi) ...[
-          _sectionTitle(context, tr('video.series.seasonList')),
-          const SizedBox(height: 10),
-          VideoSeasonGrid(
-            seasons: seasons,
-            progress: b.progress,
-            scale: _posterScale,
-            coverId: widget.coverId ?? sample?.id,
-            onTap: (s) => openVideoSeason(
-              context,
-              name: widget.name,
-              season: s,
-              libraryId: widget.libraryId,
-              coverId: widget.coverId,
-            ),
-          ),
-        ] else ...[
-          _sectionTitle(
-            context,
-            tr('video.series.episodeList'),
-            trailing: '${b.items.length}',
-          ),
-          const SizedBox(height: 10),
-          VideoEpisodeGrid(
-            episodes: b.items,
-            progress: b.progress,
-            onTap: (ep) => openEpisodeDetail(context, ep),
-          ),
-        ],
+        _sectionTitle(context, tr('video.series.seasonList')),
+        const SizedBox(height: 10),
+        VideoSeasonGrid(
+          seasons: seasons,
+          progress: b.progress,
+          scale: _posterScale,
+          coverId: widget.coverId ?? sample?.id,
+          onTap: (s) => _openSeason(context, b, s),
+        ),
         const SizedBox(height: NasTokens.spaceXl),
       ],
     );
+  }
+
+  /// 选完季直接进该季的单集详情/播放页：优先续播集，否则第一集。
+  void _openSeason(BuildContext context, SeriesBundle b, int season) {
+    final eps = b.episodesOf(season);
+    if (eps.isEmpty) return;
+    openVideoDetail(context, b.resumeOf(eps) ?? eps.first);
   }
 
   Widget _sectionTitle(BuildContext context, String text, {String? trailing}) {

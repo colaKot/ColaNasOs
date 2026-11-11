@@ -15,6 +15,7 @@ import 'video_collection_picker.dart';
 import 'video_jp_pages.dart';
 import 'video_list_view.dart';
 import 'video_scrape_dialogs.dart';
+import 'video_series_widgets.dart';
 import 'detail/video_detail_router.dart';
 
 /// 演职人员名清洗。
@@ -1291,10 +1292,8 @@ class VideoDetailPageState extends State<VideoDetailPage> {
       message: ep.title,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: current
-            ? null
-            // 切集也走统一入口：嵌入模式下压在同一个三级栈里，不会盖住左栏
-            : () => openVideoDetailOn(Navigator.of(context), ep),
+        // 点具体剧集立刻起播（用户 2026-11-11 要求）：不再先切详情再点播放。
+        onTap: () => playVideoItemNow(context, ep),
         child: Container(
           width: 52,
           height: 40,

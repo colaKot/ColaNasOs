@@ -169,7 +169,7 @@ class _VideoSeasonDetailPageState extends State<VideoSeasonDetailPage> {
         VideoEpisodeGrid(
           episodes: episodes,
           progress: b.progress,
-          onTap: (ep) => openEpisodeDetail(context, ep),
+          onTap: (ep) => playEpisodeNow(context, ep),
         ),
         const SizedBox(height: NasTokens.spaceXl),
       ],

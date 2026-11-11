@@ -2518,7 +2518,7 @@
     "video.library.type": "库类型",
     "video.library.type.image": "图片",
     "video.library.type.jp": "日本电影",
-    "video.library.type.mixed": "混合",
+    "video.library.type.mixed": "图片视频混合",
     "video.library.type.movie": "电影",
     "video.library.type.tv": "电视剧",
     "video.list.count": "{count} 部 · 已刮削 {scraped}",

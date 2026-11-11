@@ -18,6 +18,13 @@ import {
   scopeCond,
 } from '../image-scope';
 import { TAG, imageToMediaRow, toItem, type MediaRow } from '../util';
+import {
+  bindVideoListCacheInvalidation,
+  videoListCacheClear,
+  videoListCacheGet,
+  videoListCacheKey,
+  videoListCacheSet,
+} from '../list-cache';
 import type { FastifyInstance } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { VideoHelpers } from '../helpers';
@@ -33,6 +40,7 @@ export function registerVideoImageFolders(
   k: KernelApi,
   h: VideoHelpers,
 ): void {
+  bindVideoListCacheInvalidation(k);
   app.get(
     '/api/v1/video/image/folders',
     secured('video:read', {
@@ -81,6 +89,14 @@ export function registerVideoImageFolders(
 
       const scopeRoots = currentPath ? [currentPath] : roots;
       const offline = await offlineSmbPrefixes(k.db);
+      // 文件夹聚合是整库 group by（最重的一条），同样按「库 + 当前目录 + 离线前缀」缓存。
+      const cacheKey = videoListCacheKey('folders', {
+        libraryId: lib.id,
+        folderPath: currentPath,
+        offline: offline.join(','),
+      });
+      const cached = videoListCacheGet(cacheKey);
+      if (cached) return cached as any;
       const imgDir = dirExpr('i');
       const imgRows = (
         await sql<{ dir: string; cnt: number; cover_id: string | null }>`
@@ -218,7 +234,7 @@ export function registerVideoImageFolders(
         .sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
 
       const root = currentPath ? requireRoot(currentPath, roots) : null;
-      return {
+      const result = {
         path: currentPath,
         parentPath: parentFolderOf(currentPath, root),
         segments: folderSegments(currentPath, root),
@@ -228,6 +244,8 @@ export function registerVideoImageFolders(
         selfVideoCount,
         hasSubFolders: folders.length > 0,
       };
+      videoListCacheSet(cacheKey, result);
+      return result;
     },
   );
 
@@ -298,6 +316,8 @@ export function registerVideoImageFolders(
         `.execute(trx);
         return Number(img.numAffectedRows ?? 0) + Number(vid.numAffectedRows ?? 0);
       });
+      // 删了整个目录，列表 / 文件夹缓存都得作废
+      videoListCacheClear();
       return { removed: res, trashedTo: batch };
     },
   );

@@ -64,6 +64,24 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
   String _query = '';
   String _letter = '';
 
+  /// 进程内按「库 + 目录 + 排序/搜索条件」缓存一屏数据：
+  /// 切文件夹先渲染缓存（0 等待）再后台刷新，不再整屏 loading 等接口。
+  static final Map<String, _PageSnapshot> _cache = <String, _PageSnapshot>{};
+  static const Duration _cacheTtl = Duration(minutes: 10);
+
+  int _reqSeq = 0;
+  bool _refreshing = false;
+
+  String get _cacheKey => <String>[
+        widget.libraryId,
+        _folderMode ? 'folder' : 'all',
+        _folderPath,
+        _sortBy,
+        _sortOrder,
+        _letter,
+        _query,
+      ].join('\u0000');
+
   /// 每个库独立记：文件夹/整库、网格/瀑布流、名称开关、排序、首字母、当前目录
   String _k(String name) => 'video.image.${widget.libraryId}.$name';
 
@@ -108,12 +126,41 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
     });
   }
 
-  Future<void> _load({bool reset = false, bool more = false}) async {
+  Future<void> _load({
+    bool reset = false,
+    bool more = false,
+    bool force = false,
+  }) async {
+    final key = _cacheKey;
+    // reset 递增序号：切目录后旧目录的在途响应一律丢弃，不会覆盖新列表。
+    final seq = reset ? ++_reqSeq : _reqSeq;
+    _PageSnapshot? snap;
+    if (reset && !force) {
+      final hit = _cache[key];
+      if (hit != null && DateTime.now().difference(hit.at) < _cacheTtl) {
+        snap = hit;
+      }
+    }
     if (reset) {
+      final s = snap;
       setState(() {
-        _loading = true;
-        _error = null;
-        _cursor = null;
+        if (s != null) {
+          // 先渲染缓存：切换文件夹立刻出列表，后台再悄悄刷新。
+          _items = s.items;
+          _cursor = s.cursor;
+          _folders = s.folders;
+          _segments = s.segments;
+          _parentPath = s.parentPath;
+          _folderPath = s.path;
+          _loading = false;
+          _refreshing = true;
+          _error = null;
+        } else {
+          _loading = true;
+          _refreshing = false;
+          _error = null;
+          _cursor = null;
+        }
       });
     } else if (more) {
       setState(() => _loadingMore = true);
@@ -135,27 +182,44 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
         cursor: more ? _cursor : null,
         limit: 60,
       );
-      if (!mounted) return;
+      if (!mounted || seq != _reqSeq) return;
       setState(() {
         _items = more ? [..._items, ...res.items] : res.items;
         _cursor = res.nextCursor;
         _loading = false;
         _loadingMore = false;
+        _refreshing = false;
       });
-      if (!more) {
-        unawaited(_loadFolders());
-      }
+      _saveCache(key);
+      // 命中缓存时 folders 也是缓存的，不必再发那条最重的整库聚合；
+      // 首次进入 / 手动强制刷新才补一次。
+      if (!more && snap == null) unawaited(_loadFolders(seq, key));
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || seq != _reqSeq) return;
       setState(() {
         _error = '$e';
         _loading = false;
         _loadingMore = false;
+        _refreshing = false;
       });
     }
   }
 
-  Future<void> _loadFolders() async {
+  void _saveCache(String key) {
+    _cache[key] = _PageSnapshot(
+      items: List<VideoItem>.unmodifiable(_items),
+      cursor: _cursor,
+      folders: List<VideoImageFolderNode>.unmodifiable(_folders),
+      segments: List<VideoImageFolderSegment>.unmodifiable(_segments),
+      parentPath: _parentPath,
+      path: _folderPath,
+      at: DateTime.now(),
+    );
+    if (_cache.length > 64) _cache.remove(_cache.keys.first);
+  }
+
+  Future<void> _loadFolders([int? seq, String? cacheKey]) async {
+    if (seq != null && seq != _reqSeq) return;
     if (!_folderMode || _isSearching) {
       if (mounted) {
         setState(() {
@@ -163,6 +227,7 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
           _foldersLoading = false;
         });
       }
+      if (cacheKey != null) _saveCache(cacheKey);
       return;
     }
     setState(() => _foldersLoading = true);
@@ -171,7 +236,7 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
         libraryId: widget.libraryId,
         folderPath: _folderPath.isEmpty ? null : _folderPath,
       );
-      if (!mounted) return;
+      if (!mounted || (seq != null && seq != _reqSeq)) return;
       setState(() {
         _folderPath = res.path;
         _parentPath = res.parentPath;
@@ -179,8 +244,11 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
         _folders = res.folders;
         _foldersLoading = false;
       });
+      if (cacheKey != null) _saveCache(cacheKey);
     } catch (_) {
-      if (mounted) setState(() => _foldersLoading = false);
+      if (mounted && (seq == null || seq == _reqSeq)) {
+        setState(() => _foldersLoading = false);
+      }
     }
   }
 
@@ -398,13 +466,18 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
     final body = Column(
       children: [
         _toolbar(context),
+        if (_refreshing)
+          const SizedBox(
+            height: 2,
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
         Expanded(
           child: _loading
               ? const NasLoading()
-              : _error != null
+              : _error != null && _items.isEmpty && _folders.isEmpty
               ? NasErrorState(
                   message: _error!,
-                  onRetry: () => _load(reset: true),
+                  onRetry: () => _load(reset: true, force: true),
                 )
               : _content(context),
         ),
@@ -460,7 +533,9 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
                   color: _folderMode ? null : scheme.primary,
                 ),
               ),
-              NasRefreshButton(onPressed: () => _load(reset: true)),
+              NasRefreshButton(
+                onPressed: () => _load(reset: true, force: true),
+              ),
             ],
           ),
           const SizedBox(height: 4),
@@ -1019,4 +1094,25 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
       child: cell,
     );
   }
+}
+
+/// 一屏列表 + 文件夹层级的内存快照（stale-while-revalidate 用）。
+class _PageSnapshot {
+  const _PageSnapshot({
+    required this.items,
+    required this.cursor,
+    required this.folders,
+    required this.segments,
+    required this.parentPath,
+    required this.path,
+    required this.at,
+  });
+
+  final List<VideoItem> items;
+  final String? cursor;
+  final List<VideoImageFolderNode> folders;
+  final List<VideoImageFolderSegment> segments;
+  final String? parentPath;
+  final String path;
+  final DateTime at;
 }

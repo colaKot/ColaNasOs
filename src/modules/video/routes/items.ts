@@ -8,6 +8,12 @@ import { missingEpisodes } from '../series';
 import { rankMarksOf } from '../jp-rank';
 import { effectiveSources, offlineCond, offlineSmbPrefixes, sourceRootCond } from '../sources';
 import { jpTagCond, resolutionCond } from '../jp-filter';
+import {
+  bindVideoListCacheInvalidation,
+  videoListCacheGet,
+  videoListCacheKey,
+  videoListCacheSet,
+} from '../list-cache';
 import { ONLINE_NO, normalizeConnType } from '../smb';
 import {
   FolderMode,
@@ -174,6 +180,7 @@ function applyFilters(
 
 /** 列表 / 详情 */
 export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: VideoHelpers): Promise<void> {
+    bindVideoListCacheInvalidation(k);
     // ---------------------------------------------------------------- 列表 / 详情
 
     app.get(
@@ -258,6 +265,16 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           }
           return reply.code(400).send({ error: Err.badRequest, message: 'invalid folder path' });
         }
+
+        // 图片 / 混合库的列表：整库扫描 + 同名排除很重，按「用户 + 完整查询」
+        // 缓存 20s；扫描完成 / SMB 上线会让缓存整体失效。
+        const cacheKey = wantImage && lib ? videoListCacheKey('list', q, uid) : null;
+        const cached = cacheKey ? videoListCacheGet(cacheKey) : null;
+        if (cached) return cached as any;
+        const put = <T>(value: T): T => {
+          if (cacheKey) videoListCacheSet(cacheKey, value);
+          return value;
+        };
 
         // 图片 / 混合库排序：名字 / 拍摄 / 入库 / 查看时间；默认名字升序。
         const mediaSortRaw = String(q.sortBy || '').trim();
@@ -389,20 +406,20 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
         if (onlyImages) {
           const rows = await imageRows(limit + 1);
           const { page, last } = sortPage(rows, limit);
-          return {
+          return put({
             items: await withRank(k, dropSharedArtwork(page).map(toItem)),
             nextCursor: last ? encodeSortCursor(last.sort_key ?? '', last.id) : null,
-          };
+          });
         }
 
         if (wantImage && wantVideo) {
           const [vs, is] = await Promise.all([videoRows(limit + 1), imageRows(limit + 1)]);
           const merged = mergeRows(vs, is);
           const { page, last } = sortPage(merged, limit);
-          return {
+          return put({
             items: await withRank(k, dropSharedArtwork(page).map(toItem)),
             nextCursor: last ? encodeSortCursor(last.sort_key ?? '', last.id) : null,
-          };
+          });
         }
 
         // ---------------------------------------------------------- 纯视频库：排序 / 筛选
@@ -438,7 +455,7 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
         let sourceRoot: string | null = null;
         if (q.sourceId) {
           const src = sources.find((s) => s.id === q.sourceId);
-          if (!src) return { items: [], nextCursor: null };
+          if (!src) return put({ items: [], nextCursor: null });
           sourceRoot = src.root_path;
         }
         where = applyFilters(where, q, uid, sourceRoot);
@@ -482,10 +499,10 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
 
         const rows = res.rows.slice(0, limit);
         const next = res.rows.length > limit && rows.length > 0 ? rows[rows.length - 1] : null;
-        return {
+        return put({
           items: await withRank(k, dropSharedArtwork(rows).map(toItem)),
           nextCursor: next ? encodeSortCursor(next.sort_key ?? '', next.id) : null,
-        };
+        });
       },
     );
 

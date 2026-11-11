@@ -3,7 +3,6 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
-import 'cola_video_detail_page.dart';
 import 'player_page.dart';
 import 'video_card.dart';
 
@@ -868,9 +867,9 @@ class SeasonPosterCard extends StatelessWidget {
   }
 }
 
-/// 集列表的一列点击入口（统一走影片详情，和列表页一致）。
-void openEpisodeDetail(BuildContext context, VideoItem ep) {
-  openVideoDetail(context, ep);
+/// 集卡片的点击入口：直接起播，不再绕一层影片详情。
+void playEpisodeNow(BuildContext context, VideoItem ep) {
+  playVideoItemNow(context, ep);
 }
 
 /// 判断「这行文字是不是同一部剧的名字」用的归一化：忽略大小写与空格 / 点 / 下划线。
