@@ -404,7 +404,8 @@ class SeriesPosterCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(NasTokens.radiusSm),
                     child: SeriesCoverImage(
                       artUrl: seriesArtUrl(item.coverId, size: wantSize),
-                      posterUrl: episodeStillFallbackUrl(item.coverId),
+                      // 竖版海报拿不到就显示占位，别退成横版剧照
+                      posterUrl: null,
                       fallbackText: item.name,
                       cacheWidth: wantSize,
                     ),

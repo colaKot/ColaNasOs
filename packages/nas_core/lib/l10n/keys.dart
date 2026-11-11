@@ -2295,6 +2295,8 @@ class I18nKeys {
   static const videoDetailOverview = 'video.detail.overview';
   static const videoDetailPeople = 'video.detail.people';
   static const videoDetailRegion = 'video.detail.region';
+  static const videoDetailResumeEpisodeMinute = 'video.detail.resumeEpisodeMinute';
+  static const videoDetailResumeMinute = 'video.detail.resumeMinute';
   static const videoDetailReleaseDate = 'video.detail.releaseDate';
   static const videoDetailRuntime = 'video.detail.runtime';
   static const videoDetailScore = 'video.detail.score';
@@ -2679,4 +2681,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2637;
+const int i18nKeyCount = 2639;

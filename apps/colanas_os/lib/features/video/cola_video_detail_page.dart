@@ -781,7 +781,7 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             children: [
               Expanded(
                 child: Text(
-                  item.title,
+                  _displayTitle(item),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -878,68 +878,131 @@ class VideoDetailPageState extends State<VideoDetailPage> {
     );
   }
 
+  /// 详情页标题：电视剧显示剧名（多季再补「第 N 季」），电影仍显示片名。
+  String _displayTitle(VideoItem item) {
+    final series = (item.series ?? '').trim();
+    if (series.isEmpty) return item.title;
+    final name = _zhSeriesName(series, item.path);
+    final seasons = _seriesEpisodes.map((e) => e.season ?? 1).toSet().length;
+    final n = item.season ?? 0;
+    if (seasons > 1 && n > 0) {
+      return '$name · ${tr('video.series.season', {'n': '$n'})}';
+    }
+    return name;
+  }
+
+  /// series 列是英文发布名；目录 / 文件名里常带中文剧名，优先用它。
+  String _zhSeriesName(String series, String path) {
+    final re = RegExp(r'[\u3400-\u9fff][\u3400-\u9fff0-9A-Za-z·：:，,、\s]{1,30}');
+    for (final s in [series, path]) {
+      final m = re.firstMatch(s);
+      if (m == null) continue;
+      final t = (m.group(0) ?? '').trim().replaceAll(
+        RegExp(r'[\s.,·:：，、]+$'),
+        '',
+      );
+      if (t.length >= 2) return t;
+    }
+    return series;
+  }
+
+  /// 续播起点：优先用上报的播放位置，缺失时按片长 × 百分比估算。
+  int? _resumeMinutes(VideoItem item, double percent) {
+    final raw = (_position ?? '').trim();
+    if (raw.isNotEmpty) {
+      final ms = int.tryParse(raw);
+      if (ms != null) return ms ~/ 60000;
+      final parts = raw.split(':');
+      if (parts.length >= 2) {
+        final h = int.tryParse(parts[0].trim()) ?? 0;
+        final m = int.tryParse(parts[1].trim()) ?? 0;
+        return h * 60 + m;
+      }
+    }
+    final duration = item.durationMs ?? 0;
+    if (duration > 0) return (duration * percent / 100 / 60000).floor();
+    return null;
+  }
+
+  String? _resumeHint(VideoItem item) {
+    if (_percent <= 0 || _percent >= 95) return null;
+    final minutes = _resumeMinutes(item, _percent);
+    if (minutes == null) return null;
+    final n = item.episode ?? 0;
+    if ((item.series ?? '').isNotEmpty && n > 0) {
+      return tr('video.detail.resumeEpisodeMinute', {
+        'episode': '$n',
+        'minute': '$minutes',
+      });
+    }
+    return tr('video.detail.resumeMinute', {'minute': '$minutes'});
+  }
+
   /// 操作行：播放胶囊 + 三个圆形按钮（收藏 / 已看 / 更多）。
   ///
-  /// 其余操作（转码、加合集、复制链接、复制路径、强制刮削）收进「更多」，
-  /// 头图区不再摆一排 8 个按钮。
+  /// 有播放记录 →「继续播放」，没有 →「播放」；按钮下方给出续播起点。
   Widget _actionRow(BuildContext context, VideoItem item) {
-    final scheme = Theme.of(context).colorScheme;
-    final hasProgress = _percent > 0;
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      crossAxisAlignment: WrapCrossAlignment.center,
+    final hasProgress = _percent > 0 && _percent < 100;
+    final hint = hasProgress ? _resumeHint(item) : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        FilledButton.icon(
-          onPressed: _busy ? null : _openPlayer,
-          icon: const Icon(Icons.play_arrow, size: 20),
-          label: Text(
-            hasProgress && _percent < 100
-                ? '${tr('ui.video.017')} ${_percent.round()}%'
-                : tr('ui.video.018'),
-          ),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            shape: const StadiumBorder(),
-          ),
-        ),
-        _circleAction(
-          context,
-          icon: _favorite ? Icons.favorite : Icons.favorite_border,
-          tooltip: _favorite
-              ? tr('video.action.unfavorite')
-              : tr('video.action.favorite'),
-          active: _favorite,
-          onTap: _toggleFavorite,
-        ),
-        _circleAction(
-          context,
-          icon: item.watched ? Icons.check_circle : Icons.check_circle_outline,
-          tooltip: item.watched
-              ? tr('video.action.markUnwatched')
-              : (item.series != null
-                    ? tr('video.action.markTvWatched')
-                    : tr('video.action.markWatched')),
-          active: item.watched,
-          onTap: _busy ? null : _toggleWatched,
-        ),
-        _circleAction(
-          context,
-          icon: Icons.more_horiz,
-          tooltip: tr('video.card.more'),
-          onTap: () => _showMoreActions(context, item),
-        ),
-        if (hasProgress)
-          Padding(
-            padding: const EdgeInsets.only(left: 4),
-            child: Text(
-              '${_percent.round()}%',
-              style: TextStyle(
-                fontSize: NasTokens.fontCaption,
-                color: scheme.primary,
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            FilledButton.icon(
+              onPressed: _busy ? null : _openPlayer,
+              icon: const Icon(Icons.play_arrow, size: 20),
+              label: Text(
+                hasProgress
+                    ? tr('video.series.resume')
+                    : tr('video.series.play'),
+              ),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                shape: const StadiumBorder(),
               ),
             ),
+            _circleAction(
+              context,
+              icon: _favorite ? Icons.favorite : Icons.favorite_border,
+              tooltip: _favorite
+                  ? tr('video.action.unfavorite')
+                  : tr('video.action.favorite'),
+              active: _favorite,
+              onTap: _toggleFavorite,
+            ),
+            _circleAction(
+              context,
+              icon: item.watched ? Icons.check_circle : Icons.check_circle_outline,
+              tooltip: item.watched
+                  ? tr('video.action.markUnwatched')
+                  : (item.series != null
+                        ? tr('video.action.markTvWatched')
+                        : tr('video.action.markWatched')),
+              active: item.watched,
+              onTap: _busy ? null : _toggleWatched,
+            ),
+            _circleAction(
+              context,
+              icon: Icons.more_horiz,
+              tooltip: tr('video.card.more'),
+              onTap: () => _showMoreActions(context, item),
+            ),
+          ],
+        ),
+        if (hint != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            hint,
+            style: TextStyle(
+              fontSize: NasTokens.fontCaption,
+              color: context.nasTextSecondary,
+            ),
           ),
+        ],
       ],
     );
   }

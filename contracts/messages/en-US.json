@@ -2377,6 +2377,8 @@
     "video.detail.overview": "Overview",
     "video.detail.people": "Cast & crew",
     "video.detail.region": "Region",
+    "video.detail.resumeEpisodeMinute": "Resume from episode {episode} at {minute} min",
+    "video.detail.resumeMinute": "Resume from {minute} min",
     "video.detail.releaseDate": "Released",
     "video.detail.runtime": "Runtime",
     "video.detail.score": "Rating",

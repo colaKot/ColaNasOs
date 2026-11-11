@@ -2258,6 +2258,8 @@
     "video.detail.overview": "剧情简介",
     "video.detail.people": "演职人员",
     "video.detail.region": "地区",
+    "video.detail.resumeEpisodeMinute": "从第 {episode} 集 {minute} 分钟开始",
+    "video.detail.resumeMinute": "从 {minute} 分钟开始",
     "video.detail.releaseDate": "上映",
     "video.detail.runtime": "片长",
     "video.detail.score": "评分",

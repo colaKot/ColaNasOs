@@ -2946,6 +2946,13 @@
     "video.detail.overview": {},
     "video.detail.people": {},
     "video.detail.region": {},
+    "video.detail.resumeEpisodeMinute": {
+      "episode": {},
+      "minute": {}
+    },
+    "video.detail.resumeMinute": {
+      "minute": {}
+    },
     "video.detail.releaseDate": {},
     "video.detail.runtime": {},
     "video.detail.score": {},

@@ -139,11 +139,46 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
     );
   }
 
+  /// 剧名：series 列是英文发布名，目录 / 文件名里带中文时优先用中文。
+  String _displayName(String series, String? path) {
+    final re = RegExp(r'[\u3400-\u9fff][\u3400-\u9fff0-9A-Za-z·：:，,、\s]{1,30}');
+    for (final s in [series, path ?? '']) {
+      final m = re.firstMatch(s);
+      if (m == null) continue;
+      final t = (m.group(0) ?? '').trim().replaceAll(
+        RegExp(r'[\s.,·:：，、]+$'),
+        '',
+      );
+      if (t.length >= 2) return t;
+    }
+    return series;
+  }
+
+  /// 继续播放按钮下方：从第几集几分钟开始（进度按片长 × 百分比估算）。
+  String? _resumeHint(SeriesBundle b) {
+    final ep = b.resumeOf();
+    if (ep == null) return null;
+    final percent = b.progress[ep.id] ?? 0;
+    if (percent <= 0 || percent >= 95) return null;
+    final duration = ep.durationMs ?? 0;
+    if (duration <= 0) return null;
+    final minutes = (duration * percent / 100 / 60000).floor();
+    final n = ep.episode ?? 0;
+    if (n > 0) {
+      return tr('video.detail.resumeEpisodeMinute', {
+        'episode': '$n',
+        'minute': '$minutes',
+      });
+    }
+    return tr('video.detail.resumeMinute', {'minute': '$minutes'});
+  }
+
   Widget _content(BuildContext context, SeriesBundle b) {
     // 单季已在 build 里直接落到单集详情，这里只可能是多季的选季页。
     final seasons = b.bySeason;
     final sample = b.sample;
     final resume = b.resumeOf();
+    final resumeHint = _resumeHint(b);
 
     final meta = <String>[
       if ((sample?.year ?? 0) > 0) '${sample!.year}',
@@ -164,7 +199,7 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
       padding: const EdgeInsets.all(NasTokens.spaceMd),
       children: [
         VideoSeriesHero(
-          title: sample?.series ?? widget.name,
+          title: _displayName(sample?.series ?? widget.name, sample?.path),
           subtitle: tr('video.seasonsEpisodes', {
             'seasons': '${seasons.length}',
             'episodes': '${b.items.length}',
@@ -179,6 +214,16 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
           onPlay: resume == null ? null : () => _play(resume),
           notice: gapNote,
         ),
+        if (resumeHint != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            resumeHint,
+            style: TextStyle(
+              fontSize: NasTokens.fontCaption,
+              color: context.nasTextSecondary,
+            ),
+          ),
+        ],
         const SizedBox(height: NasTokens.spaceLg),
         _sectionTitle(context, tr('video.series.seasonList')),
         const SizedBox(height: 10),
