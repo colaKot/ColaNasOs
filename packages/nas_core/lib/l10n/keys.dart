@@ -69,10 +69,14 @@ class I18nKeys {
   static const accountsPolicyAddPath = 'accounts.policy.addPath';
   static const accountsPolicyApps = 'accounts.policy.apps';
   static const accountsPolicyAppsHint = 'accounts.policy.appsHint';
+  static const accountsPolicyFullAccessHint = 'accounts.policy.fullAccessHint';
   static const accountsPolicyNoApps = 'accounts.policy.noApps';
+  static const accountsPolicyOutsideRoot = 'accounts.policy.outsideRoot';
   static const accountsPolicyPath = 'accounts.policy.path';
+  static const accountsPolicyPathEmpty = 'accounts.policy.pathEmpty';
   static const accountsPolicyPathHint = 'accounts.policy.pathHint';
   static const accountsPolicyPaths = 'accounts.policy.paths';
+  static const accountsPolicyPickDir = 'accounts.policy.pickDir';
   static const accountsPolicyRestrict = 'accounts.policy.restrict';
   static const accountsPolicySaved = 'accounts.policy.saved';
   static const accountsRemark = 'accounts.remark';
@@ -148,6 +152,9 @@ class I18nKeys {
   // ---- common ----
   static const commonCollapse = 'common.collapse';
   static const commonExpand = 'common.expand';
+  // ---- files ----
+  static const filesNoDirGranted = 'files.noDirGranted';
+  static const filesNoDirGrantedHint = 'files.noDirGrantedHint';
   // ---- photo ----
   static const photoMemoryConfirmAll = 'photo.memory.confirmAll';
   static const photoMemoryConfirmAllBody = 'photo.memory.confirmAllBody';
@@ -2720,4 +2727,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2676;
+const int i18nKeyCount = 2682;

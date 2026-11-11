@@ -80,10 +80,16 @@
     "accounts.policy.addPath": {},
     "accounts.policy.apps": {},
     "accounts.policy.appsHint": {},
+    "accounts.policy.fullAccessHint": {},
     "accounts.policy.noApps": {},
+    "accounts.policy.outsideRoot": {
+      "home": {}
+    },
     "accounts.policy.path": {},
+    "accounts.policy.pathEmpty": {},
     "accounts.policy.pathHint": {},
     "accounts.policy.paths": {},
+    "accounts.policy.pickDir": {},
     "accounts.policy.restrict": {},
     "accounts.policy.saved": {},
     "accounts.remark": {},
@@ -170,6 +176,8 @@
     "app.transmission": {},
     "common.collapse": {},
     "common.expand": {},
+    "files.noDirGranted": {},
+    "files.noDirGrantedHint": {},
     "photo.memory.confirmAll": {
       "count": {}
     },

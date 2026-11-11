@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+
 import '../../shell/app_widgets.dart';
 
 import '../../core/display_labels.dart';
 import '../../core/session.dart';
 import '../../shell/app_nav_shell.dart';
+import '../photo/folder_picker.dart';
 import 'scope_picker.dart';
 
 /// 用户与权限（SP3-01）：主从布局（用户列表 + 详情工作台）。
@@ -192,7 +194,10 @@ class _AccountsPageState extends State<AccountsPage> {
       );
       NasSnack.showOn(messenger, tr('accounts.policy.saved'));
     } catch (e) {
-      NasSnack.showOn(messenger, tr('common.saveFailed', {'error': '${_hint(e) ?? e}'}));
+      NasSnack.showOn(
+        messenger,
+        tr('common.saveFailed', {'error': '${_hint(e) ?? e}'}),
+      );
     } finally {
       if (mounted) setState(() => _policySaving = false);
     }
@@ -266,10 +271,7 @@ class _AccountsPageState extends State<AccountsPage> {
                     ),
                   ),
                   const SizedBox(height: NasTokens.spaceXs),
-                  ScopePicker(
-                    value: scopes,
-                    onChanged: (v) => scopes = v,
-                  ),
+                  ScopePicker(value: scopes, onChanged: (v) => scopes = v),
                 ],
               ),
             ),
@@ -327,9 +329,13 @@ class _AccountsPageState extends State<AccountsPage> {
       await _loadUsers();
     } catch (e) {
       if (!mounted) return;
-      NasSnack.show(context, 
-            tr('accounts.toggleFailed', {'action': disabled ? tr('ui.accounts.007') : tr('ui.accounts.008'), 'error': '$e'}),
-          );
+      NasSnack.show(
+        context,
+        tr('accounts.toggleFailed', {
+          'action': disabled ? tr('ui.accounts.007') : tr('ui.accounts.008'),
+          'error': '$e',
+        }),
+      );
     }
   }
 
@@ -360,7 +366,9 @@ class _AccountsPageState extends State<AccountsPage> {
                 TextField(
                   controller: passCtrl,
                   obscureText: true,
-                  decoration: InputDecoration(labelText: tr('accounts.passwordKeep')),
+                  decoration: InputDecoration(
+                    labelText: tr('accounts.passwordKeep'),
+                  ),
                 ),
                 const SizedBox(height: NasTokens.spaceMd),
                 TextField(
@@ -381,10 +389,7 @@ class _AccountsPageState extends State<AccountsPage> {
                   ),
                 ),
                 const SizedBox(height: NasTokens.spaceXs),
-                ScopePicker(
-                  value: scopes,
-                  onChanged: (v) => scopes = v,
-                ),
+                ScopePicker(value: scopes, onChanged: (v) => scopes = v),
               ],
             ),
           ),
@@ -421,7 +426,10 @@ class _AccountsPageState extends State<AccountsPage> {
         );
         await _loadUsers();
       } catch (e) {
-        NasSnack.showOn(messenger, tr('common.saveFailed', {'error': '${_hint(e) ?? e}'}));
+        NasSnack.showOn(
+          messenger,
+          tr('common.saveFailed', {'error': '${_hint(e) ?? e}'}),
+        );
       }
     } finally {
       nameCtrl.dispose();
@@ -458,7 +466,10 @@ class _AccountsPageState extends State<AccountsPage> {
       setState(() => _selectedId = null);
       await _loadUsers();
     } catch (e) {
-      NasSnack.showOn(messenger, tr('common.deleteFailed', {'error': '${_hint(e) ?? e}'}));
+      NasSnack.showOn(
+        messenger,
+        tr('common.deleteFailed', {'error': '${_hint(e) ?? e}'}),
+      );
     }
   }
 
@@ -567,10 +578,18 @@ class _AccountsPageState extends State<AccountsPage> {
     }
   }
 
+  /// 添加一条目录授权：**用公共的目录选择器选**，不再让人手打相对路径。
+  ///
+  /// 以前是个 `TextField`，提示写「相对文件根，例：/media/movies」——
+  /// 用户根本不知道文件根在哪、目录叫什么（用户 2026-11-11 反馈「怎么不能选目录」）。
+  /// 现在选绝对路径，再用 `/files/roots` 的 `home` 折算成规则要的相对路径。
   Future<void> _addPolicyPath() async {
-    final ctrl = TextEditingController();
+    // 选中的目录（相对 files 根，形如 /media/movies）
+    String? picked;
     // 新建规则默认给「看 + 下载」：和旧的 ro 一等价，够用又不会一上来就能删
     var actions = <String>['view', 'download'];
+    var picking = false;
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
@@ -582,11 +601,75 @@ class _AccountsPageState extends State<AccountsPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(
-                  controller: ctrl,
-                  decoration: InputDecoration(
-                    labelText: tr('accounts.policy.path'),
-                    hintText: tr('accounts.policy.pathHint'),
+                Text(tr('accounts.policy.path')),
+                const SizedBox(height: NasTokens.spaceXs),
+                InkWell(
+                  borderRadius: BorderRadius.circular(NasTokens.radiusMd),
+                  onTap: picking
+                      ? null
+                      : () async {
+                          setDialogState(() => picking = true);
+                          final next = await _pickPolicyDir();
+                          if (!ctx.mounted) return;
+                          setDialogState(() {
+                            picking = false;
+                            if (next != null) picked = next;
+                          });
+                        },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: NasTokens.spaceMd,
+                      vertical: NasTokens.spaceSm + 2,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(NasTokens.radiusMd),
+                      border: Border.all(color: Theme.of(ctx).dividerColor),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          picked == null
+                              ? Icons.folder_open_outlined
+                              : Icons.folder,
+                          size: 18,
+                          color: picked == null
+                              ? ctx.nasTextSecondary
+                              : Theme.of(ctx).colorScheme.primary,
+                        ),
+                        const SizedBox(width: NasTokens.spaceSm),
+                        Expanded(
+                          child: Text(
+                            picking
+                                ? tr('common.loading')
+                                : (picked ?? tr('accounts.policy.pathEmpty')),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: NasTokens.fontBody,
+                              color: picked == null
+                                  ? ctx.nasTextSecondary
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          tr('accounts.policy.pickDir'),
+                          style: TextStyle(
+                            fontSize: NasTokens.fontCaption,
+                            color: Theme.of(ctx).colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: NasTokens.spaceXs),
+                Text(
+                  tr('accounts.policy.pathHint'),
+                  style: TextStyle(
+                    fontSize: NasTokens.fontMicro,
+                    color: ctx.nasTextSecondary,
                   ),
                 ),
                 const SizedBox(height: NasTokens.spaceMd),
@@ -608,17 +691,15 @@ class _AccountsPageState extends State<AccountsPage> {
               child: Text(tr('common.cancel')),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
+              onPressed: picked == null ? null : () => Navigator.pop(ctx, true),
               child: Text(tr('common.save')),
             ),
           ],
         ),
       ),
     );
-    if (ok != true) return;
-    final path = ctrl.text.trim();
-    if (path.isEmpty) return;
-    if (!mounted) return;
+    if (ok != true || picked == null || !mounted) return;
+    final path = picked!;
     setState(() {
       _policyPaths = [
         ..._policyPaths,
@@ -627,6 +708,32 @@ class _AccountsPageState extends State<AccountsPage> {
     });
   }
 
+  /// 选一个目录并折算成「相对文件根」的规则路径；选到根外就提示并放弃。
+  Future<String?> _pickPolicyDir() async {
+    final abs = await showFolderPicker(
+      context,
+      title: tr('accounts.policy.pickDir'),
+    );
+    if (abs == null || abs.trim().isEmpty) return null;
+    String home;
+    try {
+      home = (await ApiSession.instance.client.filesRoots()).home;
+    } catch (e) {
+      if (mounted) NasSnack.show(context, '$e');
+      return null;
+    }
+    final rel = filesRelativePath(abs, home);
+    if (rel == null) {
+      if (mounted) {
+        NasSnack.show(
+          context,
+          tr('accounts.policy.outsideRoot', {'home': home}),
+        );
+      }
+      return null;
+    }
+    return rel;
+  }
 
   /// 编辑某条路径允许的动作（查看 / 下载 / 改名移动 / 删除 / 上传）
   Future<void> _editPathActions(int index) async {
@@ -673,7 +780,9 @@ class _AccountsPageState extends State<AccountsPage> {
     setState(() {
       _policyPaths = [
         for (var j = 0; j < _policyPaths.length; j++)
-          j == index ? {..._policyPaths[j], 'actions': actions} : _policyPaths[j],
+          j == index
+              ? {..._policyPaths[j], 'actions': actions}
+              : _policyPaths[j],
       ];
     });
   }
@@ -740,9 +849,7 @@ class _AccountsPageState extends State<AccountsPage> {
                             .toList();
                     return ListTile(
                       selected: selected,
-                      selectedTileColor: Theme.of(context)
-                          .colorScheme
-                          .primary
+                      selectedTileColor: Theme.of(context).colorScheme.primary
                           .withValues(alpha: 0.08),
                       leading: Icon(
                         disabled ? Icons.person_off : Icons.person,
@@ -754,13 +861,14 @@ class _AccountsPageState extends State<AccountsPage> {
                         overflow: TextOverflow.ellipsis,
                         style: disabled
                             ? const TextStyle(
-                                decoration: TextDecoration.lineThrough)
+                                decoration: TextDecoration.lineThrough,
+                              )
                             : null,
                       ),
                       subtitle: Text(
                         [
                           if (totp) '2FA',
-                          ...scopes.take(2),
+                          ...scopeLabels(scopes).take(2),
                         ].join(' · '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -835,7 +943,10 @@ class _AccountsPageState extends State<AccountsPage> {
                       ),
                       if (totp) ...[
                         const SizedBox(width: NasTokens.spaceXs),
-                        _statusChip('2FA', Theme.of(context).colorScheme.primary),
+                        _statusChip(
+                          '2FA',
+                          Theme.of(context).colorScheme.primary,
+                        ),
                       ],
                     ],
                   ),
@@ -844,7 +955,7 @@ class _AccountsPageState extends State<AccountsPage> {
                     spacing: NasTokens.spaceXs,
                     runSpacing: NasTokens.spaceXs,
                     children: [
-                      for (final s in scopes)
+                      for (final s in scopeLabels(scopes))
                         Chip(
                           label: Text(s),
                           visualDensity: VisualDensity.compact,
@@ -863,7 +974,9 @@ class _AccountsPageState extends State<AccountsPage> {
                           '${tr('accounts.remark')}: ${user['remark']}',
                         if (user['lastLoginAt'] != null)
                           tr('accounts.lastLogin', {
-                            'time': _fmtTime((user['lastLoginAt'] as num).toInt()),
+                            'time': _fmtTime(
+                              (user['lastLoginAt'] as num).toInt(),
+                            ),
                           }),
                       ].join(' · '),
                       style: TextStyle(
@@ -878,7 +991,9 @@ class _AccountsPageState extends State<AccountsPage> {
             const SizedBox(width: NasTokens.spaceSm),
             TextButton(
               onPressed: () => _toggleDisabled(user),
-              child: Text(disabled ? tr('ui.accounts.007') : tr('ui.accounts.008')),
+              child: Text(
+                disabled ? tr('ui.accounts.007') : tr('ui.accounts.008'),
+              ),
             ),
             IconButton(
               icon: const Icon(Icons.edit_outlined, size: 18),
@@ -936,15 +1051,12 @@ class _AccountsPageState extends State<AccountsPage> {
           ),
           trailing: FilledButton(
             onPressed: () => totp ? _disable2fa(user) : _enable2fa(user),
-            child: Text(
-              totp ? tr('ui.accounts.016') : tr('ui.accounts.017'),
-            ),
+            child: Text(totp ? tr('ui.accounts.016') : tr('ui.accounts.017')),
           ),
         ),
       ],
     );
   }
-
 
   String _fmtTime(int seconds) {
     if (seconds <= 0) return '-';
@@ -954,6 +1066,10 @@ class _AccountsPageState extends State<AccountsPage> {
   }
 
   Widget _policyTab(Map<String, dynamic> user) {
+    // 全权账号（`*`）本身就无视目录限制，除非主动加规则 —— 说清楚，
+    // 免得管理员以为自己「授权了目录」其实没生效（服务端 effectivePathRules）。
+    final isFullAccess = (user['scopes'] as List<dynamic>? ?? const [])
+        .contains('*');
     if (_policyLoading) return const NasLoading();
     if (_policyError != null) {
       return NasErrorState(
@@ -1020,6 +1136,17 @@ class _AccountsPageState extends State<AccountsPage> {
             ),
           ],
         ),
+        if (isFullAccess)
+          Padding(
+            padding: const EdgeInsets.only(bottom: NasTokens.spaceSm),
+            child: Text(
+              tr('accounts.policy.fullAccessHint'),
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: context.nasTextSecondary,
+              ),
+            ),
+          ),
         if (_policyPaths.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceSm),
@@ -1119,10 +1246,20 @@ class _AccountsPageState extends State<AccountsPage> {
                   child: TabBarView(
                     children: [
                       _twoFaTab(user),
-                      _EventTab(key: ValueKey('login-${user['id']}'), uid: '${user['id']}', audit: false),
-                      _LogsTab(key: ValueKey('logs-${user['id']}'), uid: '${user['id']}'),
+                      _EventTab(
+                        key: ValueKey('login-${user['id']}'),
+                        uid: '${user['id']}',
+                        audit: false,
+                      ),
+                      _LogsTab(
+                        key: ValueKey('logs-${user['id']}'),
+                        uid: '${user['id']}',
+                      ),
                       _policyTab(user),
-                      _TokensTab(key: ValueKey('tokens-${user['id']}'), uid: '${user['id']}'),
+                      _TokensTab(
+                        key: ValueKey('tokens-${user['id']}'),
+                        uid: '${user['id']}',
+                      ),
                     ],
                   ),
                 ),
@@ -1155,18 +1292,13 @@ class _AccountsPageState extends State<AccountsPage> {
           title: tr('app.accounts'),
           onHome: AppNavShell.onExitToHome,
         ),
-        body: user == null
-            ? _userList()
-            : _detail(user, showBack: true),
+        body: user == null ? _userList() : _detail(user, showBack: true),
       );
     }
     return Scaffold(
       body: Row(
         children: [
-          SizedBox(
-            width: 300,
-            child: _userList(),
-          ),
+          SizedBox(width: 300, child: _userList()),
           const VerticalDivider(width: 1),
           Expanded(
             child: user == null
@@ -1209,8 +1341,14 @@ class _LogsTabState extends State<_LogsTab> {
           ),
           child: SegmentedButton<bool>(
             segments: [
-              ButtonSegment(value: true, label: Text(tr('accounts.logs.files'))),
-              ButtonSegment(value: false, label: Text(tr('accounts.logs.audit'))),
+              ButtonSegment(
+                value: true,
+                label: Text(tr('accounts.logs.files')),
+              ),
+              ButtonSegment(
+                value: false,
+                label: Text(tr('accounts.logs.audit')),
+              ),
             ],
             selected: {_files},
             onSelectionChanged: (value) => setState(() => _files = value.first),
@@ -1218,8 +1356,15 @@ class _LogsTabState extends State<_LogsTab> {
         ),
         Expanded(
           child: _files
-              ? _FileLogTab(key: ValueKey('file-logs-${widget.uid}'), uid: widget.uid)
-              : _EventTab(key: ValueKey('audit-${widget.uid}'), uid: widget.uid, audit: true),
+              ? _FileLogTab(
+                  key: ValueKey('file-logs-${widget.uid}'),
+                  uid: widget.uid,
+                )
+              : _EventTab(
+                  key: ValueKey('audit-${widget.uid}'),
+                  uid: widget.uid,
+                  audit: true,
+                ),
         ),
       ],
     );
@@ -1369,9 +1514,15 @@ class _FileLogTabState extends State<_FileLogTab> {
                 isDense: true,
                 underline: const SizedBox.shrink(),
                 items: [
-                  DropdownMenuItem(value: '', child: Text(tr('accounts.fileLog.anyAction'))),
+                  DropdownMenuItem(
+                    value: '',
+                    child: Text(tr('accounts.fileLog.anyAction')),
+                  ),
                   ..._actions.map(
-                    (a) => DropdownMenuItem(value: a, child: Text(_actionLabel(a))),
+                    (a) => DropdownMenuItem(
+                      value: a,
+                      child: Text(_actionLabel(a)),
+                    ),
                   ),
                 ],
                 onChanged: (value) {
@@ -1390,9 +1541,18 @@ class _FileLogTabState extends State<_FileLogTab> {
                 isDense: true,
                 underline: const SizedBox.shrink(),
                 items: [
-                  DropdownMenuItem(value: '', child: Text(tr('accounts.fileLog.anyStatus'))),
-                  DropdownMenuItem(value: 'ok', child: Text(tr('accounts.fileLog.ok'))),
-                  DropdownMenuItem(value: 'failed', child: Text(tr('accounts.fileLog.failed'))),
+                  DropdownMenuItem(
+                    value: '',
+                    child: Text(tr('accounts.fileLog.anyStatus')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'ok',
+                    child: Text(tr('accounts.fileLog.ok')),
+                  ),
+                  DropdownMenuItem(
+                    value: 'failed',
+                    child: Text(tr('accounts.fileLog.failed')),
+                  ),
                 ],
                 onChanged: (value) {
                   if (value == null) return;
@@ -1486,20 +1646,30 @@ class _FileLogTabState extends State<_FileLogTab> {
       ),
       child: Row(
         children: [
-          Text(tr('accounts.fileLog.total', {'count': '$_total'}), style: caption),
+          Text(
+            tr('accounts.fileLog.total', {'count': '$_total'}),
+            style: caption,
+          ),
           if (to > 0) ...[
             const SizedBox(width: NasTokens.spaceSm),
-            Text(tr('accounts.fileLog.range', {'from': '$from', 'to': '$to'}), style: caption),
+            Text(
+              tr('accounts.fileLog.range', {'from': '$from', 'to': '$to'}),
+              style: caption,
+            ),
           ],
           const Spacer(),
           IconButton(
             tooltip: tr('accounts.fileLog.prev'),
-            onPressed: _loading || _offset == 0 ? null : () => _go(_offset - _pageSize),
+            onPressed: _loading || _offset == 0
+                ? null
+                : () => _go(_offset - _pageSize),
             icon: const Icon(Icons.chevron_left),
           ),
           IconButton(
             tooltip: tr('accounts.fileLog.next'),
-            onPressed: _loading || to >= _total ? null : () => _go(_offset + _pageSize),
+            onPressed: _loading || to >= _total
+                ? null
+                : () => _go(_offset + _pageSize),
             icon: const Icon(Icons.chevron_right),
           ),
         ],
@@ -1606,7 +1776,9 @@ class _EventTabState extends State<_EventTab> {
     if (_error != null) return NasErrorState(message: _error!, onRetry: _load);
     if (_items.isEmpty) {
       return NasEmptyState(
-        title: widget.audit ? tr('accounts.auditEmpty') : tr('accounts.loginEmpty'),
+        title: widget.audit
+            ? tr('accounts.auditEmpty')
+            : tr('accounts.loginEmpty'),
         icon: widget.audit ? Icons.receipt_long_outlined : Icons.login_outlined,
       );
     }
@@ -1936,7 +2108,7 @@ class _TokensTabState extends State<_TokensTab> {
           ),
           subtitle: Text(
             [
-              scopes.map((e) => '$e').join(', '),
+              scopeLabels(scopes.map((e) => '$e')).join('、'),
               tr('accounts.tokens.created', {'time': _time(item['createdAt'])}),
               lastUsedAt == null
                   ? tr('accounts.tokens.neverUsed')
@@ -2102,13 +2274,7 @@ class _IpRulesDialogState extends State<_IpRulesDialog> {
 // ---------------------------------------------------------------- 路径动作
 
 /// 路径上可授予的五个动作（顺序与内核 `PATH_ACTIONS` 一致）
-const kPathActions = <String>[
-  'view',
-  'download',
-  'update',
-  'delete',
-  'upload',
-];
+const kPathActions = <String>['view', 'download', 'update', 'delete', 'upload'];
 
 String _actionLabel(String action) => switch (action) {
   'view' => tr('accounts.pathAction.view'),
@@ -2162,4 +2328,24 @@ Widget _actionChips(
         ),
     ],
   );
+}
+
+/// 绝对路径 → 相对「文件根」的规则路径（`D:/Nas/media` + `D:/Nas` → `/media`）。
+///
+/// 目录授权里存的是**相对文件根**的路径（`PathRule.path`），而公共目录选择器
+/// 返回的是绝对路径（盘符 / 挂载点开头），必须折算一次。
+/// 不在根内 / 根为空返回 null —— 调用方负责提示，不要静默截成 `/`。
+///
+/// 比较时忽略大小写与斜杠方向：Windows 上 `D:\Nas` 与 `d:/nas` 是同一个目录。
+String? filesRelativePath(String absolute, String root) {
+  String norm(String v) =>
+      v.trim().replaceAll('\\', '/').replaceAll(RegExp(r'/+$'), '');
+  final abs = norm(absolute);
+  final home = norm(root);
+  if (abs.isEmpty || home.isEmpty) return null;
+  final a = abs.toLowerCase();
+  final h = home.toLowerCase();
+  if (a == h) return '/';
+  if (!a.startsWith('$h/')) return null;
+  return '/${abs.substring(home.length + 1)}';
 }

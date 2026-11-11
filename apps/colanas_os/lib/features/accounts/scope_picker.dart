@@ -34,6 +34,49 @@ String scopeWrite(String domain) => '$domain:write';
 /// 域的中文名。走 i18n，缺键时回落成域名本身（至少还能认出来是哪个）。
 String scopeDomainLabel(String domain) => tr('accounts.scope.domain.$domain');
 
+/// 单个权限的中文标签：`files:read` → 「文件 · 只读」，`*` → 「全部权限」。
+///
+/// 用户列表 / 账号卡片 / 访问令牌列表以前把 `files:read` 原样铺出来，
+/// 看着像配置文件而不是权限（用户 2026-11-11 反馈）。未知域 / 未知动作
+/// 原样返回，宁可露出英文也别显示成空白。
+String scopeLabel(String scope) {
+  final s = scope.trim();
+  if (s.isEmpty) return s;
+  if (s == kScopeWildcard) return tr('accounts.scope.all');
+  final idx = s.indexOf(':');
+  if (idx <= 0) return s;
+  final domain = s.substring(0, idx);
+  final action = s.substring(idx + 1);
+  final name = kScopeDomains.contains(domain)
+      ? scopeDomainLabel(domain)
+      : domain;
+  final act = switch (action) {
+    'read' => tr('accounts.scope.read'),
+    'write' => tr('accounts.scope.write'),
+    _ => action,
+  };
+  return '$name · $act';
+}
+
+/// 一组权限的中文标签，按域顺序排（`*` 直接折成一条「全部权限」）。
+List<String> scopeLabels(Iterable<String> scopes) {
+  final list = scopes.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+  if (list.contains(kScopeWildcard)) return <String>[tr('accounts.scope.all')];
+  final order = <String, int>{
+    for (var i = 0; i < kScopeDomains.length; i++) kScopeDomains[i]: i,
+  };
+  // 排序键：域序号 × 10 + 动作（只读 0 / 可写 1），同域内 read 排前面
+  int key(String s) {
+    final parts = s.split(':');
+    final d = order[parts.first] ?? 999;
+    final a = parts.length > 1 && parts[1] == 'write' ? 1 : 0;
+    return d * 10 + a;
+  }
+
+  list.sort((a, b) => key(a).compareTo(key(b)));
+  return list.map(scopeLabel).toList();
+}
+
 /// 把任意 scope 列表归一成「界面能正确显示」的形态：
 /// 去掉未知项以外的空值、给 `xxx:write` 自动补上 `xxx:read`。
 ///
@@ -170,7 +213,10 @@ class _ScopePickerState extends State<ScopePicker> {
               tr('accounts.scope.allWrite'),
               () => _applyAll(read: true, write: true),
             ),
-            _quickAction(tr('accounts.scope.clear'), () => _applyAll(read: false, write: false)),
+            _quickAction(
+              tr('accounts.scope.clear'),
+              () => _applyAll(read: false, write: false),
+            ),
           ],
         ),
         const SizedBox(height: NasTokens.spaceXs),
@@ -209,7 +255,9 @@ class _ScopePickerState extends State<ScopePicker> {
                             children: [
                               Expanded(
                                 child: Padding(
-                                  padding: const EdgeInsets.only(left: NasTokens.spaceXs),
+                                  padding: const EdgeInsets.only(
+                                    left: NasTokens.spaceXs,
+                                  ),
                                   child: Text(
                                     scopeDomainLabel(d),
                                     style: TextStyle(
@@ -290,7 +338,10 @@ class _ScopePickerState extends State<ScopePicker> {
         padding: const EdgeInsets.symmetric(horizontal: 8),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
-      child: Text(label, style: const TextStyle(fontSize: NasTokens.fontCaption)),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: NasTokens.fontCaption),
+      ),
     ),
   );
 

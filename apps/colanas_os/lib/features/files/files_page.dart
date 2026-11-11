@@ -21,6 +21,12 @@ class _FilesPageState extends State<FilesPage> {
   String _path = '/';
   bool _loading = true;
   String? _error;
+
+  /// 服务端按目录 ACL 拒绝了（403 pathForbidden）。
+  ///
+  /// 子账号没被授权任何目录时就是这个结果。以前会原样抛出
+  /// 「pathForbidden」这种机器话，用户看不懂 —— 单独给一条能照做的提示。
+  bool _denied = false;
   List<FilesListItem> _items = const [];
 
   /// 视图：`list` / `grid`；文件默认按网格看（缩略图更好认）
@@ -54,6 +60,7 @@ class _FilesPageState extends State<FilesPage> {
     setState(() {
       _loading = true;
       _error = null;
+      _denied = false;
     });
     try {
       final res = await ApiSession.instance.client.filesList(path: _path);
@@ -65,7 +72,9 @@ class _FilesPageState extends State<FilesPage> {
       });
     } catch (e) {
       if (!mounted) return;
+      final denied = e is ApiError && e.code == 'pathForbidden';
       setState(() {
+        _denied = denied;
         _error = e.toString();
         _loading = false;
       });
@@ -130,7 +139,10 @@ class _FilesPageState extends State<FilesPage> {
     return base.isEmpty ? name : '$base/$name';
   }
 
-  Future<String?> _promptName({required String title, required String initial}) {
+  Future<String?> _promptName({
+    required String title,
+    required String initial,
+  }) {
     final ctrl = TextEditingController(text: initial);
     return showDialog<String>(
       context: context,
@@ -143,7 +155,10 @@ class _FilesPageState extends State<FilesPage> {
           onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('common.cancel'))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(tr('common.cancel')),
+          ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
             child: Text(tr('common.confirm')),
@@ -158,7 +173,9 @@ class _FilesPageState extends State<FilesPage> {
     if (name == null || name.isEmpty || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ApiSession.instance.client.filesMkdir(body: FilesOpPathBody(path: _relInCurrent(name)));
+      await ApiSession.instance.client.filesMkdir(
+        body: FilesOpPathBody(path: _relInCurrent(name)),
+      );
       await _load();
     } catch (e) {
       NasSnack.showOn(messenger, '$e');
@@ -166,7 +183,10 @@ class _FilesPageState extends State<FilesPage> {
   }
 
   Future<void> _rename(FilesListItem item) async {
-    final name = await _promptName(title: tr('files.rename'), initial: item.name);
+    final name = await _promptName(
+      title: tr('files.rename'),
+      initial: item.name,
+    );
     if (name == null || name.isEmpty || name == item.name || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -186,8 +206,14 @@ class _FilesPageState extends State<FilesPage> {
         title: Text(tr('files.delete')),
         content: Text(tr('files.deleteConfirm', {'name': item.name})),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(tr('common.cancel'))),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(tr('files.delete'))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('files.delete')),
+          ),
         ],
       ),
     );
@@ -199,9 +225,10 @@ class _FilesPageState extends State<FilesPage> {
       );
       if (!mounted) return;
       final failed = res.failed;
-      NasSnack.showOn(messenger, 
-            failed.isEmpty ? tr('files.deletedToTrash') : failed.first.error,
-          );
+      NasSnack.showOn(
+        messenger,
+        failed.isEmpty ? tr('files.deletedToTrash') : failed.first.error,
+      );
       await _load();
     } catch (e) {
       NasSnack.showOn(messenger, '$e');
@@ -391,11 +418,10 @@ class _FilesPageState extends State<FilesPage> {
       final res = await ApiSession.instance.client.filesIndex();
       final taskId = res['taskId']?.toString() ?? '';
       final reused = res['reused'] == true;
-      NasSnack.showOn(messenger, 
-            reused
-                ? tr('ui.files.h439f15')
-                : '${tr('home.quick.index')}：$taskId',
-          );
+      NasSnack.showOn(
+        messenger,
+        reused ? tr('ui.files.h439f15') : '${tr('home.quick.index')}：$taskId',
+      );
     } catch (e) {
       NasSnack.showOn(messenger, '${tr('common.error')}：$e');
     }
@@ -593,6 +619,13 @@ class _FilesPageState extends State<FilesPage> {
 
   Widget _content() {
     if (_loading) return const NasLoading();
+    if (_denied) {
+      return NasEmptyState(
+        title: tr('files.noDirGranted'),
+        message: tr('files.noDirGrantedHint'),
+        icon: Icons.folder_off_outlined,
+      );
+    }
     if (_error != null) {
       return NasErrorState(
         message: _error!,
@@ -628,15 +661,15 @@ class _FilesPageState extends State<FilesPage> {
           return NasContextMenuRegion(
             entries: _fileMenuEntries(item),
             child: GestureDetector(
-            onLongPress: () => _gridMenu(item),
-            child: NasFileTile(
-              name: item.name,
-              subtitle: _kindLabel(nasFileKindOf(item.name, isDir: item.dir)),
-              kind: nasFileKindOf(item.name, isDir: item.dir),
-              grid: true,
-              onTap: () => _open(item),
-              onDoubleTap: () => _open(item),
-            ),
+              onLongPress: () => _gridMenu(item),
+              child: NasFileTile(
+                name: item.name,
+                subtitle: _kindLabel(nasFileKindOf(item.name, isDir: item.dir)),
+                kind: nasFileKindOf(item.name, isDir: item.dir),
+                grid: true,
+                onTap: () => _open(item),
+                onDoubleTap: () => _open(item),
+              ),
             ),
           );
         },
@@ -646,12 +679,12 @@ class _FilesPageState extends State<FilesPage> {
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: NasTokens.spaceLg),
       itemCount: _items.length,
-        itemBuilder: (context, i) {
-          final item = _items[i];
-          final kind = nasFileKindOf(item.name, isDir: item.dir);
-          return NasContextMenuRegion(
-            entries: _fileMenuEntries(item),
-            child: NasFileTile(
+      itemBuilder: (context, i) {
+        final item = _items[i];
+        final kind = nasFileKindOf(item.name, isDir: item.dir);
+        return NasContextMenuRegion(
+          entries: _fileMenuEntries(item),
+          child: NasFileTile(
             name: item.name,
             subtitle: _kindLabel(kind),
             kind: kind,
@@ -669,9 +702,9 @@ class _FilesPageState extends State<FilesPage> {
                 _itemMenu(item),
               ],
             ),
-            ),
-          );
-        },
+          ),
+        );
+      },
     );
   }
 
