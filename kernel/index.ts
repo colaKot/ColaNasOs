@@ -30,7 +30,7 @@ import { attachTerminal } from '../src/modules/system/pty';
 import { resolveApiToken } from '../src/modules/auth/api-token';
 import { BASE_MIGRATIONS } from './migrations/base';
 import { MIGRATION_ORDER } from './migrations/manifest';
-import { checkAppAccess, checkPathAccess, readPolicy, requestPathOf } from './access-policy';
+import { checkAppAccess, checkPathAccess, readPolicy, requestPathsOf } from './access-policy';
 import { createWatchdog, type WatchdogMetrics } from './watchdog';
 import { WatchService, DEFAULT_DEBOUNCE_MS } from './fs-watch';
 import { PollService, DEFAULT_POLL_INTERVAL_MS } from './poll';
@@ -395,16 +395,35 @@ export async function startKernel(opts: KernelOptions) {
         apps: policy.apps,
       });
     }
-    const pathScope = req.routeOptions.config?.pathScope;
-    if (pathScope) {
-      const target = requestPathOf(req as { query?: unknown; body?: unknown });
-      if (target) {
-        const pathDecision = checkPathAccess(policy.paths, pathScope, target);
+    const cfg = (req.routeOptions.config || {}) as {
+      pathAction?: 'view' | 'download' | 'update' | 'delete' | 'upload';
+      pathTargetAction?: 'view' | 'download' | 'update' | 'delete' | 'upload';
+      pathScope?: 'read' | 'write';
+    };
+    // 旧的 pathScope 折算：read→view、write→update
+    const needAction =
+      cfg.pathAction ?? (cfg.pathScope === 'write' ? 'update' : cfg.pathScope === 'read' ? 'view' : null);
+    if (needAction) {
+      const { paths, target } = requestPathsOf(req as { query?: unknown; body?: unknown });
+      // 批量接口逐条判：只要有一条越界就整单拒绝，不做「部分成功」
+      for (const p of paths) {
+        const pathDecision = checkPathAccess(policy.paths, needAction, p);
         if (!pathDecision.ok) {
           return reply.code(403).send({
             error: Err.pathForbidden,
-            need: pathScope,
+            need: needAction,
             rule: pathDecision.rule,
+            path: p,
+          });
+        }
+      }
+      if (cfg.pathTargetAction && target) {
+        const decision = checkPathAccess(policy.paths, cfg.pathTargetAction, target);
+        if (!decision.ok) {
+          return reply.code(403).send({
+            error: Err.pathForbidden,
+            need: cfg.pathTargetAction,
+            rule: decision.rule,
             path: target,
           });
         }

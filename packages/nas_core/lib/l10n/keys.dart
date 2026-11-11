@@ -57,6 +57,12 @@ class I18nKeys {
   static const accountsLogsUnavailable = 'accounts.logs.unavailable';
   static const accountsMobileBack = 'accounts.mobileBack';
   static const accountsPasswordKeep = 'accounts.passwordKeep';
+  static const accountsPathActionDelete = 'accounts.pathAction.delete';
+  static const accountsPathActionDownload = 'accounts.pathAction.download';
+  static const accountsPathActionTitle = 'accounts.pathAction.title';
+  static const accountsPathActionUpdate = 'accounts.pathAction.update';
+  static const accountsPathActionUpload = 'accounts.pathAction.upload';
+  static const accountsPathActionView = 'accounts.pathAction.view';
   static const accountsPhone = 'accounts.phone';
   static const accountsPolicyAccessRo = 'accounts.policy.access.ro';
   static const accountsPolicyAccessRw = 'accounts.policy.access.rw';
@@ -2699,4 +2705,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2656;
+const int i18nKeyCount = 2662;

@@ -180,9 +180,20 @@ const OkResponse = Type.Object({ ok: Type.Boolean() });
 
 const PolicyQuery = Type.Object({ uid: Type.String({ minLength: 1 }) });
 
+const PathActionSchema = Type.Union([
+  Type.Literal('view'),
+  Type.Literal('download'),
+  Type.Literal('update'),
+  Type.Literal('delete'),
+  Type.Literal('upload'),
+]);
+
 const PathRuleSchema = Type.Object({
   path: Type.String({ minLength: 1, maxLength: 1024 }),
-  access: Type.Union([Type.Literal('ro'), Type.Literal('rw')]),
+  /** 允许的动作（view 浏览 / download 下载 / update 改名移动 / delete 删除 / upload 上传） */
+  actions: Type.Optional(Type.Array(PathActionSchema, { maxItems: 5 })),
+  /** @deprecated 旧的 ro/rw 写法；不传 actions 时按它折算，写入一律落 actions */
+  access: Type.Optional(Type.Union([Type.Literal('ro'), Type.Literal('rw')])),
 });
 
 const PolicyBody = Type.Object({

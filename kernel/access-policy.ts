@@ -41,10 +41,48 @@ export const PUBLIC_API_PREFIXES = [
   '/api/v1/mcp',
 ];
 
+/**
+ * 路径上允许的动作（参考项目 user_permission.action 的口径）：
+ * - view     看目录 / 缩略图 / 搜索（只读浏览）
+ * - download 下载原文件（含 Range 拖动）
+ * - update   改名 / 移动 / 新建目录（改结构但不毁数据）
+ * - delete   删除（进回收站 / 彻底删 / 清空回收站）
+ * - upload   往这个路径写新文件（上传分片 / 合并 / 秒传校验）
+ */
+export type PathAction = 'view' | 'download' | 'update' | 'delete' | 'upload';
+
+export const PATH_ACTIONS: PathAction[] = [
+  'view',
+  'download',
+  'update',
+  'delete',
+  'upload',
+];
+
 export interface PathRule {
   /** 相对 files 根的路径；`/` 表示全部 */
   path: string;
-  access: 'ro' | 'rw';
+  /** 允许的动作；空/未传时按旧的 access 折算 */
+  actions?: PathAction[];
+  /** @deprecated 旧数据的 ro/rw；读取时折算成 actions，写入一律落 actions */
+  access?: 'ro' | 'rw';
+}
+
+/** 旧数据的 ro/rw → 动作集合（ro 只读浏览+下载，rw 全放行） */
+const LEGACY_ACTIONS: Record<'ro' | 'rw', PathAction[]> = {
+  ro: ['view', 'download'],
+  rw: PATH_ACTIONS,
+};
+
+/** 一条规则实际生效的动作（顺序固定，方便 UI 展示与比较） */
+export function actionsOfRule(rule: PathRule): PathAction[] {
+  const raw = Array.isArray(rule.actions) ? rule.actions : null;
+  if (raw && raw.length > 0) {
+    const set = new Set(raw.map((a) => String(a).trim()));
+    const picked = PATH_ACTIONS.filter((a) => set.has(a));
+    if (picked.length > 0) return picked;
+  }
+  return LEGACY_ACTIONS[rule.access === 'rw' ? 'rw' : 'ro'];
 }
 
 export interface AccessPolicy {
@@ -71,8 +109,7 @@ function normalizePath(value: string): string {
 
 /** 规则归一 + 校验；非法路径直接抛错（不做静默降级） */
 export function normalizePathRule(rule: PathRule): PathRule {
-  const access = rule.access === 'rw' ? 'rw' : 'ro';
-  return { path: normalizePath(rule.path), access };
+  return { path: normalizePath(rule.path), actions: actionsOfRule(rule) };
 }
 
 export function readPolicy(config: ConfigStore, uid: string): AccessPolicy {
@@ -140,12 +177,17 @@ export interface PathAccessDecision {
   rule: string | null;
 }
 
+/**
+ * 路径 ACL 判定。`need` 兼容旧的 read / write（分别折算成 view / update），
+ * 新代码直接传具体动作 —— 只给「上传」权限的账号不该能删文件。
+ */
 export function checkPathAccess(
   rules: PathRule[] | null | undefined,
-  need: 'read' | 'write',
+  need: PathAction | 'read' | 'write',
   requestPath: string,
 ): PathAccessDecision {
   if (!rules || rules.length === 0) return { ok: true, rule: null };
+  const action: PathAction = need === 'read' ? 'view' : need === 'write' ? 'update' : need;
 
   let target: string;
   try {
@@ -161,7 +203,7 @@ export function checkPathAccess(
     if (!deepest || rule.path.length > deepest.path.length) deepest = rule;
   }
   if (!deepest) return { ok: false, rule: null };
-  if (need === 'write' && deepest.access !== 'rw') return { ok: false, rule: deepest.path };
+  if (!actionsOfRule(deepest).includes(action)) return { ok: false, rule: deepest.path };
   return { ok: true, rule: deepest.path };
 }
 /** 从请求里取路径参数（query.path 优先，其次 body.path）；取不到返回 null = 不做路径校验 */
@@ -172,4 +214,32 @@ export function requestPathOf(req: { query?: unknown; body?: unknown }): string 
   if (typeof b.path === 'string' && b.path.trim()) return b.path;
   if (typeof b.target === 'string' && b.target.trim()) return b.target;
   return null;
+}
+
+/**
+ * 收集一个请求里**所有**需要过 ACL 的路径。
+ *
+ * 批量接口（delete / move）的 `paths[]` 以前只查了第一条 —— 只要有任意一条
+ * 落在禁区内就该整单拒绝，所以这里全收上来逐条判定。
+ * `target` 单独返回：移动 / 复制的目标目录要的是 upload 动作，和源路径不同。
+ */
+export function requestPathsOf(req: { query?: unknown; body?: unknown }): {
+  paths: string[];
+  target: string | null;
+} {
+  const out: string[] = [];
+  const q = (req.query || {}) as { path?: unknown };
+  if (typeof q.path === 'string' && q.path.trim()) out.push(q.path);
+  const b = (req.body || {}) as { path?: unknown; paths?: unknown; to?: unknown; target?: unknown };
+  if (typeof b.path === 'string' && b.path.trim()) out.push(b.path);
+  if (Array.isArray(b.paths)) {
+    for (const p of b.paths) if (typeof p === 'string' && p.trim()) out.push(p);
+  }
+  const rawTarget =
+    typeof b.to === 'string' && b.to.trim()
+      ? b.to
+      : typeof b.target === 'string' && b.target.trim()
+        ? b.target
+        : null;
+  return { paths: [...new Set(out)], target: rawTarget };
 }

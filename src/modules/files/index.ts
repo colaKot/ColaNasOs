@@ -201,7 +201,7 @@ export const files: ServerModule = {
     app.get(
       '/api/v1/files/list',
       secured('files:read', {
-        config: { pathScope: 'read' },
+        config: { pathAction: 'view' },
         schema: {
           operationId: 'filesList',
           tags: TAG,
@@ -234,7 +234,7 @@ export const files: ServerModule = {
     app.post(
       '/api/v1/files/check',
       secured('files:write', {
-        config: { pathScope: 'write' },
+        config: { pathAction: 'upload' },
         schema: {
           operationId: 'filesCheck',
           tags: TAG,
@@ -282,7 +282,7 @@ export const files: ServerModule = {
       secured('files:write', {
         // 请求体是二进制，跳过 ajv（query 由 handler 自行校验）
         validatorCompiler: (() => () => true) as any,
-        config: { pathScope: 'write' },
+        config: { pathAction: 'upload' },
         schema: {
           operationId: 'filesChunk',
           tags: TAG,
@@ -322,7 +322,7 @@ export const files: ServerModule = {
     app.post(
       '/api/v1/files/merge',
       secured('files:write', {
-        config: { pathScope: 'write' },
+        config: { pathAction: 'upload' },
         schema: {
           operationId: 'filesMerge',
           tags: TAG,
@@ -380,7 +380,7 @@ export const files: ServerModule = {
     app.get(
       '/api/v1/files/download',
       secured('files:read', {
-        config: { pathScope: 'read' },
+        config: { pathAction: 'download' },
         schema: {
           operationId: 'filesDownload',
           tags: TAG,
@@ -474,7 +474,7 @@ export const files: ServerModule = {
     app.get(
       '/api/v1/files/thumb',
       secured('files:read', {
-        config: { pathScope: 'read' },
+        config: { pathAction: 'view' },
         schema: {
           operationId: 'filesThumb',
           tags: TAG,
@@ -541,7 +541,7 @@ export const files: ServerModule = {
     app.get(
       '/api/v1/files/search',
       secured('files:read', {
-        config: { pathScope: 'read' },
+        config: { pathAction: 'view' },
         schema: {
           operationId: 'filesSearch',
           tags: TAG,
@@ -578,7 +578,7 @@ export const files: ServerModule = {
     app.post(
       '/api/v1/files/mkdir',
       secured('files:write', {
-        config: { pathScope: 'write' },
+        config: { pathAction: 'update' },
         schema: {
           operationId: 'filesMkdir',
           tags: TAG,
@@ -613,7 +613,7 @@ export const files: ServerModule = {
     app.post(
       '/api/v1/files/rename',
       secured('files:write', {
-        config: { pathScope: 'write' },
+        config: { pathAction: 'update' },
         schema: {
           operationId: 'filesRename',
           tags: TAG,
@@ -658,7 +658,8 @@ export const files: ServerModule = {
     app.post(
       '/api/v1/files/move',
       secured('files:write', {
-        config: { pathScope: 'write' },
+        // 源：改名/移动算 update；目标目录：要往里写东西，算 upload
+        config: { pathAction: 'update', pathTargetAction: 'upload' },
         schema: {
           operationId: 'filesMove',
           tags: TAG,
@@ -705,7 +706,7 @@ export const files: ServerModule = {
     app.post(
       '/api/v1/files/delete',
       secured('files:write', {
-        config: { pathScope: 'write' },
+        config: { pathAction: 'delete' },
         schema: {
           operationId: 'filesDelete',
           tags: TAG,
@@ -765,7 +766,7 @@ export const files: ServerModule = {
     app.post(
       '/api/v1/files/trash/restore',
       secured('files:write', {
-        config: { pathScope: 'write' },
+        config: { pathAction: 'update' },
         schema: {
           operationId: 'filesTrashRestore',
           tags: TAG,
@@ -811,7 +812,7 @@ export const files: ServerModule = {
     app.post(
       '/api/v1/files/trash/empty',
       secured('files:write', {
-        config: { pathScope: 'write' },
+        config: { pathAction: 'delete' },
         schema: {
           operationId: 'filesTrashEmpty',
           tags: TAG,

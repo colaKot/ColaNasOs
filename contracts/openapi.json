@@ -14632,14 +14632,51 @@
                       "items": {
                         "type": "object",
                         "required": [
-                          "path",
-                          "access"
+                          "path"
                         ],
                         "properties": {
                           "path": {
                             "minLength": 1,
                             "maxLength": 1024,
                             "type": "string"
+                          },
+                          "actions": {
+                            "maxItems": 5,
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "view"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "download"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "update"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "delete"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "upload"
+                                  ]
+                                }
+                              ]
+                            }
                           },
                           "access": {
                             "anyOf": [
@@ -14732,14 +14769,51 @@
                     "items": {
                       "type": "object",
                       "required": [
-                        "path",
-                        "access"
+                        "path"
                       ],
                       "properties": {
                         "path": {
                           "minLength": 1,
                           "maxLength": 1024,
                           "type": "string"
+                        },
+                        "actions": {
+                          "maxItems": 5,
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "view"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "download"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "update"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "delete"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "upload"
+                                ]
+                              }
+                            ]
+                          }
                         },
                         "access": {
                           "anyOf": [
@@ -14798,14 +14872,51 @@
                       "items": {
                         "type": "object",
                         "required": [
-                          "path",
-                          "access"
+                          "path"
                         ],
                         "properties": {
                           "path": {
                             "minLength": 1,
                             "maxLength": 1024,
                             "type": "string"
+                          },
+                          "actions": {
+                            "maxItems": 5,
+                            "type": "array",
+                            "items": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "view"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "download"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "update"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "delete"
+                                  ]
+                                },
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "upload"
+                                  ]
+                                }
+                              ]
+                            }
                           },
                           "access": {
                             "anyOf": [

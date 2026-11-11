@@ -139,7 +139,14 @@ class _AccountsPageState extends State<AccountsPage> {
       final apps = res['allowedApps'];
       final paths = (res['paths'] as List<dynamic>? ?? const [])
           .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
+          .map(
+            (e) => <String, dynamic>{
+              'path': '${e['path'] ?? ''}',
+              // 老数据只有 access(ro/rw)，服务端已折算成 actions；这里再兜一层，
+              // 免得某个旧版本服务端只回 access 时界面变成「零动作」。
+              'actions': _actionsOfRule(Map<String, dynamic>.from(e)),
+            },
+          )
           .toList();
       setState(() {
         _appRestricted = apps is List;
@@ -174,10 +181,12 @@ class _AccountsPageState extends State<AccountsPage> {
           'allowedApps': _appRestricted ? _allowedApps.toList() : null,
           'paths': _policyPaths
               .where((p) => '${p['path'] ?? ''}'.trim().isNotEmpty)
-              .map((p) => {
-                    'path': '${p['path']}',
-                    'access': p['access'] == 'rw' ? 'rw' : 'ro',
-                  })
+              .map(
+                (p) => <String, dynamic>{
+                  'path': '${p['path']}',
+                  'actions': _actionsOfRule(p),
+                },
+              )
               .toList(),
         },
       );
@@ -560,39 +569,38 @@ class _AccountsPageState extends State<AccountsPage> {
 
   Future<void> _addPolicyPath() async {
     final ctrl = TextEditingController();
-    var access = 'ro';
+    // 新建规则默认给「看 + 下载」：和旧的 ro 一等价，够用又不会一上来就能删
+    var actions = <String>['view', 'download'];
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: Text(tr('accounts.policy.addPath')),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: ctrl,
-                decoration: InputDecoration(
-                  labelText: tr('accounts.policy.path'),
-                  hintText: tr('accounts.policy.pathHint'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: ctrl,
+                  decoration: InputDecoration(
+                    labelText: tr('accounts.policy.path'),
+                    hintText: tr('accounts.policy.pathHint'),
+                  ),
                 ),
-              ),
-              const SizedBox(height: NasTokens.spaceMd),
-              SegmentedButton<String>(
-                segments: [
-                  ButtonSegment(
-                    value: 'ro',
-                    label: Text(tr('accounts.policy.access.ro')),
-                  ),
-                  ButtonSegment(
-                    value: 'rw',
-                    label: Text(tr('accounts.policy.access.rw')),
-                  ),
-                ],
-                selected: {access},
-                onSelectionChanged: (v) =>
-                    setDialogState(() => access = v.first),
-              ),
-            ],
+                const SizedBox(height: NasTokens.spaceMd),
+                Text(
+                  tr('accounts.pathAction.title'),
+                  style: Theme.of(ctx).textTheme.titleSmall,
+                ),
+                const SizedBox(height: NasTokens.spaceXs),
+                _actionChips(
+                  actions,
+                  (next) => setDialogState(() => actions = next),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -614,11 +622,61 @@ class _AccountsPageState extends State<AccountsPage> {
     setState(() {
       _policyPaths = [
         ..._policyPaths,
-        {'path': path, 'access': access},
+        {'path': path, 'actions': actions},
       ];
     });
   }
 
+
+  /// 编辑某条路径允许的动作（查看 / 下载 / 改名移动 / 删除 / 上传）
+  Future<void> _editPathActions(int index) async {
+    if (index < 0 || index >= _policyPaths.length) return;
+    final rule = _policyPaths[index];
+    var actions = _actionsOfRule(rule);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('${rule['path'] ?? ''}', overflow: TextOverflow.ellipsis),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tr('accounts.pathAction.title'),
+                  style: Theme.of(ctx).textTheme.titleSmall,
+                ),
+                const SizedBox(height: NasTokens.spaceXs),
+                _actionChips(
+                  actions,
+                  (next) => setDialogState(() => actions = next),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('common.save')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() {
+      _policyPaths = [
+        for (var j = 0; j < _policyPaths.length; j++)
+          j == index ? {..._policyPaths[j], 'actions': actions} : _policyPaths[j],
+      ];
+    });
+  }
 
   Widget _userList() {
     if (_loadingUsers) return const NasLoading();
@@ -987,27 +1045,14 @@ class _AccountsPageState extends State<AccountsPage> {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  NasDropdown<String>(
-                    value: _policyPaths[i]['access'] == 'rw' ? 'rw' : 'ro',
-                    underline: const SizedBox.shrink(),
-                    items: [
-                      DropdownMenuItem(
-                        value: 'ro',
-                        child: Text(tr('accounts.policy.access.ro')),
-                      ),
-                      DropdownMenuItem(
-                        value: 'rw',
-                        child: Text(tr('accounts.policy.access.rw')),
-                      ),
-                    ],
-                    onChanged: (v) => setState(() {
-                      _policyPaths = [
-                        for (var j = 0; j < _policyPaths.length; j++)
-                          j == i
-                              ? {..._policyPaths[j], 'access': v ?? 'ro'}
-                              : _policyPaths[j],
-                      ];
-                    }),
+                  TextButton(
+                    onPressed: () => _editPathActions(i),
+                    child: Text(
+                      _actionsOfRule(_policyPaths[i])
+                          .map(_actionLabel)
+                          .join(' · '),
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, size: 18),
@@ -2053,4 +2098,68 @@ class _IpRulesDialogState extends State<_IpRulesDialog> {
       ],
     );
   }
+}
+// ---------------------------------------------------------------- 路径动作
+
+/// 路径上可授予的五个动作（顺序与内核 `PATH_ACTIONS` 一致）
+const kPathActions = <String>[
+  'view',
+  'download',
+  'update',
+  'delete',
+  'upload',
+];
+
+String _actionLabel(String action) => switch (action) {
+  'view' => tr('accounts.pathAction.view'),
+  'download' => tr('accounts.pathAction.download'),
+  'update' => tr('accounts.pathAction.update'),
+  'delete' => tr('accounts.pathAction.delete'),
+  'upload' => tr('accounts.pathAction.upload'),
+  _ => action,
+};
+
+/// 一条规则的动作：优先读 `actions`，取不到再兼容旧的 `access`（ro/rw）
+List<String> _actionsOfRule(Map<String, dynamic> rule) {
+  final raw = rule['actions'];
+  if (raw is List && raw.isNotEmpty) {
+    final set = raw.map((e) => '$e').toSet();
+    final picked = kPathActions.where(set.contains).toList();
+    if (picked.isNotEmpty) return picked;
+  }
+  return rule['access'] == 'rw'
+      ? [...kPathActions]
+      : const ['view', 'download'];
+}
+
+/// 五个动作的开关条（新建 / 编辑路径规则都用它）
+Widget _actionChips(
+  List<String> selected,
+  ValueChanged<List<String>> onChanged,
+) {
+  return Wrap(
+    spacing: 6,
+    runSpacing: 4,
+    children: [
+      for (final action in kPathActions)
+        FilterChip(
+          label: Text(
+            _actionLabel(action),
+            style: const TextStyle(fontSize: 12),
+          ),
+          selected: selected.contains(action),
+          onSelected: (on) {
+            final set = selected.toSet();
+            if (on) {
+              set.add(action);
+            } else {
+              set.remove(action);
+            }
+            onChanged(kPathActions.where(set.contains).toList());
+          },
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+    ],
+  );
 }

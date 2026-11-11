@@ -10,6 +10,7 @@ import type { I18nRegistry } from './i18n';
 import type { ContractRegistry } from './contract';
 import type { Migration } from './migrator';
 import type { TokenPayload } from './auth';
+import type { PathAction } from './access-policy';
 
 /** 缓存命中快照（`GET /api/v1/system/cache/stats` 的条目） */
 export interface CacheSnapshotItem {
@@ -190,7 +191,14 @@ declare module 'fastify' {
   interface FastifyContextConfig {
     /** 该路由要求的 scope；缺省表示公开路由 */
     scope?: string;
-    /** 路径级 ACL 所需的权限：设置后对该请求的 path 参数做 `checkPathAccess` */
+    /**
+     * 路径级 ACL：设置后对该请求涉及的 path 做 `checkPathAccess`。
+     * 取值是具体动作（view/download/update/delete/upload），比旧的 read/write 细。
+     */
+    pathAction?: PathAction;
+    /** 目标路径（移动 / 复制的 `to`）要求的动作，不设就不检查目标 */
+    pathTargetAction?: PathAction;
+    /** @deprecated 旧的粗粒度写法；仍兼容，read→view、write→update */
     pathScope?: 'read' | 'write';
   }
 }
