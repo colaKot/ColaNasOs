@@ -47,8 +47,49 @@ const LoginResponse = Type.Object({
   user: Type.Object({ id: Type.String(), username: Type.String() }),
 });
 
+/**
+ * 用户名校验（服务端唯一口径）。
+ *
+ * 参考项目的口径是「3-20 位、允许任意字符」，但落进 SQLite 的 text 列、
+ * 又要出现在 URL / 日志里，所以这里收成：允许中日韩等字母、数字、下划线、
+ * 点和连字符，不含空白与路径符号。**中文名必须能建**（之前是纯 ASCII 正则，
+ * 用户建「小明」直接被 400 挡掉）。
+ */
+const USERNAME_RE = /^[\p{L}\p{N}_.-]{2,32}$/u;
+
+/**
+ * 密码强度（与参考项目对齐，但不用它的「客户端加密后长度」那套）：
+ * 至少 6 位、不能是同一个字符重复、不能是连续数字、不能和用户名相同。
+ * 返回 null 表示通过。
+ */
+function passwordProblem(password: string, username: string): string | null {
+  if (password.length < 6) return '密码至少 6 位';
+  if (/^(.)\1+$/u.test(password)) return '密码不能是同一个字符重复';
+  if (/^\d+$/.test(password)) {
+    let dir = 0;
+    let consecutive = true;
+    for (let i = 1; i < password.length; i += 1) {
+      const diff = Number(password[i]) - Number(password[i - 1]);
+      if (diff !== 1 && diff !== -1) {
+        consecutive = false;
+        break;
+      }
+      if (dir === 0) dir = diff;
+      else if (diff !== dir) {
+        consecutive = false;
+        break;
+      }
+    }
+    if (consecutive && password.length >= 3) return '密码不能是连续数字';
+  }
+  if (username && password === username) return '密码不能和用户名相同';
+  return null;
+}
+
 const CreateBody = Type.Object({
-  username: Type.String({ pattern: '^[a-zA-Z0-9_.-]{3,64}$' }),
+  // 只限长度，字符集在 handler 里用 USERNAME_RE 校验（要放开中文，
+  // 但正则塞进 JSON Schema 的话报错信息是英文 pattern，对用户没意义）
+  username: Type.String({ minLength: 2, maxLength: 32 }),
   password: Type.String({ minLength: 6, maxLength: 256 }),
   scopes: Type.Optional(Type.Array(Type.String({ maxLength: 32 }))),
   phone: Type.Optional(Type.String({ maxLength: 32 })),
@@ -57,7 +98,7 @@ const CreateBody = Type.Object({
 
 const UpdateBody = Type.Object({
   id: Type.String({ minLength: 1 }),
-  username: Type.Optional(Type.String({ pattern: '^[a-zA-Z0-9_.-]{3,64}$' })),
+  username: Type.Optional(Type.String({ minLength: 2, maxLength: 32 })),
   password: Type.Optional(Type.String({ minLength: 6, maxLength: 256 })),
   phone: Type.Optional(Type.String({ maxLength: 32 })),
   remark: Type.Optional(Type.String({ maxLength: 200 })),
@@ -594,11 +635,22 @@ export const accounts: ServerModule = {
           remark?: string;
         };
         if (!body.username || !body.password) {
-          return reply.code(400).send({ error: Err.badRequest, message: 'username/password required' });
+          return reply.code(400).send({ error: Err.badRequest, message: '用户名和密码都要填' });
         }
-        const exists = await sql`select 1 from auth_users where username = ${body.username}`.execute(k.db);
+        const username = String(body.username).trim();
+        if (!USERNAME_RE.test(username)) {
+          return reply.code(400).send({
+            error: Err.badRequest,
+            message: '用户名 2-32 位，可用中文、字母、数字、下划线、点和连字符（不能有空格）',
+          });
+        }
+        const pwProblem = passwordProblem(body.password, username);
+        if (pwProblem) {
+          return reply.code(400).send({ error: Err.badRequest, message: pwProblem });
+        }
+        const exists = await sql`select 1 from auth_users where username = ${username}`.execute(k.db);
         if (exists.rows.length > 0) {
-          return reply.code(400).send({ error: Err.conflict, message: 'username exists' });
+          return reply.code(400).send({ error: Err.conflict, message: '这个用户名已经有人用了' });
         }
         const salt = crypto.randomBytes(16).toString('hex');
         const id = crypto.randomBytes(8).toString('base64url');
@@ -608,13 +660,13 @@ export const accounts: ServerModule = {
         await sql`
           insert into auth_users
             (id, username, salt, hash, scopes, totp_secret, totp_enabled, disabled, phone, remark, last_login_at, created_at)
-          values (${id}, ${body.username}, ${salt}, ${hashPassword(body.password, salt)},
+          values (${id}, ${username}, ${salt}, ${hashPassword(body.password, salt)},
                   ${JSON.stringify(scopes)}, ${null}, 0, 0, ${phone}, ${remark}, null, ${now()})
         `.execute(k.db);
-        await writeEvent('user_create', id, body.username, req, JSON.stringify({ scopes }));
+        await writeEvent('user_create', id, username, req, JSON.stringify({ scopes }));
         return {
           id,
-          username: body.username,
+          username,
           scopes,
           totpEnabled: false,
           disabled: false,
@@ -888,16 +940,27 @@ export const accounts: ServerModule = {
 
         const changes: string[] = [];
         if (body.username && body.username !== row.username) {
+          const nextName = String(body.username).trim();
+          if (!USERNAME_RE.test(nextName)) {
+            return reply.code(400).send({
+              error: Err.badRequest,
+              message: '用户名 2-32 位，可用中文、字母、数字、下划线、点和连字符（不能有空格）',
+            });
+          }
           const dup = await sql`
-            select 1 from auth_users where username = ${body.username} and id <> ${row.id}
+            select 1 from auth_users where username = ${nextName} and id <> ${row.id}
           `.execute(k.db);
           if (dup.rows.length > 0) {
-            return reply.code(400).send({ error: Err.conflict, message: 'username exists' });
+            return reply.code(400).send({ error: Err.conflict, message: '这个用户名已经有人用了' });
           }
-          await sql`update auth_users set username = ${body.username} where id = ${row.id}`.execute(k.db);
+          await sql`update auth_users set username = ${nextName} where id = ${row.id}`.execute(k.db);
           changes.push('username');
         }
         if (body.password) {
+          const pwProblem = passwordProblem(String(body.password), body.username ?? row.username);
+          if (pwProblem) {
+            return reply.code(400).send({ error: Err.badRequest, message: pwProblem });
+          }
           const salt = crypto.randomBytes(16).toString('hex');
           await sql`
             update auth_users set salt = ${salt}, hash = ${hashPassword(body.password, salt)}

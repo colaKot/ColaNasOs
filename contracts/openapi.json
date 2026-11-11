@@ -14377,7 +14377,8 @@
                 ],
                 "properties": {
                   "username": {
-                    "pattern": "^[a-zA-Z0-9_.-]{3,64}$",
+                    "minLength": 2,
+                    "maxLength": 32,
                     "type": "string"
                   },
                   "password": {
@@ -15321,7 +15322,8 @@
                     "type": "string"
                   },
                   "username": {
-                    "pattern": "^[a-zA-Z0-9_.-]{3,64}$",
+                    "minLength": 2,
+                    "maxLength": 32,
                     "type": "string"
                   },
                   "password": {
