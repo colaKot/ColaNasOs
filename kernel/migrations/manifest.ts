@@ -205,6 +205,8 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '172_rss_feed_download_target',
   // 下载台账关联影视元数据（media_id / library_id / 完成时间），订阅可选归档库
   '173_pt_media_link',
+  // 图片 / 混合库目录列预写入库（列表 / 文件夹聚合改走索引）
+  '174_video_dir_path',
 ]);
 
 export interface OrderCheck {

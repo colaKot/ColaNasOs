@@ -66,9 +66,19 @@ export function parentFolderOf(folderPath: string, root: string | null): string 
   return parent && parent.length >= root.length ? parent : null;
 }
 
-/** SQL 里的目录表达式（带尾斜杠），用于 exact 范围 / 文件夹聚合 */
+/**
+ * 目录前缀（带尾斜杠）：扫描写入 `dir_path` 列与查询共用同一口径。
+ * 与旧 SQL `rtrim(rel_path, replace(rel_path,'/',''))` 完全等价。
+ */
+export function dirPathOf(relPath: string): string {
+  const p = String(relPath || '');
+  const i = p.lastIndexOf('/');
+  return i < 0 ? '' : p.slice(0, i + 1);
+}
+
+/** SQL 里的目录列：已经预写进库，可走 (library_id, dir_path) 索引。 */
 export function dirExpr(alias: string): ReturnType<typeof sql> {
-  return sql`rtrim(${sql.raw(alias)}.rel_path, replace(${sql.raw(alias)}.rel_path, '/', ''))`;
+  return sql`${sql.raw(alias)}.dir_path`;
 }
 
 /** 图片库 / 混合库列表的文件夹范围条件 */
@@ -84,7 +94,7 @@ export function scopeCond(
     const prefix = `${p}/`;
     return folderMode === 'exact'
       ? sql`${dirExpr(alias)} = ${prefix}`
-      : sql`substr(${sql.raw(alias)}.rel_path, 1, ${prefix.length}) = ${prefix}`;
+      : sql`substr(${dirExpr(alias)}, 1, ${prefix.length}) = ${prefix}`;
   }
   // 库根：exact = 各来源根目录自身；subtree = 整库
   if (folderMode === 'subtree') return sql`1 = 1`;
@@ -92,14 +102,16 @@ export function scopeCond(
   return parts.length > 0 ? sql`(${sql.join(parts, sql` or `)})` : sql`1 = 0`;
 }
 
-/** 图片与视频同名时，图片不再单独出现在混合库里 */
+/**
+ * 图片与视频同名时，图片不再单独出现在混合库里。
+ * 目录相等判断改用预写的 dir_path 列，配合 idx_video_items_dir 只回查同目录的影片，
+ * 不再对每张图片扫一遍整张 video_items。
+ */
 export function hideSameNameImageCond(alias = 'i'): ReturnType<typeof sql> {
-  const dir = dirExpr(alias);
-  const vdir = dirExpr('v');
   return sql`not exists (
     select 1 from video_items v
      where v.library_id = ${sql.raw(alias)}.library_id
-       and ${vdir} = ${dir}
+       and v.dir_path = ${sql.raw(alias)}.dir_path
        and lower(replace(replace(v.title, ' ', ''), '_', ''))
          = lower(replace(replace(${sql.raw(alias)}.title, ' ', ''), '_', ''))
   )`;

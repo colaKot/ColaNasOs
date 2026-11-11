@@ -8,7 +8,7 @@ import { isImageFile, mimeOf, readImageMeta } from '../photo/exif';
 import { extensionOf, isVideoFile, probeVideo, titleOf } from './ffmpeg';
 import { parseActorNames, syncActorLinks } from './jp-links';
 import { imageTitleOf, jpMetaOf, libTypeOf } from './media-type';
-import { firstLetterOf, naturalKeyOf } from './image-scope';
+import { dirPathOf, firstLetterOf, naturalKeyOf } from './image-scope';
 import { hasLocalMeta, ingestNfo } from './nfo-ingest';
 import { findNfoFile } from './nfo';
 import { parseEpisode } from './series';
@@ -500,12 +500,13 @@ async function scanOneSource(
           const jp = jpMetaOf(p.rel);
           await sql`
             insert into video_items
-              (id, library_id, rel_path, title, duration, width, height, video_codec,
+              (id, library_id, rel_path, dir_path, title, duration, width, height, video_codec,
                audio_codec, container, has_subtitle, size, mtime, created_at,
                series, season, episode, media_type, code, uncensored, chinese_sub,
                is_4k, hdr10, hdr10plus, hlg, dolby_vision, dolby_atmos, hdr_meta_v)
             values
-              (${p.id}, ${lib.id}, ${p.fullRel}, ${titleOf(p.rel)}, ${m.durationMs},
+              (${p.id}, ${lib.id}, ${p.fullRel}, ${dirPathOf(p.fullRel)},
+               ${titleOf(p.rel)}, ${m.durationMs},
                ${m.width}, ${m.height}, ${m.videoCodec}, ${m.audioCodec},
                ${extensionOf(p.rel)}, ${m.hasSubtitle ? 1 : 0}, ${p.size}, ${p.mtime}, ${nowSec},
                ${ep.series}, ${ep.season}, ${ep.episode}, ${'video'},
@@ -514,6 +515,7 @@ async function scanOneSource(
                ${m.hlg ? 1 : 0}, ${m.dolbyVision ? 1 : 0}, ${m.dolbyAtmos ? 1 : 0},
                ${HDR_META_VERSION})
             on conflict(library_id, rel_path) do update set
+              dir_path = excluded.dir_path,
               title = excluded.title,
               duration = excluded.duration,
               width = excluded.width,
@@ -586,14 +588,15 @@ async function scanOneSource(
           const title = imageTitleOf(p.rel);
           await sql`
             insert into image_items
-              (id, library_id, rel_path, title, natural_name, filename_fl,
+              (id, library_id, rel_path, dir_path, title, natural_name, filename_fl,
                taken_at, size, mtime, width, height, mime, created_at)
             values
-              (${p.id}, ${lib.id}, ${p.fullRel}, ${title},
+              (${p.id}, ${lib.id}, ${p.fullRel}, ${dirPathOf(p.fullRel)}, ${title},
                ${naturalKeyOf(title)}, ${firstLetterOf(title)},
                ${p.meta.takenAt == null ? null : Number(p.meta.takenAt)}, ${p.size}, ${p.mtime},
                ${p.meta.width}, ${p.meta.height}, ${mimeOf(p.rel)}, ${nowSec})
             on conflict(library_id, rel_path) do update set
+              dir_path = excluded.dir_path,
               title = excluded.title,
               natural_name = excluded.natural_name,
               filename_fl = excluded.filename_fl,

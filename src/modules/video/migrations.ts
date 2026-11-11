@@ -763,4 +763,33 @@ export const VIDEO_MIGRATIONS: Migration[] = [
         `.execute(db);
       },
     },
+    {
+      // 图片 / 混合库的目录列预写进库。
+      //
+      // 列表接口原来靠 `rtrim(rel_path, replace(rel_path,'/',''))` 现算目录：
+      // exact 范围、文件夹 group by、同名封面排除的目录相等判断全是列上的函数，
+      // (library_id, rel_path) 索引一个都用不上，混合库一次列表就是整库扫描。
+      // 这里把目录前缀落库（扫描写入 + 老数据一次性回填），查询改成列比较，
+      // 配合 (library_id, dir_path) 索引，首次进入也能走索引，不再等全表扫完。
+      id: '174_video_dir_path',
+      async up(db) {
+        for (const table of ['image_items', 'video_items'] as const) {
+          const cols = (
+            (await sql.raw(`pragma table_info(${table})`).execute(db)).rows as Array<{ name: string }>
+          ).map((r) => r.name);
+          if (!cols.includes('dir_path')) {
+            await sql.raw(`alter table ${table} add column dir_path text`).execute(db);
+          }
+          // 幂等：只补没算过的行。老库升级时这是一次全表更新（只跑一次）。
+          await sql.raw(`
+            update ${table}
+               set dir_path = rtrim(rel_path, replace(rel_path, '/', ''))
+             where dir_path is null
+          `).execute(db);
+          await sql.raw(`
+            create index if not exists idx_${table}_dir on ${table}(library_id, dir_path)
+          `).execute(db);
+        }
+      },
+    },
 ];
