@@ -446,24 +446,6 @@ String _libTypeLabel(String type) => switch (type) {
   _ => tr('video.library.type.movie'),
 };
 
-/// 电视剧 / 短剧只差播放器行为（上下切集），这两者可以互改。
-bool _isDramaType(String type) => type == 'tv' || type == 'short_tv';
-
-/// 类型下拉框能不能点开：新建时随便选；编辑时只有电视剧 / 短剧能换。
-bool _libTypeSwappable(String type, {required bool isEdit}) =>
-    !isEdit || _isDramaType(type);
-
-/// 类型下拉项：编辑已存在的剧库时只给「电视剧 / 短剧」两项，
-/// 免得选到「电影」再被服务端拒绝；其它情况给全套。
-List<DropdownMenuItem<String>> _libTypeItems(String type, {required bool isEdit}) {
-  const all = <String>['movie', 'tv', 'short_tv', 'jp_movie', 'image', 'mixed'];
-  final types = isEdit && _isDramaType(type) ? const <String>['tv', 'short_tv'] : all;
-  return [
-    for (final t in types)
-      DropdownMenuItem<String>(value: t, child: Text(_libTypeLabel(t))),
-  ];
-}
-
 /// 表单里的一个来源（与 API 的 VideoSourceInput 同构）
 class VideoSourceSpec {
   const VideoSourceSpec({
@@ -671,12 +653,34 @@ Future<VideoLibraryForm?> showVideoLibraryDialog(
                     initialValue: libType,
                     dropdownColor: Theme.of(ctx).colorScheme.surface,
                     decoration: InputDecoration(labelText: tr('video.library.type')),
-                    items: _libTypeItems(libType, isEdit: isEdit),
-                    // 库类型决定扫描 / 列表 / 删除的全部行为，创建后不可改；
-                    // 例外是电视剧 ↔ 短剧（只差播放器上下切集），改已存在的剧库时会放开。
-                    onChanged: !_libTypeSwappable(libType, isEdit: isEdit)
-                        ? null
-                        : (v) => setLocal(() => libType = v ?? 'movie'),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'movie',
+                        child: Text(tr('video.library.type.movie')),
+                      ),
+                      DropdownMenuItem(
+                        value: 'tv',
+                        child: Text(tr('video.library.type.tv')),
+                      ),
+                      DropdownMenuItem(
+                        value: 'short_tv',
+                        child: Text(tr('video.library.type.shortTv')),
+                      ),
+                      DropdownMenuItem(
+                        value: 'jp_movie',
+                        child: Text(tr('video.library.type.jp')),
+                      ),
+                      DropdownMenuItem(
+                        value: 'image',
+                        child: Text(tr('video.library.type.image')),
+                      ),
+                      DropdownMenuItem(
+                        value: 'mixed',
+                        child: Text(tr('video.library.type.mixed')),
+                      ),
+                    ],
+                    // 库类型决定扫描 / 列表 / 删除的全部行为，创建后不可改
+                    onChanged: isEdit ? null : (v) => setLocal(() => libType = v ?? 'movie'),
                   ),
                   const SizedBox(height: NasTokens.spaceSm),
                   Row(
