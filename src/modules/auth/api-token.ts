@@ -27,6 +27,14 @@ export interface ApiTokenPayload {
   /** 与 JWT payload 对齐；访问令牌用签发时间 / 过期时间 */
   iat: number;
   exp: number;
+  /**
+   * 签发它的账号是否全权（`scopes` 含 `*`）。
+   *
+   * 路径 ACL 的默认拒绝规则要看这个：管理员用自己的令牌跑脚本时不该因为
+   * 「配置文件里没有目录规则」被 403（见 `access-policy.effectivePathRules`）。
+   * 令牌自己的 scopes 通常是子集，看不出账号本身是不是全权。
+   */
+  ownerAdmin?: boolean;
 }
 
 interface TokenRow {
@@ -53,8 +61,8 @@ export async function resolveApiToken(db: any, raw: string): Promise<ApiTokenPay
   if (row.expires_at !== null && Number(row.expires_at) <= now) return null;
 
   const user = (
-    await sql<{ disabled: number }>`
-      select disabled from auth_users where id = ${row.uid}
+    await sql<{ disabled: number; scopes: string | null }>`
+      select disabled, scopes from auth_users where id = ${row.uid}
     `.execute(db)
   ).rows[0];
   if (!user || Number(user.disabled) === 1) return null;
@@ -69,5 +77,7 @@ export async function resolveApiToken(db: any, raw: string): Promise<ApiTokenPay
     scopes: Array.isArray(scopes) ? scopes : [],
     iat: Number(row.created_at),
     exp: row.expires_at === null ? 0 : Number(row.expires_at),
+    // 账号是不是 `*`：用户表里 scopes 是 JSON 文本，`"*"` 一定带引号
+    ownerAdmin: String(user.scopes ?? '').includes('"*"'),
   };
 }

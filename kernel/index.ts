@@ -30,7 +30,14 @@ import { attachTerminal } from '../src/modules/system/pty';
 import { resolveApiToken } from '../src/modules/auth/api-token';
 import { BASE_MIGRATIONS } from './migrations/base';
 import { MIGRATION_ORDER } from './migrations/manifest';
-import { checkAppAccess, checkPathAccess, readPolicy, requestPathsOf } from './access-policy';
+import {
+  checkAppAccess,
+  checkPathAccess,
+  effectivePathRules,
+  isFullAccess,
+  readPolicy,
+  requestPathsOf,
+} from './access-policy';
 import { createWatchdog, type WatchdogMetrics } from './watchdog';
 import { WatchService, DEFAULT_DEBOUNCE_MS } from './fs-watch';
 import { PollService, DEFAULT_POLL_INTERVAL_MS } from './poll';
@@ -404,10 +411,13 @@ export async function startKernel(opts: KernelOptions) {
     const needAction =
       cfg.pathAction ?? (cfg.pathScope === 'write' ? 'update' : cfg.pathScope === 'read' ? 'view' : null);
     if (needAction) {
+      // 没配目录的账号**一个目录都不给**（全权账号且从未配置过才放行），
+      // 折算规则都在 effectivePathRules 里，别在这里另写一套。
+      const pathRules = effectivePathRules(policy, isFullAccess(payload));
       const { paths, target } = requestPathsOf(req as { query?: unknown; body?: unknown });
       // 批量接口逐条判：只要有一条越界就整单拒绝，不做「部分成功」
       for (const p of paths) {
-        const pathDecision = checkPathAccess(policy.paths, needAction, p);
+        const pathDecision = checkPathAccess(pathRules, needAction, p);
         if (!pathDecision.ok) {
           return reply.code(403).send({
             error: Err.pathForbidden,
@@ -418,7 +428,7 @@ export async function startKernel(opts: KernelOptions) {
         }
       }
       if (cfg.pathTargetAction && target) {
-        const decision = checkPathAccess(policy.paths, cfg.pathTargetAction, target);
+        const decision = checkPathAccess(pathRules, cfg.pathTargetAction, target);
         if (!decision.ok) {
           return reply.code(403).send({
             error: Err.pathForbidden,

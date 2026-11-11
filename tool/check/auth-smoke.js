@@ -226,8 +226,18 @@ process.chdir(root);
   });
   const aliceToken = { authorization: 'Bearer ' + (dev2.json().token || '') };
 
+  // 没配任何目录 = 一个目录都不给（用户 2026-11-11 要求：必须授权目录才能用）。
+  // 以前这里是「空策略 = 全放行」，等于新建子账号天然拿到整盘权限。
   r = await app.inject({ method: 'GET', url: '/api/v1/files/list?path=/', headers: aliceToken });
-  check('policy_unset_allows', r.statusCode === 200, 'status=' + r.statusCode);
+  check(
+    'policy_unset_denies',
+    r.statusCode === 403 && r.json().error === 'pathForbidden',
+    'status=' + r.statusCode,
+  );
+
+  // 管理员（`*`）不受影响：从没配过策略 = 全权，否则新装机器上连自己都打不开文件
+  r = await app.inject({ method: 'GET', url: '/api/v1/files/list?path=/', headers: admin });
+  check('policy_admin_unset_allows', r.statusCode === 200, 'status=' + r.statusCode);
 
   r = await app.inject({
     method: 'POST',
@@ -269,7 +279,7 @@ process.chdir(root);
   const deniedBody = r.json();
   check(
     'error_details_structured',
-    Boolean(deniedBody.details) && deniedBody.details.need === 'read' && deniedBody.details.path === '/secret',
+    Boolean(deniedBody.details) && deniedBody.details.need === 'view' && deniedBody.details.path === '/secret',
     'details=' + JSON.stringify(deniedBody.details),
   );
   check(

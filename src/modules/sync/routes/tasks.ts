@@ -4,7 +4,12 @@ import path from 'node:path';
 import { Type } from '@sinclair/typebox';
 import { sql } from 'kysely';
 import { secured } from '../../../../kernel/route';
-import { checkPathAccess, readPolicy } from '../../../../kernel/access-policy';
+import {
+  checkPathAccess,
+  effectivePathRules,
+  isFullAccess,
+  readPolicy,
+} from '../../../../kernel/access-policy';
 import { filesRoot, resolveInRoot, resolveRemoteDir } from '../../files/fs-root';
 import { buildPlan, inScope, type SyncEntry, type SyncMode } from '../plan';
 import { Err } from '../../../../kernel/errors';
@@ -25,7 +30,9 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
       need: 'read' | 'write',
     ): boolean => {
       const policy = readPolicy(k.config, h.uidOf(req));
-      return checkPathAccess(policy.paths, need, relPath).ok;
+      // 没配目录 = 一个目录都不给（全权账号且从未配置过才放行），口径与内核中间件一致
+      const rules = effectivePathRules(policy, isFullAccess(req.user));
+      return checkPathAccess(rules, need, relPath).ok;
     };
     // ------------------------------------------------ 多端同步（三向比对）
 

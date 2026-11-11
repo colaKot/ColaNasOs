@@ -74,6 +74,13 @@ process.chdir(root);
     payload: { sub: 'u1', scopes: ['files:read'] },
   });
   const auth = { authorization: 'Bearer ' + tokenRes.json().token };
+  // 路径 ACL 默认拒绝（用户 2026-11-11）：没授权目录的账号连文件根都列不出来。
+  // 本用例验的不是授权，所以显式把文件根授给这个测试账号。
+  await k.config.set('accessPolicy.u1', {
+    apps: null,
+    paths: [{ path: '/', actions: ['view', 'download', 'update', 'delete', 'upload'] }],
+  });
+
 
   const url = (p) => '/api/v1/files/download?path=' + encodeURIComponent(p);
 

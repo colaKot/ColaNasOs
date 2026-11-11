@@ -143,6 +143,13 @@ function startMcp(baseUrl, token) {
     })
   ).json().token;
 
+  // 路径 ACL 默认拒绝（用户 2026-11-11）：没授权目录的账号列不出文件根。
+  // 这里验的是 MCP 工具调用形态，不验授权，所以显式授权文件根。
+  await k.config.set('accessPolicy.mcp', {
+    apps: null,
+    paths: [{ path: '/', actions: ['view', 'download', 'update', 'delete', 'upload'] }],
+  });
+
   const mcp = startMcp(base, token);
   try {
     // ---- 握手 ----

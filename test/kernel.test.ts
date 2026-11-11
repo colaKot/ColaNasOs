@@ -6,7 +6,13 @@ import { I18nRegistry } from '../kernel/i18n';
 import { ModuleRegistry } from '../kernel/registry';
 import { hasScope, signToken, verifyToken } from '../kernel/auth';
 import { checkMigrationOrder, orderMigrations } from '../kernel/migrations/manifest';
-import { appKeysForPath, checkAppAccess, checkPathAccess } from '../kernel/access-policy';
+import {
+  appKeysForPath,
+  checkAppAccess,
+  checkPathAccess,
+  effectivePathRules,
+  isFullAccess,
+} from '../kernel/access-policy';
 import { buildPlan } from '../src/modules/sync/plan';
 import { WatchdogSupervisor } from '../kernel/watchdog-supervisor';
 import { buildUnc, normalizeScanPath, parseUnc } from '../src/modules/video/smb';
@@ -265,15 +271,30 @@ test('access-policy: 路径 ACL 前缀与读写', () => {
   assert.equal(checkPathAccess(rules, 'read', '/publichidden').ok, false);
 });
 
-test('access-policy: 最深规则优先 + 空规则不限制', () => {
+test('access-policy: 最深规则优先 + 空规则全拒', () => {
   const rules = [
     { path: '/', access: 'ro' as const },
     { path: '/pub', access: 'rw' as const },
   ];
   assert.equal(checkPathAccess(rules, 'write', '/pub/a.jpg').ok, true);
   assert.equal(checkPathAccess(rules, 'write', '/other/a.jpg').ok, false);
-  assert.equal(checkPathAccess([], 'write', '/anywhere').ok, true);
   assert.equal(checkPathAccess(rules, 'read', '/../etc/passwd').ok, false);
+  // `null` = 不做路径校验；`[]` = 一个目录都不授权（用户 2026-11-11 的默认拒绝）
+  assert.equal(checkPathAccess(null, 'write', '/anywhere').ok, true);
+  assert.equal(checkPathAccess([], 'write', '/anywhere').ok, false);
+});
+
+test('access-policy: 没配目录时普通账号全拒、全权账号不限制', () => {
+  const empty = { apps: null, paths: [] as const };
+  assert.deepEqual(effectivePathRules(empty, false), []);
+  assert.equal(effectivePathRules(empty, true), null);
+  const one = { apps: null, paths: [{ path: '/pub', actions: ['view'] as const }] };
+  // 配了规则就按规则判，全权账号也不跳过
+  assert.deepEqual(effectivePathRules(one, true), one.paths);
+  // 全权判定：`*` 或 token 的 ownerAdmin
+  assert.equal(isFullAccess({ scopes: ['*'] }), true);
+  assert.equal(isFullAccess({ scopes: ['files:read'] }), false);
+  assert.equal(isFullAccess({ scopes: ['files:read'], ownerAdmin: true }), true);
 });
 
 test('sync plan: 三向比对的核心分支', () => {

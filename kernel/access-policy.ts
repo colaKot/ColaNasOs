@@ -5,7 +5,9 @@ import type { ConfigStore } from './config';
  *
  * 语义（与 UI 无关，HTTP 调用同样受约束）：
  * - **应用级**：`apps` 未配置（`null`/`undefined`）= 不限制（向后兼容）；配置了数组 = 只允许数组内的 appKey。
- * - **路径级**：`paths` 为空 = 不限制；非空时按规则前缀匹配，`ro` 只允许读、`rw` 读写都允许。
+ * - **路径级**：见 [effectivePathRules] —— **没配目录 = 一个目录都不授权**（用户 2026-11-11 要求：
+ *   子账号必须被明确授权目录才能用，不能靠「没配=全开」白拿）。全权账号（`*`）且从未配置过
+ *   策略时才视为不限制，管理员开箱即用。
  * - 未登记前缀**一律放行**——新增模块必须同步登记到 `APP_API_PREFIXES`，否则应用白名单对它无效。
  *
  * 存储：`config` 表键 `accessPolicy.<uid>`，靠 `ConfigStore` 的内存缓存实现每请求 O(1) 读取。
@@ -88,7 +90,7 @@ export function actionsOfRule(rule: PathRule): PathAction[] {
 export interface AccessPolicy {
   /** 允许的 appKey；未配置 = 不限制 */
   apps?: string[] | null;
-  /** 路径规则；空 = 不限制 */
+  /** 路径规则；空 = 看 effectivePathRules（普通账号全拒 / 全权账号不限制） */
   paths?: PathRule[];
 }
 
@@ -122,6 +124,42 @@ export function readPolicy(config: ConfigStore, uid: string): AccessPolicy {
         .map((p) => normalizePathRule(p as PathRule))
     : [];
   return { apps: apps && apps.length > 0 ? apps : null, paths };
+}
+
+/**
+ * 一个请求主体实际生效的路径规则：`null` = 不限制，`[]` = 一个目录都不给。
+ *
+ * 只有两种结果：
+ * - 有规则 → 按规则（取最深的一条前缀匹配）；
+ * - 没规则 → **普通账号一个目录都不给**，全权账号（`*`）不限制。
+ *
+ * 「没规则」这条是本轮的核心（用户 2026-11-11：「用户如果没有添加目录，是完全
+ * 不能访问任何目录的，必须要添加目录才能用」）。以前空策略 = 全放行，新建子账号
+ * 天然拿到整盘权限。
+ *
+ * 全权账号不限制是**开箱即用**的兜底：管理员从没配过、或者把规则全删了，
+ * 都当他「不管了」，否则新装的机器上管理员自己都打不开「文件」，系统没法用。
+ */
+export function effectivePathRules(
+  policy: AccessPolicy,
+  fullAccess: boolean,
+): PathRule[] | null {
+  const rules = policy.paths ?? [];
+  if (rules.length > 0) return rules;
+  return fullAccess ? null : [];
+}
+
+/**
+ * 请求主体是否全权（`scopes` 里有 `*`）。
+ *
+ * 访问令牌的 scopes 是令牌自己的，全权与否要看**签发它的账号**，
+ * 所以 `resolveApiToken` 会额外带一个 `ownerAdmin`（见 api-token.ts）。
+ */
+export function isFullAccess(user: unknown): boolean {
+  const u = user as { scopes?: unknown; ownerAdmin?: unknown } | null | undefined;
+  if (!u) return false;
+  if (Array.isArray(u.scopes) && u.scopes.includes('*')) return true;
+  return u.ownerAdmin === true;
 }
 
 export async function writePolicy(
@@ -180,13 +218,18 @@ export interface PathAccessDecision {
 /**
  * 路径 ACL 判定。`need` 兼容旧的 read / write（分别折算成 view / update），
  * 新代码直接传具体动作 —— 只给「上传」权限的账号不该能删文件。
+ *
+ * `rules` 三态：`null` = 不限制；`[]` = **一个目录都不授权**（默认拒绝）；
+ * 非空 = 按前缀匹配，取最深的一条。调用方要先经 [effectivePathRules] 折算，
+ * 别直接把 `policy.paths` 传进来（没配置过的账号会变成全拒）。
  */
 export function checkPathAccess(
   rules: PathRule[] | null | undefined,
   need: PathAction | 'read' | 'write',
   requestPath: string,
 ): PathAccessDecision {
-  if (!rules || rules.length === 0) return { ok: true, rule: null };
+  if (!rules) return { ok: true, rule: null };
+  if (rules.length === 0) return { ok: false, rule: null };
   const action: PathAction = need === 'read' ? 'view' : need === 'write' ? 'update' : need;
 
   let target: string;
