@@ -2287,6 +2287,8 @@
     "ui.video.he348df": "视频编码",
     "ui.video.he63140": "最近在看",
     "video.action.copyPath": "复制文件路径",
+    "video.action.deleteSeason": "删除本季（{count} 集）",
+    "video.action.deleteSeries": "删除整部剧（{count} 集）",
     "video.action.excludeScrape": "不再自动刮削这条",
     "video.action.favorite": "收藏",
     "video.action.locateFile": "定位文件",
@@ -3018,6 +3020,8 @@
     "video.jp.deleteWorks": "删除当前筛选下的作品",
     "video.jp.deleteWorksBody": "只会删除当前筛选命中的 {count} 部影片，文件移入回收站（可恢复）。演员档案、以及不符合筛选的影片全部保留。",
     "video.jp.deleteWorksDone": "已删除 {count} 部影片，可在回收站恢复",
-    "video.media.letterFilter": "首字母筛选"
+    "video.media.letterFilter": "首字母筛选",
+    "video.watch.marked": "已标记 {count} 集为已看",
+    "video.watch.unmarked": "已标记 {count} 集为未看"
   }
 }

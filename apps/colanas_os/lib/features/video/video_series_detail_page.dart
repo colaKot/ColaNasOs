@@ -8,6 +8,7 @@ import 'detail/video_detail_router.dart';
 import 'video_card.dart';
 import 'video_genre_labels.dart';
 import 'video_series_widgets.dart';
+import 'video_series_actions.dart';
 import 'short_play_page.dart';
 import 'library_types.dart';
 import 'series_display.dart';
@@ -242,6 +243,12 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
           scale: _posterScale,
           coverId: widget.coverId ?? sample?.id,
           onTap: (s) => _openSeason(context, b, s),
+          // 季卡右键：本季标记已看 / 删除本季
+          menuEntries: (season, eps) => seasonMenuEntries(
+            context,
+            episodes: eps,
+            onChanged: () => _load(),
+          ),
         ),
         const SizedBox(height: NasTokens.spaceXl),
       ],

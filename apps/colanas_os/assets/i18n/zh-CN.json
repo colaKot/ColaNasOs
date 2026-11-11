@@ -2164,6 +2164,8 @@
     "ui.video.he348df": "视频编码",
     "ui.video.he63140": "最近在看",
     "video.action.copyPath": "复制文件路径",
+    "video.action.deleteSeason": "删除本季（{count} 集）",
+    "video.action.deleteSeries": "删除整部剧（{count} 集）",
     "video.action.excludeScrape": "不再自动刮削这条",
     "video.action.favorite": "收藏",
     "video.action.locateFile": "定位文件",
@@ -2642,6 +2644,8 @@
     "video.transcode.tempDirHint": "转码切片放这里，留空用默认目录",
     "video.transcode.title": "转码播放",
     "video.transcodeFailed": "转码失败：{error}",
-    "video.transcodeIncomplete": "转码未完成：{status} {error}"
+    "video.transcodeIncomplete": "转码未完成：{status} {error}",
+    "video.watch.marked": "已标记 {count} 集为已看",
+    "video.watch.unmarked": "已标记 {count} 集为未看"
   }
 }

@@ -15,6 +15,7 @@ import 'video_collection_picker.dart';
 import 'video_jp_pages.dart';
 import 'video_list_view.dart';
 import 'video_scrape_dialogs.dart';
+import 'video_item_actions.dart';
 import 'series_display.dart';
 import 'video_series_widgets.dart';
 import 'short_play_page.dart';
@@ -1368,44 +1369,65 @@ class VideoDetailPageState extends State<VideoDetailPage> {
   ) {
     return Tooltip(
       message: ep.title,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        // 点具体剧集立刻起播；短剧走上下切换的连播页
-        onTap: () {
-          if (VideoLibraryTypes.isShortTv(_item.libraryId) &&
-              _seriesEpisodes.length > 1) {
-            final idx = _seriesEpisodes.indexWhere((e) => e.id == ep.id);
-            openShortPlay(context, _seriesEpisodes, idx < 0 ? 0 : idx);
-            return;
-          }
-          playVideoItemNow(context, ep);
-        },
-        child: Container(
-          width: 52,
-          height: 40,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: current
-                ? scheme.primary
-                : scheme.surfaceContainerHighest.withValues(alpha: 0.7),
-            borderRadius: BorderRadius.circular(8),
-            border: !current && ep.watched
-                ? Border.all(color: scheme.primary.withValues(alpha: 0.45))
-                : null,
-          ),
-          child: Text(
-            '$index',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+      // 单集右键：菜单与影片列表同一套（一集就是一个 VideoItem）
+      child: NasContextMenuRegion(
+        entries: videoItemMenuEntries(
+          ep,
+          onAction: (action) => _episodeAction(action, ep),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          // 点具体剧集立刻起播；短剧走上下切换的连播页
+          onTap: () {
+            if (VideoLibraryTypes.isShortTv(_item.libraryId) &&
+                _seriesEpisodes.length > 1) {
+              final idx = _seriesEpisodes.indexWhere((e) => e.id == ep.id);
+              openShortPlay(context, _seriesEpisodes, idx < 0 ? 0 : idx);
+              return;
+            }
+            playVideoItemNow(context, ep);
+          },
+          child: Container(
+            width: 52,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
               color: current
-                  ? scheme.onPrimary
-                  : (ep.watched ? scheme.primary : scheme.onSurface),
+                  ? scheme.primary
+                  : scheme.surfaceContainerHighest.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(8),
+              border: !current && ep.watched
+                  ? Border.all(color: scheme.primary.withValues(alpha: 0.45))
+                  : null,
+            ),
+            child: Text(
+              '$index',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: current
+                    ? scheme.onPrimary
+                    : (ep.watched ? scheme.primary : scheme.onSurface),
+              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  /// 单集右键动作：走的还是影片列表那一套，做完就地刷新这一集和选集列表。
+  Future<void> _episodeAction(String action, VideoItem ep) async {
+    final changed = await runVideoItemAction(context, action, ep);
+    if (!mounted) return;
+    // 删掉的正是当前正在看的那一集：退回上一级，不要停在一个已经不存在的条目上
+    if (action == VideoItemAction.delete && ep.id == _item.id) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    if (!changed) return;
+    await _loadEpisodes();
+    await _loadProgress();
   }
 
   // ---------------------------------------------------------------- 文件 / 轨道

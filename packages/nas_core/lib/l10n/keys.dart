@@ -2201,6 +2201,8 @@ class I18nKeys {
   static const uiVideoHe63140 = 'ui.video.he63140';
   // ---- video ----
   static const videoActionCopyPath = 'video.action.copyPath';
+  static const videoActionDeleteSeason = 'video.action.deleteSeason';
+  static const videoActionDeleteSeries = 'video.action.deleteSeries';
   static const videoActionExcludeScrape = 'video.action.excludeScrape';
   static const videoActionFavorite = 'video.action.favorite';
   static const videoActionLocateFile = 'video.action.locateFile';
@@ -2680,7 +2682,9 @@ class I18nKeys {
   static const videoTranscodeTitle = 'video.transcode.title';
   static const videoTranscodeFailed = 'video.transcodeFailed';
   static const videoTranscodeIncomplete = 'video.transcodeIncomplete';
+  static const videoWatchMarked = 'video.watch.marked';
+  static const videoWatchUnmarked = 'video.watch.unmarked';
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2641;
+const int i18nKeyCount = 2645;

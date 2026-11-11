@@ -2164,6 +2164,8 @@
     "ui.video.he348df": "Video codec",
     "ui.video.he63140": "Continue watching",
     "video.action.copyPath": "Copy path",
+    "video.action.deleteSeason": "Delete this season ({count} episodes)",
+    "video.action.deleteSeries": "Delete whole series ({count} episodes)",
     "video.action.excludeScrape": "Exclude from auto-scrape",
     "video.action.favorite": "Favorite",
     "video.action.locateFile": "Show in files",
@@ -2642,6 +2644,8 @@
     "video.transcode.tempDirHint": "Transcode cache goes here; leave empty for the default",
     "video.transcode.title": "Transcode & play",
     "video.transcodeFailed": "Transcoding failed: {error}",
-    "video.transcodeIncomplete": "Transcoding not finished: {status} {error}"
+    "video.transcodeIncomplete": "Transcoding not finished: {status} {error}",
+    "video.watch.marked": "Marked {count} episodes as watched",
+    "video.watch.unmarked": "Marked {count} episodes as unwatched"
   }
 }

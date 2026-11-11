@@ -669,6 +669,7 @@ class VideoSeasonGrid extends StatelessWidget {
     this.scale = 1.0,
     this.coverId,
     this.onTap,
+    this.menuEntries,
   });
 
   /// 季号 → 该季全部集（升序）
@@ -682,6 +683,10 @@ class VideoSeasonGrid extends StatelessWidget {
   final String? coverId;
 
   final void Function(int season)? onTap;
+
+  /// 季卡的右键菜单（标记本季已看 / 删除本季），由调用方按季生成
+  final List<NasMenuEntry> Function(int season, List<VideoItem> episodes)?
+  menuEntries;
 
   @override
   Widget build(BuildContext context) {
@@ -702,7 +707,8 @@ class VideoSeasonGrid extends StatelessWidget {
           itemCount: entries.length,
           itemBuilder: (context, i) {
             final e = entries[i];
-            return SeasonPosterCard(
+            final menu = menuEntries?.call(e.key, e.value) ?? const <NasMenuEntry>[];
+            final card = SeasonPosterCard(
               season: e.key,
               episodes: e.value,
               width: m.itemWidth,
@@ -710,6 +716,8 @@ class VideoSeasonGrid extends StatelessWidget {
               coverId: coverId,
               onTap: onTap == null ? null : () => onTap!(e.key),
             );
+            if (menu.isEmpty) return card;
+            return NasContextMenuRegion(entries: menu, child: card);
           },
         );
       },

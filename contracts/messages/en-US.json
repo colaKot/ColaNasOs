@@ -2287,6 +2287,8 @@
     "ui.video.he348df": "Video codec",
     "ui.video.he63140": "Continue watching",
     "video.action.copyPath": "Copy path",
+    "video.action.deleteSeason": "Delete this season ({count} episodes)",
+    "video.action.deleteSeries": "Delete whole series ({count} episodes)",
     "video.action.excludeScrape": "Exclude from auto-scrape",
     "video.action.favorite": "Favorite",
     "video.action.locateFile": "Show in files",
@@ -3018,6 +3020,8 @@
     "video.jp.deleteWorks": "Delete works in current filter",
     "video.jp.deleteWorksBody": "Only the {count} titles matching the current filter will be deleted; files go to the trash (recoverable). The actor profile and every title outside this filter stay untouched.",
     "video.jp.deleteWorksDone": "Deleted {count} titles. Recoverable from the trash",
-    "video.media.letterFilter": "Filter by first letter"
+    "video.media.letterFilter": "Filter by first letter",
+    "video.watch.marked": "Marked {count} episodes as watched",
+    "video.watch.unmarked": "Marked {count} episodes as unwatched"
   }
 }

@@ -2824,6 +2824,12 @@
     "ui.video.he348df": {},
     "ui.video.he63140": {},
     "video.action.copyPath": {},
+    "video.action.deleteSeason": {
+      "count": {}
+    },
+    "video.action.deleteSeries": {
+      "count": {}
+    },
     "video.action.excludeScrape": {},
     "video.action.favorite": {},
     "video.action.locateFile": {},
@@ -3458,6 +3464,12 @@
     "video.transcodeIncomplete": {
       "status": {},
       "error": {}
+    },
+    "video.watch.marked": {
+      "count": {}
+    },
+    "video.watch.unmarked": {
+      "count": {}
     }
   }
 }

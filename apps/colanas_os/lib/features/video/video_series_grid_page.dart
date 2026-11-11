@@ -8,6 +8,7 @@ import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import 'video_card.dart';
 import 'series_display.dart';
+import 'video_series_actions.dart';
 import 'video_series_detail_page.dart';
 import 'video_series_widgets.dart';
 
@@ -243,15 +244,24 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
           itemCount: _items.length,
           itemBuilder: (context, i) {
             final s = _items[i];
-            return SeriesPosterCard(
-              item: s,
-              width: itemWidth,
-              onTap: () => openVideoSeries(
+            // 桌面右键：整部剧口径的菜单（标记已看 / 定位文件 / 删除整部剧）
+            return NasAsyncMenuRegion(
+              entries: () => seriesMenuEntries(
                 context,
-                name: s.name,
-                coverId: s.coverId,
+                s,
                 libraryId: widget.libraryId,
-                headers: videoArtHeaders,
+                onChanged: () => _load(),
+              ),
+              child: SeriesPosterCard(
+                item: s,
+                width: itemWidth,
+                onTap: () => openVideoSeries(
+                  context,
+                  name: s.name,
+                  coverId: s.coverId,
+                  libraryId: widget.libraryId,
+                  headers: videoArtHeaders,
+                ),
               ),
             );
           },
