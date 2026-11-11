@@ -1839,7 +1839,7 @@
     "tray.show": "Show main window",
     "ui.accounts.001": "New sub-account",
     "ui.accounts.002": "Username",
-    "ui.accounts.003": "Initial password (at least 6 characters)",
+    "ui.accounts.003": "Initial password",
     "ui.accounts.004": "Permission scopes (comma-separated)",
     "ui.accounts.005": "e.g. files:read, photo:read, video:read",
     "ui.accounts.006": "Create",

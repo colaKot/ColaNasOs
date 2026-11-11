@@ -1839,7 +1839,7 @@
     "tray.show": "显示主窗口",
     "ui.accounts.001": "新建子账号",
     "ui.accounts.002": "用户名",
-    "ui.accounts.003": "初始密码（≥ 6 位）",
+    "ui.accounts.003": "初始密码",
     "ui.accounts.004": "权限 scope（逗号分隔）",
     "ui.accounts.005": "例：files:read, photo:read, video:read",
     "ui.accounts.006": "创建",

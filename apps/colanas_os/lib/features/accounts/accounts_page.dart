@@ -192,6 +192,8 @@ class _AccountsPageState extends State<AccountsPage> {
   Future<void> _createUser() async {
     final nameCtrl = TextEditingController();
     final passCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final remarkCtrl = TextEditingController();
     // 默认给最小可用权限：能看文件。用户不想配就至少进得去，不会建出一个空白账号。
     var scopes = <String>[scopeRead('files')];
     final ok = await showDialog<bool>(
@@ -199,34 +201,69 @@ class _AccountsPageState extends State<AccountsPage> {
       builder: (ctx) => AlertDialog(
         title: Text(tr('ui.accounts.001')),
         content: SizedBox(
-          width: 460,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: InputDecoration(labelText: tr('ui.accounts.002')),
+          width: 520,
+          // 权限清单本身就要 300px 高，再加四个输入框，小窗口里会顶到外面 ——
+          // 内容必须能滚，否则「创建」按钮被挤出可视区，点了像没反应。
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 520),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: tr('ui.accounts.002'),
+                    ),
+                  ),
+                  const SizedBox(height: NasTokens.spaceMd),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: tr('ui.accounts.003'),
+                    ),
+                  ),
+                  const SizedBox(height: NasTokens.spaceMd),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: phoneCtrl,
+                          decoration: InputDecoration(
+                            labelText: tr('accounts.phone'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: NasTokens.spaceSm),
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          controller: remarkCtrl,
+                          decoration: InputDecoration(
+                            labelText: tr('accounts.remark'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: NasTokens.spaceLg),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      tr('accounts.scope.title'),
+                      style: Theme.of(ctx).textTheme.titleSmall,
+                    ),
+                  ),
+                  const SizedBox(height: NasTokens.spaceXs),
+                  ScopePicker(
+                    value: scopes,
+                    onChanged: (v) => scopes = v,
+                  ),
+                ],
               ),
-              const SizedBox(height: NasTokens.spaceMd),
-              TextField(
-                controller: passCtrl,
-                obscureText: true,
-                decoration: InputDecoration(labelText: tr('ui.accounts.003')),
-              ),
-              const SizedBox(height: NasTokens.spaceMd),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  tr('accounts.scope.title'),
-                  style: Theme.of(ctx).textTheme.titleSmall,
-                ),
-              ),
-              const SizedBox(height: NasTokens.spaceXs),
-              ScopePicker(
-                value: scopes,
-                onChanged: (v) => scopes = v,
-              ),
-            ],
+            ),
           ),
         ),
         actions: [
@@ -241,20 +278,34 @@ class _AccountsPageState extends State<AccountsPage> {
         ],
       ),
     );
+
+    final username = nameCtrl.text.trim();
+    final body = <String, dynamic>{
+      'username': username,
+      'password': passCtrl.text,
+      'scopes': scopes,
+    };
+    final phone = phoneCtrl.text.trim();
+    final remark = remarkCtrl.text.trim();
+    if (phone.isNotEmpty) body['phone'] = phone;
+    if (remark.isNotEmpty) body['remark'] = remark;
+    nameCtrl.dispose();
+    passCtrl.dispose();
+    phoneCtrl.dispose();
+    remarkCtrl.dispose();
+
     if (ok != true) return;
 
     try {
-      await ApiSession.instance.client.userCreate(
-        body: {
-          'username': nameCtrl.text.trim(),
-          'password': passCtrl.text,
-          'scopes': scopes,
-        },
-      );
+      await ApiSession.instance.client.userCreate(body: body);
       await _loadUsers();
     } catch (e) {
       if (!mounted) return;
-      NasSnack.show(context, tr('common.createFailed', {'error': '$e'}));
+      // 服务端回的是中文原因（用户名重复 / 用户名密码没填…），别再弹一串 JSON。
+      NasSnack.show(
+        context,
+        tr('common.createFailed', {'error': '${_hint(e) ?? e}'}),
+      );
     }
   }
 
