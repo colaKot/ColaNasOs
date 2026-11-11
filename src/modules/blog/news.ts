@@ -48,8 +48,9 @@ export const CATEGORIES: CategoryDef[] = [
       // 改用中新网两个中国频道：时政 + 社会民生（均为当天更新的 RSS）。
       { name: '中新网国内', url: 'https://www.chinanews.com.cn/rss/china.xml' },
       { name: '中新网社会', url: 'https://www.chinanews.com.cn/rss/society.xml' },
-      // 修复：OPML 的 /rss 是 404，官方 RSS 入口在 a 子域
-      { name: '界面新闻', url: 'https://a.jiemian.com/index.php?m=article&a=rss' },
+      // 界面新闻**不再进综合类**：它的 RSS 是财经快讯流（软银股价、券商策略、
+      // 日韩股市开盘），一条都不像综合新闻，还挤占了中新网的位置。
+      // 它只在「国内财经」里出现（见下面 domesticFinance）。
       // 保留原地址：实测返回 HTML（澎湃已无公开 RSS），恢复后自动生效
       { name: '澎湃新闻', url: 'https://www.thepaper.cn/rss', optional: true },
     ],
@@ -151,9 +152,20 @@ function decodeEntities(s: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(Number(n)))
+    // 十六进制实体：MarketWatch / ABC 的标题里是 `&#x2018;` 这种引号，
+    // 原来只认十进制，TTS 会把 `&#x2018;` 逐字符念出来（2026-11-11 顺手修掉）。
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => codePoint(parseInt(n, 16)))
+    .replace(/&#(\d+);/g, (_, n: string) => codePoint(Number(n)))
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&');
+}
+
+function codePoint(n: number): string {
+  try {
+    return Number.isFinite(n) && n >= 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '';
+  } catch {
+    return '';
+  }
 }
 
 /** 去掉 HTML 标签与多余空白。摘要只留纯文本，TTS 不会被标签念出来。 */
@@ -242,9 +254,35 @@ async function fetchFeed(url: string): Promise<string> {
  * 只做粗筛，模糊的留给模型按核心新闻点判断。
  */
 const FOREIGN_MARKER =
-  /(美国|白宫|特朗普|美联储|FBI|五角大楼|美众议院|美参议院|俄罗斯|乌克兰|以色列|巴勒斯坦|伊朗|伊拉克|埃及|沙特|也门|胡塞|土耳其|日本|韩国|朝鲜|印度|越南|菲律宾|英国|法国|德国|意大利|西班牙|加拿大|澳大利亚|新西兰|巴西|智利|阿根廷|南非|欧盟|北约|联合国|苹果|微软|谷歌|OpenAI|英伟达|特斯拉|Meta|亚马逊|三星|索尼|英特尔|高通|AMD|Anthropic|SpaceX|Gartner|Airbnb|彭博社|华尔街日报|路透社|法新社|CNN|BBC|CNBC|MarketWatch)/i;
+  /(美国|美方|美军|白宫|特朗普|美联储|FBI|五角大楼|美众议院|美参议院|众议院|参议院|纳指|道指|标普|日经|日韩|软银|俄罗斯|乌克兰|泽连斯基|普京|克里姆林宫|俄乌|欧洲|以色列|巴勒斯坦|加沙|伊朗|伊拉克|埃及|沙特|也门|胡塞|土耳其|叙利亚|黎巴嫩|日本|韩国|朝鲜|印度|越南|菲律宾|英国|法国|德国|意大利|西班牙|葡萄牙|荷兰|瑞典|瑞士|加拿大|澳大利亚|新西兰|巴西|智利|阿根廷|墨西哥|委内瑞拉|南非|尼日利亚|肯尼亚|印尼|泰国|新加坡|马来西亚|巴基斯坦|阿富汗|欧盟|北约|联合国|欧佩克|OPEC|EIA|苹果|微软|谷歌|OpenAI|Anthropic|英伟达|Nvidia|特斯拉|Meta|亚马逊|三星|索尼|英特尔|高通|AMD|CoreWeave|Discord|Chrome|Netflix|Spotify|Uber|波音|空客|SpaceX|Gartner|Airbnb|彭博社|华尔街日报|路透社|法新社|CNN|BBC|CNBC|MarketWatch)/i;
+// 单字的 `省|市|县` 不能当中国锚点：`上市`『超市』`城市` 都会命中，
+// 于是「Anthropic 冲刺上市」被判成国内新闻（2026-11-11 实测漏进国内科技）。
 const CHINA_ANCHOR =
-  /(中国|我国|国内|内地|大陆|中方|国务院|中央|发改委|央行|人民银行|工信部|证监会|商务部|财政部|外交部|教育部|公安部|新华社|央视|中共|北京|上海|广东|浙江|江苏|山东|四川|湖北|湖南|河南|河北|福建|安徽|陕西|辽宁|重庆|天津|深圳|广州|杭州|成都|武汉|南京|苏州|香港|澳门|台湾|华为|小米|阿里|腾讯|字节|百度|比亚迪|格力|美的|中芯|大疆|京东|美团|拼多多|快手|滴滴|科大讯飞|商汤|旷视|蚂蚁|网易|联想|中兴|海尔|宁德|吉利|蔚来|小鹏|理想|中新网|省|市|县)/;
+  /(中国|我国|国内|内地|大陆|中方|国务院|中央|发改委|央行|人民银行|工信部|证监会|商务部|财政部|外交部|教育部|公安部|新华社|央视|中共|北京|上海|广东|浙江|江苏|山东|四川|湖北|湖南|河南|河北|福建|安徽|陕西|辽宁|吉林|黑龙江|重庆|天津|深圳|广州|杭州|成都|武汉|南京|苏州|香港|澳门|台湾|华为|小米|阿里|腾讯|字节|火山引擎|百度|比亚迪|格力|美的|中芯|大疆|京东|美团|拼多多|快手|滴滴|科大讯飞|商汤|旷视|蚂蚁|网易|联想|中兴|海尔|宁德|吉利|蔚来|小鹏|理想|鸿蒙|昇腾|寒武纪|地平线|智谱|月之暗面|百川|MiniMax|DeepSeek|通义|文心|豆包|Kimi|中国移动|中国电信|中国联通|国铁|中新网)/;
+
+/**
+ * 「早报 / 晨报 / 周报 / 实时更新」这类**聚合稿**：一篇里塞了十几条不相关新闻。
+ *
+ * 界面早报 = 算力规模 + 阿里分拆 + 金鸡奖 + 纳指 + 美联储表态，
+ * 让它当某一条的素材，模型必然把同篇文章里的其它条目一起写进正文 ——
+ * 2026-11-11 用户听到「国内综合」末尾突然冒出金鸡奖和美股行情，就是这一条进来的。
+ */
+const ROUNDUP_TITLE = /(早报|晨报|晚报|午报|午间|早餐|速览|一览|盘点|集锦|周报|简报|汇总|要闻|实时更新|滚动播报)/;
+
+/**
+ * 导购 / 促销稿：IT之家、界面这些源里混着「京东 1868 元直降」这类带货内容。
+ * 它们的标题里往往带「双系统」「平台」等词，单靠技术词过滤会漏进来。
+ */
+const PROMO_TITLE =
+  /(直降|到手价|立减|秒杀|券后|百亿补贴|补贴后|包邮|大促|低至|仅需|元起|元直降|折合|首发价|预售价|好价|促销|优惠\s*\d)/;
+
+/** 科技类的内容相关性：标题里连一个技术词都没有，就不是科技新闻（铁路车次、送货上门都在此列） */
+const TECH_TOKEN =
+  /(芯片|半导体|光模块|算力|数据中心|服务器|GPU|CPU|NPU|内存|存储|操作系统|数据库|编程|编码|开源|代码|漏洞|安全|通信|5G|6G|卫星|航天|火箭|发射|量子|机器人|无人机|自动化|自动驾驶|传感器|电池|光伏|核聚变|新材料|算法|软件|硬件|云计算|边缘计算|浏览器|手机|电脑|笔记本|耳机|相机|显示|屏幕|显卡|制程|晶圆|封装|技术|研发|专利|互联网|平台|大模型|模型|训练|推理|系统|设备|App|收购|初创|人工智能|智能)/i;
+
+/** AI 类的内容相关性：一篇文章里没提到 AI / 模型 / 算力，就不是 AI 新闻（钛媒体的民生稿都在此列） */
+const AI_TOKEN =
+  /(人工智能|大模型|模型|算法|智能体|Agent|机器学习|深度学习|神经网络|算力|推理|训练|多模态|具身|机器人|语音|视觉|芯片|智能|\bAI\b|\bLLM\b|\bGPT|Gemini|Claude|Copilot|\bGPU\b)/i;
 
 function domesticCandidate(title: string, summary: string): boolean {
   const head = title.slice(0, 80);
@@ -256,9 +294,55 @@ function domesticCandidate(title: string, summary: string): boolean {
   return true;
 }
 
+export type ScreenReason = 'roundup' | 'promo' | 'irrelevant' | 'foreign';
+
+/**
+ * 单条素材能不能进本类的素材池。纯函数、只读标题与摘要，方便离线核规则。
+ *
+ * 顺序：聚合稿 → 导购稿 → 内容相关性（科技 / AI 类）→ 地域（国内类）。
+ * 前三条对国内外一视同仁（国外的「黑色星期五优惠盘点」同样不是科技新闻）。
+ */
+export function screenItem(
+  key: CountKey,
+  title: string,
+  summary = '',
+): ScreenReason | null {
+  if (ROUNDUP_TITLE.test(title)) return 'roundup';
+  if (PROMO_TITLE.test(title)) return 'promo';
+  const isTech = key === 'domesticTech' || key === 'worldTech';
+  const isAi = key === 'domesticAi' || key === 'worldAi';
+  // 只看标题：摘要是整篇文章的节选，聚合稿的摘要里什么都有，拿它判相关性等于没判
+  if (isTech && !TECH_TOKEN.test(title)) return 'irrelevant';
+  if (isAi && !AI_TOKEN.test(title)) return 'irrelevant';
+  if (key.startsWith('domestic') && !domesticCandidate(title, summary)) return 'foreign';
+  return null;
+}
+
 /** 标题归一化去重：同一条新闻在多个源里可能只差标点 / 空格 */
 function titleKey(title: string): string {
   return title.replace(/[\s\p{P}\p{S}]/gu, '').slice(0, 60);
+}
+
+/** 标题的 2-gram 集合：用来认「同一条新闻，不同媒体写法不同」 */
+function bigrams(key: string): Set<string> {
+  const out = new Set<string>();
+  for (let i = 0; i + 1 < key.length; i += 1) out.add(key.slice(i, i + 2));
+  return out;
+}
+
+/**
+ * 两条标题是不是同一件事。
+ *
+ * `titleKey` 只认一模一样的标题，压不住「同一事件不同标题」：
+ * 中新网《第一批新车次列车车票 今起陆续发售》和 IT之家
+ * 《铁路车次改革落地：…第一批新车次列车车票今起陆续发售》在稿件里各播了一遍
+ * （2026-11-11 反馈）。用 2-gram 包含率兜住这种情况。
+ */
+function sameEvent(a: Set<string>, b: Set<string>): boolean {
+  if (a.size === 0 || b.size === 0) return false;
+  let hit = 0;
+  for (const g of a) if (b.has(g)) hit += 1;
+  return hit / Math.min(a.size, b.size) >= 0.7;
 }
 
 /**
@@ -277,6 +361,8 @@ export async function fetchNews(
   // CGTN 也同时供国际综合 / 国外财经），只做类内去重会让同一条新闻在稿件里播两次。
   // 共享 seen 放在循环外；被跳过的条目由该类后续素材补足，不影响 want 条数。
   const seenGlobal = new Set<string>();
+  // 已收录条目的 2-gram：用来识别「同一事件、不同标题」的重复
+  const seenGlobalGrams: Array<Set<string>> = [];
   let dropped = 0;
 
   for (const cat of CATEGORIES) {
@@ -312,28 +398,50 @@ export async function fetchNews(
     }
     if (stale > 0) log?.(`[blog] ${cat.spoken} 丢弃 ${stale} 条过期素材`);
 
-    // 国内类：先把明显境外的素材剔掉，别让「国内 XX」栏目播国外新闻
-    const domestic = cat.key.startsWith('domestic');
-    const regional = domestic
-      ? fresh.filter((e) => domesticCandidate(e.title, e.summary))
-      : fresh;
-    if (regional.length < fresh.length) {
-      log?.(`[blog] ${cat.spoken} 地域粗筛剔除 ${fresh.length - regional.length} 条境外素材`);
+    // 三步粗筛（顺序有意义：聚合稿先剔，再看内容相关性，最后才看地域）：
+    //   1. 早报 / 晨报 / 实时更新这类**聚合稿**——一篇里十几条不相关新闻，
+    //      模型改写时会顺手把同篇的金鸡奖、纳指一起写进正文；
+    //   2. 科技 / AI 类的**内容相关性**——「铁路车次」「送货上门新规」是 IT之家
+    //      发的，但不是科技新闻；
+    //   3. 国内类的**地域**——微软 / Anthropic / CoreWeave 的稿子不能播进「国内科技」。
+    const reasons = { roundup: 0, promo: 0, irrelevant: 0, foreign: 0 };
+    const screened = fresh.filter((e) => {
+      const why = screenItem(cat.key, e.title, e.summary);
+      if (why) {
+        reasons[why] += 1;
+        return false;
+      }
+      return true;
+    });
+    if (reasons.roundup > 0) {
+      log?.(`[blog] ${cat.spoken} 剔除 ${reasons.roundup} 条聚合稿（早报/晨报/实时更新）`);
+    }
+    if (reasons.promo > 0) {
+      log?.(`[blog] ${cat.spoken} 剔除 ${reasons.promo} 条导购/促销稿`);
+    }
+    if (reasons.irrelevant > 0) {
+      log?.(`[blog] ${cat.spoken} 剔除 ${reasons.irrelevant} 条内容不相关素材`);
+    }
+    if (reasons.foreign > 0) {
+      log?.(`[blog] ${cat.spoken} 剔除 ${reasons.foreign} 条境外素材`);
     }
 
     // 发布时间缺失的排在最后（不要因为没 pubDate 就丢掉）
-    regional.sort((a, b) => (b.published ?? 0) - (a.published ?? 0));
+    screened.sort((a, b) => (b.published ?? 0) - (a.published ?? 0));
 
     let taken = 0;
-    for (const e of regional) {
+    for (const e of screened) {
       if (taken >= want) break;
       const k = titleKey(e.title);
       if (!k) continue;
-      if (seenGlobal.has(k)) {
+      // 同一条新闻不同媒体的写法不同（标题对不上），用 2-gram 包含率再兜一层
+      const grams = bigrams(k);
+      if (seenGlobal.has(k) || seenGlobalGrams.some((g) => sameEvent(grams, g))) {
         dropped += 1;
         continue;
       }
       seenGlobal.add(k);
+      seenGlobalGrams.push(grams);
       items.push({
         key: cat.key,
         spoken: cat.spoken,
