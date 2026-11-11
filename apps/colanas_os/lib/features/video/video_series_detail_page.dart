@@ -182,9 +182,15 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
     );
 
     if (!widget.embedded) {
+      // 桌面 / 平板走整页全屏：自带顶栏。标题优先用中文剧名，
+      // 与头部主标题保持同一个名字（`series` 列是英文发布名）。
+      final sample = bundle?.sample;
       return Scaffold(
         appBar: AppBar(
-          title: Text(widget.name, overflow: TextOverflow.ellipsis),
+          title: Text(
+            _displayName(sample?.series ?? widget.name, sample?.path),
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
         body: body,
       );

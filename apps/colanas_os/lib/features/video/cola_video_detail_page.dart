@@ -1215,8 +1215,9 @@ class VideoDetailPageState extends State<VideoDetailPage> {
 
 /// 打开影视详情的统一入口。
 ///
-/// 影视壳挂载时走**三级页**（内容区叠层，左侧一二级栏保留、返回走外壳）；
-/// 壳不在时（桌面卡片 / 独立窗口）或调用方本身在整页路由里时，退回整页 push。
+/// **桌面 / 平板整页全屏**（用户 2026-11-11 要求：详情页恢复全屏）；
+/// **手机**（宽度 < 600）才在壳的内容区叠三级页 —— 那里左侧一二级栏本来就不占地方，
+/// 叠一层保留「一层层返回」的手感。壳没挂载时一律整页 push。
 Future<void> openVideoDetail(BuildContext context, VideoItem item) {
   final router = VideoDetailRouter.instance;
   if (router.embeddableFrom(context)) {
@@ -1243,7 +1244,9 @@ Future<void> openVideoDetail(BuildContext context, VideoItem item) {
 /// 页面自己知道自己在哪（详情页切集、列表页点卡片），不需要再猜。
 Future<void> openVideoDetailOn(NavigatorState navigator, VideoItem item) {
   final router = VideoDetailRouter.instance;
-  if (router.attached) {
+  // 宽屏要整页全屏：这里没有调用方 context，用 navigator 所在窗口的宽度判断，
+  // 口径与 `embeddableFrom` 一致（两边不一致会出现「有的入口叠、有的不叠」）。
+  if (router.attached && router.embedsAt(navigator.context)) {
     router.open(
       VideoDetailEntry(
         tag: 'video:${item.id}',
