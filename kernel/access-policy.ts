@@ -44,7 +44,7 @@ export const PUBLIC_API_PREFIXES = [
 ];
 
 /**
- * 路径上允许的动作（参考项目 user_permission.action 的口径）：
+ * 路径上允许的动作：
  * - view     看目录 / 缩略图 / 搜索（只读浏览）
  * - download 下载原文件（含 Range 拖动）
  * - update   改名 / 移动 / 新建目录（改结构但不毁数据）
