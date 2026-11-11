@@ -89,13 +89,10 @@ class I18nKeys {
   static const accountsScopeDomainBlog = 'accounts.scope.domain.blog';
   static const accountsScopeDomainDiscover = 'accounts.scope.domain.discover';
   static const accountsScopeDomainFiles = 'accounts.scope.domain.files';
-  static const accountsScopeDomainIntegration = 'accounts.scope.domain.integration';
   static const accountsScopeDomainMusic = 'accounts.scope.domain.music';
   static const accountsScopeDomainPhoto = 'accounts.scope.domain.photo';
-  static const accountsScopeDomainPlayer = 'accounts.scope.domain.player';
   static const accountsScopeDomainPt = 'accounts.scope.domain.pt';
   static const accountsScopeDomainRss = 'accounts.scope.domain.rss';
-  static const accountsScopeDomainSecurity = 'accounts.scope.domain.security';
   static const accountsScopeDomainSync = 'accounts.scope.domain.sync';
   static const accountsScopeDomainSystem = 'accounts.scope.domain.system';
   static const accountsScopeDomainUser = 'accounts.scope.domain.user';
@@ -2727,4 +2724,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2682;
+const int i18nKeyCount = 2679;

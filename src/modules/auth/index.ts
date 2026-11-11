@@ -337,7 +337,7 @@ function openTotp(stored: string | null): string | null {
 export const accounts: ServerModule = {
   id: 'accounts',
   prefix: '/api/v1',
-  permissions: ['user:read', 'user:write', 'security:read', 'security:write'],
+  permissions: ['user:read', 'user:write'],
 
   migrations: [
     {
@@ -416,6 +416,88 @@ export const accounts: ServerModule = {
           create index if not exists idx_auth_api_tokens_uid
           on auth_api_tokens (uid, created_at desc)
         `.execute(db);
+      },
+    },
+    {
+      // 权限域合并（用户 2026-11-11）：
+      //   player      → video   转码播放本来就是影视的一部分，给了影视就该能播
+      //   security    → user    IP 黑名单属于「用户与权限」
+      //   integration → system  Webhook 属于「系统与监控」
+      //
+      // 必须挂在模块迁移里、且排在 MIGRATION_ORDER 末尾：BASE_MIGRATIONS 在
+      // registry.mount 之前就跑完，那时 auth_users / auth_api_tokens 还不存在。
+      // 合并后 secured() 已不再有这三个域，存量账号 / 访问令牌里仍留着旧值；
+      // 不迁移的话，只持有 `security:write` 的老账号升级后改 IP 规则直接 403。
+      id: '175_scope_domain_merge',
+      async up(db) {
+        const merge = (list: string[]): string[] => {
+          const map: Record<string, string> = {
+            player: 'video',
+            security: 'user',
+            integration: 'system',
+          };
+          const out: string[] = [];
+          for (const raw of list) {
+            const s = String(raw || '').trim();
+            if (!s) continue;
+            const idx = s.indexOf(':');
+            const domain = idx > 0 ? s.slice(0, idx) : s;
+            const next = map[domain] ? map[domain] + s.slice(domain.length) : s;
+            if (!out.includes(next)) out.push(next);
+          }
+          return out;
+        };
+
+        const rewrite = (raw: unknown): string | null => {
+          if (typeof raw !== 'string' || !raw.trim()) return null;
+          let list: unknown;
+          try {
+            list = JSON.parse(raw);
+          } catch {
+            return null;
+          }
+          if (!Array.isArray(list)) return null;
+          const before = list.map((v) => String(v));
+          const after = merge(before);
+          if (after.length === before.length && after.every((v, i) => v === before[i])) {
+            return null;
+          }
+          return JSON.stringify(after);
+        };
+
+        // 值改写是可跳过的：模块被裁掉 / 极老的库没建表时，宁可不动也别拦住启动。
+        const tableExists = async (name: string): Promise<boolean> => {
+          const rows = (
+            await sql<{ n: number }>`
+              select count(*) as n from sqlite_master where type = 'table' and name = ${name}
+            `.execute(db)
+          ).rows;
+          return Number(rows[0]?.n ?? 0) > 0;
+        };
+
+        if (await tableExists('auth_users')) {
+          const users = await sql<{ id: string; scopes: string | null }>`
+            select id, scopes from auth_users
+          `.execute(db);
+          for (const row of users.rows) {
+            const next = rewrite(row.scopes);
+            if (next === null) continue;
+            await sql`update auth_users set scopes = ${next} where id = ${row.id}`.execute(db);
+          }
+        }
+
+        if (await tableExists('auth_api_tokens')) {
+          const tokens = await sql<{ id: string; scopes_json: string | null }>`
+            select id, scopes_json from auth_api_tokens
+          `.execute(db);
+          for (const row of tokens.rows) {
+            const next = rewrite(row.scopes_json);
+            if (next === null) continue;
+            await sql`update auth_api_tokens set scopes_json = ${next} where id = ${row.id}`.execute(
+              db,
+            );
+          }
+        }
       },
     },
   ],
@@ -1144,7 +1226,7 @@ export const accounts: ServerModule = {
 
     app.post(
       '/api/v1/security/ip/add',
-      secured('security:write', {
+      secured('user:write', {
         schema: {
           operationId: 'securityIpAdd',
           tags: TAG,
@@ -1166,7 +1248,7 @@ export const accounts: ServerModule = {
 
     app.get(
       '/api/v1/security/ip/list',
-      secured('security:read', {
+      secured('user:read', {
         schema: {
           operationId: 'securityIpList',
           tags: TAG,
@@ -1184,7 +1266,7 @@ export const accounts: ServerModule = {
 
     app.post(
       '/api/v1/security/ip/remove',
-      secured('security:write', {
+      secured('user:write', {
         schema: {
           operationId: 'securityIpRemove',
           tags: TAG,

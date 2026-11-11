@@ -70,7 +70,7 @@ process.chdir(root);
   const t = await app.inject({
     method: 'POST',
     url: '/api/v1/auth/dev-token',
-    payload: { sub: 'u1', scopes: ['integration:read', 'integration:write'] },
+    payload: { sub: 'u1', scopes: ['system:read', 'system:write'] },
   });
   const bearer = { authorization: 'Bearer ' + (t.json().token || '') };
 

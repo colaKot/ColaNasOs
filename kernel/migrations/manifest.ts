@@ -207,6 +207,8 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '173_pt_media_link',
   // 图片 / 混合库目录列预写入库（列表 / 文件夹聚合改走索引）
   '174_video_dir_path',
+  // 权限域合并：player→video / security→user / integration→system（只改存量值）
+  '175_scope_domain_merge',
 ]);
 
 export interface OrderCheck {

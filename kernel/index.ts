@@ -359,7 +359,14 @@ export async function startKernel(opts: KernelOptions) {
       const q = (req.query ?? {}) as { t?: string };
       const payload = typeof q.t === 'string' && q.t ? verifyToken(q.t, secret) : null;
       const sessionId = hlsPath.slice(hlsPrefix.length).split('/')[0];
-      if (!payload || payload.sub !== `hls:${sessionId}` || !payload.scopes.includes('player:read')) {
+      // 权限域合并后新签发的令牌带 `video:read`；`player:read` 是升级前的旧值，
+      // 6 小时有效期内一并认，免得正在播放的会话被一次重启打断。
+      const scopes: string[] = payload?.scopes ?? [];
+      if (
+        !payload ||
+        payload.sub !== `hls:${sessionId}` ||
+        (!scopes.includes('video:read') && !scopes.includes('player:read'))
+      ) {
         return reply.code(401).send({ error: Err.unauthorized, message: 'missing or invalid hls token' });
       }
       return;

@@ -91,7 +91,7 @@ export function signature(secret: string, body: string): string {
 export const integrations: ServerModule = {
   id: 'integrations',
   prefix: '/api/v1/integration',
-  permissions: ['integration:read', 'integration:write'],
+  permissions: ['system:read', 'system:write'],
 
   migrations: [
     {
@@ -195,7 +195,7 @@ export const integrations: ServerModule = {
 
     app.post(
       '/api/v1/integration/webhooks',
-      secured('integration:write', {
+      secured('system:write', {
         schema: {
           operationId: 'webhookCreate',
           tags: TAG,
@@ -228,7 +228,7 @@ export const integrations: ServerModule = {
 
     app.get(
       '/api/v1/integration/webhooks',
-      secured('integration:read', {
+      secured('system:read', {
         schema: {
           operationId: 'webhookList',
           tags: TAG,
@@ -252,7 +252,7 @@ export const integrations: ServerModule = {
 
     app.post(
       '/api/v1/integration/webhooks/remove',
-      secured('integration:write', {
+      secured('system:write', {
         schema: {
           operationId: 'webhookRemove',
           tags: TAG,
@@ -271,7 +271,7 @@ export const integrations: ServerModule = {
 
     app.post(
       '/api/v1/integration/webhooks/test',
-      secured('integration:write', {
+      secured('system:write', {
         schema: {
           operationId: 'webhookTest',
           tags: TAG,
@@ -291,7 +291,7 @@ export const integrations: ServerModule = {
 
     app.post(
       '/api/v1/integration/emit',
-      secured('integration:write', {
+      secured('system:write', {
         schema: {
           operationId: 'integrationEmit',
           tags: TAG,
@@ -308,7 +308,7 @@ export const integrations: ServerModule = {
 
     app.get(
       '/api/v1/integration/deliveries',
-      secured('integration:read', {
+      secured('system:read', {
         schema: {
           operationId: 'webhookDeliveries',
           tags: TAG,

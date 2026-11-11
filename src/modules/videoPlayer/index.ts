@@ -86,7 +86,7 @@ const urlOf = (id: string, token?: string) =>
 
 /** HLS 地址凭**短期签名令牌**访问（不再依赖裸会话 UUID） */
 const hlsToken = (k: KernelApi, id: string) =>
-  k.auth.sign({ sub: `hls:${id}`, scopes: ['player:read'] }, 6 * 3600);
+  k.auth.sign({ sub: `hls:${id}`, scopes: ['video:read'] }, 6 * 3600);
 
 /** HLS 分片根目录：与 pump() 保持一致地解析 video.transcode.tempDir，配置无效时回落默认目录 */
 function hlsRootOf(k: KernelApi): string {
@@ -494,7 +494,7 @@ async function sweepHls(k: KernelApi): Promise<number> {
 export const videoPlayer: ServerModule = {
   id: 'videoPlayer',
   prefix: '/api/v1/player',
-  permissions: ['player:read', 'player:write'],
+  permissions: ['video:read', 'video:write'],
 
   migrations: [
     {
@@ -619,7 +619,7 @@ export const videoPlayer: ServerModule = {
 
     app.post(
       '/api/v1/player/sessions',
-      secured('player:write', {
+      secured('video:write', {
         schema: {
           operationId: 'playerSessionCreate',
           tags: TAG,
@@ -756,7 +756,7 @@ export const videoPlayer: ServerModule = {
 
     app.get(
       '/api/v1/player/sessions',
-      secured('player:read', {
+      secured('video:read', {
         schema: {
           operationId: 'playerSessionGet',
           tags: TAG,

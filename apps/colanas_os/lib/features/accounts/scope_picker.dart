@@ -18,12 +18,13 @@ const List<String> kScopeDomains = <String>[
   'pt',
   'rss',
   'sync',
-  'player',
-  'integration',
   'system',
   'user',
-  'security',
 ];
+// `player`（转码播放）/ `security`（IP 黑名单）/ `integration`（Webhook）三个域
+// 已合并进 video / user / system（用户 2026-11-11：转码播放属于影视、IP 黑名单
+// 跟随用户与权限、Webhook 归系统集成）。服务端同名 secured() 同步改过，
+// `tool/check/scope-catalog.js` 会卡住两边不一致。
 
 /// 通配权限：勾上就等于「所有域 + 以后新增的域」。
 const String kScopeWildcard = '*';

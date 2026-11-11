@@ -261,11 +261,9 @@ process.chdir(root);
   const devToken = async (scopes, sub = 'admin') =>
     (await inject('POST', '/api/v1/auth/dev-token', '', { sub, scopes })).json().token;
 
-  const admin = await devToken(
-    ['player:read', 'player:write', 'video:read', 'video:write'],
-    'admin',
-  );
-  const reader = await devToken(['player:read', 'video:read'], 'reader');
+  // 转码会话已并入影视域（`video:*`）：只要给了影视就能转码播放
+  const admin = await devToken(['video:read', 'video:write'], 'admin');
+  const reader = await devToken(['video:read'], 'reader');
   const mediaReady = k.media.available();
 
   // ---- 建库 + 扫描（拿到 video_items 行） ----

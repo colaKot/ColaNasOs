@@ -4,7 +4,7 @@ import type { BehaviorDomain, CaseContext } from '../check/behavior-types';
  * webhook 域行为用例：创建权限、secret 只返回一次、列表脱敏、删除。
  * 不触发真实投递（避免依赖外部 HTTP 端点），投递链路由 `smoke:webhook` 覆盖。
  */
-const OWNER = ['integration:read', 'integration:write'];
+const OWNER = ['system:read', 'system:write'];
 
 async function createHook(ctx: CaseContext, name = 'Behavior Hook'): Promise<{ id: string; secret?: string }> {
   const owner = await ctx.token(OWNER);
@@ -40,7 +40,7 @@ const domain: BehaviorDomain = {
       id: 'create.reader-403',
       name: '只读用户不能创建 webhook',
       async run(ctx) {
-        const reader = await ctx.token(['integration:read']);
+        const reader = await ctx.token(['system:read']);
         const res = await ctx.request('POST', '/api/v1/integration/webhooks', {
           token: reader,
           payload: { url: 'https://example.com/x', events: ['task.done'] },
