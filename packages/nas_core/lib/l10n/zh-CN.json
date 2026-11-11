@@ -2147,7 +2147,7 @@
     "ui.video.023": "关闭字幕",
     "ui.video.024": "自动",
     "ui.video.h1137ee": "音频编码",
-    "ui.video.h390648": "内置播放器基于 media_kit（Windows / Linux / macOS / Android / iOS / Web 同一套 API）；外挂字幕与字幕轨切换在后续迭代接入。",
+    "ui.video.h390648": "播放器基于 media_kit（Windows / Linux / macOS / Android / iOS / Web 同一套 API）；外挂字幕与字幕轨切换在后续迭代接入。",
     "ui.video.h4ad584": "播放令牌过期后会自动重签；持续失败就重新打开播放页。",
     "ui.video.h5186a2": "影视库",
     "ui.video.h720777": "无",

@@ -2270,7 +2270,7 @@
     "ui.video.023": "Subtitles off",
     "ui.video.024": "Auto",
     "ui.video.h1137ee": "Audio codec",
-    "ui.video.h390648": "The in-app player is built on media_kit (one API across Windows / Linux / macOS / Android / iOS / Web); external subtitles and track switching come in a later iteration.",
+    "ui.video.h390648": "The player is built on media_kit (one API across Windows / Linux / macOS / Android / iOS / Web); external subtitles and track switching come in a later iteration.",
     "ui.video.h4ad584": "Play tokens are reissued automatically when they expire; reopen the player page if it keeps failing.",
     "ui.video.h5186a2": "Video library",
     "ui.video.h720777": "None",
