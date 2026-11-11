@@ -854,12 +854,14 @@ class VideoDetailSkeleton extends StatelessWidget {
 ///
 /// 用 sliver 而不是 `Wrap` / `GridView(shrinkWrap: true)`：
 /// 50 集以上的剧一次性铺完会让滚动掉帧，sliver 只建可见的那几行。
-/// 点「不是当前选中」的集 = 只切换选中（同步更新下方文件信息）；
-/// 再点一次当前集 = 直接播放（PRD 的交互口径）。
+///
+/// **点一下就走**（用户 2026-11-11 19:24 要求）：点集数立刻开播，
+/// 不做「先选中、再点一次才播」那套两步交互——点集就是想看那一集。
+/// `selectedId` 只用来高亮「当前这一集」（= 本页所属的那一集，或刚播过的那一集），
+/// 文件信息面板也跟它走。
 SliverPadding videoEpisodeGridSliver({
   required List<VideoItem> episodes,
   required String? selectedId,
-  required void Function(VideoItem ep) onSelect,
   required void Function(VideoItem ep) onPlay,
   required EdgeInsetsGeometry padding,
   List<NasMenuEntry> Function(VideoItem ep)? menuEntries,
@@ -879,7 +881,7 @@ SliverPadding videoEpisodeGridSliver({
           number: ep.episode ?? (i + 1),
           watched: ep.watched,
           selected: ep.id == selectedId,
-          onTap: () => ep.id == selectedId ? onPlay(ep) : onSelect(ep),
+          onTap: () => onPlay(ep),
         );
         final menu = menuEntries?.call(ep) ?? const <NasMenuEntry>[];
         final wrapped = menu.isEmpty

@@ -610,7 +610,6 @@ class VideoDetailPageState extends State<VideoDetailPage> {
                         videoEpisodeGridSliver(
                           episodes: eps,
                           selectedId: _selected.id,
-                          onSelect: (ep) => setState(() => _selectedId = ep.id),
                           onPlay: (ep) => _playEpisode(ep),
                           padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 0),
                           menuEntries: (ep) => videoItemMenuEntries(
@@ -971,8 +970,8 @@ class VideoDetailPageState extends State<VideoDetailPage> {
                     ? tr('video.series.resume')
                     : (onPage || (_selected.episode ?? 0) <= 0
                           ? tr('video.series.play')
-                          // 选集网格里换了集：按钮直接点名要播第几集，
-                          // 否则「点了集数没反应」会被当成坏了
+                          // 刚点播过别的集（播完返回）：按钮点名要播第几集，
+                          // 否则读者会以为顶部按钮播的仍是页头那一条
                           : tr('video.detail.playEpisode', {
                               'n': '${_selected.episode}',
                             })),
@@ -1182,8 +1181,12 @@ class VideoDetailPageState extends State<VideoDetailPage> {
     await _loadProgress();
   }
 
-  /// 播放某一集（选集网格里「再点一次当前集」走这里）。
+  /// 点集数直接开播（用户 2026-11-11 19:24 要求：不要「先选中再点一次」）。
+  ///
+  /// 播之前先把选中态拨到这一集：从播放器回来时，选集高亮和下方「文件与技术
+  /// 信息」都停在刚看过的那一集，而不是页头那条。
   Future<void> _playEpisode(VideoItem ep) async {
+    if (_selectedId != ep.id) setState(() => _selectedId = ep.id);
     if (VideoLibraryTypes.isShortTv(ep.libraryId) &&
         _seriesEpisodes.length > 1) {
       final idx = _seriesEpisodes.indexWhere((e) => e.id == ep.id);
