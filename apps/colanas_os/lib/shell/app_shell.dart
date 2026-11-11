@@ -89,10 +89,12 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
+    // 应用 ≤4 个时没有工作台，启动直接落在第一个应用上
+    _selected = _ids.first;
     // 外部入口（Electron 托盘的「同步任务」）请求切 App 时走这里
     AppShell.openAppRequest = _open;
-    // 手机端二级页左上角的房子：点它回工作台（桌面端用不到）
-    AppNavShell.onExitToHome = () => _open('home');
+    // 手机端二级页左上角的房子：回到根页面（有工作台时是工作台）
+    AppNavShell.onExitToHome = () => _open(_ids.first);
     // 用户开启过「自动同步」才启动调度；默认关，避免悄悄读写本地磁盘
     if (SyncScheduler.instance.enabled) SyncScheduler.instance.start();
     // 托盘桥在 `runColanasApp` 里已经装好；这里补报一次状态 —— 登录之后才拿得到
@@ -156,8 +158,14 @@ class _AppShellState extends State<AppShell> {
     ),
   );
 
-  /// 页面顺序：工作台在最前，其余按契约顺序
-  static List<String> get _ids => ['home', for (final a in _apps) a.id];
+  /// 应用 ≤4 个时不放「工作台」：直接把第一个应用当首页（用户 2026-11-12）。
+  static bool get _showHome => _apps.length > 4;
+
+  /// 页面顺序：有工作台时它在最前，否则第一个应用就是落点。
+  static List<String> get _ids => <String>[
+    if (_showHome) 'home',
+    for (final a in _apps) a.id,
+  ];
 
   void _open(String id) => setState(() => _selected = id);
 
@@ -208,15 +216,16 @@ class _AppShellState extends State<AppShell> {
 
   List<NasNavGroup> _navGroups() {
     final groups = <NasNavGroup>[
-      NasNavGroup(
-        entries: [
-          NasNavEntry(
-            id: 'home',
-            label: tr('nav.home'),
-            icon: Icons.dashboard_outlined,
-          ),
-        ],
-      ),
+      if (_showHome)
+        NasNavGroup(
+          entries: [
+            NasNavEntry(
+              id: 'home',
+              label: tr('nav.home'),
+              icon: Icons.dashboard_outlined,
+            ),
+          ],
+        ),
     ];
     for (final group in AppGroup.values) {
       final entries = <NasNavEntry>[
@@ -241,6 +250,7 @@ class _AppShellState extends State<AppShell> {
     var index = ids.indexOf(_selected);
     if (index < 0) index = 0;
     final currentId = ids[index];
+    final rootId = ids.first;
     _built.add(currentId);
     final pages = [
       for (final id in ids)
@@ -253,14 +263,14 @@ class _AppShellState extends State<AppShell> {
         final mode = layoutFor(constraints.maxWidth);
 
         if (mode == LayoutMode.compact) {
-          // 手机端：**工作台是唯一入口**，App 全屏（自带 56 顶栏 + 底部二级菜单）。
-          // 因此这里不再有一级底部导航，也没有「更多」弹层 —— 两层底部栏没法共存。
+          // 手机端：**根页面是唯一入口**（工作台，或应用 ≤4 个时的第一个应用）。
+          // App 全屏（自带 56 顶栏 + 底部二级菜单），两层底部栏没法共存。
           //
-          // 2026-11-08 用户要求：App 首页按 Android 手势返回要回**工作台**，
-          // 不能把整个 App 退到后台。顺序是「先退 App 内下钻 → 再回工作台 → 最后才是退出」。
+          // 2026-11-08 用户要求：App 首页按 Android 手势返回要回**根页面**，
+          // 不能把整个 App 退到后台。顺序是「先退 App 内下钻 → 再回根页面 → 最后才是退出」。
           return PopScope(
-            // 只有站在工作台且没有下钻时才把返回让给系统（= 退出/最小化）
-            canPop: currentId == 'home' && ShellBack.depth(currentId) == 0,
+            // 只有站在根页面且没有下钻时才把返回让给系统（= 退出/最小化）
+            canPop: currentId == rootId && ShellBack.depth(currentId) == 0,
             onPopInvokedWithResult: (didPop, _) {
               if (didPop) return;
               final back = ShellBack.handlerFor(currentId);
@@ -268,7 +278,7 @@ class _AppShellState extends State<AppShell> {
                 back();
                 return;
               }
-              if (currentId != 'home') _open('home');
+              if (currentId != rootId) _open(rootId);
             },
             child: Scaffold(
               backgroundColor: Colors.transparent,
@@ -321,7 +331,7 @@ class _AppShellState extends State<AppShell> {
                           title: _labelOf(currentId),
                           // 首页不显示副标题（「存储、内存与服务状态一览」，
                           // 2026-11-07 反馈删除）；其余 App 仍显示分组名
-                          subtitle: currentId == 'home'
+                          subtitle: currentId == rootId
                               ? null
                               : tr(AppVisuals.groupOf(currentId).i18nKey),
                           // 顶部搜索暂时不显示（2026-11-04）：它只按 App 名字跳转，

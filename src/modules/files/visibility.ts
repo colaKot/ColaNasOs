@@ -95,11 +95,18 @@ export function dirVisible(v: Visibility, candidate: string): boolean {
  */
 export function likePrefixes(v: Visibility): string[] {
   const out = new Set<string>();
+  const root = posix(filesRoot()).replace(/\/+$/, '').toLowerCase();
   for (const r of v.rules) {
     const bare = posix(r.path).replace(/^\/+/, '');
     if (bare) out.add(bare);
     const abs = absolutePathOf(r.path).replace(/^\/+/, '');
     if (abs) out.add(abs);
+    // 目录选择器选出来的是绝对路径，规则因此是 `/C:/.../files/music`；
+    // 但库 / 曲目的 rel_path 往往是相对 filesRoot 的 `music/a.mp3`。
+    // 少了这一条，库能显示、曲目却被 LIKE 全部滤空（2026-11-12 tv 账号实测）。
+    if (abs.toLowerCase().startsWith(`${root}/`)) {
+      out.add(abs.slice(root.length + 1));
+    }
   }
   return [...out];
 }
