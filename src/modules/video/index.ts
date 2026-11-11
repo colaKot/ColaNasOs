@@ -50,6 +50,7 @@ async function hasPendingScrape(db: any, libraryId: string): Promise<boolean> {
 }
 import { registerVideoLibrary } from './routes/library';
 import { registerVideoItems } from './routes/items';
+import { registerVideoSeriesDisplay } from './routes/series-display';
 import { registerVideoFacets } from './routes/facets';
 import { registerVideoPlayback } from './routes/playback';
 import { registerVideoSubtitles } from './routes/subtitles';
@@ -535,6 +536,7 @@ export const video: ServerModule = {
     const h = makeVideoHelpers(k, libWatch);
     await registerVideoLibrary(app, k, h);
     await registerVideoItems(app, k, h);
+    await registerVideoSeriesDisplay(app, k);
     await registerVideoFacets(app, k, h);
     await registerVideoPlayback(app, k, h);
     await registerVideoSubtitles(app, k, h);

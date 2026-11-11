@@ -12,7 +12,6 @@ import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import '../photo/photo_download.dart';
 import 'video_card.dart';
-import 'cola_video_detail_page.dart';
 import 'video_item_actions.dart';
 import 'video_media_viewer_page.dart';
 
@@ -313,11 +312,9 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
   }
 
   Future<void> _openItem(VideoItem item, int index) async {
-    if (item.mediaType == 'image') {
-      await openMediaViewer(context, items: _items, initialIndex: index);
-      return;
-    }
-    openVideoDetail(context, item);
+    // 混合库 / 图片库统一进全屏浏览：图片直接看、视频直接起播，不再绕详情页。
+    // 上下滑动 / ↑↓ 在同一个浏览页里换上一条下一条。
+    await openMediaViewer(context, items: _items, initialIndex: index);
   }
 
   Future<void> _deleteFolder(VideoImageFolderNode folder) async {

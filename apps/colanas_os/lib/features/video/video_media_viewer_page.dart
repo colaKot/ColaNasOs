@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
 import '../photo/photo_download.dart';
 import 'video_card.dart';
-import 'cola_video_detail_page.dart';
 
 /// 图片库 / 混合库的全屏浏览。
 ///
-/// 图片：左右滑动 / 方向键翻页，首尾循环，双指或按钮缩放。
-/// 视频：显示海报 + 播放按钮，点一下进详情。
+/// 图片：上下滑动 / ↑↓ 翻页，首尾循环，双指缩放。
+/// 视频：进这一页就**自动起播**（混合库点条目不再绕详情页），翻到图片时自动暂停。
+/// 一个 Player 复用给所有视频页，避免每翻一页都新建一个平台视图。
 Future<void> openMediaViewer(
   BuildContext context, {
   required List<VideoItem> items,
@@ -43,17 +45,30 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
   late final PageController _pageController;
   late int _index;
 
+  Player? _player;
+  VideoController? _videoController;
+  String? _loadedId;
+  bool _playReady = false;
+  String? _playError;
+
   @override
   void initState() {
     super.initState();
     _index = widget.initialIndex.clamp(0, widget.items.isEmpty ? 0 : widget.items.length - 1);
     _pageController = PageController(initialPage: _base + _index);
     HardwareKeyboard.instance.addHandler(_onKey);
+    if (widget.items.isNotEmpty) {
+      _player = Player();
+      _videoController = VideoController(_player!);
+      // initState 里不能取 InheritedWidget，首帧之后再起播
+      WidgetsBinding.instance.addPostFrameCallback((_) => _ensurePlayback());
+    }
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    _player?.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -62,15 +77,20 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
     if (event is! KeyDownEvent) return false;
     final route = ModalRoute.of(context);
     if (route != null && !route.isCurrent) return false;
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowLeft) {
       _go(-1);
       return true;
     }
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+    if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.arrowRight) {
       _go(1);
       return true;
     }
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
+    if (key == LogicalKeyboardKey.space) {
+      _player?.playOrPause();
+      return true;
+    }
+    if (key == LogicalKeyboardKey.escape) {
       Navigator.of(context).maybePop();
       return true;
     }
@@ -88,6 +108,41 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
   }
 
   VideoItem get _current => widget.items[_index];
+
+  /// 当前页是视频就起播，是图片就暂停。翻页时复用同一个 Player，只换片源。
+  Future<void> _ensurePlayback() async {
+    if (!mounted || widget.items.isEmpty || _player == null) return;
+    final item = _current;
+    if (item.mediaType == 'image') {
+      await _player!.pause();
+      if (!mounted) return;
+      setState(() {
+        _playReady = false;
+        _loadedId = null;
+        _playError = null;
+      });
+      return;
+    }
+    if (_loadedId == item.id && _playReady) return;
+    _loadedId = item.id;
+    _playReady = false;
+    _playError = null;
+    if (mounted) setState(() {});
+    try {
+      final res = await ApiSession.instance.client.videoStreamUrl(id: item.id);
+      if (!mounted) return;
+      final url = '${ApiSession.instance.baseUrl}${res.url}';
+      await _player!.open(Media(url), play: true);
+      if (!mounted) return;
+      setState(() => _playReady = true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _playReady = false;
+        _playError = '$e';
+      });
+    }
+  }
 
   Future<void> _download(VideoItem item) async {
     final url =
@@ -145,12 +200,17 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
           Positioned.fill(
             child: PageView.builder(
               controller: _pageController,
+              scrollDirection: Axis.vertical,
               onPageChanged: (page) {
                 setState(() => _index = page % widget.items.length);
+                _ensurePlayback();
               },
               itemBuilder: (ctx, page) {
-                final item = widget.items[page % widget.items.length];
-                return item.mediaType == 'image' ? _imagePage(item) : _videoPage(item);
+                final i = page % widget.items.length;
+                final item = widget.items[i];
+                return item.mediaType == 'image'
+                    ? _imagePage(item)
+                    : _videoPage(item, i == _index);
               },
             ),
           ),
@@ -180,6 +240,8 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
     return InteractiveViewer(
       minScale: 0.5,
       maxScale: 8,
+      // 单指平移交给外层纵向 PageView，双指缩放照旧
+      panEnabled: false,
       child: Center(
         child: Image.network(
           url,
@@ -195,36 +257,68 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
     );
   }
 
-  Widget _videoPage(VideoItem item) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => openVideoDetail(context, item),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Center(
-            child: AspectRatio(
-              aspectRatio: _aspectOf(item),
-              child: NasCoverImage(
-                url: videoPosterUrl(item, kind: 'fanart'),
-                headers: videoArtHeaders,
-                fit: BoxFit.contain,
-                icon: Icons.movie_outlined,
-              ),
+  Widget _videoPage(VideoItem item, bool active) {
+    if (active && _playReady && _videoController != null) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _player?.playOrPause(),
+        child: Center(
+          child: AspectRatio(
+            aspectRatio: _aspectOf(item),
+            child: Video(
+              controller: _videoController!,
+              controls: null,
+              fit: BoxFit.contain,
+              fill: Colors.black,
             ),
           ),
-          Center(
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.45),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.play_arrow, size: 42, color: Colors.white),
+        ),
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Center(
+          child: AspectRatio(
+            aspectRatio: _aspectOf(item),
+            child: NasCoverImage(
+              url: videoPosterUrl(item, kind: 'fanart'),
+              headers: videoArtHeaders,
+              fit: BoxFit.contain,
+              icon: Icons.movie_outlined,
             ),
           ),
-        ],
-      ),
+        ),
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: const BoxDecoration(
+              color: Colors.black54,
+              shape: BoxShape.circle,
+            ),
+            child: _playError == null
+                ? const SizedBox(
+                    width: 42,
+                    height: 42,
+                    child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
+                  )
+                : const Icon(Icons.error_outline, size: 42, color: Colors.white70),
+          ),
+        ),
+        if (_playError != null)
+          Positioned(
+            left: 24,
+            right: 24,
+            bottom: 80,
+            child: Text(
+              _playError!,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ),
+      ],
     );
   }
 
@@ -283,6 +377,7 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
     );
   }
 
+  /// 左右两侧的点击区保留（鼠标用户方便），图标按「上一个 / 下一个」语义改上下箭头。
   Widget _sideNav({required bool left}) {
     final width = MediaQuery.of(context).size.width;
     return Positioned(
@@ -306,7 +401,7 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
               border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
             ),
             child: Icon(
-              left ? Icons.chevron_left : Icons.chevron_right,
+              left ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
               color: Colors.white,
               size: 34,
             ),

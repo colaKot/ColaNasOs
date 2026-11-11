@@ -2575,7 +2575,7 @@
     "video.media.sortTakenDesc": "拍摄时间（新→旧）",
     "video.media.sortViewAsc": "查看时间（旧→新）",
     "video.media.sortViewDesc": "查看时间（新→旧）",
-    "video.media.viewerHint": "左右滑动翻页 · 双击缩放 · 方向键切换",
+    "video.media.viewerHint": "上下滑动 / ↑↓ 键切换 · 双指缩放 · 空格暂停 · Esc 关闭",
     "video.media.waterfall": "瀑布流",
     "video.nav.appSettings": "应用设置",
     "video.nav.clientSettings": "客户端设置",

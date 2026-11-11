@@ -2474,7 +2474,7 @@
     "video.media.sortTakenDesc": "Taken (newest)",
     "video.media.sortViewAsc": "Viewed (oldest)",
     "video.media.sortViewDesc": "Viewed (newest)",
-    "video.media.viewerHint": "Swipe to browse · double-tap to zoom · arrow keys to switch",
+    "video.media.viewerHint": "Swipe up/down or use ↑↓ · pinch to zoom · Space to pause · Esc to close",
     "video.media.waterfall": "Waterfall",
     "video.nav.appSettings": "App settings",
     "video.nav.clientSettings": "Client settings",

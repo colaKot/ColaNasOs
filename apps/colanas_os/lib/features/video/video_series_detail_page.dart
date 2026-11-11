@@ -8,6 +8,7 @@ import 'detail/video_detail_router.dart';
 import 'video_card.dart';
 import 'video_genre_labels.dart';
 import 'video_series_widgets.dart';
+import 'series_display.dart';
 
 /// 剧详情 / 选季入口。
 ///
@@ -60,6 +61,10 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
   @override
   void initState() {
     super.initState();
+    // 剧中文名 / TMDB 竖版海报是展示层补充，拉到后重画一次即可
+    SeriesDisplayStore.ensure().then((_) {
+      if (mounted) setState(() {});
+    });
     _load();
   }
 
@@ -141,6 +146,8 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
 
   /// 剧名：series 列是英文发布名，目录 / 文件名里带中文时优先用中文。
   String _displayName(String series, String? path) {
+    final cached = SeriesDisplayStore.nameOf(series);
+    if (cached != null && cached.isNotEmpty) return cached;
     final re = RegExp(r'[\u3400-\u9fff][\u3400-\u9fff0-9A-Za-z·：:，,、\s]{1,30}');
     for (final s in [series, path ?? '']) {
       final m = re.firstMatch(s);

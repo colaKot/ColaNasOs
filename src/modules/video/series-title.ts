@@ -224,3 +224,81 @@ export async function localizeHomeTitles(
     if (zh && zh !== name) item.title = zh;
   }
 }
+
+// ---------------------------------------------------------------- 剧展示信息（隐藏路由）
+
+/** 剧的展示信息：中文显示名 + TMDB 竖版海报。 */
+export interface SeriesDisplay {
+  name: string;
+  displayName: string;
+  posterUrl: string | null;
+}
+
+const POSTER_CATALOG = 'series_poster';
+
+async function posterCacheGet(k: KernelApi, key: string): Promise<string | null> {
+  const rows = (
+    await sql<{ payload: string }>`
+      select payload from media_catalog
+       where catalog_type = ${POSTER_CATALOG} and key = ${key}
+       limit 1
+    `.execute(k.db)
+  ).rows;
+  if (!rows.length) return null;
+  try {
+    const v: unknown = JSON.parse(String(rows[0].payload || ''));
+    return typeof v === 'string' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+async function posterCachePut(k: KernelApi, key: string, value: string): Promise<void> {
+  await sql`
+    insert into media_catalog (catalog_type, key, payload, item_count, snapshot_at)
+    values (${POSTER_CATALOG}, ${key}, ${JSON.stringify(value)}, 1, ${Date.now()})
+    on conflict(catalog_type, key) do update set
+      payload = excluded.payload, snapshot_at = excluded.snapshot_at
+  `.execute(k.db);
+}
+
+/**
+ * 一次拿到所有剧的中文显示名 + TMDB 竖版海报。
+ * 中文名复用 localizeSeriesNames（本地路径 / 已有缓存）；海报单独查一次
+ * `/search/tv` 并落 media_catalog，之后请求只读缓存、不再联网。
+ */
+export async function loadSeriesDisplay(
+  k: KernelApi,
+  entries: Array<{ name: string; path?: string | null }>,
+): Promise<SeriesDisplay[]> {
+  const names = await localizeSeriesNames(k, entries);
+  const cfg = tmdbConfigOf(readScrapeSettings(k));
+  const online = tmdbReady(cfg);
+  const out: SeriesDisplay[] = [];
+  await Promise.all(
+    entries.map(async (e) => {
+      const name = String(e.name || '').trim();
+      if (!name) return;
+      let poster = await posterCacheGet(k, name);
+      if (poster === null && online) {
+        const query = searchQueryOf(name);
+        try {
+          const list = query
+            ? await withTimeout(searchTmdb(cfg, query, 'tv'), 3500)
+            : [];
+          const p = list.find((c) => String(c.posterPath || '').trim())?.posterPath;
+          poster = p ? `${cfg.imageBase}/w500${p}` : '';
+          await posterCachePut(k, name, poster);
+        } catch {
+          poster = '';
+        }
+      }
+      out.push({
+        name,
+        displayName: names.get(name) || name,
+        posterUrl: poster || null,
+      });
+    }),
+  );
+  return out;
+}

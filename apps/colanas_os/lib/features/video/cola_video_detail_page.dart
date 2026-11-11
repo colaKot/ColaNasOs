@@ -15,6 +15,7 @@ import 'video_collection_picker.dart';
 import 'video_jp_pages.dart';
 import 'video_list_view.dart';
 import 'video_scrape_dialogs.dart';
+import 'series_display.dart';
 import 'video_series_widgets.dart';
 import 'detail/video_detail_router.dart';
 
@@ -94,6 +95,10 @@ class VideoDetailPageState extends State<VideoDetailPage> {
   @override
   void initState() {
     super.initState();
+    // 剧中文名 / TMDB 竖版海报是展示层补充，拉到后重画一次即可
+    SeriesDisplayStore.ensure().then((_) {
+      if (mounted) setState(() {});
+    });
     _loadProgress();
     _loadEpisodes();
     _loadActorInfo();
@@ -882,7 +887,8 @@ class VideoDetailPageState extends State<VideoDetailPage> {
   String _displayTitle(VideoItem item) {
     final series = (item.series ?? '').trim();
     if (series.isEmpty) return item.title;
-    final name = _zhSeriesName(series, item.path);
+    final name =
+        SeriesDisplayStore.nameOf(series) ?? _zhSeriesName(series, item.path);
     final seasons = _seriesEpisodes.map((e) => e.season ?? 1).toSet().length;
     final n = item.season ?? 0;
     if (seasons > 1 && n > 0) {

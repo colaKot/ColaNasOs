@@ -7,6 +7,7 @@ import 'package:nas_ui/nas_ui.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import 'video_card.dart';
+import 'series_display.dart';
 import 'video_series_detail_page.dart';
 import 'video_series_widgets.dart';
 
@@ -50,6 +51,10 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
   @override
   void initState() {
     super.initState();
+    // 剧中文名 / TMDB 竖版海报是展示层补充，拉到后重画一次即可
+    SeriesDisplayStore.ensure().then((_) {
+      if (mounted) setState(() {});
+    });
     final saved = SettingsStore.instance.getInt(_keyScale) ?? 100;
     _scale = (saved / 100.0).clamp(0.7, 1.15);
     _scroll.addListener(_onScroll);
@@ -404,9 +409,10 @@ class SeriesPosterCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(NasTokens.radiusSm),
                     child: SeriesCoverImage(
                       artUrl: seriesArtUrl(item.coverId, size: wantSize),
-                      // 竖版海报拿不到就显示占位，别退成横版剧照
-                      posterUrl: null,
-                      fallbackText: item.name,
+                      // 本地竖版海报拿不到就用 TMDB 剧海报，仍不要用横版剧照
+                      posterUrl: SeriesDisplayStore.posterOf(item.name),
+                      fallbackText:
+                          SeriesDisplayStore.nameOf(item.name) ?? item.name,
                       cacheWidth: wantSize,
                     ),
                   ),
@@ -474,7 +480,7 @@ class SeriesPosterCard extends StatelessWidget {
                   poster,
                 const SizedBox(height: 4),
                 Text(
-                  item.name,
+                  SeriesDisplayStore.nameOf(item.name) ?? item.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
