@@ -17,6 +17,8 @@ import 'video_list_view.dart';
 import 'video_scrape_dialogs.dart';
 import 'series_display.dart';
 import 'video_series_widgets.dart';
+import 'short_play_page.dart';
+import 'library_types.dart';
 import 'detail/video_detail_router.dart';
 
 /// 演职人员名清洗。
@@ -225,6 +227,13 @@ class VideoDetailPageState extends State<VideoDetailPage> {
   }
 
   Future<void> _openPlayer() async {
+    // 短剧：进上下切换的连播页，而不是单集播放器
+    if (VideoLibraryTypes.isShortTv(_item.libraryId) &&
+        _seriesEpisodes.length > 1) {
+      final idx = _seriesEpisodes.indexWhere((e) => e.id == _item.id);
+      await openShortPlay(context, _seriesEpisodes, idx < 0 ? 0 : idx);
+      return;
+    }
     setState(() => _busy = true);
     try {
       final res = await ApiSession.instance.client.videoStreamUrl(id: _item.id);
@@ -1361,8 +1370,16 @@ class VideoDetailPageState extends State<VideoDetailPage> {
       message: ep.title,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        // 点具体剧集立刻起播（用户 2026-11-11 要求）：不再先切详情再点播放。
-        onTap: () => playVideoItemNow(context, ep),
+        // 点具体剧集立刻起播；短剧走上下切换的连播页
+        onTap: () {
+          if (VideoLibraryTypes.isShortTv(_item.libraryId) &&
+              _seriesEpisodes.length > 1) {
+            final idx = _seriesEpisodes.indexWhere((e) => e.id == ep.id);
+            openShortPlay(context, _seriesEpisodes, idx < 0 ? 0 : idx);
+            return;
+          }
+          playVideoItemNow(context, ep);
+        },
         child: Container(
           width: 52,
           height: 40,

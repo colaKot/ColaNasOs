@@ -8,6 +8,8 @@ import 'detail/video_detail_router.dart';
 import 'video_card.dart';
 import 'video_genre_labels.dart';
 import 'video_series_widgets.dart';
+import 'short_play_page.dart';
+import 'library_types.dart';
 import 'series_display.dart';
 
 /// 剧详情 / 选季入口。
@@ -278,6 +280,15 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
   }
 
   Future<void> _play(VideoItem ep) async {
+    final bundle = _bundle;
+    if (VideoLibraryTypes.isShortTv(ep.libraryId) &&
+        bundle != null &&
+        bundle.items.length > 1) {
+      final idx = bundle.items.indexWhere((e) => e.id == ep.id);
+      await openShortPlay(context, bundle.items, idx < 0 ? 0 : idx);
+      if (mounted) await _load();
+      return;
+    }
     await playVideoItemNow(context, ep);
     if (mounted) await _load();
   }

@@ -15,6 +15,7 @@ import 'video_item_actions.dart';
 import 'video_jp_pages.dart';
 import 'video_media_browser_page.dart';
 import 'video_page.dart';
+import 'library_types.dart';
 import 'video_app_settings_page.dart';
 import 'video_client_settings_page.dart';
 import 'video_settings_pages.dart';
@@ -86,6 +87,8 @@ class _VideoShellPageState extends State<VideoShellPage> {
         for (final l in res.items)
           if (l.libType == 'jp_movie') l.id,
       };
+      // 剧集类库（电视剧 / 短剧）的播放器行为按库类型分流，这里顺手记一份
+      VideoLibraryTypes.update(res.items);
       setState(() => _libraries = res.items);
     } catch (_) {
       // 库列表读不到：菜单里就少几个库入口，不影响其它板块
@@ -207,7 +210,7 @@ class _VideoShellPageState extends State<VideoShellPage> {
           }
           // 电视剧库：一部剧只占一张卡（右上角总集数），点进去才分层看季 / 集。
           // 逐集铺卡的列表对剧库完全不可用（40 集就是 40 张同样的海报）。
-          if (lib.libType == 'tv') {
+          if (lib.libType == 'tv' || lib.libType == 'short_tv') {
             return VideoSeriesGridPage(
               key: ValueKey('video-tv-${lib.id}'),
               libraryId: lib.id,

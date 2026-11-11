@@ -2457,7 +2457,9 @@ class I18nKeys {
   static const videoLibraryTypeJp = 'video.library.type.jp';
   static const videoLibraryTypeMixed = 'video.library.type.mixed';
   static const videoLibraryTypeMovie = 'video.library.type.movie';
+  static const videoLibraryTypeShortTv = 'video.library.type.shortTv';
   static const videoLibraryTypeTv = 'video.library.type.tv';
+  static const videoShortPlayHint = 'video.shortPlay.hint';
   static const videoListCount = 'video.list.count';
   static const videoListFilter = 'video.list.filter';
   static const videoListFilterAll = 'video.list.filter.all';
@@ -2681,4 +2683,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2639;
+const int i18nKeyCount = 2641;

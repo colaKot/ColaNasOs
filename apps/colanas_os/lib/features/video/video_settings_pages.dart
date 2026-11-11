@@ -430,6 +430,7 @@ class _VideoLibrarySettingsPageState extends State<VideoLibrarySettingsPage> {
 
 IconData _libIcon(String type) => switch (type) {
   'tv' => Icons.live_tv_outlined,
+  'short_tv' => Icons.slow_motion_video_outlined,
   'jp_movie' => Icons.local_movies_outlined,
   'image' => Icons.image_outlined,
   'mixed' => Icons.perm_media_outlined,
@@ -438,6 +439,7 @@ IconData _libIcon(String type) => switch (type) {
 
 String _libTypeLabel(String type) => switch (type) {
   'tv' => tr('video.library.type.tv'),
+  'short_tv' => tr('video.library.type.shortTv'),
   'jp_movie' => tr('video.library.type.jp'),
   'image' => tr('video.library.type.image'),
   'mixed' => tr('video.library.type.mixed'),
@@ -659,6 +661,10 @@ Future<VideoLibraryForm?> showVideoLibraryDialog(
                       DropdownMenuItem(
                         value: 'tv',
                         child: Text(tr('video.library.type.tv')),
+                      ),
+                      DropdownMenuItem(
+                        value: 'short_tv',
+                        child: Text(tr('video.library.type.shortTv')),
                       ),
                       DropdownMenuItem(
                         value: 'jp_movie',

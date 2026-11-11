@@ -3,12 +3,13 @@ import path from 'node:path';
 /**
  * 影视库类型与日本电影库的文件名解析。
  *
- * 库类型**创建后不可改**（类型即行为）：movie / jp_movie / tv / image / mixed。
+ * 库类型**创建后不可改**（类型即行为）：movie / jp_movie / tv / short_tv / image / mixed。
  * 「日本电影」是独立类型而不是开关：索引、扫描、列表、字幕与角标全按 jp_movie 走。
+ * 「短剧」的扫描 / 列表 / 详情 / 刮削与电视剧完全一致，唯一区别是播放器支持上下切集。
  */
-export type LibType = 'movie' | 'jp_movie' | 'tv' | 'image' | 'mixed';
+export type LibType = 'movie' | 'jp_movie' | 'tv' | 'short_tv' | 'image' | 'mixed';
 
-export const LIB_TYPES: LibType[] = ['movie', 'jp_movie', 'tv', 'image', 'mixed'];
+export const LIB_TYPES: LibType[] = ['movie', 'jp_movie', 'tv', 'short_tv', 'image', 'mixed'];
 
 export function normalizeLibType(input: unknown): LibType {
   const text = String(input || '')
