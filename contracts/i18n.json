@@ -2831,6 +2831,7 @@
       "count": {}
     },
     "video.action.excludeScrape": {},
+    "video.action.excludeScrapeSeries": {},
     "video.action.favorite": {},
     "video.action.locateFile": {},
     "video.action.markTvWatched": {},
@@ -3177,6 +3178,16 @@
     "video.library.type.movie": {},
     "video.library.type.shortTv": {},
     "video.library.type.tv": {},
+    "video.scrape.bulkCleaned": {
+      "count": {}
+    },
+    "video.scrape.bulkExcluded": {
+      "count": {}
+    },
+    "video.scrape.bulkRunning": {
+      "done": {},
+      "total": {}
+    },
     "video.shortPlay.hint": {},
     "video.list.count": {
       "count": {},

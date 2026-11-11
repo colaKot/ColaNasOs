@@ -2204,6 +2204,7 @@ class I18nKeys {
   static const videoActionDeleteSeason = 'video.action.deleteSeason';
   static const videoActionDeleteSeries = 'video.action.deleteSeries';
   static const videoActionExcludeScrape = 'video.action.excludeScrape';
+  static const videoActionExcludeScrapeSeries = 'video.action.excludeScrapeSeries';
   static const videoActionFavorite = 'video.action.favorite';
   static const videoActionLocateFile = 'video.action.locateFile';
   static const videoActionMarkTvWatched = 'video.action.markTvWatched';
@@ -2461,6 +2462,9 @@ class I18nKeys {
   static const videoLibraryTypeMovie = 'video.library.type.movie';
   static const videoLibraryTypeShortTv = 'video.library.type.shortTv';
   static const videoLibraryTypeTv = 'video.library.type.tv';
+  static const videoScrapeBulkCleaned = 'video.scrape.bulkCleaned';
+  static const videoScrapeBulkExcluded = 'video.scrape.bulkExcluded';
+  static const videoScrapeBulkRunning = 'video.scrape.bulkRunning';
   static const videoShortPlayHint = 'video.shortPlay.hint';
   static const videoListCount = 'video.list.count';
   static const videoListFilter = 'video.list.filter';
@@ -2687,4 +2691,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2645;
+const int i18nKeyCount = 2649;

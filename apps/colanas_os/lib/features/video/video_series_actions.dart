@@ -5,8 +5,10 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
+import 'series_display.dart';
 import 'video_card.dart';
 import 'video_item_actions.dart';
+import 'video_scrape_dialogs.dart';
 import 'video_series_detail_page.dart';
 
 /// 剧 / 季 / 集的右键菜单。
@@ -73,6 +75,7 @@ Future<List<NasMenuEntry>> seriesMenuEntries(
   VoidCallback? onChanged,
 }) async {
   final eps = await loadSeriesEpisodes(item.name, libraryId: libraryId);
+  final ids = eps.map((e) => e.id).toList();
   final total = eps.isEmpty ? item.episodes : eps.length;
   final allWatched = eps.isNotEmpty && eps.every((e) => e.watched);
 
@@ -103,6 +106,37 @@ Future<List<NasMenuEntry>> seriesMenuEntries(
         libraryId: libraryId,
         headers: videoArtHeaders,
       ),
+    ),
+    const NasMenuEntry.divider(),
+    // 刮削类的四项跟影片列表对齐；剧级是「对这一部的每一集都做」，
+    // 拉不到集数就没法定位到具体文件，直接置灰。
+    NasMenuEntry(
+      label: tr('video.action.scrape'),
+      icon: Icons.auto_awesome_outlined,
+      onSelected: ids.isEmpty
+          ? null
+          : () => scrapeVideos(context, ids, onChanged: onChanged),
+    ),
+    NasMenuEntry(
+      label: tr('video.action.matchTmdb'),
+      icon: Icons.search,
+      onSelected: ids.isEmpty
+          ? null
+          : () => matchSeries(context, eps, item, onChanged: onChanged),
+    ),
+    NasMenuEntry(
+      label: tr('video.action.scrapeCleanup'),
+      icon: Icons.cleaning_services_outlined,
+      onSelected: ids.isEmpty
+          ? null
+          : () => cleanupVideos(context, ids, onChanged: onChanged),
+    ),
+    NasMenuEntry(
+      label: tr('video.action.excludeScrapeSeries'),
+      icon: Icons.block,
+      onSelected: ids.isEmpty
+          ? null
+          : () => excludeVideos(context, ids, onChanged: onChanged),
     ),
     const NasMenuEntry.divider(),
     NasMenuEntry(
@@ -298,6 +332,205 @@ class _BulkDeleteDialog extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------- 剧级刮削
+
+/// 刮削整部剧。
+///
+/// 服务端的 `/video/scrape/batch` 是**同步串行**的（一条一次网络请求），
+/// 一次性丢几十条进去很容易撞 30s 超时，所以按 12 条一批分批调，边跑边报进度。
+/// `mode: auto` 与影片卡上的「刮削影片信息」同口径：已经有 NFO 的会直接跳过。
+Future<void> scrapeVideos(
+  BuildContext context,
+  List<String> ids, {
+  VoidCallback? onChanged,
+}) async {
+  if (ids.isEmpty) return;
+  final messenger = ScaffoldMessenger.of(context);
+  final progress = ValueNotifier<({int done, int total})>((
+    done: 0,
+    total: ids.length,
+  ));
+  final closer = _BusyCloser(context, progress);
+  var scraped = 0, skipped = 0, notfound = 0, unavailable = 0;
+  try {
+    const chunk = 12;
+    for (var i = 0; i < ids.length; i += chunk) {
+      final end = i + chunk > ids.length ? ids.length : i + chunk;
+      final res = await ApiSession.instance.client.videoScrapeBatch(
+        body: VideoScrapeBatchBody(ids: ids.sublist(i, end), mode: 'auto'),
+      );
+      scraped += res.scraped;
+      skipped += res.skipped;
+      notfound += res.notfound;
+      unavailable += res.unavailable;
+      progress.value = (done: end, total: ids.length);
+    }
+    NasSnack.showOn(
+      messenger,
+      tr('video.scrape.batchDone', {
+        'scraped': '$scraped',
+        'skipped': '$skipped',
+        'notfound': '$notfound',
+        'unavailable': '$unavailable',
+      }),
+    );
+    onChanged?.call();
+  } catch (e) {
+    NasSnack.showOn(messenger, '$e');
+  } finally {
+    closer.close();
+  }
+}
+
+/// 手动匹配整部剧：搜一次 TMDB，选中的条目套到这部剧的每一集上。
+Future<void> matchSeries(
+  BuildContext context,
+  List<VideoItem> eps,
+  VideoSeriesItem item, {
+  VoidCallback? onChanged,
+}) async {
+  if (eps.isEmpty) return;
+  final query = SeriesDisplayStore.nameOf(item.name) ?? item.name;
+  final ok = await showTmdbMatchDialog(
+    context,
+    item: eps.first,
+    applyIds: eps.map((e) => e.id).toList(),
+    initialQuery: query,
+  );
+  if (ok) onChanged?.call();
+}
+
+/// 清除整部剧的刮削信息（逐条调，纯本地库操作，很快）。
+Future<void> cleanupVideos(
+  BuildContext context,
+  List<String> ids, {
+  VoidCallback? onChanged,
+}) => _runPerItem(
+  context,
+  ids,
+  (id) => ApiSession.instance.client.videoScrapeCleanup(
+    body: VideoScrapeCleanupBody(id: id),
+  ),
+  tr('video.scrape.bulkCleaned', {'count': '${ids.length}'}),
+  onChanged: onChanged,
+);
+
+/// 整部剧「不再自动刮削」。
+Future<void> excludeVideos(
+  BuildContext context,
+  List<String> ids, {
+  VoidCallback? onChanged,
+}) => _runPerItem(
+  context,
+  ids,
+  (id) => ApiSession.instance.client.videoScrapeMatch(
+    body: VideoMatchNfoBody(id: id, match: false),
+  ),
+  tr('video.scrape.bulkExcluded', {'count': '${ids.length}'}),
+  onChanged: onChanged,
+);
+
+/// 逐条跑一批本地操作，带进度框；单条失败不中断（数量对得上更重要）。
+Future<void> _runPerItem(
+  BuildContext context,
+  List<String> ids,
+  Future<void> Function(String id) step,
+  String doneText, {
+  VoidCallback? onChanged,
+}) async {
+  if (ids.isEmpty) return;
+  final messenger = ScaffoldMessenger.of(context);
+  final progress = ValueNotifier<({int done, int total})>((
+    done: 0,
+    total: ids.length,
+  ));
+  final closer = _BusyCloser(context, progress);
+  var ok = 0;
+  try {
+    for (var i = 0; i < ids.length; i += 1) {
+      try {
+        await step(ids[i]);
+        ok += 1;
+      } catch (_) {
+        // 单条失败继续，最后统一提示
+      }
+      progress.value = (done: i + 1, total: ids.length);
+    }
+    NasSnack.showOn(messenger, ok == ids.length ? doneText : '$ok/${ids.length}');
+    if (ok > 0) onChanged?.call();
+  } finally {
+    closer.close();
+  }
+}
+
+/// 批量操作的进度框：挂上去、跑完关掉，并保证 notifier 不会用到别人身上。
+class _BusyCloser {
+  _BusyCloser(BuildContext context, ValueNotifier<({int done, int total})> p) {
+    _progress = p;
+    _nav = Navigator.of(context, rootNavigator: true);
+    _open = true;
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _BulkJobDialog(progress: p),
+      ).then((_) => _open = false),
+    );
+  }
+
+  late final ValueNotifier<({int done, int total})> _progress;
+  late final NavigatorState _nav;
+  bool _open = false;
+
+  void close() {
+    if (_open && _nav.canPop()) _nav.pop();
+    // 弹窗还在退场动画里引着这个 notifier，下一帧再销毁
+    WidgetsBinding.instance.addPostFrameCallback((_) => _progress.dispose());
+  }
+}
+
+class _BulkJobDialog extends StatelessWidget {
+  const _BulkJobDialog({required this.progress});
+
+  final ValueNotifier<({int done, int total})> progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      content: ValueListenableBuilder<({int done, int total})>(
+        valueListenable: progress,
+        builder: (context, p, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2.4),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  tr('video.scrape.bulkRunning', {
+                    'done': '${p.done}',
+                    'total': '${p.total}',
+                  }),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: p.total > 0 ? (p.done / p.total).clamp(0.0, 1.0) : null,
+              minHeight: 3,
+            ),
+          ],
+        ),
       ),
     );
   }

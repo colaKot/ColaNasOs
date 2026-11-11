@@ -45,21 +45,36 @@ Future<void> showScrapeOutcome(BuildContext context, VideoScrapeResponse res) as
 /// 手动匹配：搜 TMDB → 选一条 → 以 `tmdbId` 重新刮削。
 ///
 /// 返回 true 表示写库成功（调用方据此刷新详情）。
+///
+/// `applyIds` 给「剧级」用：一次匹配把这条 TMDB 结果套到这部剧的全部集上
+/// （服务端刮削是「一条一集」的，不能只写一集就指望整剧跟着变）。
 Future<bool> showTmdbMatchDialog(
   BuildContext context, {
   required VideoItem item,
+  List<String>? applyIds,
+  String? initialQuery,
 }) async {
   final result = await showDialog<bool>(
     context: context,
-    builder: (_) => _TmdbMatchDialog(item: item),
+    builder: (_) => _TmdbMatchDialog(
+      item: item,
+      applyIds: applyIds,
+      initialQuery: initialQuery,
+    ),
   );
   return result == true;
 }
 
 class _TmdbMatchDialog extends StatefulWidget {
-  const _TmdbMatchDialog({required this.item});
+  const _TmdbMatchDialog({required this.item, this.applyIds, this.initialQuery});
 
   final VideoItem item;
+
+  /// 非空时把匹配结果套到这些条目上（剧级手动匹配）
+  final List<String>? applyIds;
+
+  /// 搜索框预填：剧级用剧名（`item.title` 只是某一集的标题）
+  final String? initialQuery;
 
   @override
   State<_TmdbMatchDialog> createState() => _TmdbMatchDialogState();
@@ -67,12 +82,15 @@ class _TmdbMatchDialog extends StatefulWidget {
 
 class _TmdbMatchDialogState extends State<_TmdbMatchDialog> {
   late final TextEditingController _ctrl = TextEditingController(
-    // 预填：刮削名优先，否则文件名；用户多半只需按一下搜索
-    text: (widget.item.title.isNotEmpty ? widget.item.title : widget.item.fileTitle),
+    text:
+        widget.initialQuery ??
+        // 预填：刮削名优先，否则文件名；用户多半只需按一下搜索
+        (widget.item.title.isNotEmpty ? widget.item.title : widget.item.fileTitle),
   );
   bool _searching = false;
   bool _configured = true;
   String? _error;
+  String? _progress;
   List<VideoTmdbCandidate> _items = const [];
 
   @override
@@ -112,26 +130,47 @@ class _TmdbMatchDialogState extends State<_TmdbMatchDialog> {
   }
 
   Future<void> _apply(VideoTmdbCandidate c) async {
-    setState(() => _searching = true);
+    final targets = (widget.applyIds == null || widget.applyIds!.isEmpty)
+        ? <String>[widget.item.id]
+        : widget.applyIds!;
+    setState(() {
+      _searching = true;
+      _error = null;
+      _progress = null;
+    });
+    var scraped = 0;
     try {
-      final res = await ApiSession.instance.client.videoScrapeStart(
-        body: VideoScrapeBody(
-          id: widget.item.id,
-          mode: 'force',
-          mediaType: c.mediaType == 'tv' ? 'tv' : 'movie',
-          tmdbId: c.tmdbId,
-        ),
-      );
+      for (var i = 0; i < targets.length; i += 1) {
+        final res = await ApiSession.instance.client.videoScrapeStart(
+          body: VideoScrapeBody(
+            id: targets[i],
+            mode: 'force',
+            mediaType: c.mediaType == 'tv' ? 'tv' : 'movie',
+            tmdbId: c.tmdbId,
+          ),
+        );
+        if (res.status == 'scraped') scraped += 1;
+        if (!mounted) return;
+        if (targets.length > 1) {
+          setState(() {
+            _progress = tr('video.scrape.bulkRunning', {
+              'done': '${i + 1}',
+              'total': '${targets.length}',
+            });
+          });
+        }
+      }
       if (!mounted) return;
-      Navigator.of(context).pop(res.status == 'scraped');
-      if (res.status != 'scraped') {
-        NasSnack.show(context, scrapeOutcomeText(res));
+      Navigator.of(context).pop(scraped > 0);
+      if (scraped == 0) {
+        NasSnack.show(context, tr('video.scrape.notfound'));
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _error = '$e';
         _searching = false;
+        _progress = null;
       });
     }
   }
@@ -190,7 +229,26 @@ class _TmdbMatchDialogState extends State<_TmdbMatchDialog> {
               ),
             Expanded(
               child: _searching
-                  ? const Center(child: CircularProgressIndicator())
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(),
+                          if (_progress != null) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              _progress!,
+                              style: TextStyle(
+                                fontSize: NasTokens.fontCaption,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    )
                   : _items.isEmpty
                       ? Center(
                           child: Text(
