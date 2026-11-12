@@ -773,8 +773,8 @@ export const videoPlayer: ServerModule = {
         if (dupe) {
           // 内核重启可能留下 pending 会话、没有 pump 在跑，顺手补一次
           pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
-          // 复用的会话可能刚建、还没出片：等一小会再给地址（同新建会话的口径）
-          await waitPlayable(k, dupe.id, 3_000);
+          // 复用的会话也要保证「返回时已有分片」，否则第一次打开仍会撞空列表
+          await waitPlayable(k, dupe.id, 20_000);
           return {
             id: dupe.id,
             url: urlOf(dupe.id, hlsToken(k, dupe.id)),
@@ -793,10 +793,12 @@ export const videoPlayer: ServerModule = {
                   ${audioIndex}, ${forceSdr}, ${forceSdr}, ${leadMs}, ${startMs}, 'pending', ${ts}, ${ts})
         `.execute(k.db);
         pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
-        // 等首片（最多 3s）：多数 1080p 片源 2~3s 就有首片，等到了播放器就能秒开。
-        // 不能再长 —— 建会话的响应也别让播放器/代理等太久；没等到就照常返回地址，
-        // 播放列表接口会立刻回空 EVENT 列表让播放器轮询。
-        await waitPlayable(k, id, 3_000);
+        // 等首片（最多 20s）：建会话是普通 Dart HTTP 请求（客户端超时 30s），
+        // 可以放心在这里等 —— 播放器**不会**感知这一步。
+        // 这是「第一次打开必失败」的治本点：把等待放在播放器不碰的调用里，
+        // 返回给播放器的地址保证已经有分片，播放器第一次 open 就拿到真实列表。
+        // 另一种常见做法是给静态点播列表、把等待放到单个分片请求上，思路相同。
+        await waitPlayable(k, id, 20_000);
         return { id, url: urlOf(id, hlsToken(k, id)), startedMs: startMs };
       },
     );

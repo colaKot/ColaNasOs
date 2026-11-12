@@ -535,9 +535,9 @@ class _PlayerPageState extends State<PlayerPage> {
         m.contains('404');
   }
 
-  /// 良性中断 → 静默重开当前地址；重试两次仍没播起来才把错误显示出来。
+  /// 良性中断 → 静默重开当前地址；重试四次仍没播起来才把错误显示出来。
   void _retryAfterBenignError(String message) {
-    if (_benignRetries >= 2) {
+    if (_benignRetries >= 4) {
       setState(() => _error = message);
       return;
     }
@@ -674,8 +674,8 @@ class _PlayerPageState extends State<PlayerPage> {
         _preparing = false;
         _isTranscode = true;
       });
-      // retries: 首片还没落盘时内核会「打不开」，不是转码失败，给三次重试
-      await _openUrl(u, retries: 3);
+      // retries: 首片还没落盘时内核会「打不开」，不是转码失败，给五次重试
+      await _openUrl(u, retries: 5);
     } catch (e) {
       if (!mounted) return;
       // 不能退回直链：走到这里就说明片源直链本来解不了（HEVC / MKV / HDR），
