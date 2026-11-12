@@ -2470,6 +2470,7 @@
     "video.list.filter.unwatched": "只看未观看",
     "video.list.filter.watched": "只看已观看",
     "video.list.filter.years": "年份",
+    "video.list.multiSelect": "多选",
     "video.list.posterSize": "海报大小",
     "video.list.reset": "重置",
     "video.list.searchHint": "搜索片名 / 文件名 / 番号",

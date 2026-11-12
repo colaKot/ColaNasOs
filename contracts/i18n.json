@@ -3250,6 +3250,7 @@
     "video.list.filter.unwatched": {},
     "video.list.filter.watched": {},
     "video.list.filter.years": {},
+    "video.list.multiSelect": {},
     "video.list.posterSize": {},
     "video.list.reset": {},
     "video.list.searchHint": {},

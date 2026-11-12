@@ -595,6 +595,7 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
                               item,
                               onAction: (a) => _runItemAction(a, item),
                               extra: _collectionExtras(item),
+                              context: context,
                             ),
                             child: InkWell(
                               onLongPress: () => _itemMenu(item),

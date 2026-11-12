@@ -2470,6 +2470,7 @@
     "video.list.filter.unwatched": "Unwatched only",
     "video.list.filter.watched": "Watched only",
     "video.list.filter.years": "Year",
+    "video.list.multiSelect": "Multi-select",
     "video.list.posterSize": "Poster size",
     "video.list.reset": "Reset",
     "video.list.searchHint": "Search title / file / code",

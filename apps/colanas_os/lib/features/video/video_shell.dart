@@ -600,6 +600,7 @@ class _VideoFavoritesPageState extends State<VideoFavoritesPage> {
                       entries: videoItemMenuEntries(
                         item,
                         onAction: (a) => _runItemAction(item, a),
+                        context: context,
                       ),
                       child: GestureDetector(
                         onLongPress: () => _showItemActions(item),

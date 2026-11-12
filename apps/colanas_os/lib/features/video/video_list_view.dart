@@ -9,6 +9,7 @@ import '../../core/settings_store.dart';
 import '../../shell/app_widgets.dart';
 import 'detail/video_detail_router.dart';
 import 'video_card.dart';
+import 'video_collection_picker.dart';
 import 'cola_video_detail_page.dart';
 import 'video_genre_labels.dart';
 import 'video_item_actions.dart';
@@ -385,8 +386,18 @@ class _VideoListViewState extends State<VideoListView> {
             onSelected: (v) {
               if (v == 'scale') _openScaleSheet();
               if (v == 'refresh') _load();
+              if (v == 'select') {
+                setState(() {
+                  _selectionMode = true;
+                  _selected.clear();
+                });
+              }
             },
             itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'select',
+                child: Text(tr('video.list.multiSelect')),
+              ),
               PopupMenuItem(
                 value: 'scale',
                 child: Text(tr('video.list.posterSize')),
@@ -1276,6 +1287,15 @@ class _VideoListViewState extends State<VideoListView> {
                 ..addAll(_items.map((e) => e.id));
             }),
             child: Text(tr('video.list.filter.all')),
+          ),
+          TextButton(
+            onPressed: _selected.isEmpty
+                ? null
+                : () => showAddToCollectionDialog(
+                      context,
+                      itemIds: _selected.toList(),
+                    ),
+            child: Text(tr('video.collection.addTo')),
           ),
           TextButton(
             onPressed: _selected.isEmpty

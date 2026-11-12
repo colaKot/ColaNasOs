@@ -2510,6 +2510,7 @@ class I18nKeys {
   static const videoListFilterUnwatched = 'video.list.filter.unwatched';
   static const videoListFilterWatched = 'video.list.filter.watched';
   static const videoListFilterYears = 'video.list.filter.years';
+  static const videoListMultiSelect = 'video.list.multiSelect';
   static const videoListPosterSize = 'video.list.posterSize';
   static const videoListReset = 'video.list.reset';
   static const videoListSearchHint = 'video.list.searchHint';
@@ -2723,4 +2724,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2678;
+const int i18nKeyCount = 2679;

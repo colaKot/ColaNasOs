@@ -1045,7 +1045,11 @@ class _VideoJpActorPageState extends State<VideoJpActorPage> {
 
             return RepaintBoundary(
               child: NasContextMenuRegion(
-                entries: videoItemMenuEntries(item, onAction: run),
+                entries: videoItemMenuEntries(
+                  item,
+                  onAction: run,
+                  context: context,
+                ),
                 child: GestureDetector(
                   onLongPress: () async {
                     final action = await showVideoItemActionSheet(context, item);

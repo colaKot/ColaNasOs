@@ -338,6 +338,7 @@ class _SmartAlbumItemsPageState extends State<_SmartAlbumItemsPage> {
                               entries: videoItemMenuEntries(
                                 item,
                                 onAction: (a) => _runAction(item, a),
+                                context: context,
                               ),
                               child: GestureDetector(
                                 onLongPress: () async {

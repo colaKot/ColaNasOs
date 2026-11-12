@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nas_core/nas_core.dart';
@@ -5,6 +7,7 @@ import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
 import 'cola_video_detail_page.dart';
+import 'video_collection_picker.dart';
 import 'video_scrape_dialogs.dart';
 
 /// 影片条目的通用右键 / 长按动作。
@@ -16,6 +19,7 @@ import 'video_scrape_dialogs.dart';
 class VideoItemAction {
   static const detail = 'detail';
   static const watched = 'watched';
+  static const addToCollection = 'addToCollection';
   static const copyPath = 'copyPath';
   static const scrape = 'scrape';
   static const match = 'match';
@@ -58,6 +62,11 @@ List<VideoItemActionSpec> videoItemActionSpecs(
                 : 'video.action.markWatched'),
     ),
     item.watched ? Icons.remove_done : Icons.done_all,
+  ),
+  VideoItemActionSpec(
+    VideoItemAction.addToCollection,
+    tr('video.collection.addTo'),
+    Icons.playlist_add,
   ),
   VideoItemActionSpec(
     VideoItemAction.detail,
@@ -112,6 +121,7 @@ List<NasMenuEntry> videoItemMenuEntries(
   bool allowScrape = true,
   bool allowDelete = true,
   List<VideoItemActionSpec> extra = const [],
+  BuildContext? context,
 }) => [
   for (final s in videoItemActionSpecs(
     item,
@@ -126,7 +136,16 @@ List<NasMenuEntry> videoItemMenuEntries(
         label: s.label,
         icon: s.icon,
         danger: s.danger,
-        onSelected: () => onAction(s.id),
+        onSelected: () {
+          // 「加入合集」自带弹窗，不需要每个页面各写一套分发。
+          if (s.id == VideoItemAction.addToCollection && context != null) {
+            unawaited(
+              showAddToCollectionDialog(context, itemIds: [item.id]),
+            );
+            return;
+          }
+          onAction(s.id);
+        },
       ),
 ];
 
@@ -159,7 +178,16 @@ Future<String?> showVideoItemActionSheet(
                 dense: true,
                 leading: Icon(s.icon, size: 20),
                 title: Text(s.label),
-                onTap: () => Navigator.pop(ctx, s.id),
+                onTap: () {
+                  if (s.id == VideoItemAction.addToCollection) {
+                    Navigator.pop(ctx);
+                    unawaited(
+                      showAddToCollectionDialog(context, itemIds: [item.id]),
+                    );
+                    return;
+                  }
+                  Navigator.pop(ctx, s.id);
+                },
               ),
         ],
       ),

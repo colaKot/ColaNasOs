@@ -611,6 +611,7 @@ class VideoDetailPageState extends State<VideoDetailPage> {
                           menuEntries: (ep) => videoItemMenuEntries(
                             ep,
                             onAction: (action) => _episodeAction(action, ep),
+                            context: context,
                           ),
                         ),
                       ],
