@@ -44,6 +44,7 @@ import {
   decodeTimeCursor,
   type SortKey,
 } from '../util';
+import { localizeHomeTitles } from '../series-title';
 import type { FastifyInstance } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { VideoHelpers } from '../helpers';
@@ -75,6 +76,22 @@ async function withRank(k: KernelApi, items: Array<Record<string, unknown>>): Pr
       rankMonthly: monthly.get(code) ?? null,
     };
   });
+}
+
+/**
+ * 剧封面的统一口径（`/video/series`、`recentSeriesOf`、首页推荐共用）：
+ * 优先取本剧里「有海报的那一集」，都没有才退回最小 id。
+ * 否则 `/video/art` 会 404，剧集卡片整排灰块。
+ */
+function seriesCoverIdSql(alias?: string) {
+  const col = (name: string) => sql.ref(alias ? `${alias}.${name}` : name);
+  // 竖版海报优先：nfo_thumb 是横版剧照 / 缩略图，拿它当封面会出现
+  // 「一部剧整排都是剧照」。先挑真正有 poster 的那一集，整部剧都没有才退 thumb。
+  return sql<string | null>`coalesce(
+    min(case when nullif(${col('nfo_poster')}, '') is not null then ${col('id')} end),
+    min(case when nullif(${col('nfo_thumb')}, '') is not null then ${col('id')} end),
+    min(${col('id')})
+  )`;
 }
 
 /** 逗号分隔的多选参数 → 数组（去空、去重、限长） */
@@ -546,13 +563,7 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           select series as name,
                  count(distinct coalesce(season, 0)) as seasons,
                  count(*) as episodes,
-                 -- 优先用本剧里「有海报的」那一集的 id 当封面；都没有才退回最小 id。
-                 -- 否则 /video/art 404，剧集列表整排灰块。
-                 coalesce(
-                   min(case when coalesce(nullif(nfo_poster, ''), nullif(nfo_thumb, '')) is not null
-                            then id end),
-                   min(id)
-                 ) as cover_id
+                 ${seriesCoverIdSql()} as cover_id
             from video_items
            where ${where}
            group by series
@@ -1125,19 +1136,98 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
 
         // 推荐：有评分优先 / 新片其次 / 未看优先。没有评分时退化成「最近添加」，
         // 不用随机，保证刷新两次结果一致（可复现才可排查）。
-        const recommendRows = (
+        //
+        // 电影一部一张；电视剧按剧聚合（用户 2026-11-11 反馈：同一部剧每一集都被铺成
+        // 独立卡片）。一部剧只出一张卡，排序取「未看集里评分最高、最新」的那一集；
+        // 标题 / 海报 / 集数用剧级信息（seriesInfo），与 `/video/series` 同一套口径。
+        const movieRows = (
           await sql<VideoItemRow>`
             select * from (${withWatched}) v
              where media_type = 'video'
                ${libFilter}
                ${offline.length > 0 ? sql`and ${offlineCond(offline, 'v.rel_path')}` : sql``}
+               and (series is null or series = '')
                and not exists(select 1 from video_watch w2
                                where w2.item_id = v.id and w2.owner_id = ${uid})
              order by coalesce(nfo_score, 0) desc, mtime desc
              limit ${recLimit}
           `.execute(k.db)
         ).rows;
-        const recommend = dropSharedArtwork(recommendRows);
+
+        const seriesGroups = (
+          await sql<{
+            library_id: string;
+            name: string;
+            seasons: number;
+            episodes: number;
+            cover_id: string | null;
+            rank_score: number;
+            rank_at: number;
+          }>`
+            select library_id, series as name,
+                   count(distinct coalesce(season, 0)) as seasons,
+                   count(*) as episodes,
+                   ${seriesCoverIdSql()} as cover_id,
+                   max(case when not watched then coalesce(nfo_score, 0) else -1 end) as rank_score,
+                   max(case when not watched then mtime else 0 end) as rank_at
+              from (${withWatched}) v
+             where media_type = 'video'
+               ${libFilter}
+               ${offline.length > 0 ? sql`and ${offlineCond(offline, 'v.rel_path')}` : sql``}
+               and series is not null and series <> ''
+             group by library_id, series
+            having max(case when not watched then 1 else 0 end) = 1
+             order by rank_score desc, rank_at desc
+             limit ${recLimit}
+          `.execute(k.db)
+        ).rows;
+
+        // 卡片展示用「封面那一集」的元数据（简介 / 年份等是剧级的，任取一集都一样）
+        const coverIds = [
+          ...new Set(seriesGroups.map((g) => g.cover_id).filter((x): x is string => !!x)),
+        ];
+        const coverRows = coverIds.length
+          ? (
+              await sql<VideoItemRow>`
+                select * from (${withWatched}) v
+                 where v.id in (${sql.join(coverIds.map((id) => sql`${id}`), sql`, `)})
+              `.execute(k.db)
+            ).rows
+          : [];
+        const coverById = new Map(coverRows.map((r) => [r.id, r]));
+
+        const ranked: Array<{ score: number; at: number; item: Record<string, unknown> }> = [];
+        for (const r of dropSharedArtwork(movieRows)) {
+          ranked.push({
+            score: Number(r.nfo_score) || 0,
+            at: Number(r.mtime) || 0,
+            item: toItem(r),
+          });
+        }
+        for (const g of seriesGroups) {
+          const row = g.cover_id ? coverById.get(g.cover_id) : undefined;
+          if (!row) continue;
+          ranked.push({
+            score: Number(g.rank_score) || 0,
+            at: Number(g.rank_at) || 0,
+            item: {
+              ...toItem(row),
+              // 首页上这张卡代表「整部剧」：标题用剧名，季 / 集号不外露，
+              // 集数信息走 seriesInfo，点击由客户端打开剧详情。
+              title: g.name,
+              season: null,
+              episode: null,
+              seriesInfo: {
+                name: g.name,
+                seasons: Number(g.seasons) || 1,
+                episodes: Number(g.episodes) || 0,
+                coverId: g.cover_id,
+              },
+            },
+          });
+        }
+        ranked.sort((a, b) => b.score - a.score || b.at - a.at);
+        const recommend = ranked.slice(0, recLimit).map((x) => x.item);
 
         // 继续观看：有进度、未看完（<95%）
         const playRows = (
@@ -1224,15 +1314,19 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           // 电视剧库：另给一份「按剧聚合」的卡片（一部剧一条）。
           // `items` 里是逐集数据，前端碰到 tv 库优先用这份，否则首页一排全是
           // 同一部剧的不同集（用户 2026-11-11 反馈）。
-          if (lt === 'tv') {
+          if (lt === 'tv' || lt === 'short_tv') {
             row.series = await recentSeriesOf(k.db, l.id, addLimit, offline);
           }
           perLib.push(row);
         }
 
+        // 推荐区剧卡的标题来自 series 列（英文发布名），按默认语言补中文显示名；
+        // seriesInfo.name 仍是剧的分组 / 查询键，不能动。
+        await localizeHomeTitles(k, recommend);
+
         return {
           sources,
-          recommend: recommend.map(toItem),
+          recommend,
           recentPlay: playRows.map(toItem),
           recentAdd: perLib,
           progress: playRows.map((r) => ({
@@ -1412,11 +1506,7 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
             select f.series, f.library_id, f.created_at,
                    count(distinct i.season) as seasons,
                    count(i.id) as episodes,
-                   coalesce(
-                     min(case when coalesce(nullif(i.nfo_poster, ''), nullif(i.nfo_thumb, '')) is not null
-                              then i.id end),
-                     min(i.id)
-                   ) as cover_id
+                   ${seriesCoverIdSql('i')} as cover_id
               from video_series_favorites f
               left join video_items i
                      on i.library_id = f.library_id and i.series = f.series
@@ -1556,11 +1646,7 @@ async function recentSeriesOf(
       select series as name,
              count(distinct coalesce(season, 0)) as seasons,
              count(*) as episodes,
-             coalesce(
-               min(case when coalesce(nullif(nfo_poster, ''), nullif(nfo_thumb, '')) is not null
-                        then id end),
-               min(id)
-             ) as cover_id,
+             ${seriesCoverIdSql()} as cover_id,
              max(mtime) as at
         from video_items
        where library_id = ${libraryId}

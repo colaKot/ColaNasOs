@@ -2887,6 +2887,7 @@ export type VideoItem = {
   "series": string;
   "season": number;
   "episode": number;
+  "seriesInfo"?: VideoSeriesItem;
   "takenAt": number;
   "code": string;
   "uncensored": boolean;

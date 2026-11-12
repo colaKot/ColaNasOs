@@ -209,6 +209,28 @@ const FILES = [
     `missing=${JSON.stringify(r.json().missing)}`,
   );
 
+  // 3.1 首页推荐：电视剧按剧聚合（一部剧一张卡），电影保持一条
+  r = await app.inject({ method: 'GET', url: '/api/v1/video/home', headers: reader });
+  const rec = r.json().recommend || [];
+  const recBb = rec.find((x) => x.seriesInfo && x.seriesInfo.name === 'Breaking Bad');
+  const recTw = rec.find((x) => x.seriesInfo && x.seriesInfo.name === 'The Wire');
+  const recMovie = rec.find((x) => !x.seriesInfo && !x.series);
+  check(
+    'home_recommend_series',
+    r.statusCode === 200 &&
+      rec.length === 3 &&
+      rec.every((x) => !x.series || !!x.seriesInfo) &&
+      recBb &&
+      recBb.title === 'Breaking Bad' &&
+      recBb.seriesInfo.seasons === 2 &&
+      recBb.seriesInfo.episodes === 3 &&
+      recTw &&
+      recTw.seriesInfo.episodes === 4 &&
+      recMovie &&
+      recMovie.title.includes('Inception'),
+    `rec=${JSON.stringify(rec.map((x) => [x.title, x.seriesInfo && x.seriesInfo.episodes]))}`,
+  );
+
   // 5. 关键词 + cursor 翻页
   r = await app.inject({ method: 'GET', url: '/api/v1/video/series?q=wire', headers: reader });
   check(

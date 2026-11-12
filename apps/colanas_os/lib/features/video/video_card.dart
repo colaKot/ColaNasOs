@@ -574,12 +574,24 @@ class VideoHeroCard extends StatelessWidget {
     required this.width,
     required this.onTap,
     this.onMore,
+    this.title,
+    this.meta,
+    this.artUrl,
   });
 
   final VideoItem item;
   final double width;
   final VoidCallback onTap;
   final VoidCallback? onMore;
+
+  /// 展示用标题；缺省用 `item.title`（首页剧卡传剧名）
+  final String? title;
+
+  /// 副标题；缺省用 `videoMetaLine(item)`（首页剧卡传「N 季 · M 集」）
+  final String? meta;
+
+  /// 封面地址；缺省按 `item` 取横版剧照（首页剧卡传剧封面）
+  final String? artUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -594,14 +606,15 @@ class VideoHeroCard extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               NasCoverImage(
-                url: videoPosterUrl(
-                  item,
-                  kind: 'fanart',
-                  size: (width * 2).round(),
-                ),
+                url: artUrl ??
+                    videoPosterUrl(
+                      item,
+                      kind: 'fanart',
+                      size: (width * 2).round(),
+                    ),
                 fit: BoxFit.cover,
                 headers: videoArtHeaders,
-                fallbackText: item.title,
+                fallbackText: title ?? item.title,
                 // 16:9 剧照 1920×1080 原尺寸解码约 8 MB，同 VideoPosterCard 按显示宽度解码。
                 cacheWidth: (width * 2).round(),
               ),
@@ -651,7 +664,7 @@ class VideoHeroCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      item.title,
+                      title ?? item.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -662,7 +675,7 @@ class VideoHeroCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      videoMetaLine(item),
+                      meta ?? videoMetaLine(item),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(

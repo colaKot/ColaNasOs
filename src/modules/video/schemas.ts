@@ -53,7 +53,9 @@ export const LibraryItem = Type.Object(
     items: Type.Integer({ description: '已索引条目数（视频 + 图片）' }),
     createdAt: Type.Integer(),
     lastScanAt: NullableInteger,
-    libType: Type.String({ description: 'movie / jp_movie / tv / image / mixed' }),
+    libType: Type.String({
+      description: 'movie / jp_movie / tv / short_tv / image / mixed',
+    }),
     connType: Type.Optional(Type.String({ description: 'local / smb' })),
     /** 0 未知 / 1 在线 / 2 离线（离线源不返回内容，也不阻塞列表） */
     onlineState: Type.Optional(Type.Integer()),
@@ -110,7 +112,7 @@ export const LibraryCreateBody = Type.Object(
     password: Type.Optional(Type.String({ maxLength: 256, description: 'AES-256-GCM 密文落库' })),
     libType: Type.Optional(
       Type.String({
-        description: 'movie / jp_movie / tv / image / mixed（创建后不可改）',
+        description: 'movie / jp_movie / tv / short_tv / image / mixed（创建后不可改）',
         default: 'movie',
       }),
     ),
@@ -124,7 +126,7 @@ export const LibraryUpdateBody = Type.Object(
   {
     id: Type.String({ minLength: 1 }),
     name: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
-    /** movie / jp_movie / tv / image / mixed */
+    /** movie / jp_movie / tv / short_tv / image / mixed */
     libType: Type.Optional(Type.String({ maxLength: 16 })),
     connType: Type.Optional(Type.Union([Type.Literal('local'), Type.Literal('smb')])),
     /** 本地库：相对 files 根的目录 */
@@ -218,6 +220,13 @@ export const Item = Type.Object(
     series: NullableString,
     season: NullableInteger,
     episode: NullableInteger,
+    /**
+     * 首页推荐里的「剧级卡片」：有值表示这一条代表整部剧。
+     *
+     * 客户端应展示剧名 / 剧封面 / 总季数集数，点击打开剧详情；普通影片与
+     * 其它列表接口不返回。可选字段，老客户端不受影响。
+     */
+    seriesInfo: Type.Optional(Type.Ref('VideoSeriesItem')),
     takenAt: NullableInteger,
     code: NullableString,
     uncensored: Type.Boolean({ description: '日本库角标：无码 / 流出' }),
@@ -1098,7 +1107,10 @@ export const HomeLibraryRow = Type.Object(
 export const HomeResponse = Type.Object(
   {
     sources: Type.Array(Type.Ref(HomeSource)),
-    recommend: Type.Array(Type.Ref(Item)),
+    recommend: Type.Array(Type.Ref(Item), {
+      description:
+        '推荐：电影一部一条；电视剧一部剧一条（条目带 seriesInfo，标题 / 海报 / 集数按剧级展示）',
+    }),
     recentPlay: Type.Array(Type.Ref(Item), { description: '继续观看（带 progress 语义，见 progress 字段）' }),
     recentAdd: Type.Array(Type.Ref(HomeLibraryRow)),
     progress: Type.Array(Type.Ref(Progress), { description: '与 recentPlay 对应的进度' }),

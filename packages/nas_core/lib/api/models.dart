@@ -9732,6 +9732,7 @@ class VideoItem {
   final String? series;
   final int? season;
   final int? episode;
+  final VideoSeriesItem? seriesInfo;
   final int? takenAt;
   final String? code;
   final bool uncensored;
@@ -9782,6 +9783,7 @@ class VideoItem {
     required this.series,
     required this.season,
     required this.episode,
+    this.seriesInfo,
     required this.takenAt,
     required this.code,
     required this.uncensored,
@@ -9833,6 +9835,7 @@ class VideoItem {
         series: json['series'] as String?,
         season: json['season'] as int?,
         episode: json['episode'] as int?,
+        seriesInfo: json['seriesInfo'] == null ? null : VideoSeriesItem.fromJson(json['seriesInfo'] as Map<String, dynamic>),
         takenAt: json['takenAt'] as int?,
         code: json['code'] as String?,
         uncensored: json['uncensored'] as bool,
@@ -9884,6 +9887,7 @@ class VideoItem {
         'series': series,
         'season': season,
         'episode': episode,
+        if (seriesInfo != null) 'seriesInfo': seriesInfo!.toJson(),
         'takenAt': takenAt,
         'code': code,
         'uncensored': uncensored,

@@ -14,6 +14,7 @@ import 'video_list_view.dart';
 import 'video_media_viewer_page.dart';
 import 'video_series_detail_page.dart';
 import 'video_series_grid_page.dart';
+import 'video_series_widgets.dart';
 
 /// 影视首页：**来源 / 推荐 / 继续观看 / 每库最近添加** 四段式。
 ///
@@ -440,6 +441,36 @@ class _VideoHomePageState extends State<VideoHomePage> {
             separatorBuilder: (_, _) => const SizedBox(width: NasTokens.spaceSm),
             itemBuilder: (context, i) {
               final item = items[i];
+              // 服务端按剧聚合后的卡片：标题 / 海报 / 集数都按剧级展示，
+              // 点进去是剧详情（不是「封面那一集」的播放页）。
+              final info = item.seriesInfo;
+              if (info != null) {
+                return SizedBox(
+                  height: cardW / (16 / 9),
+                  child: VideoHeroCard(
+                    item: item,
+                    width: cardW,
+                    // 服务端已按默认语言给出中文剧名；info.name 仍是剧的查询键
+                    title: item.title,
+                    meta: tr('video.seasonsEpisodes', {
+                      'seasons': '${info.seasons}',
+                      'episodes': '${info.episodes}',
+                    }),
+                    artUrl: seriesArtUrl(
+                      info.coverId,
+                      kind: 'fanart',
+                      size: (cardW * 2).round(),
+                    ),
+                    onTap: () => openVideoSeries(
+                      context,
+                      name: info.name,
+                      coverId: info.coverId,
+                      libraryId: item.libraryId,
+                      headers: videoArtHeaders,
+                    ),
+                  ),
+                );
+              }
               return SizedBox(
                 height: cardW / (16 / 9),
                 child: NasContextMenuRegion(
@@ -447,6 +478,7 @@ class _VideoHomePageState extends State<VideoHomePage> {
                     item,
                     onAction: (a) => _runItemAction(item, a),
                     allowScrape: item.mediaType != 'image',
+                    context: context,
                   ),
                   child: GestureDetector(
                     onLongPress: () => _showItemActions(item),
@@ -487,7 +519,9 @@ class _VideoHomePageState extends State<VideoHomePage> {
     // 电视剧库：服务端另给一份按剧聚合的卡片（`series`），一部剧一张，
     // 否则这里一排全是同一部剧的不同集（用户 2026-11-11 反馈）。
     final series = row.series;
-    if (row.libType == 'tv' && series != null && series.isNotEmpty) {
+    if ((row.libType == 'tv' || row.libType == 'short_tv') &&
+        series != null &&
+        series.isNotEmpty) {
       return _seriesScroller(
         context,
         title: title,
@@ -564,6 +598,7 @@ class _VideoHomePageState extends State<VideoHomePage> {
                   item,
                   onAction: (a) => _runItemAction(item, a),
                   allowScrape: item.mediaType != 'image',
+                  context: context,
                 ),
                 child: GestureDetector(
                   onLongPress: () => _showItemActions(item),

@@ -10380,7 +10380,7 @@
             "nullable": true
           },
           "libType": {
-            "description": "movie / jp_movie / tv / image / mixed",
+            "description": "movie / jp_movie / tv / short_tv / image / mixed",
             "type": "string"
           },
           "connType": {
@@ -10651,7 +10651,7 @@
             "type": "string"
           },
           "libType": {
-            "description": "movie / jp_movie / tv / image / mixed（创建后不可改）",
+            "description": "movie / jp_movie / tv / short_tv / image / mixed（创建后不可改）",
             "default": "movie",
             "type": "string"
           },
@@ -10862,6 +10862,9 @@
           "episode": {
             "type": "integer",
             "nullable": true
+          },
+          "seriesInfo": {
+            "$ref": "#/components/schemas/VideoSeriesItem"
           },
           "takenAt": {
             "type": "integer",
@@ -13462,6 +13465,7 @@
             }
           },
           "recommend": {
+            "description": "推荐：电影一部一条；电视剧一部剧一条（条目带 seriesInfo，标题 / 海报 / 集数按剧级展示）",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/VideoItem"
