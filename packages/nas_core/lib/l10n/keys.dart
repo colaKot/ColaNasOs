@@ -2271,6 +2271,7 @@ class I18nKeys {
   static const videoClientPlayQualityHint = 'video.client.playQualityHint';
   static const videoCollectionAddTo = 'video.collection.addTo';
   static const videoCollectionAdded = 'video.collection.added';
+  static const videoCollectionContinuePlay = 'video.collection.continuePlay';
   static const videoCollectionCoverBadge = 'video.collection.coverBadge';
   static const videoCollectionCoverSet = 'video.collection.coverSet';
   static const videoCollectionDelete = 'video.collection.delete';
@@ -2295,6 +2296,7 @@ class I18nKeys {
   static const videoCollectionName = 'video.collection.name';
   static const videoCollectionNameHint = 'video.collection.nameHint';
   static const videoCollectionNew = 'video.collection.new';
+  static const videoCollectionPlayAll = 'video.collection.playAll';
   static const videoCollectionRemoveItem = 'video.collection.removeItem';
   static const videoCollectionRename = 'video.collection.rename';
   static const videoCollectionSetCover = 'video.collection.setCover';
@@ -2724,4 +2726,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2679;
+const int i18nKeyCount = 2681;

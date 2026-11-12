@@ -2922,6 +2922,7 @@
     "video.collection.added": {
       "count": {}
     },
+    "video.collection.continuePlay": {},
     "video.collection.coverBadge": {},
     "video.collection.coverSet": {},
     "video.collection.delete": {},
@@ -2952,6 +2953,7 @@
     "video.collection.name": {},
     "video.collection.nameHint": {},
     "video.collection.new": {},
+    "video.collection.playAll": {},
     "video.collection.removeItem": {},
     "video.collection.rename": {},
     "video.collection.setCover": {},

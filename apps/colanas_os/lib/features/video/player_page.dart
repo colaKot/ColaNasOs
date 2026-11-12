@@ -47,6 +47,8 @@ class PlayerPage extends StatefulWidget {
     this.sourceHeight,
     this.sourceBytes,
     this.initialSessionId,
+    this.playlist,
+    this.playlistIsSeries = false,
   });
 
   /// 带短期令牌的原画直链（`/api/v1/video/stream-url` 签发）
@@ -81,6 +83,15 @@ class PlayerPage extends StatefulWidget {
   /// 从详情页「转码」入口进来时已经建好的会话 id —— 有了它，
   /// 媒体信息面板才能查「转码中 / 完成」和实际编码（否则只剩本地猜）。
   final String? initialSessionId;
+
+  /// 外部指定的播放队列（合集 / 自定义列表）。
+  ///
+  /// 传了就不再按「同系列 / 同目录分卷」去探测：合集里的影片彼此毫无命名
+  /// 规律，探测出来的只会是「同目录其它文件」这种不相干的东西。
+  final List<VideoItem>? playlist;
+
+  /// 队列是否按剧集口径排（决定列表副标题显示 `S1 · E2` 还是文件名）。
+  final bool playlistIsSeries;
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
@@ -331,6 +342,13 @@ class _PlayerPageState extends State<PlayerPage> {
   ///     或 `abd-121-1` 配 `-2`），命名规则见 `core/play_related.dart`。
   /// 列表里没有当前片、或只剩当前片一条，就保持按钮隐藏。
   Future<void> _loadPlaylist() async {
+    // 合集 / 自定义队列：调用方已经把整队列传进来了，按它走。
+    // 合集里的片名之间没有任何命名关系，再按系列 / 分卷去探测只会拉进无关片子。
+    final preset = widget.playlist;
+    if (preset != null && preset.isNotEmpty) {
+      _setPlaylist(preset, isSeries: widget.playlistIsSeries);
+      return;
+    }
     final id = widget.itemId;
     if (id == null || id.isEmpty) return;
     try {
@@ -1068,6 +1086,25 @@ class _PlayerPageState extends State<PlayerPage> {
     );
   }
 
+  /// 竖向滑动的累计位移：手机上「上滑 / 下滑」切上一条 / 下一条，
+  /// 和短剧连播页的手感保持一致。松手才切，滑到一半反悔不算。
+  double _vDragDy = 0;
+
+  void _onVerticalDragStart(DragStartDetails d) => _vDragDy = 0;
+
+  void _onVerticalDragUpdate(DragUpdateDetails d) => _vDragDy += d.delta.dy;
+
+  void _onVerticalDragEnd(DragEndDetails d) {
+    if (!_hasPlaylist || _locked) return;
+    const threshold = 60.0;
+    if (_vDragDy <= -threshold) {
+      _playAdjacent(1); // 上滑 = 下一条
+    } else if (_vDragDy >= threshold) {
+      _playAdjacent(-1); // 下滑 = 上一条
+    }
+    _vDragDy = 0;
+  }
+
   /// 拖动中：只更新预览，不做 seek（每帧都 seek 会把转码会话拖垮）
   void _onSeekDragStart(DragStartDetails d) {
     if (_locked) return;
@@ -1209,6 +1246,16 @@ class _PlayerPageState extends State<PlayerPage> {
     }
     if (k == LogicalKeyboardKey.arrowRight) {
       _seekBy(30);
+      return KeyEventResult.handled;
+    }
+    // 上 / 下 = 切上一条 / 下一条。只在这种播放器真有队列（合集、同系列、
+    // 同目录分卷）时才接管，否则按键直接放过去，别把「方向键」吃掉。
+    if (_hasPlaylist && k == LogicalKeyboardKey.arrowUp) {
+      _playAdjacent(-1);
+      return KeyEventResult.handled;
+    }
+    if (_hasPlaylist && k == LogicalKeyboardKey.arrowDown) {
+      _playAdjacent(1);
       return KeyEventResult.handled;
     }
     if (k == LogicalKeyboardKey.keyF) {
@@ -1865,6 +1912,10 @@ class _PlayerPageState extends State<PlayerPage> {
             compat: res.compat,
             sourceBytes: it.size,
             durationMs: it.durationMs,
+            // 切下一条是 pushReplacement，不带队列的话新播放器会重新去探测：
+            // 合集内切一条就整队列丢失，「下一个」再也按不动。
+            playlist: _playlist,
+            playlistIsSeries: _playlistIsSeries,
           ),
         ),
       );
@@ -2418,6 +2469,10 @@ class _PlayerPageState extends State<PlayerPage> {
                   onHorizontalDragStart: _onSeekDragStart,
                   onHorizontalDragUpdate: _onSeekDragUpdate,
                   onHorizontalDragEnd: _onSeekDragEnd,
+                  // 竖向拖动 = 切上一条 / 下一条（仅在有队列时生效，否则松手即忽略）
+                  onVerticalDragStart: _onVerticalDragStart,
+                  onVerticalDragUpdate: _onVerticalDragUpdate,
+                  onVerticalDragEnd: _onVerticalDragEnd,
                   onLongPressStart: (_) {
                     _boosting = true;
                     _player.setRate(2.0);

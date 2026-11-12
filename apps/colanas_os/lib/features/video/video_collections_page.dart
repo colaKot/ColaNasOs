@@ -4,9 +4,11 @@ import 'package:nas_ui/nas_ui.dart';
 import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
+import '../../core/settings_store.dart';
 import 'detail/video_detail_router.dart';
+import 'player_page.dart';
+import 'video_card.dart';
 import 'video_item_actions.dart';
-import 'video_page.dart';
 
 /// 影视自定义合集（每用户）：列表 + 新建 / 重命名 / 删除 + 合集内影片。
 class VideoCollectionsPage extends StatefulWidget {
@@ -443,18 +445,45 @@ class VideoCollectionDetailPage extends StatefulWidget {
 }
 
 class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
+  static const _kFanart = 'video.collection.fanart';
+  static const _kWaterfall = 'video.collection.waterfall';
+
   bool _loading = true;
+  bool _busy = false;
   String? _error;
   List<VideoItem> _items = const [];
 
   /// 当前封面（服务端返回的是解析后的 id，本地改动后不用整页重拉）
   String? _coverId;
 
+  /// 竖版海报 / 横版剧照：同一套网格换个图源，等于「封面图 ↔ 缩略图」。
+  bool _fanart = false;
+
+  /// 瀑布流：横版缩略图按画面比例密排，短剧竖屏 / 老片 4:3 会自然错落。
+  bool _waterfall = false;
+
+  /// 观看进度（itemId → 百分比），只服务于「继续播放」定位。
+  /// 没有它也能播，只是永远从第一部开始。
+  Map<String, int> _progress = const {};
+
   @override
   void initState() {
     super.initState();
     _coverId = widget.collection.coverItemId;
+    final store = SettingsStore.instance;
+    _fanart = store.getBool(_kFanart) ?? false;
+    _waterfall = store.getBool(_kWaterfall) ?? false;
     _load();
+  }
+
+  void _setView({bool? fanart, bool? waterfall}) {
+    setState(() {
+      if (fanart != null) _fanart = fanart;
+      if (waterfall != null) _waterfall = waterfall;
+    });
+    final store = SettingsStore.instance;
+    store.setBool(_kFanart, _fanart);
+    store.setBool(_kWaterfall, _waterfall);
   }
 
   Future<void> _setCover(VideoItem item) async {
@@ -516,18 +545,32 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
     if (changed && mounted) await _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  /// `silent`：从播放器回来时只刷新进度，别把整页打回 Loading 闪一下。
+  Future<void> _load({bool silent = false}) async {
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final res = await ApiSession.instance.client.videoCollectionItems(
         id: widget.collection.id,
       );
+      // 进度只影响「继续播放」从哪部起，拉不到不该让整页报错
+      var progress = <String, int>{};
+      try {
+        final p = await ApiSession.instance.client.videoProgressList(limit: 500);
+        progress = <String, int>{
+          for (final row in p.items) row.itemId: row.percent,
+        };
+      } catch (_) {
+        // 忽略：没有进度就退化成「播第一部没看过的」
+      }
       if (!mounted) return;
       setState(() {
         _items = res.items;
+        _progress = progress;
         _loading = false;
       });
     } catch (e) {
@@ -536,6 +579,61 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
         _error = '$e';
         _loading = false;
       });
+    }
+  }
+
+  /// 「继续播放」的起播位置：先找看过一半的那部，再找第一部没看过的，
+  /// 都找不到就从头开始（与剧集详情页的续播口径一致）。
+  int get _resumeIndex {
+    var best = -1;
+    var bestPercent = 0;
+    for (var i = 0; i < _items.length; i += 1) {
+      final p = _progress[_items[i].id] ?? 0;
+      if (p > bestPercent && p < 95) {
+        bestPercent = p;
+        best = i;
+      }
+    }
+    if (best >= 0) return best;
+    for (var i = 0; i < _items.length; i += 1) {
+      final it = _items[i];
+      if (!it.watched && (_progress[it.id] ?? 0) == 0) return i;
+    }
+    return 0;
+  }
+
+  /// 起播：**整个合集**都进播放队列，所以点了任意一部、按「下一个」、
+  /// 键盘 ↑↓、手机上滑，都是在合集里翻，播完一部接下一部。
+  Future<void> _play(int index) async {
+    if (_busy || index < 0 || index >= _items.length) return;
+    final item = _items[index];
+    setState(() => _busy = true);
+    try {
+      final res = await ApiSession.instance.client.videoStreamUrl(id: item.id);
+      final url = '${ApiSession.instance.baseUrl}${res.url}';
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => PlayerPage(
+            url: url,
+            title: item.title,
+            itemId: item.id,
+            compat: res.compat,
+            sourceHeight: item.height,
+            sourceBytes: item.size,
+            durationMs: item.durationMs,
+            playlist: _items,
+          ),
+        ),
+      );
+      if (!mounted) return;
+      // 播完回来进度变了，「继续播放」要跟着挪；静默刷新避免整屏闪一下
+      await _load(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      NasSnack.show(context, tr('video.playUrlFailed', {'error': '$e'}));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -558,109 +656,8 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final base = ApiSession.instance.baseUrl;
-    final token = ApiSession.instance.token;
-    final headers =
-        token == null ? const <String, String>{} : {'Authorization': 'Bearer $token'};
-    final body = _loading
-        ? const NasLoading()
-        : _error != null
-            ? NasErrorState(message: _error!, onRetry: _load)
-            : _items.isEmpty
-                ? ListView(
-                    children: [
-                      NasEmptyState(
-                        title: tr('video.collection.emptyItems'),
-                        message: tr('video.collection.emptyItemsHint'),
-                        icon: Icons.movie_outlined,
-                      ),
-                    ],
-                  )
-                : LayoutBuilder(
-                    builder: (context, c) {
-                      final columns = gridColumns(c.maxWidth);
-                      return GridView.builder(
-                        padding: const EdgeInsets.all(NasTokens.spaceSm),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: columns,
-                          crossAxisSpacing: NasTokens.spaceSm,
-                          mainAxisSpacing: NasTokens.spaceSm,
-                          childAspectRatio: 0.72,
-                        ),
-                        itemCount: _items.length,
-                        itemBuilder: (context, i) {
-                          final item = _items[i];
-                          return NasContextMenuRegion(
-                            entries: videoItemMenuEntries(
-                              item,
-                              onAction: (a) => _runItemAction(a, item),
-                              extra: _collectionExtras(item),
-                              context: context,
-                            ),
-                            child: InkWell(
-                              onLongPress: () => _itemMenu(item),
-                              onTap: () => openVideoDetail(context, item),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            NasTokens.radiusSm,
-                                          ),
-                                          child: NasCoverImage(
-                                            url:
-                                                '$base/api/v1/video/poster?id=${Uri.encodeComponent(item.id)}',
-                                            headers: headers,
-                                            cacheWidth: 480,
-                                            icon: Icons.movie_outlined,
-                                          ),
-                                        ),
-                                        if (_coverId == item.id)
-                                          Positioned(
-                                            left: 4,
-                                            top: 4,
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 5,
-                                                vertical: 1,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: Theme.of(context).colorScheme.primary,
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                tr('video.collection.coverBadge'),
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 10,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(height: NasTokens.spaceXs),
-                                  Text(
-                                    item.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: NasTokens.fontBody,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  );
+    final body = _buildBody();
+    final toolbar = _toolbar(context);
 
     if (!widget.embedded) {
       return Scaffold(
@@ -670,7 +667,21 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
             NasRefreshButton(onPressed: _load),
           ],
         ),
-        body: body,
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                NasTokens.spaceMd,
+                NasTokens.spaceXs,
+                NasTokens.spaceMd,
+                0,
+              ),
+              child: toolbar,
+            ),
+            Expanded(child: body),
+          ],
+        ),
       );
     }
 
@@ -699,11 +710,268 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
                     ],
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    NasTokens.spaceMd,
+                    NasTokens.spaceXs,
+                    NasTokens.spaceMd,
+                    0,
+                  ),
+                  child: toolbar,
+                ),
                 Expanded(child: body),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 工具行：继续播放 / 播放全部 + 封面 · 缩略图 · 瀑布流。
+  ///
+  /// 两个播放按钮都会把**整个合集**放进播放队列，区别只在起播位置：
+  /// 继续播放从看过的下一部接着来，播放全部从第一部开始。
+  Widget _toolbar(BuildContext context) {
+    final enabled = !_busy && _items.isNotEmpty;
+    return Wrap(
+      spacing: NasTokens.spaceXs,
+      runSpacing: NasTokens.spaceXs,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        FilledButton.icon(
+          onPressed: enabled ? () => _play(_resumeIndex) : null,
+          icon: const Icon(Icons.play_arrow, size: 18),
+          label: Text(tr('video.collection.continuePlay')),
+        ),
+        OutlinedButton.icon(
+          onPressed: enabled ? () => _play(0) : null,
+          icon: const Icon(Icons.playlist_play, size: 18),
+          label: Text(tr('video.collection.playAll')),
+        ),
+        Text(
+          tr('video.collection.itemsCount', {'count': '${_items.length}'}),
+          style: TextStyle(
+            fontSize: NasTokens.fontCaption,
+            color: context.nasTextSecondary,
+          ),
+        ),
+        _viewToggle(context),
+      ],
+    );
+  }
+
+  Widget _viewToggle(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget btn(IconData icon, String tip, bool active, VoidCallback onTap) {
+      return IconButton(
+        tooltip: tip,
+        visualDensity: VisualDensity.compact,
+        onPressed: onTap,
+        icon: Icon(icon, size: 20, color: active ? scheme.primary : null),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        btn(
+          Icons.image_outlined,
+          tr('video.list.showPoster'),
+          !_waterfall && !_fanart,
+          () => _setView(fanart: false, waterfall: false),
+        ),
+        btn(
+          Icons.view_agenda_outlined,
+          tr('video.list.showFanart'),
+          !_waterfall && _fanart,
+          () => _setView(fanart: true, waterfall: false),
+        ),
+        btn(
+          Icons.view_quilt_rounded,
+          tr('video.media.waterfall'),
+          _waterfall,
+          () => _setView(waterfall: !_waterfall),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) return const NasLoading();
+    if (_error != null) return NasErrorState(message: _error!, onRetry: _load);
+    if (_items.isEmpty) {
+      return ListView(
+        children: [
+          NasEmptyState(
+            title: tr('video.collection.emptyItems'),
+            message: tr('video.collection.emptyItemsHint'),
+            icon: Icons.movie_outlined,
+          ),
+        ],
+      );
+    }
+    if (_waterfall) return _waterfallBody();
+    return _gridBody();
+  }
+
+  Widget _gridBody() {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final columns = gridColumns(c.maxWidth);
+        return GridView.builder(
+          padding: const EdgeInsets.all(NasTokens.spaceSm),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: NasTokens.spaceSm,
+            mainAxisSpacing: NasTokens.spaceSm,
+            // 竖版海报 2:3 的格子；横版剧照换成 3:2，标题行高度才不会被挤掉
+            childAspectRatio: _fanart ? 1.5 : 0.72,
+          ),
+          itemCount: _items.length,
+          itemBuilder: (context, i) => _cell(context, i),
+        );
+      },
+    );
+  }
+
+  /// 瀑布流：按「列」手工排布，卡片高度由画面比例决定。
+  /// 短剧竖屏、老片 4:3 混在一起才会真的错落，而不是把整齐网格重画一遍。
+  Widget _waterfallBody() {
+    return LayoutBuilder(
+      builder: (context, c) {
+        const spacing = 12.0;
+        final cols = (c.maxWidth / 260).floor().clamp(2, 6);
+        final usable = c.maxWidth - NasTokens.spaceSm * 2 - spacing * (cols - 1);
+        final w = usable / cols;
+        final buckets = List.generate(cols, (_) => <Widget>[]);
+        final heights = List<double>.filled(cols, 0);
+        for (var i = 0; i < _items.length; i += 1) {
+          final ratio = _aspectOf(_items[i]);
+          var target = 0;
+          for (var j = 1; j < cols; j += 1) {
+            if (heights[j] < heights[target]) target = j;
+          }
+          buckets[target].add(_cell(context, i, fixedWidth: w));
+          heights[target] += w / ratio + 22 + spacing;
+        }
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(NasTokens.spaceSm),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var j = 0; j < cols; j += 1) ...[
+                if (j > 0) const SizedBox(width: spacing),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final wgt in buckets[j])
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: spacing),
+                          child: wgt,
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  double _aspectOf(VideoItem item) {
+    final w = item.width ?? 0;
+    final h = item.height ?? 0;
+    if (w > 0 && h > 0) return w / h;
+    return 16 / 9;
+  }
+
+  /// 单个影格：网格与瀑布流共用同一份实现。
+  /// `fixedWidth` 有值时是瀑布流（高度按画面比例算），为 null 时撑满网格格子。
+  Widget _cell(BuildContext context, int index, {double? fixedWidth}) {
+    final item = _items[index];
+    final px = fixedWidth == null ? 480 : (fixedWidth * 2).round();
+    final percent = _progress[item.id] ?? 0;
+    final image = Stack(
+      fit: StackFit.expand,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+          child: NasCoverImage(
+            // 封面 = 竖版海报，缩略图 / 瀑布流 = 横版剧照；
+            // 统一走 `art`（带 size 走缩略图缓存），别用原图直出
+            url: videoPosterUrl(
+              item,
+              kind: !_waterfall && !_fanart ? 'poster' : 'fanart',
+              size: px,
+            ),
+            headers: videoArtHeaders,
+            cacheWidth: px,
+            icon: Icons.movie_outlined,
+          ),
+        ),
+        if (_coverId == item.id)
+          Positioned(
+            left: 4,
+            top: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                tr('video.collection.coverBadge'),
+                style: const TextStyle(color: Colors.white, fontSize: 10),
+              ),
+            ),
+          ),
+        // 看到了哪儿：进度条压在封面底部，回到合集一眼能挑出续看的那部
+        if (percent > 0)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: LinearProgressIndicator(
+              value: (percent / 100).clamp(0.0, 1.0),
+              minHeight: 3,
+              backgroundColor: Colors.black26,
+            ),
+          ),
+      ],
+    );
+
+    return NasContextMenuRegion(
+      entries: videoItemMenuEntries(
+        item,
+        onAction: (a) => _runItemAction(a, item),
+        extra: _collectionExtras(item),
+        context: context,
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+        onLongPress: () => _itemMenu(item),
+        // 点一下就播，不再先跳详情多一步；详情 / 设封面 / 移出都在右键菜单里
+        onTap: () => _play(index),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (fixedWidth == null)
+              Expanded(child: image)
+            else
+              AspectRatio(aspectRatio: _aspectOf(item), child: image),
+            const SizedBox(height: NasTokens.spaceXs),
+            Text(
+              item.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: NasTokens.fontBody),
+            ),
+          ],
+        ),
       ),
     );
   }
