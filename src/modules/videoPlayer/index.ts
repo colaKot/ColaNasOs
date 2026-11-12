@@ -773,8 +773,8 @@ export const videoPlayer: ServerModule = {
         if (dupe) {
           // 内核重启可能留下 pending 会话、没有 pump 在跑，顺手补一次
           pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
-          // 复用的会话可能刚建、还没出片：等一小会再给地址，别让播放器去撞 25s 挂起
-          await waitPlayable(k, dupe.id, 6_000);
+          // 复用的会话可能刚建、还没出片：等一小会再给地址（同新建会话的口径）
+          await waitPlayable(k, dupe.id, 3_000);
           return {
             id: dupe.id,
             url: urlOf(dupe.id, hlsToken(k, dupe.id)),
@@ -793,11 +793,10 @@ export const videoPlayer: ServerModule = {
                   ${audioIndex}, ${forceSdr}, ${forceSdr}, ${leadMs}, ${startMs}, 'pending', ${ts}, ${ts})
         `.execute(k.db);
         pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
-        // 等首片（最多 6s）：多数 1080p 片源 2~5s 就有首片，等到了播放器就能秒开。
-        // 不能等太久 —— 外网域名经过反向代理时，一个 10s 以上没有任何字节的响应
-        // 会被代理掐断，反而把「建会话」这一步弄成失败。超时就照常返回地址，
-        // 播放列表接口那边还有 25s 就绪等待兜底。
-        await waitPlayable(k, id, 6_000);
+        // 等首片（最多 3s）：多数 1080p 片源 2~3s 就有首片，等到了播放器就能秒开。
+        // 不能再长 —— 建会话的响应也别让播放器/代理等太久；没等到就照常返回地址，
+        // 播放列表接口会立刻回空 EVENT 列表让播放器轮询。
+        await waitPlayable(k, id, 3_000);
         return { id, url: urlOf(id, hlsToken(k, id)), startedMs: startMs };
       },
     );
@@ -913,17 +912,17 @@ export const videoPlayer: ServerModule = {
         const parts = isPlaylist ? partsOf(k, session) : [];
         let body: Buffer | null =
           isPlaylist && parts.length > 0 ? Buffer.from(mergePlaylists(parts), 'utf8') : null;
-        // 首片还没落盘时**短暂等一下**：直接返回「没有任何分片」的播放列表，
-        // 有些播放器会停在黑屏，而 ffmpeg 通常 1~2 秒后就有首片。
+        // 首片还没落盘时**最多等 2 秒**就回一个空的 EVENT 播放列表。
         //
-        // 但不能等太久：这条请求经外网域名（反向代理）时，一个十几秒没有任何字节的
-        // 响应会被代理掐断，播放器拿到的是 `Failed to open ...m3u8` —— 用户看到的
-        // 就是「第一次打开必定失败，关掉重开就好」（第二次会话已有分片，秒回）。
-        // 10s 是折中：建会话那边已经先等过 6s，绝大多数片到这一步就已经就绪；
-        // 真没就绪就返回空 EVENT 播放列表（hls.js / mpv 都会按 6s 轮询），
-        // 分片一出现自然起播，而不是把连接吊死。
+        // 为什么只等 2s：实测播放器（mpv / libmpv）打开 m3u8 时，服务端只要
+        // 3~5 秒没有吐出任何字节，它就自己放弃并报
+        // `tcp: ffurl_read returned 0xffffff76` + `Failed to open ...m3u8`。
+        // 之前这里等 25s（后来 10s），第一次打开必然踩到 —— 表现为「第一次播
+        // 必定失败、关掉重开就好」（第二次会话已有分片，秒回）。
+        // 空 EVENT 列表是合法的「还没内容、请按 targetduration 轮询」，
+        // hls.js 与 mpv 都会自己再拉，分片一出现就起播。
         if (body === null) {
-          const deadline = Date.now() + 10_000;
+          const deadline = Date.now() + 2_000;
           for (;;) {
             try {
               body = await fsp.readFile(abs);

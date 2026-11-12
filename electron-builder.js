@@ -74,7 +74,9 @@ if (!LITE) {
   extraResources.unshift({
     from: 'vendor/models',
     to: 'models',
-    filter: ['**/*', '!kokoro/**', '!qwen3-tts/**', '!mt/**'],
+    // 下划线开头的目录是本地临时 / 手工测试备份（例如 `_manual-test-backup` 1.1GB），
+    // 一旦混进来安装包会从 543MB 涨到 1.6GB；这里整体排除。
+    filter: ['**/*', '!kokoro/**', '!qwen3-tts/**', '!mt/**', '!**/_*/**'],
   });
   // 推理二进制随包带上（约 40MB，纯程序不含权重）：用户只需要再下模型
   extraResources.push({
