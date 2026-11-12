@@ -596,15 +596,24 @@ export const GeoVisionRejectBody = Type.Object(
 /**
  * 规则相册的一条命中条件。多条之间是 **OR**：命中任意一条就归入。
  *
- *   · `kind=face`  → `value` 是人脸聚类 id（`photo_face_clusters.id`）
- *   · `kind=scene` → `value` 是场景标签（`photo_scenes.label`，如 海滩 / 夜景）
- *   · `kind=date`  → `from` / `to` 是拍摄时间区间（秒，含端点；单边可省）
+ *   · `kind=face`     → `value` 是人脸聚类 id（`photo_face_clusters.id`）
+ *   · `kind=scene`    → `value` 是场景标签（`photo_scenes.label`，如 海滩 / 夜景）
+ *   · `kind=activity` → `value` 是活动标签（`photo_activities.label`，如 游泳 / 聚餐）
+ *   · `kind=date`     → `from` / `to` 是拍摄时间区间（秒，含端点；单边可省）
  */
 export const AlbumRule = Type.Object(
   {
-    kind: Type.Union([Type.Literal('face'), Type.Literal('scene'), Type.Literal('date')]),
+    kind: Type.Union([
+      Type.Literal('face'),
+      Type.Literal('scene'),
+      Type.Literal('activity'),
+      Type.Literal('date'),
+    ]),
     value: Type.Optional(
-      Type.String({ maxLength: 128, description: 'face = 聚类 id；scene = 场景标签' }),
+      Type.String({
+        maxLength: 128,
+        description: 'face = 聚类 id；scene / activity = 标签',
+      }),
     ),
     from: Type.Optional(Type.Integer({ description: 'date 规则起始（秒，含）' })),
     to: Type.Optional(Type.Integer({ description: 'date 规则结束（秒，含）' })),
@@ -1045,6 +1054,66 @@ export const OnThisDayResponse = Type.Object(
   { years: Type.Array(Type.Ref(OnThisDayYear)) },
   { $id: 'PhotoOnThisDayResponse' },
 );
+
+/** 时光对照：一侧照片里识别到的人脸（最多返回前三张，按面积 × 清晰度排序） */
+export const TimeContrastFace = Type.Object(
+  {
+    id: Type.String({ description: '人脸 id，头像拼 /photo/face/image?id=' }),
+    clusterId: Type.Union([Type.String(), Type.Null()]),
+    name: Type.Union([Type.String(), Type.Null()]),
+    score: Type.Number(),
+    quality: Type.Union([Type.Number(), Type.Null()]),
+    area: Type.Number({ description: '人脸框占整图面积比（0..1），用于解释排序' }),
+  },
+  { $id: 'PhotoTimeContrastFace' },
+);
+
+export const TimeContrastSide = Type.Object(
+  {
+    year: Type.Integer(),
+    item: Type.Ref(Item),
+    faces: Type.Array(Type.Ref(TimeContrastFace), { description: '最多 3 张，面积 × 清晰度倒序' }),
+    faceCount: Type.Integer({ description: '这张照片识别到的人脸总数' }),
+  },
+  { $id: 'PhotoTimeContrastSide' },
+);
+
+export const TimeContrastPerson = Type.Object(
+  {
+    id: Type.String({ description: '人脸聚类 id' }),
+    name: Type.Union([Type.String(), Type.Null()], { description: '用户命名；未命名时为空' }),
+  },
+  { $id: 'PhotoTimeContrastPerson' },
+);
+
+export const TimeContrastAlbum = Type.Object(
+  {
+    id: Type.String(),
+    name: Type.String(),
+  },
+  { $id: 'PhotoTimeContrastAlbum' },
+);
+
+export const TimeContrastResponse = Type.Object(
+  {
+    month: Type.Integer(),
+    day: Type.Integer(),
+    // 用 String 而不是 Literal 联合：契约生成器会把字面量联合映射成 Dart `dynamic`
+    mode: Type.String({ description: "person = 锁定同一人物；fallback = 降级配对" }),
+    person: Type.Union([Type.Ref(TimeContrastPerson), Type.Null()]),
+    album: Type.Union([Type.Ref(TimeContrastAlbum), Type.Null()]),
+    reason: Type.String({
+      description: 'person / same_album / similar / time_span，界面据此解释配对依据',
+    }),
+    similarity: Type.Union([Type.Number(), Type.Null()], {
+      description: '降级配对时的感知哈希相似度（0..1），无指纹时为空',
+    }),
+    gapYears: Type.Integer(),
+    left: Type.Union([Type.Ref(TimeContrastSide), Type.Null()]),
+    right: Type.Union([Type.Ref(TimeContrastSide), Type.Null()]),
+  },
+  { $id: 'PhotoTimeContrastResponse' },
+);
 /** 异步扫描入队结果（进度查 /api/v1/tasks/{id}） */
 export const ScanTask = Type.Object(
   {
@@ -1058,6 +1127,11 @@ export const PHOTO_SCHEMAS = [
   OnThisDayQuery,
   OnThisDayYear,
   OnThisDayResponse,
+  TimeContrastFace,
+  TimeContrastSide,
+  TimeContrastPerson,
+  TimeContrastAlbum,
+  TimeContrastResponse,
   PhotoDeleteBody,
   PhotoDeleteResponse,
   CalendarQuery,

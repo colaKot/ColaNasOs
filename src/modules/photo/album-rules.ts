@@ -4,12 +4,13 @@ import type { Kysely } from 'kysely';
 /**
  * 规则相册：相册除了「手工往里加照片」，还能配一组命中条件，符合的自动进来。
  *
- * 三种规则（彼此是 **OR**，命中任意一条就归入 —— 用户口径是「是这个头像的，
- * 或者这个场景的，或者这个日期段的，都归到这个相册」）：
+ * 四种规则（彼此是 **OR**，命中任意一条就归入 —— 用户口径是「是这个头像的，
+ * 或者这个场景的，或者这个活动的，或者这个日期段的，都归到这个相册」）：
  *
- *   · face  —— 命某人脸聚类（`photo_faces.cluster_id`）
- *   · scene —— 命中某场景标签（`photo_scenes.label`，如 海滩 / 夜景）
- *   · date  —— 拍摄时间落在这个区间（`photo_items.taken_at`，秒）
+ *   · face     —— 命某人脸聚类（`photo_faces.cluster_id`）
+ *   · scene    —— 命中某场景标签（`photo_scenes.label`，如 海滩 / 夜景）
+ *   · activity —— 命中某活动标签（`photo_activities.label`，如 游泳 / 聚餐）
+ *   · date     —— 拍摄时间落在这个区间（`photo_items.taken_at`，秒）
  *
  * 存成 `photo_albums.rules_json`，结构见 [AlbumRule]。为什么用 JSON 而不是
  * 单独一张 `photo_album_rules` 表：规则永远跟着相册整体读写（改一次就是整组替换），
@@ -18,6 +19,7 @@ import type { Kysely } from 'kysely';
 export type AlbumRule =
   | { kind: 'face'; value: string }
   | { kind: 'scene'; value: string }
+  | { kind: 'activity'; value: string }
   | { kind: 'date'; from?: number; to?: number };
 
 /** 单条规则的宽松上限，防止有人往 rules_json 里塞几万个值把 SQL 撑爆 */
@@ -38,7 +40,7 @@ export function parseAlbumRules(raw: unknown): AlbumRule[] {
     if (!item || typeof item !== 'object') continue;
     const r = item as Record<string, unknown>;
     const kind = String(r.kind || '');
-    if (kind === 'face' || kind === 'scene') {
+    if (kind === 'face' || kind === 'scene' || kind === 'activity') {
       const value = String(r.value ?? '').trim();
       if (value) out.push({ kind, value });
       continue;
@@ -71,6 +73,8 @@ export function albumRulesWhere(rules: AlbumRule[]) {
         return sql`exists (select 1 from photo_faces f where f.photo_id = i.id and f.cluster_id = ${r.value})`;
       case 'scene':
         return sql`exists (select 1 from photo_scenes s where s.photo_id = i.id and s.label = ${r.value})`;
+      case 'activity':
+        return sql`exists (select 1 from photo_activities a where a.photo_id = i.id and a.label = ${r.value})`;
       case 'date': {
         // 单边开区间也要能表达：只给 from = 某天之后，只给 to = 某天之前
         const seg: ReturnType<typeof sql>[] = [];

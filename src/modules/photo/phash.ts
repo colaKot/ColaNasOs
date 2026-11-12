@@ -55,6 +55,15 @@ function hexBits(hex: string): bigint {
   }
 }
 
+/** 两枚 16 位十六进制感知哈希的相似度（0..1）；任一为空返回 null */
+export function phashSimilarity(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): number | null {
+  if (!a || !b) return null;
+  return 1 - hamming(hexBits(a), hexBits(b)) / 64;
+}
+
 function hamming(a: bigint, b: bigint): number {
   let x = a ^ b;
   let n = 0;

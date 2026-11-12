@@ -4,6 +4,7 @@ import { secured } from '../../../../kernel/route';
 import { Err } from '../../../../kernel/errors';
 import { newId, TAG, toItem, type MediaRow } from '../util';
 import { pathWhere, visibilityOf } from '../../files/visibility';
+import { seriesCoverIdSql, seriesPosterIdSql } from '../series-sql';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { VideoHelpers } from '../helpers';
@@ -64,6 +65,120 @@ function collectionOut(r: CollectionRow) {
   };
 }
 
+/**
+ * 合集条目卡片。
+ *
+ * 电视剧按剧聚合：一部剧只出一张卡（`seriesInfo` 交给前端走剧详情），
+ * 与剧库列表 / 智能合集用同一套 `seriesCoverIdSql` 口径。GET 与「加入 / 移出」
+ * 的返回都必须走这里，否则同一个合集两次请求返回的条目形态不一致。
+ */
+async function collectionItemCards(
+  k: KernelApi,
+  col: CollectionRow,
+  user: unknown,
+): Promise<Record<string, unknown>[]> {
+  const uid = String((user as { sub?: string } | null)?.sub || '');
+  const vis = visibilityOf(k.config, user);
+  const cardCond = sql`i.collection_id = ${col.id} and ${pathWhere(vis, 'v.rel_path')}`;
+  const seriesRows = (
+    await sql<{
+      library_id: string;
+      name: string;
+      seasons: number;
+      episodes: number;
+      watched_episodes: number;
+      cover_id: string | null;
+      poster_id: string | null;
+      at: number;
+    }>`
+      select v.library_id, v.series as name,
+             (select count(distinct coalesce(t.season, 0)) from video_items t
+               where t.library_id = v.library_id and t.series = v.series
+                 and t.media_type = 'video') as seasons,
+             (select count(*) from video_items t
+               where t.library_id = v.library_id and t.series = v.series
+                 and t.media_type = 'video') as episodes,
+             (select count(*) from video_items t
+                join video_watch w on w.item_id = t.id and w.owner_id = ${uid}
+               where t.library_id = v.library_id and t.series = v.series
+                 and t.media_type = 'video') as watched_episodes,
+             ${seriesCoverIdSql('v')} as cover_id,
+             ${seriesPosterIdSql('v')} as poster_id,
+             max(i.added_at) as at
+        from video_collection_items i
+        join video_items v on v.id = i.item_id
+       where ${cardCond}
+         and v.series is not null and v.series <> ''
+       group by v.library_id, v.series
+       order by at desc
+       limit 2000
+    `.execute(k.db)
+  ).rows;
+
+  // 卡片上的年份 / 简介 / 评分用「封面那一集」的元数据（剧级字段本来就一样）
+  const coverIds = [
+    ...new Set(seriesRows.map((r) => r.cover_id).filter((x): x is string => !!x)),
+  ];
+  const coverRows = coverIds.length
+    ? (
+        await sql<MediaRow>`
+          select v.*, exists(select 1 from video_watch w
+                              where w.item_id = v.id and w.owner_id = ${uid}) as watched
+            from video_items v
+           where v.id in (${sql.join(coverIds.map((id) => sql`${id}`), sql`, `)})
+        `.execute(k.db)
+      ).rows
+    : [];
+  const coverById = new Map(coverRows.map((r) => [r.id, r]));
+
+  const movies = (
+    await sql<MediaRow>`
+      select v.*, exists(select 1 from video_watch w
+                          where w.item_id = v.id and w.owner_id = ${uid}) as watched,
+             i.added_at as collection_added_at
+        from video_collection_items i
+        join video_items v on v.id = i.item_id
+       where ${cardCond}
+         and (v.series is null or v.series = '')
+       order by i.added_at desc, v.id asc
+       limit 2000
+    `.execute(k.db)
+  ).rows;
+
+  const merged: Array<{ at: number; item: Record<string, unknown> }> = [
+    ...movies.map((r) => ({
+      at: Number((r as MediaRow & { collection_added_at?: number }).collection_added_at) || 0,
+      item: toItem(r) as never,
+    })),
+    ...seriesRows.flatMap((g) => {
+      const row = g.cover_id ? coverById.get(g.cover_id) : undefined;
+      if (!row) return [];
+      return [
+        {
+          at: Number(g.at) || 0,
+          item: {
+            ...toItem(row),
+            // 这张卡代表整部剧：标题用剧名，季 / 集号不外露
+            title: g.name,
+            season: null,
+            episode: null,
+            seriesInfo: {
+              name: g.name,
+              seasons: Number(g.seasons) || 1,
+              episodes: Number(g.episodes) || 0,
+              watchedEpisodes: Number(g.watched_episodes) || 0,
+              coverId: g.cover_id,
+              posterId: g.poster_id,
+            },
+          } as never,
+        },
+      ];
+    }),
+  ];
+  merged.sort((a, b) => b.at - a.at);
+  return merged.slice(0, 2000).map((x) => x.item);
+}
+
 /** 影视自定义合集（每用户；条目按加入时间倒序） */
 export async function registerVideoCollections(
   app: FastifyInstance,
@@ -86,9 +201,23 @@ export async function registerVideoCollections(
       const rows = (
         await sql<CollectionRow>`
           select c.*,
-                 (select count(*) from video_collection_items i
-                    join video_items v on v.id = i.item_id
-                   where i.collection_id = c.id and ${cond}) as items,
+                 -- 条目数按「剧聚合」口径：一部剧只算 1 条，否则集合卡显示 40 条、
+                 -- 点进去只有 1 张封面（与智能合集 / 剧库列表保持一致）。
+                 (
+                   (select count(*) from (
+                      select 1
+                        from video_collection_items i
+                        join video_items v on v.id = i.item_id
+                       where i.collection_id = c.id and ${cond}
+                         and v.series is not null and v.series <> ''
+                       group by v.library_id, v.series
+                   )) +
+                   (select count(*)
+                      from video_collection_items i
+                      join video_items v on v.id = i.item_id
+                     where i.collection_id = c.id and ${cond}
+                       and (v.series is null or v.series = ''))
+                 ) as items,
                  coalesce(
                    (select i.item_id from video_collection_items i
                       join video_items v on v.id = i.item_id
@@ -335,18 +464,11 @@ export async function registerVideoCollections(
           ).rows[0]
         : null;
       if (!col) return reply.code(404).send({ error: Err.notFound, message: 'collection not found' });
-      const rows = (
-        await sql<MediaRow>`
-          select v.*
-            from video_collection_items i
-            join video_items v on v.id = i.item_id
-           where i.collection_id = ${col.id}
-             and ${pathWhere(visibilityOf(k.config, req.user), 'v.rel_path')}
-           order by i.added_at desc, v.id asc
-           limit 2000
-        `.execute(k.db)
-      ).rows;
-      return { id: col.id, name: col.name, items: rows.map(toItem) };
+      return {
+        id: col.id,
+        name: col.name,
+        items: await collectionItemCards(k, col, req.user),
+      };
     },
   );
 
@@ -391,18 +513,11 @@ export async function registerVideoCollections(
         }
         await sql`update video_collections set updated_at = ${ts} where id = ${col.id}`.execute(trx);
       });
-      const rows = (
-        await sql<MediaRow>`
-          select v.*
-            from video_collection_items i
-            join video_items v on v.id = i.item_id
-           where i.collection_id = ${col.id}
-             and ${pathWhere(visibilityOf(k.config, req.user), 'v.rel_path')}
-           order by i.added_at desc, v.id asc
-           limit 2000
-        `.execute(k.db)
-      ).rows;
-      return { id: col.id, name: col.name, items: rows.map(toItem) };
+      return {
+        id: col.id,
+        name: col.name,
+        items: await collectionItemCards(k, col, req.user),
+      };
     },
   );
 }

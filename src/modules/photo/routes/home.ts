@@ -5,6 +5,7 @@ import type { KernelApi } from '../../../../kernel/types';
 import type { PhotoHelpers } from '../helpers';
 import { aiConfig } from '../ai/config';
 import { coverRanker } from '../cover';
+import { phashSimilarity } from '../phash';
 import { TAG, toItem, type PhotoItemRow } from '../util';
 
 /** 相册首页看板：把统计 / 足迹 / 人物 / 那年今日聚合成一次请求 */
@@ -248,6 +249,286 @@ export async function registerPhotoHome(
               .slice(0, perYear)
               .map(toItem),
           })),
+      };
+    },
+  );
+
+  /**
+   * 时光对照的「这两张为什么放一起」。
+   *
+   * 配对优先级：
+   *   1. 同一人脸簇（`photo_faces.cluster_id`）在≥2个年份都出现 —— 就是同一个人，
+   *      取最早 / 最晚年份里该人脸最清晰的一张；有人工命名的人物优先。
+   *   2. 找不到同人时降级：最早 / 最晚年份里优先「同一相册」，其次 phash 画面相似，
+   *      最后只看时间跨度。降级原因会原样返回，界面必须写清。
+   *
+   * 人脸、人物名、头像全部复用现有表与 `/photo/face/image`，不另建数据结构。
+   */
+  app.get(
+    '/api/v1/photo/time-contrast',
+    secured('photo:read', {
+      schema: {
+        operationId: 'photoTimeContrast',
+        tags: TAG,
+        summary: '时光对照：同一天最早的年份 vs 最近的年份（优先锁定同一人物）',
+        querystring: h.ref('PhotoOnThisDayQuery'),
+        response: { 200: h.ref('PhotoTimeContrastResponse') },
+      },
+    }),
+    async (req: FastifyRequest) => {
+      const uid = String((req as any).user?.sub || '');
+      const q = (req.query || {}) as { month?: number; day?: number };
+      const now = new Date();
+      const month = Math.min(Math.max(Number(q.month) || now.getMonth() + 1, 1), 12);
+      const day = Math.min(Math.max(Number(q.day) || now.getDate(), 1), 31);
+      const mm = String(month).padStart(2, '0');
+      const dd = String(day).padStart(2, '0');
+      const dayKey = `${mm}-${dd}`;
+
+      const rows = await sql<PhotoItemRow & { y: number; phash: string | null }>`
+        select *, cast(strftime('%Y', taken_at, 'unixepoch', 'localtime') as integer) as y
+          from photo_items
+         where in_trash = 0
+           and media_kind = 'image'
+           and library_id in (select id from photo_libraries where owner_id = ${uid})
+           and strftime('%m-%d', taken_at, 'unixepoch', 'localtime') = ${dayKey}
+         order by taken_at desc
+         limit 4000
+      `.execute(k.db);
+
+      const byYear = new Map<number, (PhotoItemRow & { y: number; phash: string | null })[]>();
+      for (const r of rows.rows) {
+        const y = Number(r.y);
+        if (!byYear.has(y)) byYear.set(y, []);
+        byYear.get(y)!.push(r);
+      }
+
+      const empty = {
+        month,
+        day,
+        mode: 'fallback' as const,
+        person: null,
+        album: null,
+        reason: 'time_span' as const,
+        similarity: null,
+        gapYears: 0,
+        left: null,
+        right: null,
+      };
+      if (byYear.size < 2) return empty;
+
+      const faceRows = (
+        await sql<{
+          id: string;
+          photo_id: string;
+          cluster_id: string | null;
+          name: string | null;
+          score: number;
+          quality: number | null;
+          box_width: number | null;
+          box_height: number | null;
+          img_width: number | null;
+          img_height: number | null;
+        }>`
+          select f.id, f.photo_id, f.cluster_id, c.name, f.score, f.quality,
+                 f.box_width, f.box_height, f.img_width, f.img_height
+            from photo_faces f
+            join photo_items i on i.id = f.photo_id
+            left join photo_face_clusters c on c.id = f.cluster_id
+           where i.in_trash = 0
+             and i.library_id in (select id from photo_libraries where owner_id = ${uid})
+             and strftime('%m-%d', i.taken_at, 'unixepoch', 'localtime') = ${dayKey}
+        `.execute(k.db)
+      ).rows;
+
+      type FaceInfo = (typeof faceRows)[number] & { area: number; weight: number };
+      const facesByPhoto = new Map<string, FaceInfo[]>();
+      for (const f of faceRows) {
+        const gw = Number(f.box_width) || 0;
+        const gh = Number(f.box_height) || 0;
+        const iw = Number(f.img_width) || 0;
+        const ih = Number(f.img_height) || 0;
+        const area = iw > 0 && ih > 0 ? (gw * gh) / (iw * ih) : 0;
+        // 质量优先、检测分兜底；老数据没有 bbox 时仍按检测分排个序
+        const q = f.quality == null ? Number(f.score) || 0 : Number(f.quality);
+        const weight = area * (0.25 + 0.75 * Math.max(0, Math.min(1, q))) + (Number(f.score) || 0) * 0.001;
+        const list = facesByPhoto.get(f.photo_id) ?? [];
+        list.push({ ...f, area, weight });
+        facesByPhoto.set(f.photo_id, list);
+      }
+
+      const photoById = new Map<string, { row: PhotoItemRow; year: number }>();
+      for (const r of rows.rows) photoById.set(r.id, { row: r, year: Number(r.y) });
+
+      const topFaces = (photoId: string) =>
+        [...(facesByPhoto.get(photoId) ?? [])]
+          .sort((a, b) => b.weight - a.weight)
+          .slice(0, 3)
+          .map((f) => ({
+            id: f.id,
+            clusterId: f.cluster_id,
+            name: f.name,
+            score: Number(f.score) || 0,
+            quality: f.quality == null ? null : Number(f.quality),
+            area: Number(f.area.toFixed(4)),
+          }));
+
+      const sideOf = (photoId: string) => {
+        const info = photoById.get(photoId)!;
+        const faces = facesByPhoto.get(photoId) ?? [];
+        return {
+          year: info.year,
+          item: toItem(info.row),
+          faces: topFaces(photoId),
+          faceCount: faces.length,
+        };
+      };
+
+      // ---------- 1) 同一人物：统计每个 cluster 出现在哪些年份 ----------
+      const clusterYears = new Map<
+        string,
+        { name: string | null; byYear: Map<number, { photoId: string; weight: number }[]> }
+      >();
+      for (const [photoId, faces] of facesByPhoto) {
+        const info = photoById.get(photoId);
+        if (!info) continue;
+        for (const f of faces) {
+          if (!f.cluster_id) continue;
+          let c = clusterYears.get(f.cluster_id);
+          if (!c) {
+            c = { name: null, byYear: new Map() };
+            clusterYears.set(f.cluster_id, c);
+          }
+          if (f.name) c.name = f.name;
+          const list = c.byYear.get(info.year) ?? [];
+          list.push({ photoId, weight: f.weight });
+          c.byYear.set(info.year, list);
+        }
+      }
+
+      let best: {
+        id: string;
+        name: string | null;
+        firstYear: number;
+        lastYear: number;
+        leftPhotoId: string;
+        rightPhotoId: string;
+      } | null = null;
+      let bestScore = -Infinity;
+      for (const [id, c] of clusterYears) {
+        const years = [...c.byYear.keys()].sort((a, b) => a - b);
+        if (years.length < 2) continue;
+        const firstYear = years[0];
+        const lastYear = years[years.length - 1];
+        const pick = (year: number) =>
+          [...(c.byYear.get(year) ?? [])].sort((a, b) => b.weight - a.weight)[0];
+        const left = pick(firstYear);
+        const right = pick(lastYear);
+        if (!left || !right) continue;
+        // 人工命名过的人物更可信；同名前提下跨度越大越值得对照
+        const score = (c.name ? 1_000_000 : 0) + (lastYear - firstYear) * 1000;
+        if (score > bestScore) {
+          bestScore = score;
+          best = {
+            id,
+            name: c.name,
+            firstYear,
+            lastYear,
+            leftPhotoId: left.photoId,
+            rightPhotoId: right.photoId,
+          };
+        }
+      }
+
+      if (best) {
+        const b = best;
+        return {
+          month,
+          day,
+          mode: 'person' as const,
+          person: { id: b.id, name: b.name },
+          album: null,
+          reason: 'person' as const,
+          similarity: null,
+          gapYears: b.lastYear - b.firstYear,
+          left: sideOf(b.leftPhotoId),
+          right: sideOf(b.rightPhotoId),
+        };
+      }
+
+      // ---------- 2) 降级：最早 / 最晚年份，优先同相册，其次 phash 相似 ----------
+      const years = [...byYear.keys()].sort((a, b) => a - b);
+      const firstYear = years[0];
+      const lastYear = years[years.length - 1];
+      const leftCandidates = (byYear.get(firstYear) ?? []).slice(0, 60);
+      const rightCandidates = (byYear.get(lastYear) ?? []).slice(0, 60);
+
+      const albumRows = await sql<{ item_id: string; album_id: string; album_name: string }>`
+        select m.item_id, a.id as album_id, a.name as album_name
+          from photo_album_items m
+          join photo_albums a on a.id = m.album_id
+         where a.owner_id = ${uid}
+           and m.item_id in (${sql.join(
+             [...leftCandidates, ...rightCandidates].map((r) => sql`${r.id}`),
+             sql`, `,
+           )})
+      `.execute(k.db);
+      const albumsByItem = new Map<string, { id: string; name: string }[]>();
+      for (const a of albumRows.rows) {
+        const list = albumsByItem.get(a.item_id) ?? [];
+        list.push({ id: a.album_id, name: a.album_name });
+        albumsByItem.set(a.item_id, list);
+      }
+      const sharedAlbum = (a: string, b: string) => {
+        const set = new Set((albumsByItem.get(a) ?? []).map((x) => x.id));
+        return (albumsByItem.get(b) ?? []).find((x) => set.has(x.id)) ?? null;
+      };
+
+      let fallback: {
+        left: (typeof leftCandidates)[number];
+        right: (typeof rightCandidates)[number];
+        album: { id: string; name: string } | null;
+        similarity: number | null;
+      } | null = null;
+      let fallbackScore = -Infinity;
+      for (const l of leftCandidates) {
+        for (const r of rightCandidates) {
+          if (l.id === r.id) continue;
+          const album = sharedAlbum(l.id, r.id);
+          const sim = phashSimilarity(l.phash, r.phash);
+          const score =
+            (album ? 2 : 0) +
+            (sim ?? 0) +
+            (l.library_id === r.library_id ? 0.3 : 0);
+          if (score > fallbackScore) {
+            fallbackScore = score;
+            fallback = { left: l, right: r, album, similarity: sim };
+          }
+        }
+      }
+      if (!fallback) {
+        // 理论上只有两边为空才会走到这里（byYear.size>=2 已保证非空）
+        return empty;
+      }
+
+      const sim = fallback.similarity;
+      const reason = fallback.album
+        ? ('same_album' as const)
+        : sim != null && sim >= 0.8
+          ? ('similar' as const)
+          : ('time_span' as const);
+
+      return {
+        month,
+        day,
+        mode: 'fallback' as const,
+        person: null,
+        album: fallback.album,
+        reason,
+        similarity: sim == null ? null : Number(sim.toFixed(3)),
+        gapYears: Number(fallback.right.y) - Number(fallback.left.y),
+        left: sideOf(fallback.left.id),
+        right: sideOf(fallback.right.id),
       };
     },
   );
