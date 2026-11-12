@@ -379,13 +379,13 @@ class _VideoListViewState extends State<VideoListView> {
             },
             active: _fanart,
           ),
-          _iconBtn(context, Icons.auto_awesome_outlined, tr('video.home.scrapeAll'), _scrapeAll),
           PopupMenuButton<String>(
             tooltip: tr('video.card.more'),
             icon: const Icon(Icons.more_vert),
             onSelected: (v) {
               if (v == 'scale') _openScaleSheet();
               if (v == 'refresh') _load();
+              if (v == 'scrape') _scrapeAll();
               if (v == 'select') {
                 setState(() {
                   _selectionMode = true;
@@ -405,6 +405,11 @@ class _VideoListViewState extends State<VideoListView> {
               PopupMenuItem(
                 value: 'refresh',
                 child: Text(tr('common.refresh')),
+              ),
+              // 低频但耗时：从常驻按钮收进「更多」，顶栏留筛选 / 排序 / 视图
+              PopupMenuItem(
+                value: 'scrape',
+                child: Text(tr('video.home.scrapeAll')),
               ),
             ],
           ),
