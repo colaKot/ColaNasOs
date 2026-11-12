@@ -185,6 +185,13 @@ class _PlayerPageState extends State<PlayerPage> {
   /// 已转出的总时长（毫秒）：进度条上「已加载」那一段画到这里。
   /// **片源绝对位置**（含下面的起转偏移）。0 = 还没转出来 / 没开会话。
   int _transcodedMs = 0;
+  /// 当前会话的「提前量」（毫秒）。0 = 整片一次转完。
+  ///
+  /// 分段会话的播放列表是**按整片时长预列**的（VOD + ENDLIST），所以 libmpv 报的
+  /// `duration` 是整片、不是「已转出」；拿它算 `_loadedEnd` 会让 seek 判定
+  /// 「目标在已加载区间内」，于是拖到没转的位置也只做原地 seek —— 分片不存在，
+  /// 等 10 秒超时。这就是「播放时无法跳转」的根因。
+  int _leadMs = 0;
 
   /// 本会话时间轴 0 对应的片源位置（毫秒）。
   ///
@@ -643,6 +650,10 @@ class _PlayerPageState extends State<PlayerPage> {
     );
     _jobStatus = null;
     _transcodedMs = 0;
+    // 记下这一轮的提前量：决定 `_loadedEnd` 能不能信 libmpv 报的 duration。
+    // 建会话的响应里没有 leadMs，先用客户端请求值推算，下一次轮询会用
+    // 服务端回显的 leadMs 校正（见 _watchSession）。
+    _leadMs = (leadOverride ?? PlayPreferences.leadMinutes) * 60000;
     // 起转偏移以服务端回显为准（它可能夹取过），播放器时间轴 0 = 这个位置
     _startMs = created.startedMs ?? startMs;
     // 实际编码换会话后必须清空，否则换了档还显示上一轮的结果
@@ -684,6 +695,9 @@ class _PlayerPageState extends State<PlayerPage> {
         final st = '${job.status}';
         final codec = job.codec ?? '';
         final transcoded = job.transcodedMs ?? 0;
+        // 会话可能是详情页传进来的（没走过 _ensureTranscode），lead 在这里补齐，
+        // 否则 _loadedEnd 会退回「信 player.duration」那条错路
+        _leadMs = job.leadMs ?? _leadMs;
         // 分段会话会一直 paused 着轮询，值没变就别每 3 秒重排整页
         if (_jobStatus != st ||
             _transcodedMs != transcoded ||
@@ -1398,10 +1412,15 @@ class _PlayerPageState extends State<PlayerPage> {
   ///
   /// 取「服务端回报的已转出长度」和「起点 + 播放器报的时长」中大的那个：
   /// 整片一次转完（`leadMinutes = 0`）时服务端不回报 `transcodedMs`。
+  ///
+  /// 但**分段会话不能信 `player.duration`**：它的播放列表是按整片时长预列的
+  /// （521 片全列 + ENDLIST），libmpv 报的就是整片长度。用它会得到「整片都已加载」，
+  /// `seekNeedsJump` 永远 false，用户拖到没转的位置也只做原地 seek，然后卡在
+  /// 不存在的分片上（等 10 秒超时）—— 体感就是「无法跳转」。
   Duration get _loadedEnd => Duration(
         milliseconds: loadedEndMs(
           startMs: _startMs,
-          playerMs: _player.state.duration.inMilliseconds,
+          playerMs: _leadMs > 0 ? 0 : _player.state.duration.inMilliseconds,
           serverMs: _transcodedMs,
         ),
       );

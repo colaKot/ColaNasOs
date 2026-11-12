@@ -59,17 +59,28 @@ Future<void> _ensureClientId() async {
 /// UI 线程被阻塞还是网络慢；这个数字能直接区分：平均帧 >32ms / 慢帧占比高
 /// 说明是渲染或同步 I/O 卡住，帧耗时正常则问题在别处。回调只做累加，不额外
 /// 建 widget，不会反过来拖慢界面。
+///
+/// build / raster 分开统计：`totalSpan` 高但分不出是哪一半时，排查方向会跑偏
+/// （2026-11-13 就是「帧少 + 平均低」= 空闲 与「帧少 + 平均 2s」= 渲染慢混在一起，
+/// 看日志判断不了）。build 高 = Dart 主线程被占；raster 高 = GPU/纹理合成慢。
 void _installFrameMonitor() {
   var frames = 0;
   var slow = 0;
   var sumMs = 0.0;
   var worstMs = 0.0;
+  var sumBuild = 0.0;
+  var sumRaster = 0.0;
+  var worstRaster = 0.0;
   var last = DateTime.now();
   SchedulerBinding.instance.addTimingsCallback((List<FrameTiming> timings) {
     for (final t in timings) {
       final ms = t.totalSpan.inMicroseconds / 1000.0;
       frames += 1;
       sumMs += ms;
+      sumBuild += t.buildDuration.inMicroseconds / 1000.0;
+      final raster = t.rasterDuration.inMicroseconds / 1000.0;
+      sumRaster += raster;
+      if (raster > worstRaster) worstRaster = raster;
       if (ms > 32) {
         slow += 1;
         if (ms > worstMs) worstMs = ms;
@@ -79,13 +90,19 @@ void _installFrameMonitor() {
     if (frames > 0 && now.difference(last) >= const Duration(seconds: 30)) {
       ClientLogger.instance.info(
         '$frames帧/30s 平均${(sumMs / frames).toStringAsFixed(1)}ms '
-        '慢帧$slow 最慢${worstMs.toStringAsFixed(0)}ms',
+        '慢帧$slow 最慢${worstMs.toStringAsFixed(0)}ms '
+        'build=${(sumBuild / frames).toStringAsFixed(1)}ms '
+        'raster=${(sumRaster / frames).toStringAsFixed(1)}ms '
+        '最慢raster=${worstRaster.toStringAsFixed(0)}ms',
         route: 'perf.frame',
       );
       frames = 0;
       slow = 0;
       sumMs = 0;
+      sumBuild = 0;
+      sumRaster = 0;
       worstMs = 0;
+      worstRaster = 0;
       last = now;
     }
   });
