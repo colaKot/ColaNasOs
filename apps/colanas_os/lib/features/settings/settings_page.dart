@@ -10,6 +10,7 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/app_settings.dart';
+import '../../core/app_version.dart';
 import '../../core/display_labels.dart';
 import '../../core/i18n_setup.dart';
 import '../../core/session.dart';
@@ -1319,7 +1320,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _about() {
     return _section(tr('settings.about'), [
       Text(
-        tr('settings.version', {'version': '1.0.0'}),
+        tr('settings.version', {'version': kAppVersion}),
         style: Theme.of(context).textTheme.bodyLarge,
       ),
       const SizedBox(height: NasTokens.spaceXs),
