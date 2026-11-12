@@ -116,6 +116,16 @@ function startKernel(): void {
     env.COLANAS_TRANSMISSION_BIN_DIR = path.join(process.resourcesPath, 'transmission-daemon');
     // 内置 transmission Web UI（静态）：内核 /transmission/web/* 从这里读
     env.COLANAS_TRANSMISSION_WEB_DIR = path.join(process.resourcesPath, 'transmission-web');
+    // 缩略图 / 转码依赖：装机版把 ffmpeg 与 sidecar 放在 resources 下（asar 外），
+    // 内核按 cwd 相对路径找不到它们 —— 结果所有 `?size=` 缩略图 503、界面整片没封面。
+    const mediaSidecar = path.join(process.resourcesPath, 'sidecars', 'media', 'main.js');
+    if (fs.existsSync(mediaSidecar)) env.COLANAS_MEDIA_SIDECAR = mediaSidecar;
+    const ffmpegExe = path.join(
+      process.resourcesPath,
+      'ffmpeg',
+      process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg',
+    );
+    if (fs.existsSync(ffmpegExe)) env.COLANAS_FFMPEG = ffmpegExe;
     const modelsDir = path.join(process.resourcesPath, 'models');
     if (fs.existsSync(modelsDir)) env.COLANAS_MODEL_DIR = modelsDir;
   }

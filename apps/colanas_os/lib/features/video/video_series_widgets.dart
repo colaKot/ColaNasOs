@@ -149,22 +149,28 @@ String? episodeStillFallbackUrl(String? id) {
       '?id=${Uri.encodeComponent(v)}';
 }
 
-/// 剧集封面：先请求刮削海报，404 再退到首帧。
+/// 剧集封面：刮削海报 → TMDB 剧海报 → 服务端抽帧，逐级降级。
 ///
-/// `NasCoverImage` 出错只画占位，不会换地址；剧库里总有些集既没刮到海报、
-/// 名字也不符合 `-poster/-post` 约定，直接铺一片灰块很难看。
+/// 只在**前一级真的失败**时才往下走：剧照 / 首帧铺进 2:3 的封面位会被裁成一条，
+/// 所以它排在最后 —— 但整片空白更糟（短剧、健身视频这种没正式海报的库，
+/// 一屏全是灰块，用户会以为「封面全丢了」）。
 class SeriesCoverImage extends StatefulWidget {
   const SeriesCoverImage({
     super.key,
     required this.artUrl,
     required this.posterUrl,
     required this.fallbackText,
+    this.stillUrl,
     this.icon = Icons.video_library_outlined,
     this.cacheWidth,
   });
 
   final String? artUrl;
   final String? posterUrl;
+
+  /// 最后兜底：服务端从这一集抽的首帧（可能为 null）
+  final String? stillUrl;
+
   final String fallbackText;
   final IconData icon;
   final int? cacheWidth;
@@ -174,35 +180,43 @@ class SeriesCoverImage extends StatefulWidget {
 }
 
 class _SeriesCoverImageState extends State<SeriesCoverImage> {
-  bool _artFailed = false;
+  /// 已经失败了几级：0 = 还在用首选地址
+  int _fails = 0;
+
+  @override
+  void didUpdateWidget(covariant SeriesCoverImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.artUrl != widget.artUrl ||
+        oldWidget.posterUrl != widget.posterUrl ||
+        oldWidget.stillUrl != widget.stillUrl) {
+      _fails = 0;
+    }
+  }
+
+  List<String> get _candidates => <String>[
+        if ((widget.artUrl ?? '').isNotEmpty) widget.artUrl!,
+        if ((widget.posterUrl ?? '').isNotEmpty) widget.posterUrl!,
+        if ((widget.stillUrl ?? '').isNotEmpty) widget.stillUrl!,
+      ];
 
   @override
   Widget build(BuildContext context) {
-    final art = widget.artUrl;
-    // 没有「竖版海报那一集」时，优先用 TMDB 剧海报 —— 剧照 / 首帧铺进 2:3
-    // 的封面位会被裁成一条，用户反馈「整部剧的封面都是影视截图」就是这个原因。
-    final poster = widget.posterUrl;
-    if (art == null || art.isEmpty) {
-      if (poster == null || poster.isEmpty) return _placeholder(context);
-      return _network(poster, context);
-    }
-    if (_artFailed) {
-      if (poster == null || poster.isEmpty) return _placeholder(context);
-      return _network(poster, context);
-    }
-    return _network(art, context);
+    final urls = _candidates;
+    if (urls.isEmpty || _fails >= urls.length) return _placeholder(context);
+    return _network(urls[_fails], context);
   }
 
   Widget _network(String url, BuildContext context) {
     return Image.network(
       url,
+      key: ValueKey<String>(url),
       fit: BoxFit.cover,
       headers: videoArtHeaders,
       cacheWidth: widget.cacheWidth,
       errorBuilder: (ctx, _, _) {
         // 不能在 build 里同步 setState，挪到下一帧
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && !_artFailed) setState(() => _artFailed = true);
+          if (mounted) setState(() => _fails += 1);
         });
         return _placeholder(ctx);
       },
@@ -491,6 +505,7 @@ class SeasonPosterCard extends StatelessWidget {
               // 季封面统一用剧海报；横版剧照 / 首帧都不拿来顶竖版封面
               artUrl: seriesArtUrl(coverId, size: wantSize),
               posterUrl: null,
+              stillUrl: episodeStillFallbackUrl(coverId),
               fallbackText: tr('video.series.season', {'n': '$season'}),
               cacheWidth: wantSize,
             ),

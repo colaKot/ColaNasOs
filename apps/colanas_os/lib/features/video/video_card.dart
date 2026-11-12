@@ -4,6 +4,7 @@ import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
 import 'video_genre_labels.dart';
+import 'video_series_widgets.dart' show episodeStillFallbackUrl;
 
 /// 影视海报卡的统一实现（首页横滑、列表网格、详情相关页共用）。
 ///
@@ -250,6 +251,10 @@ class VideoPosterCard extends StatelessWidget {
     final url = showFanart
         ? videoPosterUrl(item, kind: 'fanart', size: wantSize)
         : videoPosterUrl(item, size: wantSize);
+    // 首图 404 / 503 时退到服务端抽帧：只有剧照没有正式海报的条目（短剧、
+    // 健身视频、刚入库还没刮削的集）以前整排空白，用户以为「封面全没了」。
+    final still = episodeStillFallbackUrl(item.id);
+    final coverFallback = (still != null && still != url) ? still : null;
     final radius = NasTokens.radiusSm;
     final flags = videoFlagsOf(item);
     final isImage = item.mediaType == 'image';
@@ -275,6 +280,7 @@ class VideoPosterCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(radius),
                     child: NasCoverImage(
                       url: url,
+                      fallbackUrl: coverFallback,
                       fit: showFanart ? BoxFit.contain : BoxFit.cover,
                       headers: videoArtHeaders,
                       fallbackText: item.title,
@@ -596,6 +602,7 @@ class VideoHeroCard extends StatelessWidget {
                       kind: 'fanart',
                       size: (width * 2).round(),
                     ),
+                fallbackUrl: episodeStillFallbackUrl(item.id),
                 fit: BoxFit.cover,
                 headers: videoArtHeaders,
                 fallbackText: title ?? item.title,

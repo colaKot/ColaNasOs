@@ -13,6 +13,19 @@ import { SidecarSupervisor } from './supervisor';
 
 const FFMPEG_EXE = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
 
+/**
+ * 安装版资源根 `resources/` 下的候选路径。
+ *
+ * 只有 Electron 进程有 `process.resourcesPath`；纯 node（tsx 调试 / 冒烟脚本）
+ * 返回空数组，候选列表自然只剩仓库内路径。装机版把 ffmpeg 与 sidecars 放在
+ * `resources/` 下（见 electron-builder.js 的 extraResources），必须显式认这条路，
+ * 否则 `available()` 恒 false、所有 `?size=` 缩略图 503。
+ */
+function resourcePaths(...segments: string[]): string[] {
+  const root = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  return root ? [path.join(root, ...segments)] : [];
+}
+
 export class MediaUnavailableError extends Error {
   readonly code = 'E_MEDIA_UNAVAILABLE';
 
@@ -209,10 +222,13 @@ export class MediaBridge {
       return fs.existsSync(env.trim()) ? env.trim() : null;
     }
 
-    // dist/kernel/sidecar → 仓库根；tsx 直跑 src 时同样是两跳
+    // dist/kernel/sidecar → 仓库根；tsx 直跑 src 时同样是两跳。
+    // 安装版里 sidecar 由 electron-builder 送到 `resources/sidecars`（在 asar 外），
+    // 既不在 __dirname 的相对路径上、也不在 cwd 下 —— 漏了它就会「装机版缩略图全 503」。
     const candidates = [
       path.join(__dirname, '..', '..', 'sidecars', 'media', 'main.js'),
       path.join(process.cwd(), 'sidecars', 'media', 'main.js'),
+      ...resourcePaths('sidecars', 'media', 'main.js'),
     ];
     return candidates.find((p) => fs.existsSync(p)) ?? null;
   }
@@ -221,10 +237,17 @@ export class MediaBridge {
     if (this.opts.ffmpeg) return fs.existsSync(this.opts.ffmpeg) ? this.opts.ffmpeg : null;
 
     const env = process.env.COLANAS_FFMPEG;
-    if (env && env.trim()) return env.trim();
+    // 环境变量可能指向不存在的路径（换机器 / 手滑），存在性检查通过再认，
+    // 否则不如让下面的候选继续找。
+    if (env && env.trim() && fs.existsSync(env.trim())) return env.trim();
 
     const vendor = path.join(process.cwd(), 'vendor', 'ffmpeg');
-    const candidates = [path.join(vendor, FFMPEG_EXE), path.join(vendor, 'bin', FFMPEG_EXE)];
+    const candidates = [
+      path.join(vendor, FFMPEG_EXE),
+      path.join(vendor, 'bin', FFMPEG_EXE),
+      ...resourcePaths('ffmpeg', FFMPEG_EXE),
+      ...resourcePaths('ffmpeg', 'bin', FFMPEG_EXE),
+    ];
     return candidates.find((p) => fs.existsSync(p)) ?? null;
   }
 

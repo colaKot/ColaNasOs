@@ -724,6 +724,7 @@ class SeriesPosterCard extends StatelessWidget {
                         size: wantSize,
                       ),
                       posterUrl: SeriesDisplayStore.posterOf(item.name),
+                      stillUrl: episodeStillFallbackUrl(item.coverId),
                       fallbackText:
                           SeriesDisplayStore.nameOf(item.name) ?? item.name,
                       cacheWidth: wantSize,

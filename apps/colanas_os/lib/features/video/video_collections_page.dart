@@ -977,6 +977,7 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
           child: SeriesCoverImage(
             artUrl: seriesArtUrl(info.posterId, size: px),
             posterUrl: SeriesDisplayStore.posterOf(info.name),
+            stillUrl: episodeStillFallbackUrl(info.coverId),
             fallbackText: name,
             cacheWidth: px,
           ),
