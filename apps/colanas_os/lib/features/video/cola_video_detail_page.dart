@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nas_core/nas_core.dart';
@@ -685,19 +683,10 @@ class VideoDetailPageState extends State<VideoDetailPage> {
       backgroundColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
-      foregroundColor: Colors.white,
+      // 背景是极光主题（浅色主题下也是浅色），前景必须跟主题走，
+      // 继续写死白色会在亮色主题里看不见
+      foregroundColor: Theme.of(context).colorScheme.onSurface,
       title: const SizedBox.shrink(),
-      flexibleSpace: IgnorePointer(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Colors.black.withValues(alpha: 0.5), Colors.transparent],
-            ),
-          ),
-        ),
-      ),
       actions: [
         IconButton(
           tooltip: tr('video.action.scrape'),
@@ -842,46 +831,13 @@ class VideoDetailPageState extends State<VideoDetailPage> {
     );
   }
 
-  /// 背景：模糊封面 + 表面色压暗。
+  /// 背景：与相册时间轴同一套极光主题背景。
   ///
-  /// 截图里的观感是「整页深色、左上角透出海报的色块」，所以用封面自身做底、
-  /// 高斯模糊后压一层 72%~100% 的表面色，文字始终可读。
+  /// 以前这里是「模糊封面 + `colorScheme.surface` 压暗」，深色主题下 surface
+  /// 接近纯黑，整页看起来就是黑的。改用 `nasStyle.background` 跟随全局风格，
+  /// 不自己造一套配色。
   Widget _backdrop(BuildContext context, VideoItem item) {
-    final scheme = Theme.of(context).colorScheme;
-    final art = videoPosterUrl(item, kind: 'fanart', size: 640);
-    return RepaintBoundary(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ImageFiltered(
-            imageFilter: ui.ImageFilter.blur(
-              sigmaX: 36,
-              sigmaY: 36,
-              tileMode: TileMode.decal,
-            ),
-            child: NasCoverImage(
-              url: art,
-              fit: BoxFit.cover,
-              headers: videoArtHeaders,
-            ),
-          ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  scheme.surface.withValues(alpha: 0.74),
-                  scheme.surface.withValues(alpha: 0.92),
-                  scheme.surface,
-                ],
-                stops: const [0, 0.42, 1],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    return context.nasStyle.background;
   }
 
   /// 顶部信息区：左海报 + 右标题 / 元信息 / 画质标签 / 操作。

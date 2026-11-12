@@ -54,8 +54,9 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
   String _watched = 'all';
 
   /// 多选：剧是聚合卡，选中记的是**剧名**，动作落到「这部剧的每一集」
-  bool _selectionMode = false;
-  final Set<String> _selected = {};
+  final NasSelectionController _selection = NasSelectionController();
+  bool get _selectionMode => _selection.active;
+  Set<String> get _selected => _selection.ids;
   bool _busy = false;
 
   String get _keyScale => 'video.lib.${widget.libraryId}.seriesScale';
@@ -64,6 +65,7 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
   @override
   void initState() {
     super.initState();
+    _selection.addListener(_onSelectionChanged);
     // 剧中文名 / TMDB 竖版海报是展示层补充，拉到后重画一次即可
     SeriesDisplayStore.ensure().then((_) {
       if (mounted) setState(() {});
@@ -76,11 +78,18 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
 
   @override
   void dispose() {
+    _selection
+      ..removeListener(_onSelectionChanged)
+      ..dispose();
     _debounce?.cancel();
     _searchCtrl.dispose();
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _onSelectionChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onScroll() {
@@ -170,10 +179,11 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
     return _grid(context);
   }
 
-  /// 顶栏：搜索（收窄，不再吃掉整行）+ 筛选 + 排序 + 更多。
+  /// 顶栏：搜索（弹性拉满）+ 筛选 + 排序 + 更多，按钮组整体靠右。
   ///
   /// 「更多」里是与影片列表同一组低频操作：多选 / 海报大小 / 刷新 / 搜刮全部；
   /// 常驻的只有筛选与排序 —— 剧库最常做的就是「只看没看完的」和「按集数排」。
+  /// 窄屏放不下时，筛选 / 排序收进「更多」，搜索框继续弹性伸缩，整行不溢出。
   Widget _toolbar(BuildContext context) {
     final hasFilter = _watched != 'all';
     return Padding(
@@ -183,92 +193,104 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
         NasTokens.spaceXs,
         NasTokens.spaceXs,
       ),
-      child: Row(
-        children: [
-          Flexible(
-            child: SizedBox(
-              width: 280,
-              height: 36,
-              child: TextField(
-                controller: _searchCtrl,
-                decoration: InputDecoration(
-                  hintText: tr('video.list.searchHint'),
-                  isDense: true,
-                  prefixIcon: const Icon(Icons.search, size: 18),
-                  suffixIcon: _q.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear, size: 16),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            setState(() => _q = '');
-                            _load();
-                          },
-                        ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 520;
+          return Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 36,
+                  child: TextField(
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      hintText: tr('video.list.searchHint'),
+                      isDense: true,
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      suffixIcon: _q.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.clear, size: 16),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() => _q = '');
+                                _load();
+                              },
+                            ),
+                    ),
+                    onChanged: _onSearchChanged,
+                  ),
                 ),
-                onChanged: _onSearchChanged,
               ),
-            ),
-          ),
-          const Spacer(),
-          _iconBtn(
-            context,
-            Icons.filter_alt_outlined,
-            tr('video.list.filter'),
-            _openFilterSheet,
-            active: hasFilter,
-          ),
-          _iconBtn(
-            context,
-            Icons.sort_by_alpha,
-            tr('video.list.sort'),
-            _openSortSheet,
-            active: _sortBy != 'name' || _sortOrder != 'asc',
-          ),
-          PopupMenuButton<String>(
-            tooltip: tr('video.card.more'),
-            icon: const Icon(Icons.more_vert),
-            onSelected: (v) {
-              if (v == 'select') {
-                setState(() {
-                  _selectionMode = true;
-                  _selected.clear();
-                });
-              }
-              if (v == 'scale') _openScaleSheet();
-              if (v == 'refresh') _load();
-              if (v == 'scrape') _scrapeAll();
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'select',
-                child: Text(tr('video.list.multiSelect')),
+              const SizedBox(width: NasTokens.spaceSm),
+              if (!compact) ...[
+                _iconBtn(
+                  context,
+                  Icons.filter_alt_outlined,
+                  tr('video.list.filter'),
+                  _openFilterSheet,
+                  active: hasFilter,
+                ),
+                _iconBtn(
+                  context,
+                  Icons.sort_by_alpha,
+                  tr('video.list.sort'),
+                  _openSortSheet,
+                  active: _sortBy != 'name' || _sortOrder != 'asc',
+                ),
+              ],
+              PopupMenuButton<String>(
+                tooltip: tr('video.card.more'),
+                icon: const Icon(Icons.more_vert),
+                onSelected: (v) {
+                  if (v == 'filter') _openFilterSheet();
+                  if (v == 'sort') _openSortSheet();
+                  if (v == 'select') _selection.enter();
+                  if (v == 'scale') _openScaleSheet();
+                  if (v == 'refresh') _load();
+                  if (v == 'scrape') _scrapeAll();
+                },
+                itemBuilder: (_) => [
+                  // 窄屏把常驻的筛选 / 排序收进来
+                  if (compact) ...[
+                    PopupMenuItem(
+                      value: 'filter',
+                      child: Text(tr('video.list.filter')),
+                    ),
+                    PopupMenuItem(
+                      value: 'sort',
+                      child: Text(tr('video.list.sort')),
+                    ),
+                    const PopupMenuDivider(),
+                  ],
+                  PopupMenuItem(
+                    value: 'select',
+                    child: Text(tr('video.list.multiSelect')),
+                  ),
+                  PopupMenuItem(
+                    value: 'scale',
+                    child: Text(tr('video.list.posterSize')),
+                  ),
+                  PopupMenuItem(
+                    value: 'refresh',
+                    child: Text(tr('common.refresh')),
+                  ),
+                  PopupMenuItem(
+                    value: 'scrape',
+                    child: Text(tr('video.home.scrapeAll')),
+                  ),
+                ],
               ),
-              PopupMenuItem(
-                value: 'scale',
-                child: Text(tr('video.list.posterSize')),
-              ),
-              PopupMenuItem(
-                value: 'refresh',
-                child: Text(tr('common.refresh')),
-              ),
-              PopupMenuItem(
-                value: 'scrape',
-                child: Text(tr('video.home.scrapeAll')),
-              ),
+              if (_selectionMode)
+                _iconBtn(
+                  context,
+                  Icons.close,
+                  tr('common.cancel'),
+                  _selection.exit,
+                ),
             ],
-          ),
-          if (_selectionMode)
-            _iconBtn(
-              context,
-              Icons.close,
-              tr('common.cancel'),
-              () => setState(() {
-                _selectionMode = false;
-                _selected.clear();
-              }),
-            ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -413,10 +435,7 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
         onChanged: () => _load(silent: true),
       );
       if (mounted) {
-        setState(() {
-          _selectionMode = false;
-          _selected.clear();
-        });
+        _selection.exit();
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -433,10 +452,7 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
       if (!mounted || ids.isEmpty) return;
       await showAddToCollectionDialog(context, itemIds: ids);
       if (mounted) {
-        setState(() {
-          _selectionMode = false;
-          _selected.clear();
-        });
+        _selection.exit();
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -453,48 +469,33 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
   }
 
   Widget _selectionBar(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final names = _items.map((e) => e.name);
     final empty = _selected.isEmpty || _busy;
-    return Container(
-      color: scheme.primary.withValues(alpha: 0.08),
-      padding: const EdgeInsets.symmetric(
-        horizontal: NasTokens.spaceMd,
-        vertical: 4,
-      ),
-      child: Row(
-        children: [
-          Text(tr('video.list.selected', {'count': '${_selected.length}'})),
-          const Spacer(),
-          TextButton(
-            onPressed: () => setState(() {
-              _selected
-                ..clear()
-                ..addAll(_items.map((e) => e.name));
-            }),
-            child: Text(tr('video.list.filter.all')),
-          ),
-          TextButton(
-            onPressed: empty ? null : _addSelectedToCollection,
-            child: Text(tr('video.collection.addTo')),
-          ),
-          TextButton(
-            onPressed: empty ? null : () => _markSelected(true),
-            child: Text(tr('video.action.markWatched')),
-          ),
-          TextButton(
-            onPressed: empty ? null : () => _markSelected(false),
-            child: Text(tr('video.action.markUnwatched')),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 18),
-            tooltip: tr('common.cancel'),
-            onPressed: () => setState(() {
-              _selectionMode = false;
-              _selected.clear();
-            }),
-          ),
-        ],
-      ),
+    return NasSelectionBar(
+      title: tr('video.list.selected', {'count': '${_selected.length}'}),
+      allSelected: _selection.allSelected(names),
+      onToggleAll: () => _selection.toggleAll(names),
+      onClose: _selection.exit,
+      actions: [
+        NasSelectionAction(
+          label: tr('video.collection.addTo'),
+          icon: Icons.playlist_add,
+          enabled: !empty,
+          onPressed: _addSelectedToCollection,
+        ),
+        NasSelectionAction(
+          label: tr('video.action.markWatched'),
+          icon: Icons.done_all,
+          enabled: !empty,
+          onPressed: () => _markSelected(true),
+        ),
+        NasSelectionAction(
+          label: tr('video.action.markUnwatched'),
+          icon: Icons.remove_done,
+          enabled: !empty,
+          onPressed: () => _markSelected(false),
+        ),
+      ],
     );
   }
 
@@ -536,13 +537,7 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
                 width: itemWidth,
                 selectionMode: _selectionMode,
                 selected: selected,
-                onSelectToggle: () => setState(() {
-                  if (selected) {
-                    _selected.remove(s.name);
-                  } else {
-                    _selected.add(s.name);
-                  }
-                }),
+                onSelectToggle: () => _selection.toggle(s.name),
                 onTap: () => openVideoSeries(
                   context,
                   name: s.name,
@@ -760,7 +755,7 @@ class SeriesPosterCard extends StatelessWidget {
                     top: 6,
                     left: 6,
                     child: selectionMode
-                        ? SeriesSelectChip(selected: selected)
+                        ? NasSelectChip(selected: selected)
                         : SeriesWatchBadge(
                             watched: watched,
                             total: item.episodes,

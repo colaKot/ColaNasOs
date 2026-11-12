@@ -20,7 +20,6 @@ import 'video_app_settings_page.dart';
 import 'video_client_settings_page.dart';
 import 'video_settings_pages.dart';
 import 'video_series_grid_page.dart';
-import 'video_smart_albums_page.dart';
 
 /// 影视主页：左侧二级导航 + 内容区。
 ///
@@ -133,7 +132,11 @@ class _VideoShellPageState extends State<VideoShellPage> {
             ),
         ],
       },
-      conditions: {if (_hasJpLibrary) 'hasJpLibrary'},
+      conditions: {
+        if (_hasJpLibrary) 'hasJpLibrary',
+        // 库管理 / 影视设置是服务端级配置，只有超级管理员能进
+        if (ApiSession.instance.isAdmin) 'superAdmin',
+      },
       selection: _selection,
       content: (key) => _withDetail(key),
     );
@@ -192,6 +195,12 @@ class _VideoShellPageState extends State<VideoShellPage> {
   }
 
   Widget _content(String key) {
+    // 路由守卫与菜单口径一致：非超级管理员即使直接切到这两个 key 也回落首页，
+    // 不能只靠「菜单里不显示」。
+    if (!ApiSession.instance.isAdmin &&
+        (key == 'settings.library' || key == 'settings.app')) {
+      return VideoPage(embedded: true, onNavigate: _selection.select);
+    }
     if (key.startsWith('lib:')) {
       for (final lib in _libraries) {
         if ('lib:${lib.id}' == key) {
@@ -239,8 +248,6 @@ class _VideoShellPageState extends State<VideoShellPage> {
         );
       case 'collections':
         return const VideoCollectionsPage();
-      case 'smartAlbums':
-        return const VideoSmartAlbumsPage();
       case 'settings.library':
         return VideoLibrarySettingsPage(onLibrariesChanged: _loadLibraries);
       case 'settings.app':

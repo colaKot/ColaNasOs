@@ -235,34 +235,6 @@ class _SeriesCoverImageState extends State<SeriesCoverImage> {
   }
 }
 
-/// 多选勾选框（剧卡 / 季卡共用，压在海报左上角）。
-class SeriesSelectChip extends StatelessWidget {
-  const SeriesSelectChip({super.key, required this.selected});
-
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 20,
-      height: 20,
-      decoration: BoxDecoration(
-        color: selected
-            ? Theme.of(context).colorScheme.primary
-            : Colors.black.withValues(alpha: 0.5),
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.85),
-          width: 1.4,
-        ),
-      ),
-      child: selected
-          ? const Icon(Icons.check, size: 13, color: Colors.white)
-          : null,
-    );
-  }
-}
-
 /// 一集的缩略图（剧照优先，没有就退首帧）。
 String episodeStillUrl(VideoItem ep, {int size = 0}) {
   return videoPosterUrl(ep, kind: 'fanart', size: size);
@@ -547,7 +519,7 @@ class SeasonPosterCard extends StatelessWidget {
             top: 6,
             left: 6,
             child: selectionMode
-                ? SeriesSelectChip(selected: selected)
+                ? NasSelectChip(selected: selected)
                 : SeriesWatchBadge(
                     watched: watched,
                     total: episodes.length,

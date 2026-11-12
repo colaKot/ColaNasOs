@@ -7,8 +7,12 @@ import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import 'detail/video_detail_router.dart';
 import 'player_page.dart';
+import 'series_display.dart';
 import 'video_card.dart';
 import 'video_item_actions.dart';
+import 'video_series_actions.dart';
+import 'video_series_detail_page.dart';
+import 'video_series_widgets.dart';
 
 /// 影视自定义合集（每用户）：列表 + 新建 / 重命名 / 删除 + 合集内影片。
 class VideoCollectionsPage extends StatefulWidget {
@@ -486,18 +490,20 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
     store.setBool(_kWaterfall, _waterfall);
   }
 
-  Future<void> _setCover(VideoItem item) async {
+  Future<void> _setCover(VideoItem item) => _setCoverId(item.id);
+
+  Future<void> _setCoverId(String coverId) async {
     try {
       await ApiSession.instance.client.videoCollectionUpsert(
         body: VideoCollectionUpsertBody(
           id: widget.collection.id,
           name: widget.collection.name,
           kind: widget.collection.kind,
-          coverItemId: item.id,
+          coverItemId: coverId,
         ),
       );
       if (!mounted) return;
-      setState(() => _coverId = item.id);
+      setState(() => _coverId = coverId);
       widget.onChanged?.call();
       NasSnack.show(context, tr('video.collection.coverSet'));
     } catch (e) {
@@ -602,6 +608,23 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
     return 0;
   }
 
+  /// 播放队列：合集里一部剧只显示一张卡，但真正播的时候要回到「整部剧」
+  /// 的集粒度，否则「播放全部 / 下一个」会一剧只播一集。
+  Future<List<VideoItem>> _expandedQueue() async {
+    if (_items.every((x) => x.seriesInfo == null)) return _items;
+    final out = <VideoItem>[];
+    for (final it in _items) {
+      final info = it.seriesInfo;
+      if (info == null) {
+        out.add(it);
+        continue;
+      }
+      final eps = await loadSeriesEpisodes(info.name, libraryId: it.libraryId);
+      out.addAll(eps.isEmpty ? [it] : eps);
+    }
+    return out;
+  }
+
   /// 起播：**整个合集**都进播放队列，所以点了任意一部、按「下一个」、
   /// 键盘 ↑↓、手机上滑，都是在合集里翻，播完一部接下一部。
   Future<void> _play(int index) async {
@@ -609,6 +632,7 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
     final item = _items[index];
     setState(() => _busy = true);
     try {
+      final queue = await _expandedQueue();
       final res = await ApiSession.instance.client.videoStreamUrl(id: item.id);
       final url = '${ApiSession.instance.baseUrl}${res.url}';
       if (!mounted) return;
@@ -622,7 +646,7 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
             sourceHeight: item.height,
             sourceBytes: item.size,
             durationMs: item.durationMs,
-            playlist: _items,
+            playlist: queue,
           ),
         ),
       );
@@ -637,12 +661,16 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
     }
   }
 
-  Future<void> _remove(VideoItem item) async {
+  Future<void> _remove(VideoItem item) => _removeIds([item.id]);
+
+  /// 剧卡「移出合集」要落到这部剧的每一集（合集里存的是条目 id）
+  Future<void> _removeIds(List<String> ids) async {
+    if (ids.isEmpty) return;
     try {
       await ApiSession.instance.client.videoCollectionItemsSet(
         body: VideoCollectionItemsBody(
           id: widget.collection.id,
-          itemIds: [item.id],
+          itemIds: ids,
           action: 'remove',
         ),
       );
@@ -652,6 +680,46 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
       if (!mounted) return;
       NasSnack.show(context, '$e');
     }
+  }
+
+  /// 剧卡菜单：合集专有（设封面 / 移出）在前，整部剧口径的通用动作在后。
+  Future<List<NasMenuEntry>> _seriesMenuEntries(
+    VideoItem item,
+    VideoSeriesItem info,
+  ) async {
+    final eps = await loadSeriesEpisodes(info.name, libraryId: item.libraryId);
+    if (!mounted) return const <NasMenuEntry>[];
+    final ids = eps.map((e) => e.id).toList();
+    return [
+      if (info.coverId != null && _coverId != info.coverId)
+        NasMenuEntry(
+          label: tr('video.collection.setCover'),
+          icon: Icons.star_outline,
+          onSelected: () => _setCoverId(info.coverId!),
+        ),
+      NasMenuEntry(
+        label: tr('video.collection.removeItem'),
+        icon: Icons.remove_circle_outline,
+        onSelected: ids.isEmpty ? null : () => _removeIds(ids),
+      ),
+      const NasMenuEntry.divider(),
+      ...await seriesMenuEntries(
+        context,
+        info,
+        libraryId: item.libraryId,
+        onChanged: () => _load(silent: true),
+      ),
+    ];
+  }
+
+  Future<void> _showSeriesMenu(
+    VideoItem item,
+    VideoSeriesItem info,
+    Offset globalPosition,
+  ) async {
+    final entries = await _seriesMenuEntries(item, info);
+    if (!mounted) return;
+    await showNasContextMenu(context, globalPosition, entries);
   }
 
   @override
@@ -883,16 +951,125 @@ class _VideoCollectionDetailPageState extends State<VideoCollectionDetailPage> {
   }
 
   double _aspectOf(VideoItem item) {
+    // 剧卡固定用 2:3 竖版封面（与剧库列表一致），不跟着某一集的文件画面走
+    if (item.seriesInfo != null) return 2 / 3;
     final w = item.width ?? 0;
     final h = item.height ?? 0;
     if (w > 0 && h > 0) return w / h;
     return 16 / 9;
   }
 
+  /// 剧卡：整部剧一张竖版封面；点进去与「电视剧列表」点一部剧一致
+  /// （多季 → 季封面网格，单季 → 直接进剧集详情）。
+  Widget _seriesCell(
+    BuildContext context,
+    VideoItem item,
+    VideoSeriesItem info, {
+    double? fixedWidth,
+  }) {
+    final name = SeriesDisplayStore.nameOf(info.name) ?? info.name;
+    final px = fixedWidth == null ? 480 : (fixedWidth * 2).round();
+    final image = Stack(
+      fit: StackFit.expand,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+          child: SeriesCoverImage(
+            artUrl: seriesArtUrl(info.posterId, size: px),
+            posterUrl: SeriesDisplayStore.posterOf(info.name),
+            fallbackText: name,
+            cacheWidth: px,
+          ),
+        ),
+        Positioned(
+          top: 6,
+          left: 6,
+          child: SeriesWatchBadge(
+            watched: info.watchedEpisodes ?? 0,
+            total: info.episodes,
+          ),
+        ),
+        if (info.coverId != null && _coverId == info.coverId)
+          Positioned(
+            right: 4,
+            top: 4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                tr('video.collection.coverBadge'),
+                style: const TextStyle(color: Colors.white, fontSize: 10),
+              ),
+            ),
+          ),
+      ],
+    );
+
+    final card = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (fixedWidth == null)
+          Expanded(
+            child: Center(
+              child: AspectRatio(aspectRatio: 2 / 3, child: image),
+            ),
+          )
+        else
+          AspectRatio(aspectRatio: 2 / 3, child: image),
+        const SizedBox(height: NasTokens.spaceXs),
+        Text(
+          name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: NasTokens.fontBody),
+        ),
+        Text(
+          tr('video.seasonsEpisodes', {
+            'seasons': '${info.seasons}',
+            'episodes': '${info.episodes}',
+          }),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: NasTokens.fontMicro,
+            color: context.nasTextSecondary,
+          ),
+        ),
+      ],
+    );
+
+    return GestureDetector(
+      onLongPressStart: (d) => _showSeriesMenu(item, info, d.globalPosition),
+      child: NasAsyncMenuRegion(
+        entries: () => _seriesMenuEntries(item, info),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+          onTap: () => openVideoSeries(
+            context,
+            name: info.name,
+            coverId: info.coverId,
+            posterId: info.posterId,
+            libraryId: item.libraryId,
+            headers: videoArtHeaders,
+          ),
+          child: card,
+        ),
+      ),
+    );
+  }
+
   /// 单个影格：网格与瀑布流共用同一份实现。
   /// `fixedWidth` 有值时是瀑布流（高度按画面比例算），为 null 时撑满网格格子。
   Widget _cell(BuildContext context, int index, {double? fixedWidth}) {
     final item = _items[index];
+    // 服务端已把电视剧按剧聚合：这一条代表整部剧（一部剧一张卡）
+    final info = item.seriesInfo;
+    if (info != null) {
+      return _seriesCell(context, item, info, fixedWidth: fixedWidth);
+    }
     final px = fixedWidth == null ? 480 : (fixedWidth * 2).round();
     final percent = _progress[item.id] ?? 0;
     final image = Stack(

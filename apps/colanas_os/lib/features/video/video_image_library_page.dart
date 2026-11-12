@@ -665,7 +665,10 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
         onTap: () => _enterFolder(''),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-          child: Text(tr('video.browse.root')),
+          // 根节点直接用库名，不再叫「库根」
+          child: Text(
+            widget.title.isNotEmpty ? widget.title : tr('video.browse.title'),
+          ),
         ),
       ),
     );

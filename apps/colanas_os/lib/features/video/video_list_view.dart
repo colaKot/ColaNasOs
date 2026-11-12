@@ -107,8 +107,10 @@ class _VideoListViewState extends State<VideoListView> {
   double _scale = 1.0;
   bool _fanart = false;
 
-  bool _selectionMode = false;
-  final Set<String> _selected = {};
+  /// 多选：全站统一由 `NasSelectionController` 承载（进入 / 切换 / 全选 / 退出）
+  final NasSelectionController _selection = NasSelectionController();
+  bool get _selectionMode => _selection.active;
+  Set<String> get _selected => _selection.ids;
 
   /// 每个库独立：海报大小 / 封面⇄缩略图都按库 id 记，不再串库
   String get _settingScope => widget.libraryId ?? 'all';
@@ -118,6 +120,7 @@ class _VideoListViewState extends State<VideoListView> {
   @override
   void initState() {
     super.initState();
+    _selection.addListener(_onSelectionChanged);
     // 只认本库自己的键：旧版本的全局键会串库，不再回退
     final savedScale = SettingsStore.instance.getInt(_keyScale) ?? 100;
     _scale = (savedScale / 100.0).clamp(0.7, 1.15);
@@ -141,11 +144,18 @@ class _VideoListViewState extends State<VideoListView> {
 
   @override
   void dispose() {
+    _selection
+      ..removeListener(_onSelectionChanged)
+      ..dispose();
     _debounce?.cancel();
     _searchCtrl.dispose();
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _onSelectionChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onScroll() {
@@ -313,6 +323,10 @@ class _VideoListViewState extends State<VideoListView> {
 
   // ---------------------------------------------------------------- 顶栏
 
+  /// 顶栏：搜索（弹性拉满）+ 筛选 / 排序 / 视图 + 更多，按钮组整体靠右。
+  ///
+  /// 与剧库列表保持同一套排布：窄屏放不下时常驻按钮收进「更多」，
+  /// 搜索框继续弹性伸缩，整行不溢出。
   Widget _toolbar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -321,106 +335,132 @@ class _VideoListViewState extends State<VideoListView> {
         NasTokens.spaceXs,
         NasTokens.spaceXs,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: SizedBox(
-              height: 36,
-              child: TextField(
-                controller: _searchCtrl,
-                decoration: InputDecoration(
-                  hintText: tr('video.list.searchHint'),
-                  isDense: true,
-                  prefixIcon: const Icon(Icons.search, size: 18),
-                  suffixIcon: _q.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear, size: 16),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            setState(() => _q = '');
-                            _load();
-                          },
-                        ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 520;
+          final hasFilter = _years.isNotEmpty ||
+              _genres.isNotEmpty ||
+              _regions.isNotEmpty ||
+              _watched != null ||
+              _scrapedFilter != null ||
+              _resolution.isNotEmpty ||
+              _jpTag.isNotEmpty ||
+              _sourceId.isNotEmpty;
+          return Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 36,
+                  child: TextField(
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      hintText: tr('video.list.searchHint'),
+                      isDense: true,
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      suffixIcon: _q.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.clear, size: 16),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() => _q = '');
+                                _load();
+                              },
+                            ),
+                    ),
+                    onChanged: _onSearchChanged,
+                  ),
                 ),
-                onChanged: _onSearchChanged,
               ),
-            ),
-          ),
-          const SizedBox(width: NasTokens.spaceXs),
-          // 筛选放排序前面：先收窄范围再决定怎么排，是更自然的操作顺序
-          _iconBtn(
-            context,
-            Icons.filter_alt_outlined,
-            tr('video.list.filter'),
-            _openFilterSheet,
-            active: _years.isNotEmpty ||
-                _genres.isNotEmpty ||
-                _regions.isNotEmpty ||
-                _watched != null ||
-                _scrapedFilter != null ||
-                _resolution.isNotEmpty ||
-                _jpTag.isNotEmpty ||
-                _sourceId.isNotEmpty,
-          ),
-          _iconBtn(
-            context,
-            Icons.sort_by_alpha,
-            tr('video.list.sort'),
-            _openSortSheet,
-          ),
-          _iconBtn(
-            context,
-            _fanart ? Icons.crop_16_9 : Icons.crop_portrait,
-            _fanart ? tr('video.list.showFanart') : tr('video.list.showPoster'),
-            () {
-              setState(() => _fanart = !_fanart);
-              SettingsStore.instance.setBool(_keyFanart, _fanart);
-            },
-            active: _fanart,
-          ),
-          PopupMenuButton<String>(
-            tooltip: tr('video.card.more'),
-            icon: const Icon(Icons.more_vert),
-            onSelected: (v) {
-              if (v == 'scale') _openScaleSheet();
-              if (v == 'refresh') _load();
-              if (v == 'scrape') _scrapeAll();
-              if (v == 'select') {
-                setState(() {
-                  _selectionMode = true;
-                  _selected.clear();
-                });
-              }
-            },
-            itemBuilder: (_) => [
-              PopupMenuItem(
-                value: 'select',
-                child: Text(tr('video.list.multiSelect')),
+              const SizedBox(width: NasTokens.spaceSm),
+              if (!compact) ...[
+                // 筛选放排序前面：先收窄范围再决定怎么排，是更自然的操作顺序
+                _iconBtn(
+                  context,
+                  Icons.filter_alt_outlined,
+                  tr('video.list.filter'),
+                  _openFilterSheet,
+                  active: hasFilter,
+                ),
+                _iconBtn(
+                  context,
+                  Icons.sort_by_alpha,
+                  tr('video.list.sort'),
+                  _openSortSheet,
+                ),
+                _iconBtn(
+                  context,
+                  _fanart ? Icons.crop_16_9 : Icons.crop_portrait,
+                  _fanart
+                      ? tr('video.list.showFanart')
+                      : tr('video.list.showPoster'),
+                  () {
+                    setState(() => _fanart = !_fanart);
+                    SettingsStore.instance.setBool(_keyFanart, _fanart);
+                  },
+                  active: _fanart,
+                ),
+              ],
+              PopupMenuButton<String>(
+                tooltip: tr('video.card.more'),
+                icon: const Icon(Icons.more_vert),
+                onSelected: (v) {
+                  if (v == 'filter') _openFilterSheet();
+                  if (v == 'sort') _openSortSheet();
+                  if (v == 'view') {
+                    setState(() => _fanart = !_fanart);
+                    SettingsStore.instance.setBool(_keyFanart, _fanart);
+                  }
+                  if (v == 'scale') _openScaleSheet();
+                  if (v == 'refresh') _load();
+                  if (v == 'scrape') _scrapeAll();
+                  if (v == 'select') _selection.enter();
+                },
+                itemBuilder: (_) => [
+                  // 窄屏把常驻的筛选 / 排序 / 视图收进来
+                  if (compact) ...[
+                    PopupMenuItem(
+                      value: 'filter',
+                      child: Text(tr('video.list.filter')),
+                    ),
+                    PopupMenuItem(
+                      value: 'sort',
+                      child: Text(tr('video.list.sort')),
+                    ),
+                    PopupMenuItem(
+                      value: 'view',
+                      child: Text(
+                        _fanart
+                            ? tr('video.list.showPoster')
+                            : tr('video.list.showFanart'),
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                  ],
+                  PopupMenuItem(
+                    value: 'select',
+                    child: Text(tr('video.list.multiSelect')),
+                  ),
+                  PopupMenuItem(
+                    value: 'scale',
+                    child: Text(tr('video.list.posterSize')),
+                  ),
+                  PopupMenuItem(
+                    value: 'refresh',
+                    child: Text(tr('common.refresh')),
+                  ),
+                  // 低频但耗时：从常驻按钮收进「更多」，顶栏留筛选 / 排序 / 视图
+                  PopupMenuItem(
+                    value: 'scrape',
+                    child: Text(tr('video.home.scrapeAll')),
+                  ),
+                ],
               ),
-              PopupMenuItem(
-                value: 'scale',
-                child: Text(tr('video.list.posterSize')),
-              ),
-              PopupMenuItem(
-                value: 'refresh',
-                child: Text(tr('common.refresh')),
-              ),
-              // 低频但耗时：从常驻按钮收进「更多」，顶栏留筛选 / 排序 / 视图
-              PopupMenuItem(
-                value: 'scrape',
-                child: Text(tr('video.home.scrapeAll')),
-              ),
+              if (_selectionMode)
+                _iconBtn(context, Icons.close, tr('common.cancel'), _selection.exit),
             ],
-          ),
-          if (_selectionMode)
-            _iconBtn(context, Icons.close, tr('common.cancel'), () {
-              setState(() {
-                _selectionMode = false;
-                _selected.clear();
-              });
-            }),
-        ],
+          );
+        },
       ),
     );
   }
@@ -1068,13 +1108,7 @@ class _VideoListViewState extends State<VideoListView> {
               selected: selected,
               onTap: () {
                 if (_selectionMode) {
-                  setState(() {
-                    if (selected) {
-                      _selected.remove(item.id);
-                    } else {
-                      _selected.add(item.id);
-                    }
-                  });
+                  _selection.toggle(item.id);
                   return;
                 }
                 openVideoDetail(context, item);
@@ -1217,12 +1251,7 @@ class _VideoListViewState extends State<VideoListView> {
       case 'watched':
         await _toggleWatched([item.id], !item.watched);
       case 'select':
-        setState(() {
-          _selectionMode = true;
-          _selected
-            ..clear()
-            ..add(item.id);
-        });
+        _selection.enter(initialId: item.id);
       case 'detail':
         if (!mounted) return;
         openVideoDetail(context, item);
@@ -1277,53 +1306,36 @@ class _VideoListViewState extends State<VideoListView> {
   }
 
   Widget _selectionBar(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      color: scheme.primary.withValues(alpha: 0.08),
-      padding: const EdgeInsets.symmetric(horizontal: NasTokens.spaceMd, vertical: 4),
-      child: Row(
-        children: [
-          Text(tr('video.list.selected', {'count': '${_selected.length}'})),
-          const Spacer(),
-          TextButton(
-            onPressed: () => setState(() {
-              _selected
-                ..clear()
-                ..addAll(_items.map((e) => e.id));
-            }),
-            child: Text(tr('video.list.filter.all')),
+    final ids = _items.map((e) => e.id);
+    final empty = _selected.isEmpty;
+    return NasSelectionBar(
+      title: tr('video.list.selected', {'count': '${_selected.length}'}),
+      allSelected: _selection.allSelected(ids),
+      onToggleAll: () => _selection.toggleAll(ids),
+      onClose: _selection.exit,
+      actions: [
+        NasSelectionAction(
+          label: tr('video.collection.addTo'),
+          icon: Icons.playlist_add,
+          enabled: !empty,
+          onPressed: () => showAddToCollectionDialog(
+            context,
+            itemIds: _selected.toList(),
           ),
-          TextButton(
-            onPressed: _selected.isEmpty
-                ? null
-                : () => showAddToCollectionDialog(
-                      context,
-                      itemIds: _selected.toList(),
-                    ),
-            child: Text(tr('video.collection.addTo')),
-          ),
-          TextButton(
-            onPressed: _selected.isEmpty
-                ? null
-                : () => _toggleWatched(_selected.toList(), true),
-            child: Text(tr('video.action.markWatched')),
-          ),
-          TextButton(
-            onPressed: _selected.isEmpty
-                ? null
-                : () => _toggleWatched(_selected.toList(), false),
-            child: Text(tr('video.action.markUnwatched')),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 18),
-            tooltip: tr('common.cancel'),
-            onPressed: () => setState(() {
-              _selectionMode = false;
-              _selected.clear();
-            }),
-          ),
-        ],
-      ),
+        ),
+        NasSelectionAction(
+          label: tr('video.action.markWatched'),
+          icon: Icons.done_all,
+          enabled: !empty,
+          onPressed: () => _toggleWatched(_selected.toList(), true),
+        ),
+        NasSelectionAction(
+          label: tr('video.action.markUnwatched'),
+          icon: Icons.remove_done,
+          enabled: !empty,
+          onPressed: () => _toggleWatched(_selected.toList(), false),
+        ),
+      ],
     );
   }
 

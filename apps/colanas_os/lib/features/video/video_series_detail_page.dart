@@ -195,13 +195,21 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
       // 标题优先用中文剧名，与头部主标题保持同一个名字（`series` 列是英文发布名）。
       final sample = bundle?.sample;
       return Scaffold(
+        // 背景与相册时间轴同一套极光主题（Scaffold 自身透明，必须显式铺一层）
+        backgroundColor: Colors.transparent,
         appBar: AppBar(
           title: Text(
             _displayName(sample?.series ?? widget.name, sample?.path),
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        body: body,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            context.nasStyle.background,
+            Positioned.fill(child: body),
+          ],
+        ),
       );
     }
 

@@ -7,8 +7,9 @@ import '../../core/session.dart';
 
 /// 相册 · AI 中心（手机端相册的第 4 个底部 tab）。
 ///
-/// 为什么需要这一页：相册的 AI 有 8 个入口（人物 / 关系 / 场景 / 活动 / 规则 /
-/// 搜索 / GPS / 清理），手机上放不下 8 个 tab，全塞进「更多」又等于降级。
+/// 为什么需要这一页：相册的 AI 入口很多（人物 / 关系 / 场景 / 活动 /
+/// 搜索 / GPS / 清理，管理员另有 AI 设置），手机上放不下这么多 tab，
+/// 全塞进「更多」又等于降级。
 /// 所以做成一个聚合页：**回忆快捷入口 + 人物预览 + 其余功能入口**，
 /// 与移动端基线的相册 AI 页同一形态（预览行 + 查看全部）。
 ///
@@ -267,7 +268,8 @@ class _PhotoAiCenterPageState extends State<PhotoAiCenterPage> {
   }
 
   Widget _entryGrid() {
-    const entries = <({String id, String labelKey, IconData icon})>[
+    // AI 设置只给超级管理员：与侧栏同一个条件（`apps.json#nav` 的 superAdmin）
+    final entries = <({String id, String labelKey, IconData icon})>[
       (id: 'relations', labelKey: 'photo.relations.title', icon: Icons.hub_outlined),
       (id: 'scenes', labelKey: 'ui.photo.036', icon: Icons.landscape_outlined),
       (
@@ -275,7 +277,6 @@ class _PhotoAiCenterPageState extends State<PhotoAiCenterPage> {
         labelKey: 'photo.nav.activities',
         icon: Icons.sports_handball_outlined
       ),
-      (id: 'smartRules', labelKey: 'photo.smartRule.title', icon: Icons.rule),
       (id: 'search', labelKey: 'common.search', icon: Icons.search),
       (
         id: 'cleanup',
@@ -283,11 +284,12 @@ class _PhotoAiCenterPageState extends State<PhotoAiCenterPage> {
         icon: Icons.cleaning_services_outlined
       ),
       (id: 'gps', labelKey: 'photo.nav.gps', icon: Icons.gps_fixed_outlined),
-      (
-        id: 'aiSettings',
-        labelKey: 'photo.nav.aiSettings',
-        icon: Icons.tag_faces_outlined
-      ),
+      if (ApiSession.instance.isAdmin)
+        (
+          id: 'aiSettings',
+          labelKey: 'photo.nav.aiSettings',
+          icon: Icons.tag_faces_outlined
+        ),
     ];
     return LayoutBuilder(
       builder: (context, constraints) {

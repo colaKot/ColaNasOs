@@ -26,7 +26,6 @@ class AppVisuals {
     'cleaning_services_outlined': Icons.cleaning_services_outlined,
     'cloud_upload_outlined': Icons.cloud_upload_outlined,
     'collections_bookmark_outlined': Icons.collections_bookmark_outlined,
-    'collections_outlined': Icons.collections_outlined,
     'compass': Icons.travel_explore,
     'confirmation_number_outlined': Icons.confirmation_number_outlined,
     'content_copy_outlined': Icons.content_copy_outlined,

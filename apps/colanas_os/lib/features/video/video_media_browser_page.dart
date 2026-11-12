@@ -284,7 +284,10 @@ class _VideoMediaBrowserPageState extends State<VideoMediaBrowserPage> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Text(
-                '# ${lib?.name ?? ''} / ${_path.isEmpty ? tr('video.browse.root') : _path}',
+                // 根节点显示库名，不再叫「库根」；下钻后显示「库名 / 相对路径」
+                _path.isEmpty
+                    ? '# ${lib?.name ?? tr('video.browse.title')}'
+                    : '# ${lib?.name ?? ''} / $_path',
                 style: TextStyle(
                   fontSize: NasTokens.fontCaption,
                   color: context.nasTextSecondary,

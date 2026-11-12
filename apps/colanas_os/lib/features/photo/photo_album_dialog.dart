@@ -29,7 +29,7 @@ class AlbumDraft {
 ///     候选只传 `coverCandidates`（多选进来时就是那几张，编辑时是相册成员），
 ///     没有候选就整块隐藏 —— 相册还是空的，这时候让人挑封面没有意义。
 ///
-///   · **规则**：头像 / 场景 / 日期三类条件，命中任意一条就自动收进相册，
+///   · **规则**：头像 / 场景 / 活动 / 日期四类条件，命中任意一条就自动收进相册，
 ///     **以后新入库的照片也按同一套规则自动进来**。这块是「集合」被删掉之后
 ///     真正需要的那个能力：以前想给「我家猫」建个持续更新的组，只能手工一张张挑。
 Future<AlbumDraft?> showAlbumDialog(
@@ -62,6 +62,7 @@ class _AlbumDialogState extends State<_AlbumDialog> {
   // 规则候选：进入对话框时拉一次，之后复用（同一个对话框里可以连着加好几条）
   List<PhotoFaceClusterItem> _faces = const [];
   List<PhotoSceneTagSummaryItem> _scenes = const [];
+  List<PhotoSceneSummaryItem> _activities = const [];
   bool _loadingFacets = true;
   String? _facetsError;
 
@@ -85,15 +86,17 @@ class _AlbumDialogState extends State<_AlbumDialog> {
   Future<void> _loadFacets() async {
     try {
       final c = ApiSession.instance.client;
-      // 两个接口互不依赖，一起发；任何一个失败都不该让另一个白跑
+      // 三个接口互不依赖，一起发；任何一个失败都不该让另一个白跑
       final results = await Future.wait<Object?>([
         c.photoFaceClusters(limit: 500).catchError((_) => const PhotoFaceClusterList(items: [])),
         c.photoSceneTagSummary().catchError((_) => const PhotoSceneTagSummary(items: [])),
+        c.photoActivitySummary().catchError((_) => const PhotoSceneSummary(items: [])),
       ]);
       if (!mounted) return;
       setState(() {
         _faces = (results[0] as PhotoFaceClusterList).items;
         _scenes = (results[1] as PhotoSceneTagSummary).items;
+        _activities = (results[2] as PhotoSceneSummary).items;
         _loadingFacets = false;
       });
     } catch (e) {
@@ -121,6 +124,8 @@ class _AlbumDialogState extends State<_AlbumDialog> {
         return '${tr('photo.album.face')} · ${_faceName(r.value)}';
       case 'scene':
         return '${tr('photo.album.scene')} · ${r.value ?? ''}';
+      case 'activity':
+        return '${tr('photo.album.activity')} · ${r.value ?? ''}';
       case 'date':
         String fmt(int? sec) {
           if (sec == null) return '—';
@@ -162,9 +167,22 @@ class _AlbumDialogState extends State<_AlbumDialog> {
       return;
     }
     // 网格 + 封面，按张数倒序取前 30
-    final picked = await showScenePickDialog(context, items: _scenes);
-    if (picked == null || !mounted) return;
-    final rule = PhotoAlbumRule(kind: 'scene', value: picked.label);
+    final label = await showScenePickDialog(context, items: _scenes);
+    if (label == null || !mounted) return;
+    final rule = PhotoAlbumRule(kind: 'scene', value: label);
+    if (_has(rule)) return;
+    setState(() => _rules = [..._rules, rule]);
+  }
+
+  Future<void> _addActivity() async {
+    if (_activities.isEmpty) {
+      NasSnack.show(context, tr('photo.album.noActivity'));
+      return;
+    }
+    // 与场景同一套选择方式：网格 + 封面，按张数倒序取前 30
+    final label = await showActivityPickDialog(context, items: _activities);
+    if (label == null || !mounted) return;
+    final rule = PhotoAlbumRule(kind: 'activity', value: label);
     if (_has(rule)) return;
     setState(() => _rules = [..._rules, rule]);
   }
@@ -323,6 +341,11 @@ class _AlbumDialogState extends State<_AlbumDialog> {
                     onPressed: _loadingFacets ? null : _addScene,
                     icon: const Icon(Icons.landscape_outlined, size: 18),
                     label: Text(tr('photo.album.addScene')),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _loadingFacets ? null : _addActivity,
+                    icon: const Icon(Icons.sports_handball_outlined, size: 18),
+                    label: Text(tr('photo.album.addActivity')),
                   ),
                   OutlinedButton.icon(
                     onPressed: _addDate,

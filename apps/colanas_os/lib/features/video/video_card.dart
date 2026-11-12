@@ -304,8 +304,17 @@ class VideoPosterCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // 左上：已观看 / 未观看角标（图片没有观看状态，不显示）
-                  if (!isImage)
+                  // 左上：多选时换成统一勾选标记；否则是已观看 / 未观看角标
+                  // （图片没有观看状态，非多选态不占位）
+                  if (selectionMode)
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: IgnorePointer(
+                        child: NasSelectChip(selected: selected),
+                      ),
+                    )
+                  else if (!isImage)
                     Positioned(
                       top: 6,
                       left: 6,
@@ -353,8 +362,8 @@ class VideoPosterCard extends StatelessWidget {
                       right: 6,
                       child: _circleButton(context, Icons.more_horiz, onMore!),
                     ),
-                  // 左上：收藏（已看下面）
-                  if (item.favorite)
+                  // 左上：收藏（已看下面）；多选态让位给勾选标记
+                  if (item.favorite && !selectionMode)
                     Positioned(
                       top: item.watched ? 30 : 6,
                       left: 6,
@@ -422,35 +431,6 @@ class VideoPosterCard extends StatelessWidget {
                           valueColor: AlwaysStoppedAnimation<Color>(
                             scheme.primary,
                           ),
-                        ),
-                      ),
-                    ),
-                  // 多选遮罩
-                  if (selectionMode)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(radius),
-                            color: selected
-                                ? scheme.primary.withValues(alpha: 0.22)
-                                : Colors.black26,
-                            border: Border.all(
-                              color: selected
-                                  ? scheme.primary
-                                  : Colors.transparent,
-                              width: 2,
-                            ),
-                          ),
-                          child: selected
-                              ? Center(
-                                  child: Icon(
-                                    Icons.check_circle,
-                                    size: 32,
-                                    color: scheme.primary,
-                                  ),
-                                )
-                              : null,
                         ),
                       ),
                     ),

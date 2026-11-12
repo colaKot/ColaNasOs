@@ -992,25 +992,7 @@ class _EpisodeNumberCellState extends State<_EpisodeNumberCell> {
                 Positioned(
                   top: 1,
                   right: 1,
-                  child: Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: widget.picked
-                          ? scheme.primary
-                          : Colors.transparent,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: widget.picked
-                            ? scheme.primary
-                            : scheme.onSurfaceVariant.withValues(alpha: 0.6),
-                        width: 1.2,
-                      ),
-                    ),
-                    child: widget.picked
-                        ? const Icon(Icons.check, size: 8, color: Colors.white)
-                        : null,
-                  ),
+                  child: NasSelectChip(selected: widget.picked, size: 12),
                 ),
             ],
           ),

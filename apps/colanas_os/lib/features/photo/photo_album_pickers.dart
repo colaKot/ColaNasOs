@@ -116,42 +116,79 @@ class _FacePickDialog extends StatelessWidget {
   }
 }
 
-// ============================================================ 场景
+// ============================================================ 场景 / 活动
 //
 // 网格 + 封面 + 按张数倒序，只取前 30。
 //
 // 场景标签动辄上百个（Places365 全量 365 类），做成扁平列表要滚很久才能看到
 // 常用的那几个；按张数取前 30 之后，一屏就能看完「我库里真正有的场景」。
+// 活动（SigLIP2 标签）与场景同构，共用同一个选择器，只是标题 / 空态文案不同。
 
 /// 选一个场景标签；取消返回 null
-Future<PhotoSceneTagSummaryItem?> showScenePickDialog(
+Future<String?> showScenePickDialog(
   BuildContext context, {
   required List<PhotoSceneTagSummaryItem> items,
 }) {
   final top = [...items]..sort((a, b) => b.count.compareTo(a.count));
-  return showDialog<PhotoSceneTagSummaryItem>(
+  return showDialog<String>(
     context: context,
-    builder: (_) => _ScenePickDialog(items: top.take(30).toList(growable: false)),
+    builder: (_) => _TagPickDialog(
+      items: [
+        for (final s in top.take(30))
+          (label: s.label, count: s.count, coverPath: s.coverPath),
+      ],
+      title: tr('photo.album.pickScene'),
+      emptyText: tr('photo.album.noScene'),
+      icon: Icons.landscape_outlined,
+    ),
   );
 }
 
-class _ScenePickDialog extends StatelessWidget {
-  const _ScenePickDialog({required this.items});
+/// 选一个活动标签；取消返回 null
+Future<String?> showActivityPickDialog(
+  BuildContext context, {
+  required List<PhotoSceneSummaryItem> items,
+}) {
+  final top = [...items]..sort((a, b) => b.count.compareTo(a.count));
+  return showDialog<String>(
+    context: context,
+    builder: (_) => _TagPickDialog(
+      items: [
+        for (final s in top.take(30))
+          (label: s.label, count: s.count, coverPath: s.coverPath),
+      ],
+      title: tr('photo.album.pickActivity'),
+      emptyText: tr('photo.album.noActivity'),
+      icon: Icons.sports_handball_outlined,
+    ),
+  );
+}
 
-  final List<PhotoSceneTagSummaryItem> items;
+class _TagPickDialog extends StatelessWidget {
+  const _TagPickDialog({
+    required this.items,
+    required this.title,
+    required this.emptyText,
+    required this.icon,
+  });
+
+  final List<({String label, int count, String? coverPath})> items;
+  final String title;
+  final String emptyText;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     final media = MediaUrls(ApiSession.instance.baseUrl);
     return AlertDialog(
-      title: Text(tr('photo.album.pickScene')),
+      title: Text(title),
       content: SizedBox(
         width: 600,
         height: 440,
         child: items.isEmpty
             ? Center(
                 child: Text(
-                  tr('photo.album.noScene'),
+                  emptyText,
                   textAlign: TextAlign.center,
                   style: TextStyle(color: context.nasTextSecondary),
                 ),
@@ -169,7 +206,7 @@ class _ScenePickDialog extends StatelessWidget {
                   final path = s.coverPath ?? '';
                   return InkWell(
                     borderRadius: BorderRadius.circular(NasTokens.radiusMd),
-                    onTap: () => Navigator.pop(context, s),
+                    onTap: () => Navigator.pop(context, s.label),
                     child: Column(
                       children: [
                         Expanded(
@@ -181,7 +218,7 @@ class _ScenePickDialog extends StatelessWidget {
                                         .colorScheme
                                         .surfaceContainerHighest,
                                     child: Icon(
-                                      Icons.landscape_outlined,
+                                      icon,
                                       color: context.nasTextSecondary,
                                     ),
                                   )

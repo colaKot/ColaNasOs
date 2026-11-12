@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/app_visibility.dart';
+import '../../core/session.dart';
 import '../../shell/app_nav_shell.dart';
 import 'backup_page.dart';
 import 'cleanup_page.dart';
@@ -12,7 +13,6 @@ import 'photo_on_this_day_page.dart';
 import 'photo_ai_settings_page.dart';
 import 'photo_ai_center_page.dart';
 import 'photo_assistant_page.dart';
-import 'photo_duplicate_insight_page.dart';
 import 'photo_journey_page.dart';
 import 'photo_time_contrast_page.dart';
 import 'photo_folders_page.dart';
@@ -44,10 +44,16 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
   final NavSelection _selection = NavSelection('home');
 
   Widget _content(String key) {
-    // 契约里没有、但页面已实现的入口：onThisDay（往年今日）。页面在（194 行），
-    // 是否恢复成菜单项待定，先在这里登记，避免被当成死代码删掉
-    //（`app-nav.check` 的 nav-orphan 白名单）。models 已挂进契约菜单，不再豁免。
-    // nav-orphan: onThisDay
+    // 契约里没有、但页面已实现的入口：
+    //   · onThisDay —— 往年今日，是否恢复成菜单项待定；
+    //   · smartRules —— 「自定义规则」栏目已按需求下线，规则能力与页面保留，
+    //     只是不再提供入口（以后要恢复只需在 apps.json 里加回菜单项）；
+    //   · duplicateInsight —— 「重复洞察」已并入「相似清理」，旧标识保留为兼容别名，
+    //     指向同一个合并页，避免历史入口 / 脚本 / 收藏落到空白页；
+    //   · models —— 「模型目录」对所有角色隐藏入口，页面与能力保留
+    //     （直接访问时仍能打开，只是界面上不再提供入口）。
+    // 用 nav-orphan 登记，避免被当成死代码删掉（`app-nav.check` 的白名单）。
+    // nav-orphan: onThisDay, smartRules, duplicateInsight, models
     switch (key) {
       case 'home':
         return PhotoHomePage(embedded: true, onNavigate: _selection.select);
@@ -80,7 +86,8 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
       case 'journey':
         return const PhotoJourneyPage();
       case 'duplicateInsight':
-        return PhotoDuplicateInsightPage(onNavigate: _selection.select);
+        // 合并后的兼容别名：统一走「相似清理」页
+        return const PhotoCleanupPage(embedded: true);
       case 'smartRules':
         return const PhotoSmartPage(embedded: true, section: 'rules');
       case 'activities':
@@ -108,6 +115,9 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
       case 'preview':
         return const PhotoPreviewSettingsPage();
       case 'aiSettings':
+        // 菜单侧已按 superAdmin 过滤；这里再挡一层，防止程序化跳转 /
+        // 旧收藏的标识绕过菜单直接把设置页渲染出来。
+        if (!ApiSession.instance.isAdmin) return const _NoAccessPane();
         return const PhotoAiSettingsPage();
       case 'models':
         return const PhotoModelsPage();
@@ -124,8 +134,46 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
       selection: _selection,
       // 「相册备份」只在手机 App 出现（契约里该项 `when: mobileApp`）：
       // 它要读本机相册权限，web / 桌面没有这个东西
-      conditions: {if (isMobileApp()) 'mobileApp'},
+      conditions: {
+        if (isMobileApp()) 'mobileApp',
+        // AI 设置（模型 / 识别参数）涉及整库配置，只给超级管理员看
+        if (ApiSession.instance.isAdmin) 'superAdmin',
+      },
       content: _content,
+    );
+  }
+}
+
+/// 非超级管理员直接落到仅管理员页面时的兜底：不渲染功能，只给一句说明。
+class _NoAccessPane extends StatelessWidget {
+  const _NoAccessPane();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.lock_outline,
+            size: 40,
+            color: context.nasTextSecondary,
+          ),
+          const SizedBox(height: NasTokens.spaceSm),
+          Text(
+            tr('common.noPermission'),
+            style: const TextStyle(fontSize: NasTokens.fontSubtitle),
+          ),
+          const SizedBox(height: NasTokens.spaceXs),
+          Text(
+            tr('common.noPermissionHint'),
+            style: TextStyle(
+              fontSize: NasTokens.fontCaption,
+              color: context.nasTextSecondary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

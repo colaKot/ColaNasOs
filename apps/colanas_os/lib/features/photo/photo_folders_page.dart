@@ -26,8 +26,10 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
   String _path = '';
   String _sort = 'time';
   double _extent = 132;
-  bool _selecting = false;
-  final Set<String> _selected = {};
+  /// 多选：与时间轴共用同一套选择态（nas_ui/selection.dart）
+  final NasSelectionController _selection = NasSelectionController();
+  bool get _selecting => _selection.active;
+  Set<String> get _selected => _selection.ids;
 
   MediaUrls get _media => MediaUrls(ApiSession.instance.baseUrl);
 
@@ -36,7 +38,20 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
   @override
   void initState() {
     super.initState();
+    _selection.addListener(_onSelectionChanged);
     _loadRoots();
+  }
+
+  void _onSelectionChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _selection
+      ..removeListener(_onSelectionChanged)
+      ..dispose();
+    super.dispose();
   }
 
   Future<void> _loadRoots() async {
@@ -151,6 +166,8 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
       children: [
         _toolbar(),
         const Divider(height: 1),
+        // 多选条紧贴工具栏（与电视剧列表 / 相册时间轴同一落点）
+        if (_selecting) _selectBar(),
         Expanded(child: _source == null ? _rootsView() : _dirView()),
       ],
     );
@@ -195,17 +212,10 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
             onPressed: () => setState(() => _extent = (_extent + 32).clamp(80, 240)),
             icon: const Icon(Icons.zoom_in, size: 18),
           ),
-          IconButton(
-            tooltip: tr('photo.timeline.select'),
-            icon: Icon(
-              _selecting ? Icons.check_circle : Icons.check_circle_outline,
-              size: 18,
-              color: _selecting ? scheme.primary : null,
-            ),
-            onPressed: () => setState(() {
-              _selecting = !_selecting;
-              if (!_selecting) _selected.clear();
-            }),
+          NasSelectionToggleButton(
+            active: _selecting,
+            enterTooltip: tr('photo.timeline.select'),
+            onPressed: () => _selecting ? _selection.exit() : _selection.enter(),
           ),
           NasRefreshButton(onPressed: _source == null ? _loadRoots : () => _loadDir(_path)),
         ],
@@ -356,7 +366,6 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
             ],
           ),
         ),
-        if (_selecting) _selectBar(),
       ],
     );
   }
@@ -364,73 +373,50 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
   Widget _fileTile(List<PhotoItem> files, int i) {
     final file = files[i];
     final picked = _selected.contains(file.id);
+    final tile = ClipRRect(
+      borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+      child: SizedBox(
+        width: _extent,
+        height: _extent,
+        child: NasCoverImage(
+          url: _thumb(file.path),
+          headers: ApiSession.instance.authHeaders,
+          cacheWidth: 320,
+        ),
+      ),
+    );
     return GestureDetector(
       onTap: () {
         if (!_selecting) {
           _openViewerItems(files, i);
           return;
         }
-        setState(() {
-          if (picked) {
-            _selected.remove(file.id);
-          } else {
-            _selected.add(file.id);
-          }
-        });
+        _selection.toggle(file.id);
       },
-      child: Stack(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-            child: SizedBox(
-              width: _extent,
-              height: _extent,
-              child: NasCoverImage(
-                url: _thumb(file.path),
-                headers: ApiSession.instance.authHeaders,
-                cacheWidth: 320,
-              ),
-            ),
-          ),
-          if (picked)
-            Container(
-              width: _extent,
-              height: _extent,
-              decoration: BoxDecoration(
-                color: Colors.black38,
-                borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.primary,
-                  width: 2,
-                ),
-              ),
-              child: const Icon(Icons.check_circle, color: Colors.white),
-            ),
-        ],
-      ),
+      child: _selecting
+          ? NasSelectionCover(selected: picked, child: tile)
+          : tile,
     );
   }
 
   Widget _selectBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 8, 8),
-      child: Row(
-        children: [
-          Text(
-            tr('photo.timeline.selected').replaceAll('{n}', '${_selected.length}'),
-            style: TextStyle(fontSize: 12, color: context.nasTextSecondary),
-          ),
-          const Spacer(),
-          TextButton.icon(
-            onPressed: _selected.isEmpty ? null : _deleteSelected,
-            icon: const Icon(Icons.delete_outline, size: 18),
-            label: Text(tr('common.delete')),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-            ),
-          ),
-        ],
-      ),
+    final ids = (_list?.fileItems ?? const <PhotoItem>[]).map((e) => e.id);
+    return NasSelectionBar(
+      title: tr(
+        'photo.timeline.selected',
+      ).replaceAll('{n}', '${_selected.length}'),
+      allSelected: _selection.allSelected(ids),
+      onToggleAll: () => _selection.toggleAll(ids),
+      onClose: _selection.exit,
+      actions: [
+        NasSelectionAction(
+          label: tr('common.delete'),
+          icon: Icons.delete_outline,
+          enabled: _selected.isNotEmpty,
+          danger: true,
+          onPressed: _deleteSelected,
+        ),
+      ],
     );
   }
 
@@ -480,10 +466,7 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
         body: PhotoDeleteBody(ids: ids, toTrash: toTrash),
       );
       if (!mounted) return;
-      setState(() {
-        _selected.clear();
-        _selecting = false;
-      });
+      _selection.exit();
       await _loadDir(_path);
       NasSnack.showOn(messenger, tr('photo.delete.done', {'count': '${res.count}'}));
     } catch (e) {

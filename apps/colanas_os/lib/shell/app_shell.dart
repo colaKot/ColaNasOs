@@ -344,8 +344,9 @@ class _AppShellState extends State<AppShell> {
                               valueListenable: ShellBack.revision,
                               builder: (context, _, _) {
                                 final back = ShellBack.handlerFor(currentId);
-                                if (back == null)
+                                if (back == null) {
                                   return const SizedBox.shrink();
+                                }
                                 return NasIconAction(
                                   icon: Icons.arrow_back,
                                   tooltip: tr('common.back'),

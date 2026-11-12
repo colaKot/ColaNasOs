@@ -5,8 +5,8 @@ import 'package:flutter_context_menu/flutter_context_menu.dart';
 ///
 /// 菜单行高由图标撑起，纯文字标签会显得偏上；这里把文字下移 3px 与图标中线
 /// 对齐。间距只在这一处定义，改一处所有菜单一起生效。
-class CustomContextMenuItem {
-  const CustomContextMenuItem._();
+class ColaContextMenuItem {
+  const ColaContextMenuItem._();
 
   /// [value] 原样作为选中回调的返回值；[onSelected] 为空时菜单项仍可点击。
   static MenuItem create({

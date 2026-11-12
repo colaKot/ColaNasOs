@@ -802,13 +802,13 @@ class _BrowseCard extends StatelessWidget {
     // 仅桌面 / Web 端提供右键菜单（手机端没有「右键」）
     if (!DeviceUtils.isDesktopOrWeb) return card;
     final entries = <ContextMenuEntry>[
-      CustomContextMenuItem.create(
+      ColaContextMenuItem.create(
         label: Text(subscribed ? 'discover_sub_added'.tr : 'discover_sub_add'.tr),
         icon: Icon(subscribed ? Icons.star : Icons.star_border, size: 18),
         value: 'subscribe',
         onSelected: (_) => onSubscribe?.call(),
       ),
-      CustomContextMenuItem.create(
+      ColaContextMenuItem.create(
         label: Text('discover_search'.tr),
         icon: const Icon(Icons.search, size: 18),
         value: 'search',

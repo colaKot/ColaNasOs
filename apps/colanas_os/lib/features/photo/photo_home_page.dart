@@ -269,6 +269,10 @@ Map<String, String> get _imageHeaders {
 
   Widget _searchBar() {
     final scheme = Theme.of(context).colorScheme;
+    // 与时间轴搜索框同一套材质：极光风格的半透明面板色 + 面板描边。
+    // 之前用 surfaceContainerHigh（不透明合成色），深色下就是一块纯黑，
+    // 和整页极光背景割裂；换成 panelColor 后背景光晕能透上来。
+    final style = context.nasStyle;
     return InkWell(
       borderRadius: BorderRadius.circular(14),
       onTap: () => widget.onNavigate('timeline'),
@@ -276,9 +280,9 @@ Map<String, String> get _imageHeaders {
         height: 54,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerHigh,
+          color: style.panelColor,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.35)),
+          border: Border.all(color: style.panelBorderColor),
         ),
         child: Row(
           children: [

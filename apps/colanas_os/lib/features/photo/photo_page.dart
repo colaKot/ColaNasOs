@@ -140,8 +140,10 @@ class _PhotoPageState extends State<PhotoPage> {
   double _thumbExtent = 160;
 
   /// 多选
-  bool _selecting = false;
-  final Set<String> _selected = <String>{};
+  /// 多选：全站统一由 `NasSelectionController` 承载（口径见 nas_ui/selection.dart）
+  final NasSelectionController _selection = NasSelectionController();
+  bool get _selecting => _selection.active;
+  Set<String> get _selected => _selection.ids;
 
   /// 手机端多选工具条的通道（外壳给的）。桌面端取不到 → 用页面内的 [_selectBar]
   NasBulkController? _bulkCtl;
@@ -190,6 +192,7 @@ class _PhotoPageState extends State<PhotoPage> {
       }
     }
     super.initState();
+    _selection.addListener(_onSelectionChanged);
     _unsubScan = listenScanDone('photo', () {
       if (mounted) _bootstrap();
     });
@@ -204,12 +207,19 @@ class _PhotoPageState extends State<PhotoPage> {
   void dispose() {
     // 多选态是"模式"，页面没了必须收回，否则工具条会挂在别的 tab 上
     _bulkCtl?.hide();
+    _selection
+      ..removeListener(_onSelectionChanged)
+      ..dispose();
     _suggestTimer?.cancel();
     _searchCtrl.removeListener(_onSearchChanged);
     _unsubScan();
     _scroll.dispose();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _onSelectionChanged() {
+    if (mounted) setState(() {});
   }
 
   /// 热门推荐：以前 suggest 的「空 q 热门」分支服务端有、客户端从不调用，
@@ -841,9 +851,8 @@ class _PhotoPageState extends State<PhotoPage> {
       for (final id in ids) {
         _favOverride[id] = favorite;
       }
-      _selected.clear();
-      _selecting = false;
     });
+    _selection.exit();
     try {
       await ApiSession.instance.client.photoFavoriteSet(
         body: PhotoFavoriteBody(ids: ids, favorite: favorite),
@@ -902,10 +911,7 @@ if (ok != true) return;
         body: PhotoDeleteBody(ids: ids, toTrash: toTrash),
       );
       if (!mounted) return;
-      setState(() {
-        _selected.clear();
-        _selecting = false;
-      });
+      _selection.exit();
       await _loadTimeline();
       NasSnack.showOn(messenger, tr('photo.delete.done', {'count': '${res.count}'}));
     } catch (e) {
@@ -937,10 +943,7 @@ if (ok != true) return;
       // 新建：把选中的这些照片直接带进去，建完就不用再点一次加入
       final created = await _createAlbum(seedItems: selectedItems);
       if (created == null || !mounted) return;
-      setState(() {
-        _selected.clear();
-        _selecting = false;
-      });
+      _selection.exit();
       NasSnack.show(context, tr('photo.album.added', {'n': '${selectedItems.length}'}));
       return;
     }
@@ -953,10 +956,7 @@ if (ok != true) return;
         ),
       );
       if (!mounted) return;
-      setState(() {
-        _selected.clear();
-        _selecting = false;
-      });
+      _selection.exit();
       await _refreshAlbums();
       if (!mounted) return;
       NasSnack.show(context, tr('photo.album.added', {'n': '${selectedItems.length}'}));
@@ -967,45 +967,42 @@ if (ok != true) return;
   }
 
   Widget _selectBar() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: NasTokens.spaceXs),
-      child: Row(
-        children: [
-          const SizedBox(width: NasTokens.spaceMd),
-          Text(
-            tr('photo.timeline.selected').replaceAll('{n}', '${_selected.length}'),
-            style: TextStyle(
-              fontSize: NasTokens.fontCaption,
-              color: context.nasTextSecondary,
-            ),
-          ),
-          const Spacer(),
-          TextButton.icon(
-            onPressed: _selected.length == 1 ? _similarFromSelection : null,
-            icon: const Icon(Icons.image_search, size: 18),
-            label: Text(tr('photo.similar.title')),
-          ),
-          TextButton.icon(
-            onPressed: _selected.isEmpty ? null : () => _batchFavorite(true),
-            icon: const Icon(Icons.favorite_border, size: 18),
-            label: Text(tr('photo.timeline.batchFavorite')),
-          ),
-          TextButton.icon(
-            onPressed: _selected.isEmpty ? null : _addSelectedToAlbum,
-            icon: const Icon(Icons.photo_album_outlined, size: 18),
-            label: Text(tr('photo.album.addTo')),
-          ),
-          TextButton.icon(
-            onPressed: _selected.isEmpty ? null : _deleteSelected,
-            icon: const Icon(Icons.delete_outline, size: 18),
-            label: Text(tr('common.delete')),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-            ),
-          ),
-          const SizedBox(width: NasTokens.spaceSm),
-        ],
-      ),
+    final ids = _visibleItems.map((p) => p.id);
+    final any = _selected.isNotEmpty;
+    return NasSelectionBar(
+      title: tr(
+        'photo.timeline.selected',
+      ).replaceAll('{n}', '${_selected.length}'),
+      allSelected: _selection.allSelected(ids),
+      onToggleAll: () => _selection.toggleAll(ids),
+      onClose: _selection.exit,
+      actions: [
+        NasSelectionAction(
+          label: tr('photo.similar.title'),
+          icon: Icons.image_search,
+          enabled: _selected.length == 1,
+          onPressed: _similarFromSelection,
+        ),
+        NasSelectionAction(
+          label: tr('photo.timeline.batchFavorite'),
+          icon: Icons.favorite_border,
+          enabled: any,
+          onPressed: () => _batchFavorite(true),
+        ),
+        NasSelectionAction(
+          label: tr('photo.album.addTo'),
+          icon: Icons.photo_album_outlined,
+          enabled: any,
+          onPressed: _addSelectedToAlbum,
+        ),
+        NasSelectionAction(
+          label: tr('common.delete'),
+          icon: Icons.delete_outline,
+          enabled: any,
+          danger: true,
+          onPressed: _deleteSelected,
+        ),
+      ],
     );
   }
 
@@ -1129,10 +1126,7 @@ if (ok != true) return;
           title: tr(
             'photo.timeline.selected',
           ).replaceAll('{n}', '${_selected.length}'),
-          onClose: () => setState(() {
-            _selecting = false;
-            _selected.clear();
-          }),
+          onClose: _selection.exit,
           actions: [
             NasBulkAction(
               icon: Icons.image_search,
@@ -1304,8 +1298,8 @@ if (ok != true) return;
       _filterTotal = null;
       _items = const [];
       _nextCursor = null;
-      _selected.clear();
     });
+    _selection.clear();
     if (_scroll.hasClients) _scroll.jumpTo(0);
     await _loadTimeline();
   }
@@ -1318,8 +1312,8 @@ if (ok != true) return;
       _filterTotal = null;
       _items = const [];
       _nextCursor = null;
-      _selected.clear();
     });
+    _selection.clear();
     if (_scroll.hasClients) _scroll.jumpTo(0);
     await _loadTimeline();
   }
@@ -1504,18 +1498,12 @@ if (ok != true) return;
         if (!mounted) return;
         NasSnack.show(context, tr('photo.longPress.linkCopied'));
       case 'select':
-        setState(() {
-          _selecting = true;
-          _selected.add(item.id);
-        });
+        _selection.enter(initialId: item.id);
       case 'delete':
         if (!mounted) return;
-        setState(() {
-          _selecting = true;
-          _selected
-            ..clear()
-            ..add(item.id);
-        });
+        _selection
+          ..clear()
+          ..enter(initialId: item.id);
         await _deleteSelected();
     }
   }
@@ -1617,18 +1605,12 @@ if (ok != true) return;
                   icon: const Icon(Icons.calendar_view_month),
                   onPressed: _openYearView,
                 ),
-              IconButton(
-                tooltip: tr('photo.timeline.select'),
-                icon: Icon(
-                  _selecting ? Icons.check_circle : Icons.check_circle_outline,
-                ),
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 38, height: 38),
-                onPressed: () => setState(() {
-                  _selecting = !_selecting;
-                  _selected.clear();
-                }),
+              NasSelectionToggleButton(
+                active: _selecting,
+                enterTooltip: tr('photo.timeline.select'),
+                onPressed: () => _selecting
+                    ? _selection.exit()
+                    : _selection.enter(),
               ),
               // 扫描 / 清理缺失：两个动作放一个菜单里。
               // 扫描改异步后拿不到「本次发现多少张已不存在」，所以清理缺失不能
@@ -1652,6 +1634,8 @@ if (ok != true) return;
             ],
           ),
         ),
+        // 多选条紧贴工具栏（与电视剧列表同一落点）；手机端由外壳底部工具条接管
+        if (_selecting && !isCompactWidth(context)) _selectBar(),
         if (_filter != null || _mediaType != _PhotoMediaType.all) _filterChips(),
         if (_query.isNotEmpty && _hybridTags.isNotEmpty) _hybridInfoBar(),
         if (_query.isNotEmpty && _hybridTags.isEmpty && _hybridUnmatched.isNotEmpty)
@@ -1749,48 +1733,20 @@ if (ok != true) return;
                         final item = visible[i];
                         if (_selecting) {
                           final picked = _selected.contains(item.id);
-                          return Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                _PhotoTile(
-                                  item: item,
-                                  url: _thumbUrlOf(item),
-                                  headers: _imageHeaders,
-                                  favorite: _isFavorite(item),
-                                  onToggleFavorite: () => _toggleFavorite(item),
-                                  showFavorite: false,
-                                  // 键盘 / D-pad 的 Enter 也走选择逻辑
-                                  onTap: () => setState(() {
-                                    if (picked) {
-                                      _selected.remove(item.id);
-                                    } else {
-                                      _selected.add(item.id);
-                                    }
-                                  }),
-                                ),
-                                if (picked)
-                                  // 遮罩只是视觉标记，不能吃掉点击：
-                                  // 否则再点一下已选中的照片，onTap 到不了
-                                  // _PhotoTile，就永远取消不了选择。
-                                  IgnorePointer(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.black38,
-                                        border: Border.all(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
-                                          width: 2,
-                                        ),
-                                      ),
-                                      child: const Icon(
-                                        Icons.check_circle,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            );
+                          // 选择态视觉与电视剧列表一致：封面原样，左上角圆勾
+                          return NasSelectionCover(
+                            selected: picked,
+                            child: _PhotoTile(
+                              item: item,
+                              url: _thumbUrlOf(item),
+                              headers: _imageHeaders,
+                              favorite: _isFavorite(item),
+                              onToggleFavorite: () => _toggleFavorite(item),
+                              showFavorite: false,
+                              // 键盘 / D-pad 的 Enter 也走选择逻辑
+                              onTap: () => _selection.toggle(item.id),
+                            ),
+                          );
                         }
                         // 桌面 / Web 右键：与长按同一批动作（多选态下不弹）
                         return NasContextMenuRegion(
@@ -1811,9 +1767,6 @@ if (ok != true) return;
                   },
                 ),
         ),
-        // 手机端多选工具条由外壳顶掉底部 tab 来显示（NasBulkBar），
-        // 页面内这条只在桌面端用，否则会出现两条一模一样的工具条
-        if (_selecting && !isCompactWidth(context)) _selectBar(),
       ],
     );
   }

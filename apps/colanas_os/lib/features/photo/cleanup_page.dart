@@ -8,8 +8,10 @@ import 'package:nas_ui/nas_ui.dart';
 import '../../core/display_labels.dart';
 import '../../core/session.dart';
 
-/// 重复与相似清理：**先预演、再执行、可撤销**。
+/// 相似清理：**先预演、再执行、可撤销**。
 ///
+/// 合并自原「重复洞察」+「相似清理」两页：顶部先给统计概览（重复组 / 可回收空间 /
+/// 未算 MD5 / 相似组 / pHash 状态），往下才是勾选执行与批次撤销。
 /// 页面上永远先给「将要发生什么」，用户勾选后再执行；执行会写一个批次，
 /// 撤销按批次精确还原回收站状态（从属关系的合并不回滚，界面会说明）。
 class PhotoCleanupPage extends StatefulWidget {
@@ -239,9 +241,16 @@ class _PhotoCleanupPageState extends State<PhotoCleanupPage> {
     ];
   }
 
+  /// 合并后的统计口径：三组都算进「重复组」，相似组单独再列一项。
+  int _wastedBytes(List<PhotoCleanupGroup> groups) =>
+      groups.fold<int>(0, (sum, g) => sum + g.wastedBytes);
+
   @override
   Widget build(BuildContext context) {
     final preview = _preview;
+    final groups = preview == null ? const <PhotoCleanupGroup>[] : _allGroups;
+    final similarGroups =
+        preview == null ? 0 : _groupsIn(preview.similar).length;
     return Scaffold(
       appBar: widget.embedded ? null : AppBar(
         title: Text(tr('photo.nav.similarCleanup')),
@@ -267,6 +276,32 @@ class _PhotoCleanupPageState extends State<PhotoCleanupPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // 统计概览（原「重复洞察」页的核心信息）：先看清有多少可回收，
+                  // 再决定要不要往下勾选执行，不用在两个页面之间来回跳。
+                  Wrap(
+                    spacing: 18,
+                    runSpacing: 12,
+                    children: [
+                      _stat(tr('photo.duplicate.groups'), '${groups.length}'),
+                      _stat(
+                        tr('photo.duplicate.wasted'),
+                        formatBytes(_wastedBytes(groups)),
+                      ),
+                      _stat(
+                        tr('photo.duplicate.missingMd5'),
+                        '${preview?.missingMd5 ?? 0}',
+                      ),
+                      _stat(
+                        tr('photo.duplicate.similarGroups'),
+                        '$similarGroups',
+                      ),
+                      _stat(
+                        tr('photo.duplicate.phashGroups'),
+                        '${_phash?.groups ?? 0}',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: NasTokens.spaceMd),
                   Row(
                     children: [
                       Expanded(
@@ -379,6 +414,23 @@ class _PhotoCleanupPageState extends State<PhotoCleanupPage> {
               ),
             ),
           if (preview != null) ...[
+            if (groups.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceMd),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle_outline,
+                      color: context.nasSuccess,
+                    ),
+                    const SizedBox(width: NasTokens.spaceXs),
+                    Text(
+                      tr('photo.duplicate.empty'),
+                      style: TextStyle(color: context.nasTextSecondary),
+                    ),
+                  ],
+                ),
+              ),
             _section(tr('ui.photo.h5d432d'), _groupsIn(preview.duplicate)),
             _section(tr('ui.photo.h2644db'), _groupsIn(preview.nameDuplicate)),
             _section(
@@ -386,13 +438,14 @@ class _PhotoCleanupPageState extends State<PhotoCleanupPage> {
               _groupsIn(preview.similar),
               note: preview.similar['note'] as String?,
             ),
-            const SizedBox(height: NasTokens.spaceMd),
-            Text(
-              tr('ui.photo.018'),
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            const SizedBox(height: NasTokens.spaceXs),
-            for (final b in _batches)
+            if (_batches.isNotEmpty) ...[
+              const SizedBox(height: NasTokens.spaceMd),
+              Text(
+                tr('ui.photo.018'),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: NasTokens.spaceXs),
+              for (final b in _batches)
               ListTile(
                 dense: true,
                 leading: Icon(b.undoneAt == null ? Icons.history : Icons.undo),
@@ -407,6 +460,7 @@ class _PhotoCleanupPageState extends State<PhotoCleanupPage> {
                       )
                     : null,
               ),
+            ],
           ],
         ],
       ),
@@ -421,6 +475,29 @@ class _PhotoCleanupPageState extends State<PhotoCleanupPage> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _stat(String label, String value) {
+    return SizedBox(
+      width: 128,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: NasTokens.fontMicro,
+              color: context.nasTextSecondary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
