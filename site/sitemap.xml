@@ -8,8 +8,8 @@
     <priority>1.0</priority>
     <image:image>
       <image:loc>https://cola.gexuan.net/assets/shots/home.webp</image:loc>
-      <image:title>ColaNasOs Windows NAS 首页</image:title>
-      <image:caption>ColaNasOs（WindowsNas）首页：系统状态、硬盘容量与应用入口</image:caption>
+      <image:title>ColaNasOs 首页（WindowsNas 系统）</image:title>
+      <image:caption>ColaNasOs 首页：一套 WindowsNas 系统的系统状态、硬盘容量与应用入口</image:caption>
     </image:image>
     <image:image>
       <image:loc>https://cola.gexuan.net/assets/shots/video-library.webp</image:loc>
