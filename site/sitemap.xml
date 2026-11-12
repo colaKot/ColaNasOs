@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://cola.gexuan.net/</loc>
     <lastmod>2026-11-12</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://cola.gexuan.net/assets/shots/home.webp</image:loc>
+      <image:title>ColaNasOs Windows NAS 首页</image:title>
+      <image:caption>ColaNasOs（WindowsNas）首页：系统状态、硬盘容量与应用入口</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://cola.gexuan.net/assets/shots/video-library.webp</image:loc>
+      <image:title>ColaNasOs 影视库界面</image:title>
+      <image:caption>ColaNasOs 影视库：电影海报墙、搜索与筛选</image:caption>
+    </image:image>
   </url>
 </urlset>
