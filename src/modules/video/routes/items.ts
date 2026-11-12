@@ -1,4 +1,5 @@
 import { sql } from 'kysely';
+import { pathWhere, visibilityOf } from '../../files/visibility';
 import { Type } from '@sinclair/typebox';
 import { ftsPhrase } from '../../files/fts';
 import { actorKey } from '../jp-actor';
@@ -313,6 +314,7 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           if (!wantImage) return [];
           const expr = imageSortExpr('i', mediaSortBy);
           let where = sql`1 = 1`;
+          where = sql`${where} and (${pathWhere(visibilityOf(k.config, req.user), 'i.rel_path')})`;
           if (q.libraryId) where = sql`${where} and i.library_id = ${q.libraryId}`;
           if (folderMode) where = sql`${where} and ${scopeCond('i', folderPath, folderMode, roots)}`;
           if (keyword) {
@@ -352,6 +354,7 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           if (!wantVideo) return [];
           const expr = videoMediaSortExpr('v', mediaSortBy, uid);
           let where = sql`1 = 1`;
+          where = sql`${where} and (${pathWhere(visibilityOf(k.config, req.user), 'v.rel_path')})`;
           if (q.libraryId) where = sql`${where} and v.library_id = ${q.libraryId}`;
           if (folderMode) where = sql`${where} and ${scopeCond('v', folderPath, folderMode, roots)}`;
           if (q.series === 'none') where = sql`${where} and v.series is null`;
@@ -449,6 +452,7 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
               : 'desc';
 
         let where = sql`1 = 1`;
+        where = sql`${where} and (${pathWhere(visibilityOf(k.config, req.user), 'rel_path')})`;
         if (q.libraryId) where = sql`${where} and library_id = ${q.libraryId}`;
         if (q.series === 'none') where = sql`${where} and series is null`;
         else if (q.series && q.series.trim()) where = sql`${where} and series = ${q.series.trim()}`;
@@ -909,6 +913,7 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
 
         if (wantImages) {
           let where = sql`1 = 1`;
+          where = sql`${where} and (${pathWhere(visibilityOf(k.config, req.user), 'i.rel_path')})`;
           if (q.libraryId) where = sql`${where} and i.library_id = ${q.libraryId}`;
           if (folderMode) where = sql`${where} and ${scopeCond('i', folderPath, folderMode, roots)}`;
           if (keyword) {
@@ -927,6 +932,7 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
 
         if (wantVideos) {
           let where = sql`1 = 1`;
+          where = sql`${where} and (${pathWhere(visibilityOf(k.config, req.user), 'v.rel_path')})`;
           if (q.libraryId) where = sql`${where} and v.library_id = ${q.libraryId}`;
           if (folderMode) where = sql`${where} and ${scopeCond('v', folderPath, folderMode, roots)}`;
           if (q.series === 'none') where = sql`${where} and v.series is null`;
