@@ -359,6 +359,8 @@ class I18nKeys {
   static const commonMore = 'common.more';
   static const commonName = 'common.name';
   static const commonOk = 'common.ok';
+  static const commonNoPermission = 'common.noPermission';
+  static const commonNoPermissionHint = 'common.noPermissionHint';
   static const commonOpen = 'common.open';
   static const commonPathCopied = 'common.pathCopied';
   static const commonPending = 'common.pending';
@@ -904,11 +906,13 @@ class I18nKeys {
   static const photoAiTaskProgress = 'photo.ai.taskProgress';
   static const photoAiThreads = 'photo.ai.threads';
   static const photoAiThreadsHint = 'photo.ai.threadsHint';
+  static const photoAlbumAddActivity = 'photo.album.addActivity';
   static const photoAlbumAddDate = 'photo.album.addDate';
   static const photoAlbumAddFace = 'photo.album.addFace';
   static const photoAlbumAddScene = 'photo.album.addScene';
   static const photoAlbumAddTo = 'photo.album.addTo';
   static const photoAlbumAdded = 'photo.album.added';
+  static const photoAlbumActivity = 'photo.album.activity';
   static const photoAlbumAutoCover = 'photo.album.autoCover';
   static const photoAlbumCover = 'photo.album.cover';
   static const photoAlbumCoverBadge = 'photo.album.coverBadge';
@@ -928,10 +932,12 @@ class I18nKeys {
   static const photoAlbumName = 'photo.album.name';
   static const photoAlbumNoFace = 'photo.album.noFace';
   static const photoAlbumNoNamedFace = 'photo.album.noNamedFace';
+  static const photoAlbumNoActivity = 'photo.album.noActivity';
   static const photoAlbumNoScene = 'photo.album.noScene';
   static const photoAlbumPhotoCount = 'photo.album.photoCount';
   static const photoAlbumPickDate = 'photo.album.pickDate';
   static const photoAlbumPickFace = 'photo.album.pickFace';
+  static const photoAlbumPickActivity = 'photo.album.pickActivity';
   static const photoAlbumPickScene = 'photo.album.pickScene';
   static const photoAlbumRemovePhoto = 'photo.album.removePhoto';
   static const photoAlbumRules = 'photo.album.rules';
@@ -1474,13 +1480,24 @@ class I18nKeys {
   static const photoTimeContrastEarliest = 'photo.timeContrast.earliest';
   static const photoTimeContrastEmpty = 'photo.timeContrast.empty';
   static const photoTimeContrastEmptyHint = 'photo.timeContrast.emptyHint';
+  static const photoTimeContrastFallbackAlbum = 'photo.timeContrast.fallbackAlbum';
+  static const photoTimeContrastFallbackSimilar = 'photo.timeContrast.fallbackSimilar';
+  static const photoTimeContrastFallbackTime = 'photo.timeContrast.fallbackTime';
+  static const photoTimeContrastMoreFaces = 'photo.timeContrast.moreFaces';
+  static const photoTimeContrastNoFace = 'photo.timeContrast.noFace';
+  static const photoTimeContrastNoPair = 'photo.timeContrast.noPair';
   static const photoTimeContrastGap = 'photo.timeContrast.gap';
   static const photoTimeContrastHint = 'photo.timeContrast.hint';
   static const photoTimeContrastLatest = 'photo.timeContrast.latest';
   static const photoTimeContrastOpen = 'photo.timeContrast.open';
   static const photoTimeContrastPickDate = 'photo.timeContrast.pickDate';
   static const photoTimeContrastSpan = 'photo.timeContrast.span';
+  static const photoTimeContrastSamePerson = 'photo.timeContrast.samePerson';
+  static const photoTimeContrastTarget = 'photo.timeContrast.target';
   static const photoTimeContrastTitle = 'photo.timeContrast.title';
+  static const photoTimeContrastUnknownTarget = 'photo.timeContrast.unknownTarget';
+  static const photoTimeContrastUnnamed = 'photo.timeContrast.unnamed';
+  static const photoTimeContrastUnnamedPerson = 'photo.timeContrast.unnamedPerson';
   static const photoTimelineAll = 'photo.timeline.all';
   static const photoTimelineBatchFavorite = 'photo.timeline.batchFavorite';
   static const photoTimelineSelect = 'photo.timeline.select';
@@ -2102,6 +2119,9 @@ class I18nKeys {
   static const uiPhotoHf39ac5 = 'ui.photo.hf39ac5';
   static const uiPhotoHfadc6b = 'ui.photo.hfadc6b';
   static const uiPhotoHfe6c48 = 'ui.photo.hfe6c48';
+  static const uiSelectionAll = 'ui.selection.all';
+  static const uiSelectionEnter = 'ui.selection.enter';
+  static const uiSelectionNone = 'ui.selection.none';
   static const uiSettings001 = 'ui.settings.001';
   static const uiSettings002 = 'ui.settings.002';
   static const uiSettings003 = 'ui.settings.003';
@@ -2733,4 +2753,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2688;
+const int i18nKeyCount = 2708;

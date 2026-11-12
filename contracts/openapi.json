@@ -3723,6 +3723,198 @@
           }
         }
       },
+      "PhotoTimeContrastFace": {
+        "type": "object",
+        "required": [
+          "id",
+          "clusterId",
+          "name",
+          "score",
+          "quality",
+          "area"
+        ],
+        "properties": {
+          "id": {
+            "description": "人脸 id，头像拼 /photo/face/image?id=",
+            "type": "string"
+          },
+          "clusterId": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "score": {
+            "type": "number"
+          },
+          "quality": {
+            "type": "number",
+            "nullable": true
+          },
+          "area": {
+            "description": "人脸框占整图面积比（0..1），用于解释排序",
+            "type": "number"
+          }
+        }
+      },
+      "PhotoTimeContrastSide": {
+        "type": "object",
+        "required": [
+          "year",
+          "item",
+          "faces",
+          "faceCount"
+        ],
+        "properties": {
+          "year": {
+            "type": "integer"
+          },
+          "item": {
+            "$ref": "#/components/schemas/PhotoItem"
+          },
+          "faces": {
+            "description": "最多 3 张，面积 × 清晰度倒序",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhotoTimeContrastFace"
+            }
+          },
+          "faceCount": {
+            "description": "这张照片识别到的人脸总数",
+            "type": "integer"
+          }
+        }
+      },
+      "PhotoTimeContrastPerson": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "description": "人脸聚类 id",
+            "type": "string"
+          },
+          "name": {
+            "description": "用户命名；未命名时为空",
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "PhotoTimeContrastAlbum": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "PhotoTimeContrastResponse": {
+        "type": "object",
+        "required": [
+          "month",
+          "day",
+          "mode",
+          "person",
+          "album",
+          "reason",
+          "similarity",
+          "gapYears",
+          "left",
+          "right"
+        ],
+        "properties": {
+          "month": {
+            "type": "integer"
+          },
+          "day": {
+            "type": "integer"
+          },
+          "mode": {
+            "description": "person = 锁定同一人物；fallback = 降级配对",
+            "type": "string"
+          },
+          "person": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhotoTimeContrastPerson"
+              },
+              {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            ]
+          },
+          "album": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhotoTimeContrastAlbum"
+              },
+              {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            ]
+          },
+          "reason": {
+            "description": "person / same_album / similar / time_span，界面据此解释配对依据",
+            "type": "string"
+          },
+          "similarity": {
+            "description": "降级配对时的感知哈希相似度（0..1），无指纹时为空",
+            "type": "number",
+            "nullable": true
+          },
+          "gapYears": {
+            "type": "integer"
+          },
+          "left": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhotoTimeContrastSide"
+              },
+              {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            ]
+          },
+          "right": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhotoTimeContrastSide"
+              },
+              {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            ]
+          }
+        }
+      },
       "PhotoDeleteBody": {
         "type": "object",
         "required": [
@@ -4685,6 +4877,12 @@
               {
                 "type": "string",
                 "enum": [
+                  "activity"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
                   "date"
                 ]
               }
@@ -4692,7 +4890,7 @@
           },
           "value": {
             "maxLength": 128,
-            "description": "face = 聚类 id；scene = 场景标签",
+            "description": "face = 聚类 id；scene / activity = 标签",
             "type": "string"
           },
           "from": {
@@ -27985,6 +28183,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PhotoOnThisDayResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/time-contrast": {
+      "get": {
+        "operationId": "photoTimeContrast",
+        "summary": "时光对照：同一天最早的年份 vs 最近的年份（优先锁定同一人物）",
+        "tags": [
+          "photo"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 12,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "month",
+            "required": false
+          },
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 31,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "day",
+            "required": false
+          },
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 60,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "perYear",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoTimeContrastResponse"
                 }
               }
             }

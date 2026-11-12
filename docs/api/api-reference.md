@@ -1,7 +1,7 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**402 个路径 / 428 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**403 个路径 / 429 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
@@ -14,7 +14,7 @@
 - **开放集成（Webhook / deliveries）**（`integration`）· 6 个操作 · [跳转](#integration)
 - **音乐**（`music`）· 35 个操作 · [跳转](#music)
 - **其他**（`other`）· 2 个操作 · [跳转](#other)
-- **相册**（`photo`）· 131 个操作 · [跳转](#photo)
+- **相册**（`photo`）· 132 个操作 · [跳转](#photo)
 - **player**（`player`）· 2 个操作 · [跳转](#player)
 - **pt**（`pt`）· 26 个操作 · [跳转](#pt)
 - **RSS 订阅**（`rss`）· 15 个操作 · [跳转](#rss)
@@ -1766,6 +1766,13 @@ GPS 视觉候选生成进度 · `photoGeoVisionStatus`
 总量与时间跨度 · `photoStats`
 
 - 响应：200 `PhotoStatsResponse`
+
+#### `GET /api/v1/photo/time-contrast`
+
+时光对照：同一天最早的年份 vs 最近的年份（优先锁定同一人物） · `photoTimeContrast`
+
+- 参数：`month` · 查询 · integer · 可选<br>`day` · 查询 · integer · 可选<br>`perYear` · 查询 · integer · 可选
+- 响应：200 `PhotoTimeContrastResponse`
 
 #### `GET /api/v1/photo/timeline`
 

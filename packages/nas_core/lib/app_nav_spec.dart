@@ -158,11 +158,9 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
           NavItemSpec(id: 'relations', labelKey: 'photo.relations.title', icon: 'hub_outlined'),
           NavItemSpec(id: 'scenes', labelKey: 'ui.photo.036', icon: 'landscape_outlined'),
           NavItemSpec(id: 'activities', labelKey: 'photo.nav.activities', icon: 'sports_handball_outlined'),
-          NavItemSpec(id: 'smartRules', labelKey: 'photo.smartRule.title', icon: 'rule'),
           NavItemSpec(id: 'search', labelKey: 'common.search', icon: 'search'),
           NavItemSpec(id: 'gps', labelKey: 'photo.nav.gps', icon: 'gps_fixed_outlined'),
           NavItemSpec(id: 'cleanup', labelKey: 'photo.nav.similarCleanup', icon: 'cleaning_services_outlined'),
-          NavItemSpec(id: 'duplicateInsight', labelKey: 'photo.nav.duplicateInsight', icon: 'content_copy_outlined'),
         ],
       ),
       NavSectionSpec(
@@ -172,8 +170,7 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         items: <NavItemSpec>[
           NavItemSpec(id: 'source', labelKey: 'photo.nav.source', icon: 'folder_special_outlined'),
           NavItemSpec(id: 'preview', labelKey: 'photo.nav.preview', icon: 'photo_size_select_large_outlined'),
-          NavItemSpec(id: 'aiSettings', labelKey: 'photo.nav.aiSettings', icon: 'tag_faces_outlined'),
-          NavItemSpec(id: 'models', labelKey: 'photo.nav.models', icon: 'sparkles'),
+          NavItemSpec(id: 'aiSettings', labelKey: 'photo.nav.aiSettings', icon: 'tag_faces_outlined', when: 'superAdmin'),
           NavItemSpec(id: 'trash', labelKey: 'photo.nav.trash', icon: 'delete_sweep_outlined'),
           NavItemSpec(id: 'backup', labelKey: 'photo.nav.backup', icon: 'cloud_upload_outlined', when: 'mobileApp'),
         ],
@@ -206,7 +203,6 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         icon: 'collections_bookmark_outlined',
         items: <NavItemSpec>[
           NavItemSpec(id: 'collections', labelKey: 'video.collection.title', icon: 'collections_bookmark_outlined'),
-          NavItemSpec(id: 'smartAlbums', labelKey: 'video.smart.title', icon: 'auto_awesome_outlined'),
           NavItemSpec(id: 'duplicates', labelKey: 'video.duplicate.title', icon: 'content_copy_outlined'),
         ],
       ),
@@ -215,8 +211,8 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         titleKey: 'video.nav.settingsGroup',
         icon: 'settings_outlined',
         items: <NavItemSpec>[
-          NavItemSpec(id: 'settings.library', labelKey: 'video.nav.librarySettings', icon: 'video_library_outlined'),
-          NavItemSpec(id: 'settings.app', labelKey: 'video.nav.appSettings', icon: 'tune'),
+          NavItemSpec(id: 'settings.library', labelKey: 'video.nav.librarySettings', icon: 'video_library_outlined', when: 'superAdmin'),
+          NavItemSpec(id: 'settings.app', labelKey: 'video.nav.appSettings', icon: 'tune', when: 'superAdmin'),
           NavItemSpec(id: 'settings.client', labelKey: 'video.nav.clientSettings', icon: 'devices'),
         ],
       ),
@@ -281,8 +277,8 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         titleKey: 'ui.settings.017',
         icon: 'settings_outlined',
         items: <NavItemSpec>[
-          NavItemSpec(id: 'settings.source', labelKey: 'music.nav.sources', icon: 'folder_outlined'),
-          NavItemSpec(id: 'settings.app', labelKey: 'music.nav.appSettings', icon: 'tune'),
+          NavItemSpec(id: 'settings.source', labelKey: 'music.nav.sources', icon: 'folder_outlined', when: 'superAdmin'),
+          NavItemSpec(id: 'settings.app', labelKey: 'music.nav.appSettings', icon: 'tune', when: 'superAdmin'),
           NavItemSpec(id: 'settings.client', labelKey: 'music.nav.cache', icon: 'devices'),
         ],
       ),

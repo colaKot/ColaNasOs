@@ -1207,6 +1207,11 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/photo/memories/tickets', params, 'query');
   }
 
+  /** 时光对照：同一天最早的年份 vs 最近的年份（优先锁定同一人物） */
+  async photoTimeContrast(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/photo/time-contrast', params, 'query');
+  }
+
   /** 时间轴（taken_at 倒序，排序键 cursor） */
   async photoTimeline(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/photo/timeline', params, 'query');

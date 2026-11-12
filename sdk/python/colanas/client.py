@@ -975,6 +975,10 @@ class ColanasClient:
         """票夹：识别火车票 / 机票 / 门票，按行程归组"""
         return self._request("GET", "/api/v1/photo/memories/tickets", params, "query")
 
+    def photo_time_contrast(self, **params):
+        """时光对照：同一天最早的年份 vs 最近的年份（优先锁定同一人物）"""
+        return self._request("GET", "/api/v1/photo/time-contrast", params, "query")
+
     def photo_timeline(self, **params):
         """时间轴（taken_at 倒序，排序键 cursor）"""
         return self._request("GET", "/api/v1/photo/timeline", params, "query")

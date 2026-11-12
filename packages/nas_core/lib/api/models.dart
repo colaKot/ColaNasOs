@@ -3210,6 +3210,162 @@ class PhotoOnThisDayResponse {
       };
 }
 
+class PhotoTimeContrastFace {
+  final String id;
+  final String? clusterId;
+  final String? name;
+  final double score;
+  final double? quality;
+  final double area;
+
+  const PhotoTimeContrastFace({
+    required this.id,
+    required this.clusterId,
+    required this.name,
+    required this.score,
+    required this.quality,
+    required this.area,
+  });
+
+  factory PhotoTimeContrastFace.fromJson(Map<String, dynamic> json) => PhotoTimeContrastFace(
+        id: json['id'] as String,
+        clusterId: json['clusterId'] as String?,
+        name: json['name'] as String?,
+        score: (json['score'] as num).toDouble(),
+        quality: (json['quality'] as num?)?.toDouble(),
+        area: (json['area'] as num).toDouble(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'clusterId': clusterId,
+        'name': name,
+        'score': score,
+        'quality': quality,
+        'area': area,
+      };
+}
+
+class PhotoTimeContrastSide {
+  final int year;
+  final PhotoItem item;
+  final List<PhotoTimeContrastFace> faces;
+  final int faceCount;
+
+  const PhotoTimeContrastSide({
+    required this.year,
+    required this.item,
+    required this.faces,
+    required this.faceCount,
+  });
+
+  factory PhotoTimeContrastSide.fromJson(Map<String, dynamic> json) => PhotoTimeContrastSide(
+        year: json['year'] as int,
+        item: PhotoItem.fromJson(json['item'] as Map<String, dynamic>),
+        faces: (json['faces'] as List<dynamic>).map((e) => PhotoTimeContrastFace.fromJson(e as Map<String, dynamic>)).toList(),
+        faceCount: json['faceCount'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'year': year,
+        'item': item.toJson(),
+        'faces': faces.map((e) => e.toJson()).toList(),
+        'faceCount': faceCount,
+      };
+}
+
+class PhotoTimeContrastPerson {
+  final String id;
+  final String? name;
+
+  const PhotoTimeContrastPerson({
+    required this.id,
+    required this.name,
+  });
+
+  factory PhotoTimeContrastPerson.fromJson(Map<String, dynamic> json) => PhotoTimeContrastPerson(
+        id: json['id'] as String,
+        name: json['name'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+      };
+}
+
+class PhotoTimeContrastAlbum {
+  final String id;
+  final String name;
+
+  const PhotoTimeContrastAlbum({
+    required this.id,
+    required this.name,
+  });
+
+  factory PhotoTimeContrastAlbum.fromJson(Map<String, dynamic> json) => PhotoTimeContrastAlbum(
+        id: json['id'] as String,
+        name: json['name'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+      };
+}
+
+class PhotoTimeContrastResponse {
+  final int month;
+  final int day;
+  final String mode;
+  final dynamic person;
+  final dynamic album;
+  final String reason;
+  final double? similarity;
+  final int gapYears;
+  final dynamic left;
+  final dynamic right;
+
+  const PhotoTimeContrastResponse({
+    required this.month,
+    required this.day,
+    required this.mode,
+    required this.person,
+    required this.album,
+    required this.reason,
+    required this.similarity,
+    required this.gapYears,
+    required this.left,
+    required this.right,
+  });
+
+  factory PhotoTimeContrastResponse.fromJson(Map<String, dynamic> json) => PhotoTimeContrastResponse(
+        month: json['month'] as int,
+        day: json['day'] as int,
+        mode: json['mode'] as String,
+        person: (json['person'] as dynamic),
+        album: (json['album'] as dynamic),
+        reason: json['reason'] as String,
+        similarity: (json['similarity'] as num?)?.toDouble(),
+        gapYears: json['gapYears'] as int,
+        left: (json['left'] as dynamic),
+        right: (json['right'] as dynamic),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'month': month,
+        'day': day,
+        'mode': mode,
+        'person': person,
+        'album': album,
+        'reason': reason,
+        'similarity': similarity,
+        'gapYears': gapYears,
+        'left': left,
+        'right': right,
+      };
+}
+
 class PhotoDeleteBody {
   final List<String> ids;
   final bool? toTrash;

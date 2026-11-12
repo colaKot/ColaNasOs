@@ -148,11 +148,6 @@
                 "icon": "sports_handball_outlined"
               },
               {
-                "id": "smartRules",
-                "labelKey": "photo.smartRule.title",
-                "icon": "rule"
-              },
-              {
                 "id": "search",
                 "labelKey": "common.search",
                 "icon": "search"
@@ -166,11 +161,6 @@
             "id": "cleanup",
             "labelKey": "photo.nav.similarCleanup",
             "icon": "cleaning_services_outlined"
-          },
-                    {
-            "id": "duplicateInsight",
-            "labelKey": "photo.nav.duplicateInsight",
-            "icon": "content_copy_outlined"
           }
         ]
       },
@@ -192,12 +182,8 @@
                        {
             "id": "aiSettings",
             "labelKey": "photo.nav.aiSettings",
-            "icon": "tag_faces_outlined"
-          },
-          {
-            "id": "models",
-            "labelKey": "photo.nav.models",
-            "icon": "sparkles"
+            "icon": "tag_faces_outlined",
+            "when": "superAdmin"
           },
           {
             "id": "trash",
@@ -326,11 +312,6 @@
                 "icon": "collections_bookmark_outlined"
               },
               {
-                "id": "smartAlbums",
-                "labelKey": "video.smart.title",
-                "icon": "auto_awesome_outlined"
-              },
-              {
                 "id": "duplicates",
                 "labelKey": "video.duplicate.title",
                 "icon": "content_copy_outlined"
@@ -345,12 +326,14 @@
               {
                 "id": "settings.library",
                 "labelKey": "video.nav.librarySettings",
-                "icon": "video_library_outlined"
+                "icon": "video_library_outlined",
+                "when": "superAdmin"
               },
               {
                 "id": "settings.app",
                 "labelKey": "video.nav.appSettings",
-                "icon": "tune"
+                "icon": "tune",
+                "when": "superAdmin"
               },
               {
                 "id": "settings.client",
@@ -529,12 +512,14 @@
               {
                 "id": "settings.source",
                 "labelKey": "music.nav.sources",
-                "icon": "folder_outlined"
+                "icon": "folder_outlined",
+                "when": "superAdmin"
               },
               {
                 "id": "settings.app",
                 "labelKey": "music.nav.appSettings",
-                "icon": "tune"
+                "icon": "tune",
+                "when": "superAdmin"
               },
               {
                 "id": "settings.client",
@@ -778,9 +763,7 @@
         "id": "files",
         "nameKey": "app.files",
         "apps": [
-          "files",
-          "netdisk",
-          "share"
+          "files"
         ],
         "levels": {
           "desktop": "full",
@@ -810,8 +793,7 @@
         "id": "video",
         "nameKey": "app.video",
         "apps": [
-          "video",
-          "mediaTool"
+          "video"
         ],
         "levels": {
           "desktop": "full",
@@ -838,21 +820,6 @@
         }
       },
       {
-        "id": "book",
-        "nameKey": "app.book",
-        "apps": [
-          "book"
-        ],
-        "levels": {
-          "desktop": "full",
-          "mobile": "full",
-          "web": "full",
-          "tv_android": "none",
-          "tv_apple": "none",
-          "harmony": "full"
-        }
-      },
-      {
         "id": "terminal",
         "nameKey": "app.terminal",
         "apps": [
@@ -865,21 +832,6 @@
           "tv_android": "none",
           "tv_apple": "none",
           "harmony": "none"
-        }
-      },
-      {
-        "id": "editor",
-        "nameKey": "app.notes",
-        "apps": [
-          "notes"
-        ],
-        "levels": {
-          "desktop": "full",
-          "mobile": "limited",
-          "web": "full",
-          "tv_android": "none",
-          "tv_apple": "none",
-          "harmony": "limited"
         }
       },
       {

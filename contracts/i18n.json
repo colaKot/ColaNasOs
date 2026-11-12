@@ -453,6 +453,8 @@
     "common.more": {},
     "common.name": {},
     "common.ok": {},
+    "common.noPermission": {},
+    "common.noPermissionHint": {},
     "common.open": {},
     "common.pathCopied": {},
     "common.pending": {},
@@ -1119,6 +1121,7 @@
     "photo.ai.taskProgress": {},
     "photo.ai.threads": {},
     "photo.ai.threadsHint": {},
+    "photo.album.addActivity": {},
     "photo.album.addDate": {},
     "photo.album.addFace": {},
     "photo.album.addScene": {},
@@ -1126,6 +1129,7 @@
     "photo.album.added": {
       "n": {}
     },
+    "photo.album.activity": {},
     "photo.album.autoCover": {},
     "photo.album.cover": {},
     "photo.album.coverBadge": {},
@@ -1151,12 +1155,14 @@
     "photo.album.name": {},
     "photo.album.noFace": {},
     "photo.album.noNamedFace": {},
+    "photo.album.noActivity": {},
     "photo.album.noScene": {},
     "photo.album.photoCount": {
       "n": {}
     },
     "photo.album.pickDate": {},
     "photo.album.pickFace": {},
+    "photo.album.pickActivity": {},
     "photo.album.pickScene": {},
     "photo.album.removePhoto": {},
     "photo.album.rules": {},
@@ -1976,6 +1982,16 @@
     "photo.timeContrast.earliest": {},
     "photo.timeContrast.empty": {},
     "photo.timeContrast.emptyHint": {},
+    "photo.timeContrast.fallbackAlbum": {
+      "album": {}
+    },
+    "photo.timeContrast.fallbackSimilar": {},
+    "photo.timeContrast.fallbackTime": {},
+    "photo.timeContrast.moreFaces": {
+      "count": {}
+    },
+    "photo.timeContrast.noFace": {},
+    "photo.timeContrast.noPair": {},
     "photo.timeContrast.gap": {
       "count": {}
     },
@@ -1986,7 +2002,14 @@
     "photo.timeContrast.span": {
       "count": {}
     },
+    "photo.timeContrast.samePerson": {},
+    "photo.timeContrast.target": {},
     "photo.timeContrast.title": {},
+    "photo.timeContrast.unknownTarget": {},
+    "photo.timeContrast.unnamed": {},
+    "photo.timeContrast.unnamedPerson": {
+      "id": {}
+    },
     "photo.timeline.all": {},
     "photo.timeline.batchFavorite": {},
     "photo.timeline.select": {},
@@ -2484,29 +2507,41 @@
     "terminal.failed": {
       "error": {}
     },
-    "transfer.added": {},
+    "transfer.added": {
+      "count": {}
+    },
     "transfer.all": {},
     "transfer.byMe": {},
     "transfer.cancel": {},
     "transfer.canceled": {},
     "transfer.completed": {},
     "transfer.done": {},
-    "transfer.downloading": {},
+    "transfer.downloading": {
+      "percent": {}
+    },
     "transfer.empty": {},
     "transfer.failed": {
       "error": {}
     },
     "transfer.failedState": {},
-    "transfer.fromDevice": {},
+    "transfer.fromDevice": {
+      "device": {}
+    },
     "transfer.inProgress": {},
     "transfer.pause": {},
     "transfer.paused": {},
     "transfer.prune": {},
-    "transfer.pruned": {},
+    "transfer.pruned": {
+      "count": {}
+    },
     "transfer.queued": {},
     "transfer.resume": {},
     "transfer.speed": {},
-    "transfer.statsLine": {},
+    "transfer.statsLine": {
+      "active": {},
+      "done": {},
+      "failed": {}
+    },
     "transfer.titleActive": {
       "count": {}
     },
@@ -2736,6 +2771,9 @@
     "ui.photo.hf39ac5": {},
     "ui.photo.hfadc6b": {},
     "ui.photo.hfe6c48": {},
+    "ui.selection.all": {},
+    "ui.selection.enter": {},
+    "ui.selection.none": {},
     "ui.settings.001": {},
     "ui.settings.002": {},
     "ui.settings.003": {},

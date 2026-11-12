@@ -986,6 +986,45 @@ export type PhotoOnThisDayResponse = {
   "years": PhotoOnThisDayYear[];
 };
 
+export type PhotoTimeContrastFace = {
+  "id": string;
+  "clusterId": string;
+  "name": string;
+  "score": number;
+  "quality": number;
+  "area": number;
+};
+
+export type PhotoTimeContrastSide = {
+  "year": number;
+  "item": PhotoItem;
+  "faces": PhotoTimeContrastFace[];
+  "faceCount": number;
+};
+
+export type PhotoTimeContrastPerson = {
+  "id": string;
+  "name": string;
+};
+
+export type PhotoTimeContrastAlbum = {
+  "id": string;
+  "name": string;
+};
+
+export type PhotoTimeContrastResponse = {
+  "month": number;
+  "day": number;
+  "mode": string;
+  "person": PhotoTimeContrastPerson | null;
+  "album": PhotoTimeContrastAlbum | null;
+  "reason": string;
+  "similarity": number;
+  "gapYears": number;
+  "left": PhotoTimeContrastSide | null;
+  "right": PhotoTimeContrastSide | null;
+};
+
 export type PhotoDeleteBody = {
   "ids": string[];
   "toTrash"?: boolean;
@@ -1232,7 +1271,7 @@ export type PhotoStatsResponse = {
 };
 
 export type PhotoAlbumRule = {
-  "kind": "face" | "scene" | "date";
+  "kind": "face" | "scene" | "activity" | "date";
   "value"?: string;
   "from"?: number;
   "to"?: number;

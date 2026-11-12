@@ -12,7 +12,7 @@ enum CapabilityEndpoint {
   harmony,
 }
 
-/// 8 类功能能力（docs/04 §64 的行）。
+/// 6 类功能能力（docs/04 §64 的行）。
 enum Capability {
   files,
   photo,
@@ -38,7 +38,7 @@ class CapabilityEntry {
     required this.levels,
   });
 
-  /// 能力 id（`files` / `photo` / `video` / `music` / `book` / `terminal` / `editor` / `system`）
+  /// 能力 id（`files` / `photo` / `video` / `music` / `terminal` / `system`）
   final String id;
 
   /// 能力名文案键（复用 App 名称，见 l10n/keys.dart）。

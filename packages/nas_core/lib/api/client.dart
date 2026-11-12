@@ -1962,6 +1962,17 @@ class ApiClient {
     return PhotoOnThisDayResponse.fromJson(_asMap(_decode(res)));
   }
 
+  /// 时光对照：同一天最早的年份 vs 最近的年份（优先锁定同一人物）
+  Future<PhotoTimeContrastResponse> photoTimeContrast({int? month, int? day, int? perYear}) async {
+    final query = <String, String>{
+      if (month != null) 'month': '$month',
+      if (day != null) 'day': '$day',
+      if (perYear != null) 'perYear': '$perYear',
+    };
+    final res = await transport.send('GET', _uri('/api/v1/photo/time-contrast', query), headers: await _headers());
+    return PhotoTimeContrastResponse.fromJson(_asMap(_decode(res)));
+  }
+
   /// getApiMcp
   Future<Map<String, dynamic>> getApiMcp() async {
     final res = await transport.send('GET', _uri('/api/mcp'), headers: await _headers());
