@@ -25,6 +25,12 @@ void main() {
   setUp(() {
     // 必然连不上的地址：请求快速失败，页面走错误态，测试不依赖本机内核
     ApiSession.instance.baseUrl = 'http://127.0.0.1:9';
+    // 侧栏按账号授权过滤（2026-11-12）：这里遍历的是「管理员看到全部 App」的形态
+    ApiSession.instance.isAdminFromServer = true;
+  });
+
+  tearDown(() {
+    ApiSession.instance.isAdminFromServer = false;
   });
 
   testWidgets('一级导航：每个 App 都能进入且不抛异常', (tester) async {

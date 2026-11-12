@@ -103,7 +103,13 @@ class _FakeTransport implements Transport {
     if (path.endsWith('/blog/settings')) {
       payload = _settings;
     } else if (path.endsWith('/blog/episodes')) {
-      payload = {'items': _episodes};
+      // 服务端已改为真分页，响应必须带 total / limit / offset
+      payload = {
+        'items': _episodes,
+        'total': _episodes.length,
+        'limit': 10,
+        'offset': 0,
+      };
     } else if (path.endsWith('/blog/voices')) {
       payload = {
         'items': [
@@ -111,6 +117,19 @@ class _FakeTransport implements Transport {
           {'id': 'deep', 'gender': 'male', 'builtin': true, 'label': ''},
         ],
         'defaultVoice': 'default',
+      };
+    } else if (path.endsWith('/blog/mt/model')) {
+      // 翻译模型是另一张卡片，同样有「一键下载」按钮；测试只关心语音模型卡片，
+      // 这里固定返回「已安装」，避免按钮数量干扰断言。
+      payload = {
+        'installed': true,
+        'downloading': false,
+        'percent': 100.0,
+        'phase': '',
+        'task': 'done',
+        'error': null,
+        'modelDir': 'C:/data/mt/models/m2m100',
+        'sizeMb': 512,
       };
     } else if (path.endsWith('/blog/tts/model')) {
       payload = {

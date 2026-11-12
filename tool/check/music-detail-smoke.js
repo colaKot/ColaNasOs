@@ -53,6 +53,9 @@ const lastfm = require(path.join(root, 'dist', 'src', 'modules', 'music', 'lastf
 
 let sigOk = false;
 let lastScrobble = null;
+// 后台补抓计数：热度现在是异步补抓，用它断言「首次请求确实触发了抓取」
+let albumInfoCalls = 0;
+let artistInfoCalls = 0;
 
 const jsonRes = (obj) => ({
   ok: true,
@@ -91,6 +94,7 @@ lastfm.__setLastfmFetch(async (url, init = {}) => {
     });
   }
   if (method === 'album.getinfo') {
+    albumInfoCalls += 1;
     return jsonRes({
       album: {
         name: '葉惠美',
@@ -104,6 +108,7 @@ lastfm.__setLastfmFetch(async (url, init = {}) => {
     });
   }
   if (method === 'artist.getinfo') {
+    artistInfoCalls += 1;
     return jsonRes({
       artist: {
         url: 'https://www.last.fm/music/x',
@@ -136,6 +141,23 @@ process.chdir(root);
   const check = (name, ok, detail) => results.push({ name, ok, detail: detail == null ? '' : String(detail).slice(0, 160) });
   const post = (url, headers, payload) =>
     app.inject({ method: 'POST', url, headers, payload: payload || {} });
+
+  /**
+   * 详情页热度是「前台不等待、后台补抓后写缓存」：
+   * 首请求拿不到值时轮询重试，直到缓存落地或超时。
+   */
+  const waitFor = async (probe, timeoutMs = 3000) => {
+    const started = Date.now();
+    for (;;) {
+      const hit = await probe();
+      if (hit) return hit;
+      if (Date.now() - started > timeoutMs) return null;
+      await new Promise((res) => setTimeout(res, 50));
+    }
+  };
+  /** 首次请求的「空热度」外形：已配置、未命中缓存、值全为 0 */
+  const isCrowdPending = (c) =>
+    c && c.configured === true && c.cached === false && c.playcount === 0 && c.listeners === 0;
 
   const tokenRes = await app.inject({
     method: 'POST',
@@ -227,6 +249,8 @@ process.chdir(root);
   );
 
   // ---------------------------------------------------------------- 专辑详情
+  // 热度异步补抓：首次请求接口必须正常返回，crowd 是「已配置 + 未命中缓存 + 全 0」，
+  // 后台抓取落地后再请求一次，才应该拿到 mock 的播放量 / 听众数。
   r = await post('/api/v1/music/compat/album/detail', bearer, { name: '葉惠美' });
   body = r.json();
   check('album_detail_found', r.statusCode === 200 && body.found === true, JSON.stringify(body).slice(0, 120));
@@ -234,15 +258,36 @@ process.chdir(root);
   check('album_detail_artist', body.artist === '周杰倫', body.artist);
   check('album_detail_year', String(body.year) === '2003', body.year);
   check('album_detail_cover', String(body.cover_path || '').endsWith('a1.mp3'), body.cover_path);
-  check('album_detail_crowd', body.crowd && body.crowd.playcount === 1234 && body.crowd.listeners === 456,
-    JSON.stringify(body.crowd || {}).slice(0, 100));
-  check('album_detail_summary_clean', !/[<>]/.test(String((body.crowd || {}).summary || '')),
-    (body.crowd || {}).summary);
+  check(
+    'album_detail_crowd_pending_first',
+    r.statusCode === 200 && isCrowdPending(body.crowd),
+    JSON.stringify(body.crowd || {}).slice(0, 100),
+  );
+
+  const albumCrowd = await waitFor(async () => {
+    const rr = await post('/api/v1/music/compat/album/detail', bearer, { name: '葉惠美' });
+    const c = rr.json().crowd || {};
+    return c.cached === true && c.playcount === 1234 && c.listeners === 456 ? c : null;
+  });
+  check(
+    'album_detail_crowd_after_cache',
+    Boolean(albumCrowd),
+    JSON.stringify(albumCrowd || {}).slice(0, 100),
+  );
+  check('album_detail_crowd_fetched_in_background', albumInfoCalls >= 1, 'calls=' + albumInfoCalls);
+  check(
+    'album_detail_summary_clean',
+    Boolean(albumCrowd) &&
+      !/[<>]/.test(String(albumCrowd.summary || '')) &&
+      String(albumCrowd.summary || '').includes('一张专辑'),
+    albumCrowd && albumCrowd.summary,
+  );
 
   r = await post('/api/v1/music/compat/album/detail', bearer, { name: '不存在的专辑' });
   check('album_detail_missing', r.json().found === false, JSON.stringify(r.json()).slice(0, 80));
 
   // ---------------------------------------------------------------- 歌手详情
+  // 与专辑同一套异步补抓语义：首次空热度，缓存落地后拿到 mock 的听众数。
   r = await post('/api/v1/music/compat/artist/detail', bearer, { name: '周杰倫' });
   body = r.json();
   check('artist_detail_found', body.found === true, JSON.stringify(body).slice(0, 120));
@@ -254,8 +299,23 @@ process.chdir(root);
       body.albums.some((a) => a.name === '葉惠美'),
     JSON.stringify((body.albums || []).map((a) => a.name)),
   );
-  check('artist_detail_crowd', body.crowd && body.crowd.listeners === 10000,
-    JSON.stringify(body.crowd || {}).slice(0, 100));
+  check(
+    'artist_detail_crowd_pending_first',
+    r.statusCode === 200 && isCrowdPending(body.crowd),
+    JSON.stringify(body.crowd || {}).slice(0, 100),
+  );
+
+  const artistCrowd = await waitFor(async () => {
+    const rr = await post('/api/v1/music/compat/artist/detail', bearer, { name: '周杰倫' });
+    const c = rr.json().crowd || {};
+    return c.cached === true && c.listeners === 10000 ? c : null;
+  });
+  check(
+    'artist_detail_crowd_after_cache',
+    Boolean(artistCrowd),
+    JSON.stringify(artistCrowd || {}).slice(0, 100),
+  );
+  check('artist_detail_crowd_fetched_in_background', artistInfoCalls >= 1, 'calls=' + artistInfoCalls);
 
   // ---------------------------------------------------------------- 列表：去重 / 专辑顺序 / 热度
   r = await post('/api/v1/music/compat/list', bearer, {

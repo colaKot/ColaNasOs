@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 端能力矩阵生成器（CL4-02）。
- * 输入：contracts/apps.json#capabilities（8 能力 × 6 端档位 + App 归属）
+ * 输入：contracts/apps.json#capabilities（能力 × 端档位 + App 归属）
  * 输出：packages/nas_core/lib/capability_matrix.dart
  *
  * 用法：
@@ -55,7 +55,7 @@ function gen() {
     ...endpoints.map((e) => `  ${camel(e)},`),
     '}',
     '',
-    '/// 8 类功能能力（docs/04 §64 的行）。',
+    `/// ${items.length} 类功能能力（docs/04 §64 的行）。`,
     'enum Capability {',
     ...items.map((it) => `  ${camel(it.id)},`),
     '}',
@@ -74,7 +74,7 @@ function gen() {
     '    required this.levels,',
     '  });',
     '',
-    '  /// 能力 id（`files` / `photo` / `video` / `music` / `book` / `terminal` / `editor` / `system`）',
+    `  /// 能力 id（${items.map((it) => `\`${it.id}\``).join(' / ')}）`,
     '  final String id;',
     '',
     '  /// 能力名文案键（复用 App 名称，见 l10n/keys.dart）。',

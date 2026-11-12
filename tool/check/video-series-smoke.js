@@ -318,6 +318,44 @@ const FILES = [
     `series=${JSON.stringify(albumSeries)}`,
   );
 
+  // 3.6 普通合集同样按剧聚合：把整部剧的每一集都放进合集，也只出一张卡
+  r = await app.inject({
+    method: 'GET',
+    url: '/api/v1/video/list?series=' + encodeURIComponent('Breaking Bad') + '&limit=50',
+    headers: writer,
+  });
+  const bbIds = (r.json().items || []).map((x) => x.id);
+  r = await app.inject({
+    method: 'POST',
+    url: '/api/v1/video/collections/upsert',
+    headers: writer,
+    payload: { name: 'TV collection' },
+  });
+  const tvCol = r.json();
+  r = await app.inject({
+    method: 'POST',
+    url: '/api/v1/video/collections/items',
+    headers: writer,
+    payload: { id: tvCol.id, itemIds: bbIds, action: 'add' },
+  });
+  const colItems = r.json().items || [];
+  check(
+    'collection_one_card_per_series',
+    r.statusCode === 200 &&
+      bbIds.length === 3 &&
+      colItems.length === 1 &&
+      colItems[0].seriesInfo &&
+      colItems[0].seriesInfo.name === 'Breaking Bad' &&
+      colItems[0].seriesInfo.episodes === 3,
+    `eps=${bbIds.length} cards=${JSON.stringify(colItems.map((x) => x.title))}`,
+  );
+  r = await app.inject({ method: 'GET', url: '/api/v1/video/collections', headers: writer });
+  check(
+    'collection_count_per_series',
+    r.statusCode === 200 && r.json().items[0] && r.json().items[0].items === 1,
+    `items=${r.json().items[0] && r.json().items[0].items}`,
+  );
+
   // 5. 关键词 + cursor 翻页
   r = await app.inject({ method: 'GET', url: '/api/v1/video/series?q=wire', headers: reader });
   check(

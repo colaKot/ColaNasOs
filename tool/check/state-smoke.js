@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * 书籍全文检索（FTS5）+ 音乐收藏 / 播放历史 验收。
+ * 音乐收藏 / 播放历史 / 自动歌单 验收。
  *
- * - 全文：txt 正文入库后，中文两字词（如「三体」）也能命中（单字分词 + AND）
- * - 音乐：收藏幂等、取消、播放历史倒序、跨用户隔离
+ * - 音乐：收藏幂等、取消、播放历史倒序、跨用户隔离、自动歌单口径
+ * - 书籍模块已整体移除：`/api/v1/book/*` 必须全部 404（防止路由被误加回来）
  *
  * 用法：node tool/check/state-smoke.js（Electron 自举）
  */
@@ -45,11 +45,7 @@ process.chdir(root);
 (async () => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'colanas-state-'));
   const filesRoot = path.join(dataDir, 'files');
-  fs.mkdirSync(path.join(filesRoot, 'books'), { recursive: true });
-  fs.writeFileSync(
-    path.join(filesRoot, 'books', 'santi.txt'),
-    '第一章 三体问题\n三体世界的文明与科幻设定。\n',
-  );
+  fs.mkdirSync(filesRoot, { recursive: true });
 
   process.env.COLANAS_DEV_TOKEN = '1';
   process.env.COLANAS_JWT_SECRET = 'test-secret-0123456789abcdef';
@@ -70,54 +66,18 @@ process.chdir(root);
   const devToken = async (scopes, sub = 'admin') =>
     (await inject('POST', '/api/v1/auth/dev-token', '', { sub, scopes })).json().token;
 
-  const admin = await devToken(['book:read', 'book:write', 'music:read', 'music:write'], 'admin');
-  const bookReader = await devToken(['book:read'], 'reader');
-  const other = await devToken(['book:read', 'music:read', 'music:write'], 'u2');
+  const admin = await devToken(['music:read', 'music:write'], 'admin');
+  const other = await devToken(['music:read', 'music:write'], 'u2');
 
-  // ---- 书籍全文 ----
-  let r = await inject('POST', '/api/v1/book/search/reindex', '', {});
-  check('reindex_anonymous_401', r.statusCode === 401, 'status=' + r.statusCode);
-
-  r = await inject('POST', '/api/v1/book/search/reindex', bookReader, {});
-  check('reindex_reader_403', r.statusCode === 403, 'status=' + r.statusCode);
-
-  await inject('POST', '/api/v1/book/libraries', admin, { name: 'books', path: 'books' });
-  r = await inject('POST', '/api/v1/book/scan', admin, {});
-  check(
-    'book_scan',
-    r.statusCode === 200 && (r.json().added || 0) >= 1,
-    'added=' + (r.json().added || 0),
-  );
+  // ---- 书籍模块已移除：相关路由必须不存在（而不是 401/403/500） ----
+  let r = await inject('POST', '/api/v1/book/libraries', admin, { name: 'books', path: 'books' });
+  check('book_libraries_route_removed', r.statusCode === 404, 'status=' + r.statusCode);
 
   r = await inject('POST', '/api/v1/book/search/reindex', admin, {});
-  check(
-    'reindex_ok',
-    r.statusCode === 200 && r.json().indexed >= 1,
-    'indexed=' + (r.statusCode === 200 ? r.json().indexed : 'n/a'),
-  );
+  check('book_reindex_route_removed', r.statusCode === 404, 'status=' + r.statusCode);
 
   r = await inject('GET', '/api/v1/book/search?q=' + encodeURIComponent('三体'), admin);
-  const hits = r.statusCode === 200 ? r.json().items : [];
-  check(
-    'fulltext_cjk_two_chars',
-    r.statusCode === 200 && hits.length >= 1 && hits[0].title.includes('santi'),
-    `status=${r.statusCode} hits=${hits.length}`,
-  );
-  check(
-    'fulltext_snippet',
-    hits.length >= 1 && typeof hits[0].snippet === 'string' && hits[0].snippet.includes('三体'),
-    hits[0] && hits[0].snippet,
-  );
-
-  r = await inject('GET', '/api/v1/book/search?q=' + encodeURIComponent('不存在的内容'), admin);
-  check(
-    'fulltext_miss_empty',
-    r.statusCode === 200 && r.json().items.length === 0,
-    'hits=' + r.json().items.length,
-  );
-
-  r = await inject('GET', '/api/v1/book/search', admin);
-  check('fulltext_missing_q_400', r.statusCode === 400, 'status=' + r.statusCode);
+  check('book_search_route_removed', r.statusCode === 404, 'status=' + r.statusCode);
 
   // ---- 音乐收藏 / 历史 / 自动歌单（直接插曲目，避免依赖 ffmpeg 探测） ----
   const baseSec = Math.floor(Date.now() / 1000);

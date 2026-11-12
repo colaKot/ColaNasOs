@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 端能力矩阵门禁（CL4-02）：
- *  1. `contracts/apps.json#capabilities` 结构完整（8 能力 × 6 端，档位合法）
+ *  1. `contracts/apps.json#capabilities` 结构完整（6 能力 × 6 端，档位合法）
  *  2. nameKey 在 i18n 契约中登记，apps 引用真实存在的 App
  *  3. 与 `docs/04-客户端.md` §64 表格逐格一致（✅ full / ⚠️ limited / ❌ none）
  *  4. 生成物 `capability_matrix.dart` 与契约一致（调用 gen-capabilities --check）

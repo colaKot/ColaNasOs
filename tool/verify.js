@@ -136,7 +136,7 @@ const STEPS = [
   { script: 'smoke:lyrics', label: '歌词（LRC / ID3 / Vorbis / MP4）', est: 5650 },
   { script: 'smoke:blog', label: 'AI 播客（设置 / 文案 / 试听缓存降级）', est: 4200 },
   { script: 'smoke:player', label: 'HLS 转码会话 / 字幕烧录 / 分片访问', est: 6300 },
-  { script: 'smoke:state', label: '书籍全文检索（FTS5）/ 音乐收藏与历史', est: 5150 },
+  { script: 'smoke:state', label: '音乐收藏 / 播放历史 / 自动歌单（书籍路由已移除）', est: 5150 },
   { script: 'smoke:extras', label: '离线刮削 / 加密空间导出 / 受限命令', est: 5630 },
   { script: 'smoke:photo-ai', label: '照片智能（人脸 / 场景 / 以图搜图）', est: 8890 },
   { script: 'smoke:photo-retrieval', label: '相册检索链路（联想 / 关系图 / 预演撤销 / 重扫 / 分项重识别）', est: 5110 },

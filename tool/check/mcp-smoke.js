@@ -174,13 +174,25 @@ function startMcp(baseUrl, token) {
     r = await mcp.call('tools/list');
     const tools = (r.result && r.result.tools) || [];
     const names = tools.map((t) => t.name);
+    // 以 sidecars/mcp/main.js 实际注册的工具为准：多一个少一个都要红，
+    // 避免以后增删工具时这条静默通过。
+    const expectedTools = [
+      'files_list',
+      'photo_timeline',
+      'video_list',
+      'music_list',
+      'system_monitor',
+      'media_libraries',
+    ];
     check(
       'tools_list',
-      tools.length >= 7 &&
-        ['files_list', 'video_list', 'music_list', 'system_monitor'].every((n) =>
-          names.includes(n),
-        ),
+      [...names].sort().join(',') === [...expectedTools].sort().join(','),
       names.join(','),
+    );
+    check(
+      'tools_count',
+      tools.length === expectedTools.length,
+      `count=${tools.length} expected=${expectedTools.length}`,
     );
     check(
       'tools_schema',
