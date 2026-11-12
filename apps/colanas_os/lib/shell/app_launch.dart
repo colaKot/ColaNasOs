@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
@@ -52,6 +53,44 @@ Future<void> _ensureClientId() async {
   ColanasClientId.override = id;
 }
 
+/// 每 30 秒汇总一次帧耗时上报到服务端日志。
+///
+/// 装机版用户反馈「客户端非常卡、完全无法操作」时，光看服务端请求看不出是
+/// UI 线程被阻塞还是网络慢；这个数字能直接区分：平均帧 >32ms / 慢帧占比高
+/// 说明是渲染或同步 I/O 卡住，帧耗时正常则问题在别处。回调只做累加，不额外
+/// 建 widget，不会反过来拖慢界面。
+void _installFrameMonitor() {
+  var frames = 0;
+  var slow = 0;
+  var sumMs = 0.0;
+  var worstMs = 0.0;
+  var last = DateTime.now();
+  SchedulerBinding.instance.addTimingsCallback((List<FrameTiming> timings) {
+    for (final t in timings) {
+      final ms = t.totalSpan.inMicroseconds / 1000.0;
+      frames += 1;
+      sumMs += ms;
+      if (ms > 32) {
+        slow += 1;
+        if (ms > worstMs) worstMs = ms;
+      }
+    }
+    final now = DateTime.now();
+    if (frames > 0 && now.difference(last) >= const Duration(seconds: 30)) {
+      ClientLogger.instance.info(
+        '$frames帧/30s 平均${(sumMs / frames).toStringAsFixed(1)}ms '
+        '慢帧$slow 最慢${worstMs.toStringAsFixed(0)}ms',
+        route: 'perf.frame',
+      );
+      frames = 0;
+      slow = 0;
+      sumMs = 0;
+      worstMs = 0;
+      last = now;
+    }
+  });
+}
+
 /// 统一入口：初始化设置、恢复会话、初始化播放内核，然后启动应用
 Future<void> runColanasApp({AppLaunchMode mode = AppLaunchMode.full}) async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,6 +102,7 @@ Future<void> runColanasApp({AppLaunchMode mode = AppLaunchMode.full}) async {
   // 前端异常也进服务端日志：日志页只有一份，排查时不用两头找。
   // 传端标识，dev 批量日志里能区分是完整端还是相册/音乐/同步端。
   ClientLogger.instance.install(app: mode.name);
+  _installFrameMonitor();
   MediaKit.ensureInitialized();
   // Android 前台服务：熄屏 / 切后台继续播，通知栏与锁屏才有控制。
   // Web 走浏览器自己的 Media Session、桌面窗口常驻，两端都是空实现。

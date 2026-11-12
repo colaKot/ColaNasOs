@@ -215,32 +215,69 @@ const transcodedMsOf = (parts: PlaylistPart[]) =>
   parts.reduce((sum, p) => sum + playlistDurationMs(p.text), 0);
 
 /**
- * 等「播放列表里至少有 1 个分片」再返回地址（最多 ms）。
+ * 静态点播播放列表：**按片源时长预列全部分片名**，`PLAYLIST-TYPE:VOD` + ENDLIST。
  *
- * 为什么建会话要等：起播链路是「建会话 → 立刻把 m3u8 交给播放器」。首个分片
- * 落盘前，`/player/hls/:id/index.m3u8` 会**挂住连接最多 25s** 等分片（见路由里的
- * 就绪等待），而手机/PC 经外网域名（反向代理）打开时，代理往往 10~20s 就把
- * 这个「没有任何字节」的响应掐掉 —— 播放器拿到 `Failed to open ...m3u8`。
- * 用户看到的现象就是「第一次打开必定失败，关掉重开就好」：第二次复用同一会话，
- * 分片早就有了，秒开。这里改成建会话时先等分片（界面本来就在转圈），
- * 播放器拿到的地址一定是可播的。
+ * 为什么不直接把 ffmpeg 边写边追加的 EVENT 列表丢给播放器：
+ * EVENT 没有 ENDLIST，播放器按直播语义处理，会从**末尾**几片起播、并一直等新片；
+ * 而且首片没落盘时列表是空的，播放器第一次 open 直接失败，第二次（会话已有分片）
+ * 才正常 —— 就是「第一次打不开、重开就好」。
+ * 点播列表让播放器从 seg00000 开始按序拉；某一片还没转出来时，由分片路由
+ * 负责等待（见下），播放器不会碰到「空的 m3u8」。
+ *
+ * 分片名与 pump 的分段续转对齐：每段 leadMs/6s 片、各自独立编号，
+ * 用 `?part=pN` 指到对应子目录；跨段插 DISCONTINUITY，fMP4 每段重新声明 MAP。
  */
-async function waitPlayable(k: KernelApi, id: string, maxMs: number): Promise<boolean> {
-  const deadline = Date.now() + maxMs;
-  for (;;) {
-    if (partsOf(k, id).length > 0) return true;
-    for (const root of [sessionDirOf(k, id), path.join(k.paths.dataDir, 'hls', id)]) {
-      try {
-        if (fs.readFileSync(path.join(root, 'index.m3u8'), 'utf8').includes('#EXTINF')) {
-          return true;
-        }
-      } catch {
-        // 播放列表还没写出来
-      }
+async function buildStaticVodPlaylist(
+  k: KernelApi,
+  session: string,
+  row: SessionRow,
+  token: string,
+): Promise<string | null> {
+  const totalMs = await sourceDurationMsOf(k, row.item_id);
+  const actual = actualCodecOf(k, session);
+  const codec = actual.codec || row.codec || 'h264';
+  const container =
+    actual.container || row.container || (codec === 'h264' ? 'mpegts' : 'fmp4');
+  const fmp4 = container === 'fmp4';
+  const ext = fmp4 ? 'm4s' : 'ts';
+  const leadMs = Math.max(0, Number(row.lead_ms) || 0);
+  // 0 = 用户显式选「整片一次转完」，单目录不分段
+  const segPerPart = leadMs > 0 ? Math.max(1, Math.ceil(leadMs / 6000)) : 0;
+  const startMs = Math.max(0, Number(row.start_ms) || 0);
+  const remainMs = Math.max(0, totalMs - startMs);
+  // 片源时长还没入库（刚扫描完 / 探测失败）时也不能退回 EVENT 列表：
+  // 用已转出的片数先给一个可播列表，后续分片由播放器按序拉取。
+  const totalSegs =
+    remainMs > 0
+      ? Math.max(1, Math.ceil(remainMs / 6000))
+      : Math.max(1, Number(row.segments) || 1);
+  const t = encodeURIComponent(token);
+
+  const lines = [
+    '#EXTM3U',
+    `#EXT-X-VERSION:${fmp4 ? 7 : 3}`,
+    '#EXT-X-TARGETDURATION:6',
+    '#EXT-X-MEDIA-SEQUENCE:0',
+    '#EXT-X-PLAYLIST-TYPE:VOD',
+    '#EXT-X-START:TIME-OFFSET=0',
+  ];
+  // null 初值保证**第一段也写 MAP**：fMP4 没有 init.mp4 播放器解不出任何分片。
+  let lastPart: string | null = null;
+  for (let i = 0; i < totalSegs; i += 1) {
+    const part = segPerPart > 0 ? `p${Math.floor(i / segPerPart)}` : '';
+    const local = segPerPart > 0 ? i % segPerPart : i;
+    const q = part ? `?part=${part}&t=${t}` : `?t=${t}`;
+    if (part !== lastPart) {
+      if (lastPart !== null) lines.push('#EXT-X-DISCONTINUITY');
+      if (fmp4) lines.push(`#EXT-X-MAP:URI="init.mp4${q}"`);
+      lastPart = part;
     }
-    if (Date.now() >= deadline) return false;
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    const dur = i === totalSegs - 1 ? Math.max(0.1, (remainMs - i * 6000) / 1000) : 6;
+    lines.push(`#EXTINF:${dur.toFixed(3)},`);
+    lines.push(`seg${String(local).padStart(5, '0')}.${ext}${q}`);
   }
+  lines.push('#EXT-X-ENDLIST');
+  return `${lines.join('\n')}\n`;
 }
 
 const segmentCountOf = (parts: PlaylistPart[]) =>
@@ -773,8 +810,7 @@ export const videoPlayer: ServerModule = {
         if (dupe) {
           // 内核重启可能留下 pending 会话、没有 pump 在跑，顺手补一次
           pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
-          // 复用的会话也要保证「返回时已有分片」，否则第一次打开仍会撞空列表
-          await waitPlayable(k, dupe.id, 20_000);
+          // 点播列表按片长预列全部分片，不需要等首片；返回地址即可起播
           return {
             id: dupe.id,
             url: urlOf(dupe.id, hlsToken(k, dupe.id)),
@@ -793,12 +829,8 @@ export const videoPlayer: ServerModule = {
                   ${audioIndex}, ${forceSdr}, ${forceSdr}, ${leadMs}, ${startMs}, 'pending', ${ts}, ${ts})
         `.execute(k.db);
         pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
-        // 等首片（最多 20s）：建会话是普通 Dart HTTP 请求（客户端超时 30s），
-        // 可以放心在这里等 —— 播放器**不会**感知这一步。
-        // 这是「第一次打开必失败」的治本点：把等待放在播放器不碰的调用里，
-        // 返回给播放器的地址保证已经有分片，播放器第一次 open 就拿到真实列表。
-        // 另一种常见做法是给静态点播列表、把等待放到单个分片请求上，思路相同。
-        await waitPlayable(k, id, 20_000);
+        // 不再等首片：播放列表是即时生成的静态 VOD 列表，播放器按序拉分片，
+        // 还没转出来的那一片由分片路由等待（点播放到出画面不再有 20s 空转）。
         return { id, url: urlOf(id, hlsToken(k, id)), startedMs: startMs };
       },
     );
@@ -909,6 +941,35 @@ export const videoPlayer: ServerModule = {
         }
 
         const isPlaylist = file === 'index.m3u8';
+        // 点播列表：立刻返回一份按片长预列全部分片的 VOD 列表，不等任何分片落盘。
+        // 播放器从 seg00000 起播，某个分片还没转出来时由下面的分片路由等待。
+        if (isPlaylist) {
+          const full = (
+            await sql<SessionRow>`select * from player_sessions where id = ${session}`.execute(k.db)
+          ).rows[0];
+          if (full) {
+            const vod = await buildStaticVodPlaylist(k, session, full, hlsToken(k, session));
+            if (vod) {
+              // 装机版排障线索：列表是静态生成的，光看请求日志看不出
+              // 到底给了多少片、用哪个容器、是不是分段的。
+              k.log.info(
+                {
+                  session,
+                  codec: full.codec,
+                  container: full.container,
+                  leadMs: full.lead_ms,
+                  startMs: full.start_ms,
+                  segments: (vod.match(/#EXTINF/g) || []).length,
+                  parts: (vod.match(/#EXT-X-DISCONTINUITY/g) || []).length + 1,
+                },
+                '[player] 静态 VOD 播放列表已生成',
+              );
+              reply.header('cache-control', 'no-store').type('application/vnd.apple.mpegurl');
+              return reply.send(vod);
+            }
+          }
+        }
+        // 片源时长缺失时的兜底：仍用 ffmpeg 直出的 EVENT 列表（老行为）
         // 有 pN 分段时，播放列表由服务端实时拼：各段独立的 init / 分片 +
         // 接缝处 DISCONTINUITY，末尾不写 ENDLIST（后面还会续段）。
         const parts = isPlaylist ? partsOf(k, session) : [];
@@ -924,7 +985,10 @@ export const videoPlayer: ServerModule = {
         // 空 EVENT 列表是合法的「还没内容、请按 targetduration 轮询」，
         // hls.js 与 mpv 都会自己再拉，分片一出现就起播。
         if (body === null) {
-          const deadline = Date.now() + 2_000;
+          // 播放列表（兜底路径）最多等 2s；**分片可以等 30s**：播放器此时已经
+          // 解析完点播列表、处于缓冲状态，对单个分片请求的容忍度远高于 open 阶段。
+          // 等待期间客户端的会话轮询会上报播放位置，pump 按需续转下一段。
+          const deadline = Date.now() + (isPlaylist ? 2_000 : 30_000);
           for (;;) {
             try {
               body = await fsp.readFile(abs);
@@ -933,11 +997,11 @@ export const videoPlayer: ServerModule = {
             }
             const ready = isPlaylist
               ? body !== null && body.toString('utf8').includes('#EXTINF')
-              : body !== null;
+              : body !== null && body.length > 0;
             if (ready) break;
             const stillWorking =
               sessionStatus === 'pending' || sessionStatus === 'running';
-            if (!isPlaylist || !stillWorking || Date.now() >= deadline) break;
+            if ((isPlaylist && !stillWorking) || Date.now() >= deadline) break;
             // 会话可能在这期间失败 / 被取消，别死等
             const st = await statusOf(k, session);
             if (st === 'failed' || st === 'canceled') break;
@@ -946,6 +1010,14 @@ export const videoPlayer: ServerModule = {
         }
 
         if (body === null) {
+          // 分片等不到：写一条日志，否则只能看到 404，判断不出是转码太慢、
+          // 会话被取消，还是播放器要了一个根本不会产出的分片。
+          if (!isPlaylist) {
+            k.log.warn(
+              { session, file, part, status: sessionStatus },
+              '[player] 分片等待超时',
+            );
+          }
           // 转码刚启动、首片还没落盘：给一个空的 EVENT 播放列表。
           // hls.js 会按 live 语义定时刷新，分片一出现就能播；
           // 直接 404 会让它判定 fatal，整页变成播放错误。

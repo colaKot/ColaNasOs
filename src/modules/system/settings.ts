@@ -19,6 +19,9 @@ import { httpError } from '../files/fs-root';
 const TAG = ['system'];
 const ref = (id: string) => ({ $ref: `${id}#` });
 
+/** `/api/v1/system/client-log` 的进程内滑动窗口（最近 60 秒的时间戳） */
+const clientLogWindow: number[] = [];
+
 const ErrorResponse = Type.Object(
   {
     error: Type.String(),
@@ -697,9 +700,15 @@ export function registerSystemSettings(app: FastifyInstance, k: KernelApi): void
 
   // 客户端日志上报：前端异常（请求超时 / 渲染炸 / 未捕获异常）落一条到同一份日志里。
   // 不加这个，「设置 → 日志」永远只有服务端视角，用户报的错（比如删除超时）一条也找不到。
+  //
+  // 权限：这里**不要求 system:write**。普通登录用户的 token 通常只有业务域 scope，
+  // 一旦要求 system:write，装机版所有客户端的上报都会 403，服务端日志里一条
+  // `[client]` 都看不到。`secured('')` 只保留 Bearer 认证标注（契约里的
+  // security: bearerAuth 不变），scope 为空时 preHandler 跳过越权校验。
+  // 防刷由下面的进程内频率限制承担。
   app.post(
     '/api/v1/system/client-log',
-    secured('system:write', {
+    secured('', {
       schema: {
         operationId: 'systemClientLog',
         tags: TAG,
@@ -726,6 +735,14 @@ export function registerSystemSettings(app: FastifyInstance, k: KernelApi): void
       };
       const message = String(b.message || '').trim().slice(0, 2000);
       if (!message) throw httpError(400, 'message required');
+      // 装机版所有端（Web / PC / 安卓 / 独立端）都往这里写：单个进程每分钟
+      // 最多 300 条，超了静默丢弃，避免某个客户端刷屏把 kernel.log 冲爆。
+      const now = Date.now();
+      while (clientLogWindow.length > 0 && now - clientLogWindow[0] > 60_000) {
+        clientLogWindow.shift();
+      }
+      if (clientLogWindow.length >= 300) return { ok: true };
+      clientLogWindow.push(now);
       const route = String(b.route || '').trim().slice(0, 300);
       // 日志页只渲染 msg，所以把路由拼进去；堆栈放 meta 里，避免一行占半屏
       const line = route ? `[client] ${message} (${route})` : `[client] ${message}`;

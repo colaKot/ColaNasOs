@@ -116,6 +116,10 @@ class _PlayerPageState extends State<PlayerPage> {
   /// 且切换字幕永远读 `textTracks[0]`）。
   List<VideoSubtitleCue> _cues = const [];
 
+  /// 播放状态上报用的订阅：playing / buffering / completed 都写进服务端日志，
+  /// 装机版排障时不用连设备也能还原「到底卡在哪一步」。
+  final List<StreamSubscription> _logSubs = [];
+
   late String _preset;
   /// 当前编码：用用户偏好，但本机解不出来时回落 H.264。
   String _codec = codecPlayable(PlayPreferences.codec)
@@ -269,6 +273,26 @@ class _PlayerPageState extends State<PlayerPage> {
     _directUrl = widget.url;
     _player = Player();
     _controller = VideoController(_player);
+    _logSubs.add(_player.stream.playing.listen((playing) {
+      ClientLogger.instance.info(
+        'playing=$playing',
+        route: 'player.state/${_sessionId ?? 'direct'}',
+      );
+    }));
+    _logSubs.add(_player.stream.buffering.listen((buffering) {
+      ClientLogger.instance.info(
+        'buffering=$buffering',
+        route: 'player.state/${_sessionId ?? 'direct'}',
+      );
+    }));
+    _logSubs.add(_player.stream.completed.listen((done) {
+      if (done) {
+        ClientLogger.instance.info(
+          '播放结束 transcodedMs=$_transcodedMs',
+          route: 'player.state/${_sessionId ?? 'direct'}',
+        );
+      }
+    }));
     _loadUiPrefs();
 
     _player.stream.error.listen((message) {
@@ -445,6 +469,9 @@ class _PlayerPageState extends State<PlayerPage> {
   void dispose() {
     _hideTimer?.cancel();
     _seekHintTimer?.cancel();
+    for (final sub in _logSubs) {
+      sub.cancel();
+    }
     _volumeVN.dispose();
     // 退出播放器（可能是**在全屏里按返回**，而不是先点退出全屏）必须把屏幕
     // 朝向还回去：全屏时按视频比例锁了 landscape，只还原 SystemUiMode 的话
@@ -464,10 +491,20 @@ class _PlayerPageState extends State<PlayerPage> {
     bool resetBenignRetries = true,
   }) async {
     _url = u;
+    final openSw = Stopwatch()..start();
+    ClientLogger.instance.info(
+      'open 开始',
+      route: 'player.open/${_sessionId ?? 'direct'}',
+      detail: u,
+    );
     try {
       // 视频也带声音：开播前先让音乐 / 播客 / 音色试听让路
       await AudioFocus.instance.request(_player, () async => _player.pause());
       await _player.open(Media(u));
+      ClientLogger.instance.info(
+        'open 完成 ${openSw.elapsedMilliseconds}ms',
+        route: 'player.open/${_sessionId ?? 'direct'}',
+      );
       // 字幕走控制层自绘；关掉内核自带字幕轨，避免内嵌字幕再叠一层。
       // 自绘的 cue 是 State 字段，重开 Media 不需要重新挂载。
       try {
@@ -489,6 +526,11 @@ class _PlayerPageState extends State<PlayerPage> {
       if (resetBenignRetries) _benignRetries = 0;
       if (mounted) setState(() => _error = null);
     } catch (e) {
+      ClientLogger.instance.warn(
+        'open 失败 ${openSw.elapsedMilliseconds}ms: $e',
+        route: 'player.open/${_sessionId ?? 'direct'}',
+        detail: u,
+      );
       // 边转边播的第一次打开会「打不开」：播放器拉 index.m3u8 时首片可能还没落盘
       // （服务端最多等 15s，超时就先给空 EVENT 列表），内核当场就报错退出。
       // 转码本身没失败，过一两秒分片就有了 —— 直接弹「播放失败」太冤。
@@ -568,8 +610,9 @@ class _PlayerPageState extends State<PlayerPage> {
     // 请求的编码在本机解不出来时回落 H.264（桌面端一律解得出来，浏览器由
     // `MediaSource.isTypeSupported` 说了算 —— 真 Chrome 上 AV1 / HEVC 都是支持的）。
     final outCodec = codecPlayable(codec) ? codec : 'h264';
-    final created = await ApiSession.instance.client.playerSessionCreate(
-      body: PlayerSessionCreateBody(
+      final sw = Stopwatch()..start();
+      final created = await ApiSession.instance.client.playerSessionCreate(
+        body: PlayerSessionCreateBody(
         id: id,
         preset: preset,
         codec: outCodec,
@@ -591,6 +634,11 @@ class _PlayerPageState extends State<PlayerPage> {
         : '${ApiSession.instance.baseUrl}${created.url}';
     // 记下会话：媒体信息面板要拿它查「转码中 / 完成」和实际编码
     _sessionId = created.id;
+    ClientLogger.instance.info(
+      '会话已创建 ${sw.elapsedMilliseconds}ms preset=$preset codec=$outCodec',
+      route: 'player.session/${created.id}',
+      detail: u,
+    );
     _jobStatus = null;
     _transcodedMs = 0;
     // 起转偏移以服务端回显为准（它可能夹取过），播放器时间轴 0 = 这个位置

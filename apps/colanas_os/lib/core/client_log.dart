@@ -9,14 +9,15 @@ import 'session.dart';
 
 /// 把前端异常 / 警告 / 普通日志送回服务端（`设置 → 日志` 里统一呈现）。
 ///
-/// 两种模式：
-/// - **连开发内核（baseUrl 端口 7888）**：error / warn / info 全收，攒批上报到
-///   `/api/v1/system/dev-log`（服务端只在 dev 注册、不进契约，正式环境不受影响）；
-/// - **其它环境**：保持原来的单条 error / warn 上报，正式服务端行为零变化。
+/// 两种上报通道，但**两端都收 error / warn / info**：
+/// - 连开发内核（API 端口 7888）：攒批上报到 `/api/v1/system/dev-log`；
+/// - 装机版 / 正式服务端：单条上报到 `/api/v1/system/client-log`。
+///  以前正式态直接丢掉 info，装机版的服务端日志里只剩零星几条错误，
+///  排查「第一次播不了」「界面卡」时根本看不到客户端侧发生了什么。
 ///
 /// 防止客户端噪音冲爆日志（2026-11-03 反馈后定的约束）：
 ///   - 同一条 `级别 + 消息 + 位置` 5 分钟内只报一次；
-///   - 每分钟条数上限（dev 120 / 其它 30）；
+///   - 每分钟条数上限（dev 120 / 正式 60）；服务端还有 300/分钟的硬兜底；
 ///   - dev 内存队列封顶 200 条，满了丢最旧；
 ///   - 上报自身失败静默丢弃，绝不递归上报。
 class ClientLogger {
@@ -25,7 +26,7 @@ class ClientLogger {
   static final ClientLogger instance = ClientLogger._();
 
   static const Duration _dedupe = Duration(minutes: 5);
-  static const int _maxPerMinuteNormal = 30;
+  static const int _maxPerMinuteNormal = 60;
   static const int _maxPerMinuteDev = 120;
   static const int _maxQueue = 200;
   static const int _batchSize = 20;
@@ -97,8 +98,8 @@ class ClientLogger {
   void _send(String level, String message, String? route, String? detail) {
     final text = message.trim();
     if (text.isEmpty) return;
-    // 正式服务端不收普通日志，避免把生产日志冲成流水账。
-    if (level == 'info' && !_dev) return;
+    // 装机版同样收 info：播放链路的关键节点（建会话 / open / 状态变化）都是
+    // info 级，只收 error 等于把这些线索全丢掉。频率由每分钟限额与去重控制。
 
     final now = DateTime.now();
     final key = '$level|$text|${route ?? ''}';
@@ -187,19 +188,24 @@ class ClientLogger {
     }
   }
 
-  /// 非 dev：保持原来的单条上报（契约里的 `systemClientLog`）。
+  /// 非 dev：单条上报（契约里的 `systemClientLog`）。
+  /// 把端标识拼进 route，服务端那行日志就能直接看出来自 PC / 安卓 / Web。
   Future<void> _postSingle(Map<String, dynamic> entry) async {
     try {
+      final route = entry['route'] as String?;
+      final src = '$_app/$_platform';
       await ApiSession.instance.client.systemClientLog(
         body: <String, dynamic>{
           'level': entry['level'],
           'message': entry['message'],
-          if (entry['route'] != null) 'route': entry['route'],
+          'route': route == null || route.isEmpty
+              ? src
+              : '$src:$route',
           if (entry['detail'] != null) 'detail': entry['detail'],
         },
       );
     } catch (_) {
-      // 同上
+      // 上报失败静默丢弃，绝不递归
     }
   }
 }
