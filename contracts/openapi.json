@@ -12279,6 +12279,13 @@
           "coverId": {
             "type": "string",
             "nullable": true
+          },
+          "watchedEpisodes": {
+            "type": "integer"
+          },
+          "posterId": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -12302,6 +12309,18 @@
             "maximum": 200,
             "default": 60,
             "type": "integer"
+          },
+          "sortBy": {
+            "description": "name（剧名）/ updated（最近更新）/ episodes（集数）/ seasons（季数）",
+            "type": "string"
+          },
+          "sortOrder": {
+            "description": "asc / desc；默认剧名升序、其余降序",
+            "type": "string"
+          },
+          "watched": {
+            "description": "all（默认）/ unwatched（一集没看）/ watching（看了但没看完）/ watched（全看完）",
+            "type": "string"
           }
         }
       },
@@ -37449,6 +37468,33 @@
             "in": "query",
             "name": "limit",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "description": "name（剧名）/ updated（最近更新）/ episodes（集数）/ seasons（季数）"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "description": "asc / desc；默认剧名升序、其余降序"
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "watched",
+            "required": false,
+            "description": "all（默认）/ unwatched（一集没看）/ watching（看了但没看完）/ watched（全看完）"
           }
         ],
         "security": [

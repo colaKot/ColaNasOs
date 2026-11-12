@@ -2836,7 +2836,7 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 剧集列表（剧名序 + 排序键 cursor；只含能解析出季 / 集号的文件） · `videoSeriesList`
 
-- 参数：`libraryId` · 查询 · string · 可选<br>`q` · 查询 · string · 可选<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
+- 参数：`libraryId` · 查询 · string · 可选<br>`q` · 查询 · string · 可选<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选<br>`sortBy` · 查询 · string · 可选<br>`sortOrder` · 查询 · string · 可选<br>`watched` · 查询 · string · 可选
 - 响应：200 `VideoSeriesListResponse` · 错误 400
 
 #### `GET /api/v1/video/series/favorites`

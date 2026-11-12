@@ -543,6 +543,19 @@ export const SeriesItem = Type.Object(
     seasons: Type.Integer({ description: '不同季号的数量（无季号算 1 季）' }),
     episodes: Type.Integer({ description: '该剧已索引的文件数' }),
     coverId: NullableString,
+    /**
+     * 当前用户已看的集数。剧级三态 = `watchedEpisodes / episodes`：
+     * 0 未看、0<n<总 未看完、= 总 已看完。季卡、集标、封面角标共用这一份口径。
+     */
+    watchedEpisodes: Type.Optional(Type.Integer()),
+    /**
+     * **真有竖版海报**的那一集的 id（整部剧都没刮到 poster 就是 null）。
+     *
+     * 与 `coverId` 的区别：`coverId` 是「能当封面用」的兜底，可能只是一张
+     * 横版剧照或视频首帧，铺进 2:3 的封面位会被裁成一条。需要「整部剧
+     * 一张竖版封面」的地方（剧库、首页剧卡、智能合集）优先用这个。
+     */
+    posterId: Type.Optional(NullableString),
   },
   { $id: 'VideoSeriesItem' },
 );
@@ -553,6 +566,17 @@ export const SeriesListQuery = Type.Object(
     q: Type.Optional(Type.String({ maxLength: 200, description: '剧名关键词' })),
     cursor: Type.Optional(Type.String({ description: '上一页 nextCursor' })),
     limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200, default: 60 })),
+    sortBy: Type.Optional(
+      Type.String({
+        description: 'name（剧名）/ updated（最近更新）/ episodes（集数）/ seasons（季数）',
+      }),
+    ),
+    sortOrder: Type.Optional(Type.String({ description: 'asc / desc；默认剧名升序、其余降序' })),
+    watched: Type.Optional(
+      Type.String({
+        description: 'all（默认）/ unwatched（一集没看）/ watching（看了但没看完）/ watched（全看完）',
+      }),
+    ),
   },
   { $id: 'VideoSeriesListQuery' },
 );

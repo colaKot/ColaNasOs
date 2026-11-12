@@ -10811,12 +10811,16 @@ class VideoSeriesItem {
   final int seasons;
   final int episodes;
   final String? coverId;
+  final int? watchedEpisodes;
+  final String? posterId;
 
   const VideoSeriesItem({
     required this.name,
     required this.seasons,
     required this.episodes,
     required this.coverId,
+    this.watchedEpisodes,
+    this.posterId,
   });
 
   factory VideoSeriesItem.fromJson(Map<String, dynamic> json) => VideoSeriesItem(
@@ -10824,6 +10828,8 @@ class VideoSeriesItem {
         seasons: json['seasons'] as int,
         episodes: json['episodes'] as int,
         coverId: json['coverId'] as String?,
+        watchedEpisodes: json['watchedEpisodes'] == null ? null : json['watchedEpisodes'] as int,
+        posterId: json['posterId'] == null ? null : json['posterId'] as String?,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -10831,6 +10837,8 @@ class VideoSeriesItem {
         'seasons': seasons,
         'episodes': episodes,
         'coverId': coverId,
+        if (watchedEpisodes != null) 'watchedEpisodes': watchedEpisodes!,
+        if (posterId != null) 'posterId': posterId!,
       };
 }
 

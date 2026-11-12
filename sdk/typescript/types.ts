@@ -3215,6 +3215,8 @@ export type VideoSeriesItem = {
   "seasons": number;
   "episodes": number;
   "coverId": string;
+  "watchedEpisodes"?: number;
+  "posterId"?: string;
 };
 
 export type VideoSeriesListQuery = {
@@ -3222,6 +3224,9 @@ export type VideoSeriesListQuery = {
   "q"?: string;
   "cursor"?: string;
   "limit"?: number;
+  "sortBy"?: string;
+  "sortOrder"?: string;
+  "watched"?: string;
 };
 
 export type VideoSeriesListResponse = {

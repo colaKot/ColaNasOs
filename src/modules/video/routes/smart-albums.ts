@@ -4,6 +4,7 @@ import { Err } from '../../../../kernel/errors';
 import { TAG, toItem, type MediaRow } from '../util';
 import { offlineCond, offlineSmbPrefixes } from '../sources';
 import { pathWhere, visibilityOf } from '../../files/visibility';
+import { seriesCoverIdSql, seriesPosterIdSql } from '../series-sql';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { VideoHelpers } from '../helpers';
@@ -72,13 +73,29 @@ export async function registerVideoSmartAlbums(
       const offlineFilter = offline.length > 0 ? sql`and ${offlineCond(offline, 'v.rel_path')}` : sql``;
       const items = [];
       for (const key of RULE_KEYS) {
+        // 计数口径必须和条目一致：电视剧按剧算 1 条（整部剧一张卡），电影一文件 1 条。
+        // 直接把所有集数加起来会出现「显示 240 条点进去 8 部剧」。
         const rows = (
           await sql<{ n: number }>`
-            select count(*) as n
-              from video_items v
-             where v.media_type = 'video' ${offlineFilter}
-               and ${pathWhere(vis, 'v.rel_path')}
-               and ${ruleWhere(key, uid, cutoff)}
+            select
+              (select count(*) from (
+                 select 1
+                   from video_items v
+                  where v.media_type = 'video'
+                    ${offlineFilter}
+                    and ${pathWhere(vis, 'v.rel_path')}
+                    and v.series is not null and v.series <> ''
+                    and ${ruleWhere(key, uid, cutoff)}
+                  group by v.library_id, v.series
+              )) +
+              (select count(*)
+                 from video_items v
+                where v.media_type = 'video'
+                  ${offlineFilter}
+                  and ${pathWhere(vis, 'v.rel_path')}
+                  and (v.series is null or v.series = '')
+                  and ${ruleWhere(key, uid, cutoff)}
+              ) as n
           `.execute(k.db)
         ).rows;
         items.push({ key, count: Number(rows[0]?.n) || 0 });
@@ -115,20 +132,112 @@ export async function registerVideoSmartAlbums(
       const offlineFilter = offline.length > 0 ? sql`and ${offlineCond(offline, 'v.rel_path')}` : sql``;
       const vis = visibilityOf(k.config, req.user);
 
-      const rows = (
-        await sql<MediaRow>`
-          select v.*
+      /**
+       * 电视剧按剧聚合：整部剧只出一张卡。
+       *
+       * 不这么做的话「未看」合集里一部 40 集的剧会铺 40 张一模一样的封面
+       * （用户 2026-11-12 反馈）。集数 / 季数 / 已看集数都按**整部剧**算，
+       * 不是「命中了规则的集数」—— 卡片展示的是这部剧本身的体量。
+       */
+      const seriesRows = (
+        await sql<{
+          library_id: string;
+          name: string;
+          seasons: number;
+          episodes: number;
+          watched_episodes: number;
+          cover_id: string | null;
+          poster_id: string | null;
+          at: number;
+        }>`
+          select v.library_id, v.series as name,
+                 (select count(distinct coalesce(t.season, 0)) from video_items t
+                   where t.library_id = v.library_id and t.series = v.series
+                     and t.media_type = 'video') as seasons,
+                 (select count(*) from video_items t
+                   where t.library_id = v.library_id and t.series = v.series
+                     and t.media_type = 'video') as episodes,
+                 (select count(*) from video_items t
+                    join video_watch w on w.item_id = t.id and w.owner_id = ${uid}
+                   where t.library_id = v.library_id and t.series = v.series
+                     and t.media_type = 'video') as watched_episodes,
+                 ${seriesCoverIdSql('v')} as cover_id,
+                 ${seriesPosterIdSql('v')} as poster_id,
+                 max(v.mtime) as at
             from video_items v
            where v.media_type = 'video'
              ${libFilter}
              ${offlineFilter}
              and ${pathWhere(vis, 'v.rel_path')}
+             and v.series is not null and v.series <> ''
+             and ${ruleWhere(key, uid, cutoff)}
+           group by v.library_id, v.series
+           order by at desc
+           limit ${limit}
+        `.execute(k.db)
+      ).rows;
+
+      // 卡片上的年份 / 简介 / 评分用「封面那一集」的元数据（剧级字段本来就一样）
+      const coverIds = [
+        ...new Set(seriesRows.map((r) => r.cover_id).filter((x): x is string => !!x)),
+      ];
+      const coverRows = coverIds.length
+        ? (
+            await sql<MediaRow>`
+              select v.*, exists(select 1 from video_watch w
+                                  where w.item_id = v.id and w.owner_id = ${uid}) as watched
+                from video_items v
+               where v.id in (${sql.join(coverIds.map((id) => sql`${id}`), sql`, `)})
+            `.execute(k.db)
+          ).rows
+        : [];
+      const coverById = new Map(coverRows.map((r) => [r.id, r]));
+
+      const movies = (
+        await sql<MediaRow>`
+          select v.*, exists(select 1 from video_watch w
+                              where w.item_id = v.id and w.owner_id = ${uid}) as watched
+            from video_items v
+           where v.media_type = 'video'
+             ${libFilter}
+             ${offlineFilter}
+             and ${pathWhere(vis, 'v.rel_path')}
+             and (v.series is null or v.series = '')
              and ${ruleWhere(key, uid, cutoff)}
            order by v.mtime desc, v.id asc
            limit ${limit}
         `.execute(k.db)
       ).rows;
-      return { items: rows.map(toItem), nextCursor: null };
+
+      const merged: Array<{ at: number; item: Record<string, unknown> }> = [
+        ...movies.map((r) => ({ at: Number(r.mtime) || 0, item: toItem(r) as never })),
+        ...seriesRows.flatMap((g) => {
+          const row = g.cover_id ? coverById.get(g.cover_id) : undefined;
+          if (!row) return [];
+          return [
+            {
+              at: Number(g.at) || 0,
+              item: {
+                ...toItem(row),
+                // 这张卡代表整部剧：标题用剧名，季 / 集号不外露
+                title: g.name,
+                season: null,
+                episode: null,
+                seriesInfo: {
+                  name: g.name,
+                  seasons: Number(g.seasons) || 1,
+                  episodes: Number(g.episodes) || 0,
+                  watchedEpisodes: Number(g.watched_episodes) || 0,
+                  coverId: g.cover_id,
+                  posterId: g.poster_id,
+                },
+              } as never,
+            },
+          ];
+        }),
+      ];
+      merged.sort((a, b) => b.at - a.at);
+      return { items: merged.slice(0, limit).map((x) => x.item), nextCursor: null };
     },
   );
 }

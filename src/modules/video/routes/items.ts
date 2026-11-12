@@ -46,6 +46,7 @@ import {
   type SortKey,
 } from '../util';
 import { localizeHomeTitles } from '../series-title';
+import { seriesCoverIdSql, seriesPosterIdSql, watchedEpisodesSql } from '../series-sql';
 import type { FastifyInstance } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { VideoHelpers } from '../helpers';
@@ -77,22 +78,6 @@ async function withRank(k: KernelApi, items: Array<Record<string, unknown>>): Pr
       rankMonthly: monthly.get(code) ?? null,
     };
   });
-}
-
-/**
- * 剧封面的统一口径（`/video/series`、`recentSeriesOf`、首页推荐共用）：
- * 优先取本剧里「有海报的那一集」，都没有才退回最小 id。
- * 否则 `/video/art` 会 404，剧集卡片整排灰块。
- */
-function seriesCoverIdSql(alias?: string) {
-  const col = (name: string) => sql.ref(alias ? `${alias}.${name}` : name);
-  // 竖版海报优先：nfo_thumb 是横版剧照 / 缩略图，拿它当封面会出现
-  // 「一部剧整排都是剧照」。先挑真正有 poster 的那一集，整部剧都没有才退 thumb。
-  return sql<string | null>`coalesce(
-    min(case when nullif(${col('nfo_poster')}, '') is not null then ${col('id')} end),
-    min(case when nullif(${col('nfo_thumb')}, '') is not null then ${col('id')} end),
-    min(${col('id')})
-  )`;
 }
 
 /** 逗号分隔的多选参数 → 数组（去空、去重、限长） */
@@ -544,47 +529,128 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           q?: string;
           cursor?: string;
           limit?: number;
+          sortBy?: string;
+          sortOrder?: string;
+          watched?: string;
         };
-        const cur = decodeCursor(q.cursor);
+        const uid = String(req.user?.sub || '');
+        const limit = h.limitOf(q.limit, 60, 200);
+
+        // 排序键：剧名 / 最近更新 / 集数 / 季数。默认剧名升序（与旧行为一致）。
+        const sortBy = ['name', 'updated', 'episodes', 'seasons'].includes(String(q.sortBy))
+          ? String(q.sortBy)
+          : 'name';
+        const sortOrder =
+          q.sortOrder === 'asc' || q.sortOrder === 'desc'
+            ? q.sortOrder
+            : sortBy === 'name'
+              ? 'asc'
+              : 'desc';
+        const desc = sortOrder === 'desc';
+
+        const cur = decodeSortCursor(q.cursor);
         if (q.cursor && !cur) {
           return reply.code(400).send({ error: Err.badRequest, message: 'invalid cursor' });
         }
-        const limit = h.limitOf(q.limit, 60, 200);
 
-        let where = sql`series is not null`;
-        if (q.libraryId) where = sql`${where} and library_id = ${q.libraryId}`;
+        let where = sql`v.series is not null and v.series <> ''`;
+        where = sql`${where} and (${pathWhere(visibilityOf(k.config, req.user), 'v.rel_path')})`;
+        if (q.libraryId) where = sql`${where} and v.library_id = ${q.libraryId}`;
         if (q.q && q.q.trim()) {
-          where = sql`${where} and series like ${likePattern(q.q.trim())} escape '\\'`;
+          where = sql`${where} and v.series like ${likePattern(q.q.trim())} escape '\\'`;
         }
-        if (cur) where = sql`${where} and series > ${cur.title}`;
+        // 离线 SMB 来源的剧点进去是空的，列表里也别露出来（与选集接口同一口径）
+        const offline = await offlineSmbPrefixes(k.db);
+        if (offline.length > 0) where = sql`${where} and ${offlineCond(offline, 'v.rel_path')}`;
+
+        // 观看状态：剧级三态 = 已看集数 / 总集数（未看 0、未看完 0<n<总、已看完 = 总）。
+        // 季卡、集列表、封面角标都用这同一个口径，别各算一套。
+        const watchedCount = watchedEpisodesSql('w');
+        const haves: any[] = [];
+        const watched = String(q.watched ?? 'all');
+        if (watched === 'unwatched') haves.push(sql`${watchedCount} = 0`);
+        else if (watched === 'watched') haves.push(sql`${watchedCount} = count(*)`);
+        else if (watched === 'watching') haves.push(sql`${watchedCount} > 0 and ${watchedCount} < count(*)`);
+
+        // 游标：排序键 + 剧名（group by 后剧名唯一，用它做 tie-break）
+        if (cur) {
+          const v = cur.value;
+          if (sortBy === 'updated') {
+            const at = Number(v) || 0;
+            haves.push(
+              sql`(max(v.mtime) ${sql.raw(desc ? '<' : '>')} ${at} or (max(v.mtime) = ${at} and v.series > ${cur.id}))`,
+            );
+          } else if (sortBy === 'episodes') {
+            const n = Number(v) || 0;
+            haves.push(
+              sql`(count(*) ${sql.raw(desc ? '<' : '>')} ${n} or (count(*) = ${n} and v.series > ${cur.id}))`,
+            );
+          } else if (sortBy === 'seasons') {
+            const n = Number(v) || 0;
+            haves.push(
+              sql`(count(distinct coalesce(v.season, 0)) ${sql.raw(desc ? '<' : '>')} ${n} or (count(distinct coalesce(v.season, 0)) = ${n} and v.series > ${cur.id}))`,
+            );
+          } else {
+            haves.push(
+              desc ? sql`v.series < ${String(v)}` : sql`v.series > ${String(v)}`,
+            );
+          }
+        }
+
+        const orderBy =
+          sortBy === 'updated'
+            ? sql`max(v.mtime) ${sql.raw(desc ? 'desc' : 'asc')}, v.series asc`
+            : sortBy === 'episodes'
+              ? sql`count(*) ${sql.raw(desc ? 'desc' : 'asc')}, v.series asc`
+              : sortBy === 'seasons'
+                ? sql`count(distinct coalesce(v.season, 0)) ${sql.raw(desc ? 'desc' : 'asc')}, v.series asc`
+                : sql`v.series ${sql.raw(desc ? 'desc' : 'asc')}`;
 
         const res = await sql<{
           name: string;
           seasons: number;
           episodes: number;
+          watched_episodes: number;
+          at: number;
           cover_id: string | null;
+          poster_id: string | null;
         }>`
-          select series as name,
-                 count(distinct coalesce(season, 0)) as seasons,
+          select v.series as name,
+                 count(distinct coalesce(v.season, 0)) as seasons,
                  count(*) as episodes,
-                 ${seriesCoverIdSql()} as cover_id
-            from video_items
+                 ${watchedCount} as watched_episodes,
+                 max(v.mtime) as at,
+                 ${seriesCoverIdSql('v')} as cover_id,
+                 ${seriesPosterIdSql('v')} as poster_id
+            from video_items v
+            left join video_watch w on w.item_id = v.id and w.owner_id = ${uid}
            where ${where}
-           group by series
-           order by series asc
+           group by v.series
+           ${haves.length > 0 ? sql`having ${sql.join(haves, sql` and `)}` : sql``}
+           order by ${orderBy}
            limit ${limit + 1}
         `.execute(k.db);
 
         const rows = res.rows.slice(0, limit);
         const next = res.rows.length > limit && rows.length > 0 ? rows[rows.length - 1] : null;
+        const cursorValueOf = (r: (typeof rows)[number]) =>
+          sortBy === 'updated'
+            ? Number(r.at) || 0
+            : sortBy === 'episodes'
+              ? Number(r.episodes) || 0
+              : sortBy === 'seasons'
+                ? Number(r.seasons) || 0
+                : r.name;
         return {
           items: rows.map((r) => ({
             name: r.name,
             seasons: Number(r.seasons) || 0,
             episodes: Number(r.episodes) || 0,
+            watchedEpisodes: Number(r.watched_episodes) || 0,
             coverId: r.cover_id,
+            posterId: r.poster_id,
           })),
-          nextCursor: next ? encodeCursor(next.name, '') : null,
+          nextCursor: next ? encodeSortCursor(cursorValueOf(next), next.name) : null,
         };
       },
     );
@@ -615,6 +681,7 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
         const offline = await offlineSmbPrefixes(k.db);
         let where = sql`series = ${name}`;
         if (q.libraryId) where = sql`${where} and library_id = ${q.libraryId}`;
+        where = sql`${where} and (${pathWhere(visibilityOf(k.config, req.user), 'rel_path')})`;
         if (offline.length > 0) where = sql`${where} and ${offlineCond(offline, 'rel_path')}`;
 
         const res = await sql<VideoItemRow>`
@@ -1153,6 +1220,7 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
                ${libFilter}
                ${offline.length > 0 ? sql`and ${offlineCond(offline, 'v.rel_path')}` : sql``}
                and (series is null or series = '')
+               and (${pathWhere(visibilityOf(k.config, req.user), 'v.rel_path')})
                and not exists(select 1 from video_watch w2
                                where w2.item_id = v.id and w2.owner_id = ${uid})
              order by coalesce(nfo_score, 0) desc, mtime desc
@@ -1166,20 +1234,25 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
             name: string;
             seasons: number;
             episodes: number;
+            watched_episodes: number;
             cover_id: string | null;
+            poster_id: string | null;
             rank_score: number;
             rank_at: number;
           }>`
             select library_id, series as name,
                    count(distinct coalesce(season, 0)) as seasons,
                    count(*) as episodes,
+                   sum(watched) as watched_episodes,
                    ${seriesCoverIdSql()} as cover_id,
+                   min(case when nullif(nfo_poster, '') is not null then id end) as poster_id,
                    max(case when not watched then coalesce(nfo_score, 0) else -1 end) as rank_score,
                    max(case when not watched then mtime else 0 end) as rank_at
               from (${withWatched}) v
              where media_type = 'video'
                ${libFilter}
                ${offline.length > 0 ? sql`and ${offlineCond(offline, 'v.rel_path')}` : sql``}
+               and (${pathWhere(visibilityOf(k.config, req.user), 'v.rel_path')})
                and series is not null and series <> ''
              group by library_id, series
             having max(case when not watched then 1 else 0 end) = 1
@@ -1227,7 +1300,9 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
                 name: g.name,
                 seasons: Number(g.seasons) || 1,
                 episodes: Number(g.episodes) || 0,
+                watchedEpisodes: Number(g.watched_episodes) || 0,
                 coverId: g.cover_id,
+                posterId: g.poster_id,
               },
             },
           });
@@ -1321,7 +1396,7 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           // `items` 里是逐集数据，前端碰到 tv 库优先用这份，否则首页一排全是
           // 同一部剧的不同集（用户 2026-11-11 反馈）。
           if (lt === 'tv' || lt === 'short_tv') {
-            row.series = await recentSeriesOf(k.db, l.id, addLimit, offline);
+            row.series = await recentSeriesOf(k.db, l.id, addLimit, offline, uid);
           }
           perLib.push(row);
         }
@@ -1639,44 +1714,68 @@ async function recentSeriesOf(
   libraryId: string,
   limit: number,
   offline: string[],
-): Promise<Array<{ name: string; seasons: number; episodes: number; coverId: string | null }>> {
+  uid: string,
+): Promise<
+  Array<{
+    name: string;
+    seasons: number;
+    episodes: number;
+    watchedEpisodes: number;
+    coverId: string | null;
+    posterId: string | null;
+  }>
+> {
   const off = offline.length > 0 ? sql`and ${offlineCond(offline, 'rel_path')}` : sql``;
   const grouped = (
     await sql<{
       name: string;
       seasons: number;
       episodes: number;
+      watched_episodes: number;
       cover_id: string | null;
+      poster_id: string | null;
       at: number;
     }>`
-      select series as name,
-             count(distinct coalesce(season, 0)) as seasons,
+      select v.series as name,
+             count(distinct coalesce(v.season, 0)) as seasons,
              count(*) as episodes,
-             ${seriesCoverIdSql()} as cover_id,
-             max(mtime) as at
-        from video_items
-       where library_id = ${libraryId}
-         and media_type = 'video'
-         and series is not null
-         and series <> ''
+             ${watchedEpisodesSql('w')} as watched_episodes,
+             ${seriesCoverIdSql('v')} as cover_id,
+             ${seriesPosterIdSql('v')} as poster_id,
+             max(v.mtime) as at
+        from video_items v
+        left join video_watch w on w.item_id = v.id and w.owner_id = ${uid}
+       where v.library_id = ${libraryId}
+         and v.media_type = 'video'
+         and v.series is not null
+         and v.series <> ''
          ${off}
-       group by series
+       group by v.series
        order by at desc
        limit ${limit}
     `.execute(db)
   ).rows;
 
   const solos = (
-    await sql<{ id: string; name: string; at: number }>`
-      select id,
-             coalesce(nullif(nfo_name, ''), title) as name,
-             mtime as at
-        from video_items
-       where library_id = ${libraryId}
-         and media_type = 'video'
-         and (series is null or series = '')
+    await sql<{
+      id: string;
+      name: string;
+      at: number;
+      watched: number;
+      poster_id: string | null;
+    }>`
+      select v.id,
+             coalesce(nullif(v.nfo_name, ''), v.title) as name,
+             v.mtime as at,
+             case when w.item_id is not null then 1 else 0 end as watched,
+             case when nullif(v.nfo_poster, '') is not null then v.id end as poster_id
+        from video_items v
+        left join video_watch w on w.item_id = v.id and w.owner_id = ${uid}
+       where v.library_id = ${libraryId}
+         and v.media_type = 'video'
+         and (v.series is null or v.series = '')
          ${off}
-       order by mtime desc
+       order by v.mtime desc
        limit ${limit}
     `.execute(db)
   ).rows;
@@ -1688,12 +1787,21 @@ async function recentSeriesOf(
         name: r.name,
         seasons: Number(r.seasons) || 1,
         episodes: Number(r.episodes) || 0,
+        watchedEpisodes: Number(r.watched_episodes) || 0,
         coverId: r.cover_id,
+        posterId: r.poster_id,
       },
     })),
     ...solos.map((r) => ({
       at: Number(r.at) || 0,
-      out: { name: r.name, seasons: 1, episodes: 1, coverId: r.id },
+      out: {
+        name: r.name,
+        seasons: 1,
+        episodes: 1,
+        watchedEpisodes: Number(r.watched) || 0,
+        coverId: r.id,
+        posterId: r.poster_id,
+      },
     })),
   ];
   merged.sort((a, b) => b.at - a.at);

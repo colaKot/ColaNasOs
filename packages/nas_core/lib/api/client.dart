@@ -2754,12 +2754,15 @@ class ApiClient {
   }
 
   /// 剧集列表（剧名序 + 排序键 cursor；只含能解析出季 / 集号的文件）
-  Future<VideoSeriesListResponse> videoSeriesList({String? libraryId, String? q, String? cursor, int? limit}) async {
+  Future<VideoSeriesListResponse> videoSeriesList({String? libraryId, String? q, String? cursor, int? limit, String? sortBy, String? sortOrder, String? watched}) async {
     final query = <String, String>{
       if (libraryId != null) 'libraryId': libraryId,
       if (q != null) 'q': q,
       if (cursor != null) 'cursor': cursor,
       if (limit != null) 'limit': '$limit',
+      if (sortBy != null) 'sortBy': sortBy,
+      if (sortOrder != null) 'sortOrder': sortOrder,
+      if (watched != null) 'watched': watched,
     };
     final res = await transport.send('GET', _uri('/api/v1/video/series', query), headers: await _headers());
     return VideoSeriesListResponse.fromJson(_asMap(_decode(res)));

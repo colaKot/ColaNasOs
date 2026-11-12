@@ -210,8 +210,7 @@ const FILES = [
   );
 
   // 3.1 首页推荐：电视剧按剧聚合（一部剧一张卡），电影保持一条
-  r = await app.inject({ method: 'GET', url: '/api/v1/video/home', headers: reader });
-  const rec = r.json().recommend || [];
+  r = await app.inject({ method: 'GET', url: '/api/v1/video/home', headers: reader });  const rec = r.json().recommend || [];
   const recBb = rec.find((x) => x.seriesInfo && x.seriesInfo.name === 'Breaking Bad');
   const recTw = rec.find((x) => x.seriesInfo && x.seriesInfo.name === 'The Wire');
   const recMovie = rec.find((x) => !x.seriesInfo && !x.series);
@@ -229,6 +228,94 @@ const FILES = [
       recMovie &&
       recMovie.title.includes('Inception'),
     `rec=${JSON.stringify(rec.map((x) => [x.title, x.seriesInfo && x.seriesInfo.episodes]))}`,
+  );
+
+  // 3.2 已看集数 → 剧级三态（0 未看 / 0<n<总 未看完 / =总 已看完）
+  r = await app.inject({
+    method: 'GET',
+    url: '/api/v1/video/series/items?name=' + encodeURIComponent('Breaking Bad'),
+    headers: reader,
+  });
+  const bbFirst = (r.json().items || [])[0];
+  await app.inject({
+    method: 'POST',
+    url: '/api/v1/video/watch',
+    headers: writer,
+    payload: { ids: [bbFirst.id], watched: true },
+  });
+  r = await app.inject({ method: 'GET', url: '/api/v1/video/series', headers: writer });
+  const bbRow = (r.json().items || []).find((s) => s.name === 'Breaking Bad');
+  check(
+    'series_watched_episodes',
+    r.statusCode === 200 && bbRow && bbRow.watchedEpisodes === 1 && bbRow.episodes === 3,
+    `bb=${JSON.stringify(bbRow && [bbRow.watchedEpisodes, bbRow.episodes])}`,
+  );
+
+  // 3.3 观看状态筛选：看了 1/3 的剧只出现在「未看完」里
+  r = await app.inject({
+    method: 'GET',
+    url: '/api/v1/video/series?watched=watching',
+    headers: writer,
+  });
+  check(
+    'series_filter_watching',
+    r.statusCode === 200 &&
+      (r.json().items || []).length === 1 &&
+      r.json().items[0].name === 'Breaking Bad',
+    `items=${JSON.stringify((r.json().items || []).map((s) => s.name))}`,
+  );
+  r = await app.inject({
+    method: 'GET',
+    url: '/api/v1/video/series?watched=unwatched',
+    headers: writer,
+  });
+  check(
+    'series_filter_unwatched',
+    r.statusCode === 200 &&
+      (r.json().items || []).length === 1 &&
+      r.json().items[0].name === 'The Wire',
+    `items=${JSON.stringify((r.json().items || []).map((s) => s.name))}`,
+  );
+
+  // 3.4 排序：集数降序 The Wire(4) 在前；游标能接着翻下一页
+  r = await app.inject({
+    method: 'GET',
+    url: '/api/v1/video/series?sortBy=episodes&limit=1',
+    headers: reader,
+  });
+  const sortPage1 = r.json();
+  const sortCursor = sortPage1.nextCursor;
+  r = await app.inject({
+    method: 'GET',
+    url: '/api/v1/video/series?sortBy=episodes&limit=1&cursor=' + encodeURIComponent(sortCursor || ''),
+    headers: reader,
+  });
+  check(
+    'series_sort_by_episodes',
+    sortPage1.items &&
+      sortPage1.items.length === 1 &&
+      sortPage1.items[0].name === 'The Wire' &&
+      r.statusCode === 200 &&
+      (r.json().items || [])[0]?.name === 'Breaking Bad',
+    `p1=${JSON.stringify((sortPage1.items || []).map((s) => s.name))} p2=${JSON.stringify((r.json().items || []).map((s) => s.name))}`,
+  );
+
+  // 3.5 智能合集按剧聚合：一部剧只出一张卡，且带 seriesInfo
+  r = await app.inject({
+    method: 'GET',
+    url: '/api/v1/video/smart-albums/items?key=unwatched&limit=50',
+    headers: reader,
+  });
+  const albumSeries = (r.json().items || [])
+    .filter((x) => x.seriesInfo)
+    .map((x) => x.seriesInfo.name);
+  check(
+    'smart_album_one_card_per_series',
+    r.statusCode === 200 &&
+      albumSeries.length === new Set(albumSeries).size &&
+      albumSeries.includes('The Wire') &&
+      albumSeries.includes('Breaking Bad'),
+    `series=${JSON.stringify(albumSeries)}`,
   );
 
   // 5. 关键词 + cursor 翻页
