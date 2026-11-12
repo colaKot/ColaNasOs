@@ -617,8 +617,9 @@ async function detectHwAll() {
 }
 
 /** 按 codec 给出编码器参数（不含 `-c:v`）。`allowHw=false` 时强制 CPU；`prefer` 限定厂商。 */
-function videoCodecArgs(codec, allowHw, prefer = 'auto', hw = null) {
+function videoCodecArgs(codec, allowHw, prefer = 'auto', hw = null, targetKbps = 0) {
   const kind = codec === 'h265' ? 'h265' : codec === 'av1' ? 'av1' : 'h264';
+  const kbps = Number(targetKbps) > 0 ? Math.round(Number(targetKbps)) : 0;
   let enc = null;
   if (allowHw) {
     const list = (hw || { h264: [], h265: [], av1: [] })[kind];
@@ -627,6 +628,42 @@ function videoCodecArgs(codec, allowHw, prefer = 'auto', hw = null) {
     else enc = list.find((n) => n.endsWith('_' + prefer)) || null;
   }
   if (enc) {
+    // 硬件编码器**必须给目标码率**：以前只给 -cq / -qp_i（恒定质量），
+    // AMF 实测完全忽略后面的 -maxrate，1080p/1.4Mbps 的档位吐出 20~30 Mbps
+    // 的分片（6 秒 24MB），边转边播时播放器一直在缓冲、局域网也被打满。
+    if (kbps > 0) {
+      if (enc.endsWith('_nvenc')) {
+        return {
+          args: [enc, '-preset', 'p4', '-rc', 'vbr', '-b:v', `${kbps}k`],
+          encoder: enc,
+        };
+      }
+      if (enc.endsWith('_qsv')) {
+        return {
+          args: [enc, '-preset', 'veryfast', '-b:v', `${kbps}k`],
+          encoder: enc,
+        };
+      }
+      // AMF：vbr_peak + 目标码率。注意 `-rc` 只认 cqp/cbr/vbr_peak/vbr_latency/
+      // qvbr/hqvbr/hqcbr（写 `vbr` 会直接 "Error applying encoder options"，
+      // 整个转码起不来）；CQP 与 -maxrate 不兼容，所以必须切到码率模式。
+      return {
+        args: [
+          enc,
+          '-quality',
+          'speed',
+          '-rc',
+          'vbr_peak',
+          '-b:v',
+          `${kbps}k`,
+          '-maxrate',
+          `${Math.round(kbps * 1.5)}k`,
+          '-bufsize',
+          `${kbps * 2}k`,
+        ],
+        encoder: enc,
+      };
+    }
     if (enc.endsWith('_nvenc')) {
       // p4 = 均衡档；-cq 是恒定质量（数值语义接近 crf）
       return { args: [enc, '-preset', 'p4', '-cq', kind === 'h264' ? '23' : '28'], encoder: enc };
@@ -787,7 +824,7 @@ async function hls(params) {
       (PLAY_QUALITY.codecs.find((c) => c.key === codec) || {}).container || 'mpegts';
     const fmp4 = container === 'fmp4';
     // 硬件编码能探测到就用（参数见 videoCodecArgs），否则原样走 CPU
-    const vc = videoCodecArgs(codec, allowHw, prefer, hw);
+    const vc = videoCodecArgs(codec, allowHw, prefer, hw, targetKbps);
     const vCodec = vc.args;
     // 硬件计划自带显存内滤镜；其余计划走软件帧滤镜（含 libplacebo 回退）。
     const vf = plan.filter ? plan.filter(tonemapOn) : cpuFilter(tonemapOn);
@@ -853,6 +890,11 @@ async function hls(params) {
       'event',
       '-hls_list_size',
       '0',
+      // 分片先写 .tmp 落完再改名：边转边播时播放器会立刻按播放列表去取最新分片，
+      // 直接写目标名会让它读到写了一半的 m4s/ts（fMP4 尤其致命：init 之后的
+      // 分片解析失败 → 播放器反复重启 demuxer，表现成「一直在缓冲、点了也不播」）。
+      '-hls_flags',
+      'temp_file',
     ];
     if (fmp4) {
       args.push(

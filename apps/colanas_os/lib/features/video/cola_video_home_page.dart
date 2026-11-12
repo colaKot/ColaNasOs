@@ -142,6 +142,9 @@ class _VideoHomePageState extends State<VideoHomePage> {
         builder: (_) => libType == 'jp_movie'
             // 日本库：先进演员列表（页内可切「影片」）
             ? VideoJpActorPage(embedded: false, libraryId: id)
+            // 电视剧库：一剧一卡，点进去再看季 / 集
+            : libType == 'tv' || libType == 'short_tv'
+            ? VideoSeriesGridPage(libraryId: id)
             : libType == 'image' || libType == 'mixed'
             ? VideoImageLibraryPage(
                 libraryId: id,
@@ -277,6 +280,15 @@ class _VideoHomePageState extends State<VideoHomePage> {
     // 不能像普通库那样直接甩一个影片列表 —— 2026-11-04 用户反馈。
     if (lib.libType == 'jp_movie') {
       return VideoJpActorPage(embedded: true, libraryId: lib.id);
+    }
+    // 电视剧库：**一部剧一张卡**。逐集铺卡等于把 40 集摊成 40 张同样的海报，
+    // 用户看到的是「所有剧集」而不是「剧」—— 桌面外壳早就这么分了，手机端漏了。
+    if (lib.libType == 'tv' || lib.libType == 'short_tv') {
+      return VideoSeriesGridPage(
+        key: ValueKey('video-tv-${lib.id}'),
+        libraryId: lib.id,
+        embedded: true,
+      );
     }
     return lib.libType == 'image' || lib.libType == 'mixed'
         ? VideoImageLibraryPage(

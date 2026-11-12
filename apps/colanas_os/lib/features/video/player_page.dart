@@ -10,6 +10,7 @@ import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/audio_focus.dart';
 import '../../core/audio_track_label.dart';
+import '../../core/client_log.dart';
 import '../../core/codec_support.dart';
 import '../../core/play_preferences.dart';
 import '../../core/play_quality.dart';
@@ -272,6 +273,14 @@ class _PlayerPageState extends State<PlayerPage> {
 
     _player.stream.error.listen((message) {
       if (!mounted) return;
+      // 播放失败必须进服务端日志：装上就用的人看不到控制台，界面只显示一行
+      // 「播放失败」，光靠它没法判断是解码器、令牌还是转码的问题。
+      ClientLogger.instance.error(
+        message,
+        route: 'player',
+        detail:
+            'item=${widget.itemId} session=$_sessionId preset=$_preset codec=$_codec url=$_url',
+      );
       if (_isBenignPlaybackError(message)) {
         _retryAfterBenignError(message);
         return;
@@ -632,6 +641,12 @@ class _PlayerPageState extends State<PlayerPage> {
         }
         if (st == 'done' || st == 'canceled') return;
         if (st == 'failed') {
+          ClientLogger.instance.error(
+            '转码会话失败：${job.error ?? 'transcode failed'}',
+            route: 'player.session',
+            detail:
+                'session=$id preset=$_preset codec=$_codec item=${widget.itemId}',
+          );
           if (messenger != null) {
             NasSnack.showOn(
               messenger,
