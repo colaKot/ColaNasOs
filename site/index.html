@@ -57,16 +57,19 @@
         <span class="brand__sub">Windows NAS</span>
       </span>
     </a>
-    <nav class="site-nav">
+    <nav class="site-nav" id="site-nav" aria-label="站点导航">
       <a class="active" href="index.html">首页</a>
       <a href="#capabilities">能做什么</a>
-      <a class="nav-sm-hide" href="#clients">六端</a>
+      <a href="#clients">六端</a>
       <a href="#install">安装</a>
       <a href="#download">下载</a>
       <a href="#faq">常见问题</a>
       <a href="#apps">内置应用</a>
-      <a class="nav-sm-hide" href="#github">GitHub</a>
+      <a href="#github">GitHub</a>
     </nav>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="打开导航菜单">
+      <span></span><span></span><span></span>
+    </button>
   </div>
 </header>
 
@@ -98,7 +101,7 @@
           <span class="window__dots"><i></i><i></i><i></i></span>
           <span class="window__title">ColaNasOs — 首页</span>
         </div>
-        <img src="assets/shots/home.webp" width="1400" height="875" fetchpriority="high"
+        <img src="assets/shots/home.webp" srcset="assets/shots/home-720.webp 720w, assets/shots/home-1080.webp 1080w, assets/shots/home.webp 1400w" sizes="(max-width: 820px) calc(100vw - 48px), 1100px" width="1400" height="875" fetchpriority="high"
              alt="ColaNasOs 首页真实界面：系统状态、五块硬盘容量与已开放应用入口，欢迎语中的账号名已模糊">
       </div>
     </div>
@@ -217,7 +220,7 @@
               <span class="window__dots"><i></i><i></i><i></i></span>
               <span class="window__title">影视库 — 电影海报墙</span>
             </div>
-            <img src="assets/shots/video-library.webp" width="1424" height="805" loading="lazy"
+            <img src="assets/shots/video-library.webp" srcset="assets/shots/video-library-720.webp 720w, assets/shots/video-library-1080.webp 1080w, assets/shots/video-library.webp 1424w" sizes="(max-width: 1080px) calc(100vw - 48px), 520px" width="1424" height="805" loading="lazy" decoding="async"
                  alt="ColaNasOs 影视库真实界面：左侧片库导航，顶部搜索与筛选，主区是公开影片的海报墙">
           </div>
           <figcaption class="shot__cap">真实界面：电影库海报墙（公开影片海报与片名）。</figcaption>
@@ -231,7 +234,7 @@
               <span class="window__dots"><i></i><i></i><i></i></span>
               <span class="window__title">影片详情 — 简介 / 评分 / 演职人员</span>
             </div>
-            <img src="assets/shots/movie-detail.webp" width="1424" height="805" loading="lazy"
+            <img src="assets/shots/movie-detail.webp" srcset="assets/shots/movie-detail-720.webp 720w, assets/shots/movie-detail-1080.webp 1080w, assets/shots/movie-detail.webp 1424w" sizes="(max-width: 900px) calc(100vw - 48px), 520px" width="1424" height="805" loading="lazy" decoding="async"
                  alt="影片详情页真实界面：阿凡达：火与烬 的标题、评分、剧情简介与演职人员">
           </div>
           <figcaption class="shot__cap">真实界面：影片详情、剧情简介与演职人员。</figcaption>
@@ -242,7 +245,7 @@
               <span class="window__dots"><i></i><i></i><i></i></span>
               <span class="window__title">电视剧库 — 剧集与季集</span>
             </div>
-            <img src="assets/shots/series.webp" width="1424" height="805" loading="lazy"
+            <img src="assets/shots/series.webp" srcset="assets/shots/series-720.webp 720w, assets/shots/series-1080.webp 1080w, assets/shots/series.webp 1424w" sizes="(max-width: 900px) calc(100vw - 48px), 520px" width="1424" height="805" loading="lazy" decoding="async"
                  alt="电视剧库真实界面：剧集海报墙与季集数量，右下角一张日剧海报已模糊处理">
           </div>
           <figcaption class="shot__cap">真实界面：电视剧列表；右下角一张日剧海报已模糊处理，其余为公开剧集。</figcaption>
@@ -298,7 +301,7 @@
               <span class="window__dots"><i></i><i></i><i></i></span>
               <span class="window__title">音乐 — 全屏播放器</span>
             </div>
-            <img src="assets/shots/music.webp" width="1424" height="805" loading="lazy"
+            <img src="assets/shots/music.webp" srcset="assets/shots/music-720.webp 720w, assets/shots/music-1080.webp 1080w, assets/shots/music.webp 1424w" sizes="(max-width: 1080px) calc(100vw - 48px), 520px" width="1424" height="805" loading="lazy" decoding="async"
                  alt="音乐全屏播放器真实界面：黑胶唱片、播放进度与歌词区，底部歌曲文件名已模糊">
           </div>
           <figcaption class="shot__cap">真实界面：全屏唱片播放器；底部歌曲文件名已模糊。</figcaption>
@@ -324,7 +327,7 @@
               <span class="window__dots"><i></i><i></i><i></i></span>
               <span class="window__title">文件 — 网格视图</span>
             </div>
-            <img src="assets/shots/files.webp" width="1424" height="805" loading="lazy"
+            <img src="assets/shots/files.webp" srcset="assets/shots/files-720.webp 720w, assets/shots/files-1080.webp 1080w, assets/shots/files.webp 1424w" sizes="(max-width: 1080px) calc(100vw - 48px), 520px" width="1424" height="805" loading="lazy" decoding="async"
                  alt="文件管理真实界面：网格视图中的文件夹与视图切换，所有目录名已模糊">
           </div>
           <figcaption class="shot__cap">真实界面：文件网格视图；目录名已逐个模糊。</figcaption>
@@ -337,7 +340,7 @@
             <span class="window__dots"><i></i><i></i><i></i></span>
             <span class="window__title">下载 — 内置 transmission 任务</span>
           </div>
-          <img src="assets/shots/download.webp" width="1424" height="805" loading="lazy"
+          <img src="assets/shots/download.webp" srcset="assets/shots/download-720.webp 720w, assets/shots/download-1080.webp 1080w, assets/shots/download.webp 1424w" sizes="(max-width: 820px) calc(100vw - 48px), 1120px" width="1424" height="805" loading="lazy" decoding="async"
                alt="下载任务真实界面：内置 transmission 的任务列表与上传状态，任务名称已模糊">
         </div>
         <p class="shot__cap">真实界面：内置下载器的任务列表；三个任务名称已模糊。</p>
@@ -417,46 +420,46 @@
           </thead>
           <tbody>
             <tr>
-              <td>Windows 服务端</td>
-              <td><code>ColaNasOs-Setup-1.1.0.exe</code></td>
-              <td><span class="status status--ok">已发布</span></td>
-              <td>Windows 10 / 11 x64，托盘常驻；内置内核、FFmpeg 与视觉模型。</td>
+              <td data-label="端">Windows 服务端</td>
+              <td data-label="形态 / 产物"><code>ColaNasOs-Setup-1.1.0.exe</code></td>
+              <td data-label="状态"><span class="status status--ok">已发布</span></td>
+              <td data-label="说明">Windows 10 / 11 x64，托盘常驻；内置内核、FFmpeg 与视觉模型。</td>
             </tr>
             <tr>
-              <td>Windows 桌面端</td>
-              <td><code>ColaNasOs-1.1.0-windows-x64.zip</code></td>
-              <td><span class="status status--ok">已发布</span></td>
-              <td>解压即用。功能最全，也是目录同步的执行端。</td>
+              <td data-label="端">Windows 桌面端</td>
+              <td data-label="形态 / 产物"><code>ColaNasOs-1.1.0-windows-x64.zip</code></td>
+              <td data-label="状态"><span class="status status--ok">已发布</span></td>
+              <td data-label="说明">解压即用。功能最全，也是目录同步的执行端。</td>
             </tr>
             <tr>
-              <td>Android 手机 / 平板</td>
-              <td><code>ColaNasOs-1.1.0-arm64.apk</code></td>
-              <td><span class="status status--ok">已发布</span></td>
-              <td>手机与平板共用一个包，平板走大屏布局；相册滚动与播放器手势单独调过。</td>
+              <td data-label="端">Android 手机 / 平板</td>
+              <td data-label="形态 / 产物"><code>ColaNasOs-1.1.0-arm64.apk</code></td>
+              <td data-label="状态"><span class="status status--ok">已发布</span></td>
+              <td data-label="说明">手机与平板共用一个包，平板走大屏布局；相册滚动与播放器手势单独调过。</td>
             </tr>
             <tr>
-              <td>网页端</td>
-              <td>浏览器打开 <code>http://主机:7788</code></td>
-              <td><span class="status status--ok">内置</span></td>
-              <td>零安装，适合管理和临时浏览；不能读写本地目录，因此不执行同步。</td>
+              <td data-label="端">网页端</td>
+              <td data-label="形态 / 产物">浏览器打开 <code>http://主机:7788</code></td>
+              <td data-label="状态"><span class="status status--ok">内置</span></td>
+              <td data-label="说明">零安装，适合管理和临时浏览；不能读写本地目录，因此不执行同步。</td>
             </tr>
             <tr>
-              <td>Android TV</td>
-              <td>源码内 <code>tv_android</code> 目标</td>
-              <td><span class="status">需自行构建</span></td>
-              <td>遥控器焦点、大屏布局与播放页单独适配；Release 暂未分发安装包。</td>
+              <td data-label="端">Android TV</td>
+              <td data-label="形态 / 产物">源码内 <code>tv_android</code> 目标</td>
+              <td data-label="状态"><span class="status">需自行构建</span></td>
+              <td data-label="说明">遥控器焦点、大屏布局与播放页单独适配；Release 暂未分发安装包。</td>
             </tr>
             <tr>
-              <td>Apple TV</td>
-              <td>AppleTV 原生壳 + Flutter 界面</td>
-              <td><span class="status">需自行构建</span></td>
-              <td>原生壳承载同一套界面与导航；Release 暂未分发安装包。</td>
+              <td data-label="端">Apple TV</td>
+              <td data-label="形态 / 产物">AppleTV 原生壳 + Flutter 界面</td>
+              <td data-label="状态"><span class="status">需自行构建</span></td>
+              <td data-label="说明">原生壳承载同一套界面与导航；Release 暂未分发安装包。</td>
             </tr>
             <tr>
-              <td>鸿蒙</td>
-              <td><code>harmony</code> 工程骨架</td>
-              <td><span class="status">需自行构建</span></td>
-              <td>能力矩阵中已登记，界面与导航契约和其他端一致。</td>
+              <td data-label="端">鸿蒙</td>
+              <td data-label="形态 / 产物"><code>harmony</code> 工程骨架</td>
+              <td data-label="状态"><span class="status">需自行构建</span></td>
+              <td data-label="说明">能力矩阵中已登记，界面与导航契约和其他端一致。</td>
             </tr>
           </tbody>
         </table>
@@ -504,7 +507,7 @@
             <span class="window__dots"><i></i><i></i><i></i></span>
             <span class="window__title">设置 — 服务端配置</span>
           </div>
-          <img src="assets/shots/settings.webp" width="1424" height="805" loading="lazy"
+          <img src="assets/shots/settings.webp" srcset="assets/shots/settings-720.webp 720w, assets/shots/settings-1080.webp 1080w, assets/shots/settings.webp 1424w" sizes="(max-width: 820px) calc(100vw - 48px), 1120px" width="1424" height="805" loading="lazy" decoding="async"
                alt="设置页真实界面：HTTP 端口 7788、HTTPS 入口 8443、自定义主机名与全局网络代理">
         </div>
         <p class="shot__cap">真实界面：设置页。端口、HTTPS 证书与全局网络代理都在这里改，保存后按提示重启生效。</p>
@@ -527,14 +530,14 @@
             <tr><th>项目</th><th>最低</th><th>推荐</th><th>说明</th></tr>
           </thead>
           <tbody>
-            <tr><td>系统</td><td>Windows 10 1809+ / Windows 11</td><td>最新版 Windows 11</td><td>仅 x64；服务端没有 macOS / Linux 版本。</td></tr>
-            <tr><td>CPU</td><td>4 核 x64（支持 AVX2）</td><td>8 核及以上</td><td>AI 默认为 CPU 推理，核心越多识别越快。</td></tr>
-            <tr><td>内存</td><td>8 GB</td><td>16 GB 及以上</td><td>同时跑转码、索引与人脸识别时更吃内存。</td></tr>
-            <tr><td>系统盘</td><td>20 GB 可用</td><td>SSD</td><td>程序、数据库与索引在系统盘，媒体文件可放其它盘。</td></tr>
-            <tr><td>存储</td><td>HDD / SSD 均可</td><td>SSD 系统 + HDD 数据</td><td>索引与向量约占素材体积的 5–10%。</td></tr>
-            <tr><td>GPU</td><td>无（CPU 推理）</td><td>支持 DirectML 的 GPU</td><td>没有 GPU 也能用，只是识别与转码更慢。</td></tr>
-            <tr><td>网络</td><td>千兆局域网</td><td>2.5G 及以上</td><td>外网访问需自行做端口转发或反向代理。</td></tr>
-            <tr><td>端口</td><td>HTTP 7788</td><td>HTTPS 8443</td><td>HTTPS 需在设置里上传证书与私钥；开发内核 7888 仅供开发。</td></tr>
+            <tr><td data-label="项目">系统</td><td data-label="最低">Windows 10 1809+ / Windows 11</td><td data-label="推荐">最新版 Windows 11</td><td data-label="说明">仅 x64；服务端没有 macOS / Linux 版本。</td></tr>
+            <tr><td data-label="项目">CPU</td><td data-label="最低">4 核 x64（支持 AVX2）</td><td data-label="推荐">8 核及以上</td><td data-label="说明">AI 默认为 CPU 推理，核心越多识别越快。</td></tr>
+            <tr><td data-label="项目">内存</td><td data-label="最低">8 GB</td><td data-label="推荐">16 GB 及以上</td><td data-label="说明">同时跑转码、索引与人脸识别时更吃内存。</td></tr>
+            <tr><td data-label="项目">系统盘</td><td data-label="最低">20 GB 可用</td><td data-label="推荐">SSD</td><td data-label="说明">程序、数据库与索引在系统盘，媒体文件可放其它盘。</td></tr>
+            <tr><td data-label="项目">存储</td><td data-label="最低">HDD / SSD 均可</td><td data-label="推荐">SSD 系统 + HDD 数据</td><td data-label="说明">索引与向量约占素材体积的 5–10%。</td></tr>
+            <tr><td data-label="项目">GPU</td><td data-label="最低">无（CPU 推理）</td><td data-label="推荐">支持 DirectML 的 GPU</td><td data-label="说明">没有 GPU 也能用，只是识别与转码更慢。</td></tr>
+            <tr><td data-label="项目">网络</td><td data-label="最低">千兆局域网</td><td data-label="推荐">2.5G 及以上</td><td data-label="说明">外网访问需自行做端口转发或反向代理。</td></tr>
+            <tr><td data-label="项目">端口</td><td data-label="最低">HTTP 7788</td><td data-label="推荐">HTTPS 8443</td><td data-label="说明">HTTPS 需在设置里上传证书与私钥；开发内核 7888 仅供开发。</td></tr>
           </tbody>
         </table>
       </div>
@@ -876,6 +879,38 @@
     </div>
   </div>
 </footer>
+
+<script>
+(function () {
+  var toggle = document.querySelector('.nav-toggle');
+  var nav = document.getElementById('site-nav');
+  if (!toggle || !nav) return;
+
+  function setOpen(open) {
+    document.body.classList.toggle('nav-open', open);
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    toggle.setAttribute('aria-label', open ? '关闭导航菜单' : '打开导航菜单');
+  }
+
+  toggle.addEventListener('click', function () {
+    setOpen(!document.body.classList.contains('nav-open'));
+  });
+
+  nav.addEventListener('click', function (e) {
+    if (e.target.closest('a')) setOpen(false);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') setOpen(false);
+  });
+
+  document.addEventListener('click', function (e) {
+    if (document.body.classList.contains('nav-open') && !e.target.closest('.site-header')) {
+      setOpen(false);
+    }
+  });
+})();
+</script>
 
 </body>
 </html>

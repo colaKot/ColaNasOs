@@ -943,42 +943,115 @@ figure {
 }
 
 /* ---------- 响应式 ---------- */
+
+/* 汉堡按钮：桌面默认不显示 */
+.nav-toggle {
+  display: none;
+  width: 44px;
+  height: 44px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.nav-toggle span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.nav-open .nav-toggle span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.nav-open .nav-toggle span:nth-child(2) {
+  opacity: 0;
+}
+
+.nav-open .nav-toggle span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
 @media (max-width: 820px) {
-  /* 导航换到第二行，避免品牌和 8 个导航项挤在一行被裁掉 */
+  /* 顶栏：品牌 + 汉堡按钮，导航改为下拉面板 */
   .site-header .wrap {
-    flex-wrap: wrap;
+    position: relative;
+    flex-wrap: nowrap;
     gap: 0;
-    padding-top: 8px;
   }
 
-  .brand {
-    padding-bottom: 4px;
+  .nav-toggle {
+    display: flex;
   }
 
   .site-nav {
-    flex: 1 0 100%;
-    order: 3;
-    justify-content: flex-start;
-    gap: 14px;
-    font-size: 12.5px;
-    padding-bottom: 4px;
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    order: 0;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 16px;
+    padding: 6px 24px 14px;
+    max-height: calc(100vh - 58px);
+    overflow-y: auto;
+    background: #fafafc;
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 18px 30px rgba(0, 0, 0, 0.08);
+    font-size: 15px;
+    z-index: 2;
+  }
+
+  .nav-open .site-nav {
+    display: grid;
   }
 
   .site-nav a {
-    padding: 6px 0 10px;
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-2);
   }
 
   .site-nav a.active::after {
-    bottom: 2px;
+    display: none;
   }
 
   /* 锚点跳转时给固定头部留出空间 */
   section[id],
   [id] {
-    scroll-margin-top: 104px;
+    scroll-margin-top: 76px;
   }
 
-  /* 下载表在手机上改为两行：终端名 + 文件名 / 大小，右侧放按钮 */
+  /* 图片图注不要小到看不清 */
+  .shot__cap {
+    font-size: 12.5px;
+    line-height: 1.7;
+  }
+
+  .bullets li {
+    font-size: 15px;
+  }
+
+  .hero-shot__tag {
+    font-size: 12px;
+  }
+
+  /* 下载表：终端名 + 文件名 / 大小，右侧 44px 按钮 */
   .dl-table__head {
     display: none;
   }
@@ -1006,17 +1079,99 @@ figure {
     grid-row: 1 / span 3;
     align-self: center;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
   }
 
-  /* 宽表在手机上仍可横向滑动，只把单元格收紧一点 */
+  .dl-links a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 56px;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 10px;
+    background: rgba(0, 113, 227, 0.08);
+  }
+
+  /* 表格改成卡片：每行一张卡，字段名在左，内容在右 */
+  .tbl-wrap {
+    overflow: visible;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
   .tbl {
-    font-size: 13px;
+    display: block;
+    min-width: 0;
+    background: transparent;
+    font-size: 14px;
   }
 
-  .tbl th,
+  .tbl thead {
+    display: none;
+  }
+
+  .tbl tbody,
+  .tbl tr,
   .tbl td {
-    padding: 12px 14px;
+    display: block;
+    width: auto;
+  }
+
+  .tbl tr {
+    margin-bottom: 10px;
+    padding: 4px 16px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+  }
+
+  .tbl td {
+    display: grid;
+    grid-template-columns: 76px 1fr;
+    gap: 10px;
+    padding: 10px 0;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    color: var(--ink-2);
+    line-height: 1.6;
+  }
+
+  .tbl td:last-child {
+    border-bottom: 0;
+  }
+
+  .tbl td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+
+  .tbl td:first-child {
+    grid-template-columns: 1fr;
+    padding-top: 12px;
+    font-size: 15.5px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .tbl td:first-child::before {
+    display: none;
+  }
+
+  .tbl td > * {
+    justify-self: start;
+  }
+
+  .tbl code {
+    max-width: 100%;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: anywhere;
   }
 
   .faq__item {
@@ -1025,6 +1180,7 @@ figure {
 
   .faq__item summary {
     font-size: 14.6px;
+    min-height: 56px;
   }
 
   .sha {
@@ -1047,6 +1203,42 @@ figure {
   .split + .split {
     margin-top: 48px;
     padding-top: 48px;
+  }
+}
+
+@media (max-width: 560px) {
+  /* Hero 按钮竖排，避免第三个按钮单独居中 */
+  .hero__actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .hero__actions .btn {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .hero {
+    padding-top: 40px;
+    padding-bottom: 48px;
+  }
+
+  .app p {
+    font-size: 12.5px;
+  }
+
+  .apps-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .app {
+    padding: 14px 16px;
+  }
+
+  .site-footer a {
+    display: inline-block;
+    padding: 6px 0;
   }
 }
 
