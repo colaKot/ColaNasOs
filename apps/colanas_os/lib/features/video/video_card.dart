@@ -577,6 +577,7 @@ class VideoHeroCard extends StatelessWidget {
     this.title,
     this.meta,
     this.artUrl,
+    this.badge,
   });
 
   final VideoItem item;
@@ -592,6 +593,9 @@ class VideoHeroCard extends StatelessWidget {
 
   /// 封面地址；缺省按 `item` 取横版剧照（首页剧卡传剧封面）
   final String? artUrl;
+
+  /// 左上角角标（首页剧卡传「未看 / 已看 n/m / 已看完」，与剧库卡片同一套）
+  final Widget? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -634,6 +638,8 @@ class VideoHeroCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (badge != null)
+                Positioned(top: 6, left: 6, child: badge!),
               if (onMore != null)
                 Positioned(
                   top: 6,

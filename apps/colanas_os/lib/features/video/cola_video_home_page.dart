@@ -457,14 +457,20 @@ class _VideoHomePageState extends State<VideoHomePage> {
                       'episodes': '${info.episodes}',
                     }),
                     artUrl: seriesArtUrl(
-                      info.coverId,
+                      info.posterId ?? info.coverId,
                       kind: 'fanart',
                       size: (cardW * 2).round(),
+                    ),
+                    // 与剧库卡片同一套三态角标（未看 / 已看 n/m / 已看完）
+                    badge: SeriesWatchBadge(
+                      watched: info.watchedEpisodes ?? 0,
+                      total: info.episodes,
                     ),
                     onTap: () => openVideoSeries(
                       context,
                       name: info.name,
                       coverId: info.coverId,
+                      posterId: info.posterId,
                       libraryId: item.libraryId,
                       headers: videoArtHeaders,
                     ),
@@ -561,6 +567,7 @@ class _VideoHomePageState extends State<VideoHomePage> {
                   context,
                   name: s.name,
                   coverId: s.coverId,
+                  posterId: s.posterId,
                   libraryId: libraryId,
                   headers: videoArtHeaders,
                 ),
