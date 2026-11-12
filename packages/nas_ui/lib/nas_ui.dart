@@ -14,6 +14,7 @@ export 'src/components/mobile_shell.dart';
 export 'src/components/panel.dart';
 export 'src/components/search_field.dart';
 export 'src/components/section_header.dart';
+export 'src/components/selection.dart';
 export 'src/components/side_nav.dart';
 export 'src/components/skeleton.dart';
 export 'src/components/states.dart';
