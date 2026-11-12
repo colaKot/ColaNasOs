@@ -1,9 +1,7 @@
-/// 音乐模块从宿主工程带过来的那批通用工具 / 组件的等价实现。
+/// 音乐模块共用的基础能力集合：提示、格式化、缓存、右键菜单与一批小控件。
 ///
-/// 兼容基线把 toast、格式化、缓存、右键菜单、各种小控件散在 `utils/` 和
-/// `modules/base/components/` 里，音乐模块用到其中 29 个文件。
-/// 这里按**原签名**重写一份轻量版，让搬运过来的 80 个文件一行都不用改；
-/// 实现上尽量贴本项目（Material 3 / 本地 Session / 无 P2P）。
+/// 这些能力统一收口到本文件，页面直接使用导出的顶层符号；实现按本项目
+/// 技术栈（Material 3 / 本地会话 / 无 P2P）编写。
 library;
 
 import 'dart:async';
@@ -148,7 +146,7 @@ final GlobalKey<NavigatorState> kHostNavigatorKey = kAppNavigatorKey;
 
 // ============================================================ 本地缓存
 
-/// 轻量键值缓存：兼容基线用它记住排序字段这类 UI 状态。
+/// 轻量键值缓存：保存排序字段这类纯 UI 偏好。
 ///
 /// 本项目不引 shared_preferences（避免多一个原生依赖），进程内记住即可 ——
 /// 这类纯 UI 偏好丢了无感，重启回到默认排序。
@@ -341,7 +339,7 @@ class DialogUtil {
 class PopupMenuUtil {
   const PopupMenuUtil._();
 
-  /// 在某个 widget 下方弹出菜单（既有实现同名方法的等价版）
+  /// 在某个 widget 下方弹出菜单
   static Future<T?> showBelowButton<T>({
     required BuildContext context,
     required GlobalKey buttonKey,
@@ -375,13 +373,13 @@ class PopupMenuUtil {
 
 // ============================================================ 右键菜单
 
-/// 兼容基线的 `CustomContextMenuItem.create(...)`。
+/// 右键菜单项的统一构造入口。
 ///
 /// 注意：这里**不能**定义一个新的 entry 类型 —— 调用方文件同时 import
 /// `package:flutter_context_menu`，列表字面量的推断类型是 `ContextMenuEntry`，
 /// 自定义类塞不进去。所以直接映射到那个包的 [MenuItem]，返回类型就是 entry。
-class CustomContextMenuItem {
-  const CustomContextMenuItem._();
+class ColaContextMenuItem {
+  const ColaContextMenuItem._();
 
   static MenuItem<T> create<T>({
     required Widget label,
@@ -412,7 +410,7 @@ class ContextMenuUtil {
   static Widget region({
     required Widget child,
     required List<ContextMenuEntry<dynamic>> entries,
-  }) => _RegionMenu(child: child, entries: entries);
+  }) => _RegionMenu(entries: entries, child: child);
 
   static Future<void> showAtPosition(
     BuildContext context, {
@@ -481,7 +479,7 @@ class _RegionMenu extends StatelessWidget {
 
 // ============================================================ 小控件
 
-/// 圆形/方形复选框（既有实现支持 tristate 等一长串参数，这里只保留用到的）
+/// 圆形/方形复选框（只保留音乐模块用到的参数）
 class CustomCheckbox extends StatelessWidget {
   const CustomCheckbox({
     super.key,
@@ -548,7 +546,7 @@ class CustomCheckbox extends StatelessWidget {
   }
 }
 
-/// 精简开关（既有实现是方角样式）
+/// 精简开关（方角样式）
 class CustomSwitch extends StatelessWidget {
   const CustomSwitch({
     super.key,
@@ -776,18 +774,18 @@ class _CustomExpandableSearchBarState extends State<CustomExpandableSearchBar> {
 }
 
 /// 悬浮放大效果容器
-enum CustomHoverMenuTriggerMode {
-  /// 鼠标悬停触发
+enum ColaHoverMenuTrigger {
+  /// 指针进入时展开
   hover,
 
-  /// 点击触发
+  /// 点击时展开
   click,
 }
 
-/// 通用弹出菜单锚点（对齐兼容基线 `modules/base/components/custom_hover_menu_anchor.dart`）。
-/// 用 Material 3 的 [MenuAnchor] 实现，菜单内容由调用方给 [menuChildren]。
-class CustomHoverMenuAnchor extends StatefulWidget {
-  const CustomHoverMenuAnchor({
+/// 通用弹出菜单锚点：Material 3 的 [MenuAnchor] 实现，菜单内容由调用方
+/// 通过 [menuChildren] 传入，悬停或点击的触发方式可配置。
+class ColaHoverMenuAnchor extends StatefulWidget {
+  const ColaHoverMenuAnchor({
     super.key,
     required this.child,
     required this.menuChildren,
@@ -799,7 +797,7 @@ class CustomHoverMenuAnchor extends StatefulWidget {
       vertical: 10,
     ),
     this.buttonMinimumHeight,
-    this.triggerMode = CustomHoverMenuTriggerMode.click,
+    this.triggerMode = ColaHoverMenuTrigger.click,
   });
 
   final Widget child;
@@ -809,18 +807,18 @@ class CustomHoverMenuAnchor extends StatefulWidget {
   final double buttonRadius;
   final EdgeInsetsGeometry buttonPadding;
   final double? buttonMinimumHeight;
-  final CustomHoverMenuTriggerMode triggerMode;
+  final ColaHoverMenuTrigger triggerMode;
 
   @override
-  State<CustomHoverMenuAnchor> createState() => _CustomHoverMenuAnchorState();
+  State<ColaHoverMenuAnchor> createState() => _ColaHoverMenuAnchorState();
 }
 
-class _CustomHoverMenuAnchorState extends State<CustomHoverMenuAnchor> {
+class _ColaHoverMenuAnchorState extends State<ColaHoverMenuAnchor> {
   final MenuController _menu = MenuController();
 
   @override
   Widget build(BuildContext context) {
-    final hover = widget.triggerMode == CustomHoverMenuTriggerMode.hover;
+    final hover = widget.triggerMode == ColaHoverMenuTrigger.hover;
     return MenuAnchor(
       controller: _menu,
       alignmentOffset: widget.alignmentOffset,
@@ -850,7 +848,7 @@ class _CustomHoverMenuAnchorState extends State<CustomHoverMenuAnchor> {
 
 enum CustomAlbumHeaderPosition { top, bottom }
 
-/// 兼容基线 `custom_letter_filter.dart` 的等价实现：右侧一列字母索引。
+/// 右侧字母索引条：按首字母快速定位列表。
 class CustomLetterFilter extends StatelessWidget {
   const CustomLetterFilter({
     super.key,
@@ -1063,7 +1061,7 @@ class AppItemActionSheetAction extends AppItemActionSheetEntry {
   final VoidCallback? onTap;
   final Color? color;
 
-  /// 标题颜色（兼容基线的参数名，等价于 [color]）
+  /// 标题颜色（与 [color] 等价，保留两个名字以兼容现有调用）
   final Color? titleColor;
 }
 
@@ -1211,7 +1209,7 @@ class FolderPickerDialog extends StatelessWidget {
       const CustomNoData(text: '请使用「音乐来源」页添加目录');
 }
 
-/// 浏览路径工具（既有实现用于面包屑），本项目直接用 `/` 拼接
+/// 浏览路径工具（面包屑用），直接用 `/` 拼接
 class BrowsePathUtils {
   const BrowsePathUtils._();
 
@@ -1222,17 +1220,16 @@ class BrowsePathUtils {
       base.endsWith('/') ? '$base$name' : '$base/$name';
 }
 
-/// 自签名证书兼容开关（既有实现有，本项目统一由 http 客户端处理）
+/// 自签名证书兼容开关（统一由 http 客户端处理）
 class DioBadCertificatCompat {
   const DioBadCertificatCompat._();
 
   static bool get enabled => true;
 }
 
-/// 兼容基线自带的下载中心控制器：本项目下载走 Transmission/PT，音乐不涉及
+/// 下载中心的占位控制器：音乐模块的下载走 Transmission/PT，这里只提供全局实例。
 class DownloadController {
-  /// 兼容基线用 `Get.put(DownloadController())` 注册，所以要公开无名构造。
-  /// 单例只在需要「全局看进度」时才用 [instance]。
+  /// 保留公开无名构造，供全局注册使用；需要「全局看进度」时用 [instance]。
   DownloadController();
 
   static final DownloadController instance = DownloadController();
@@ -1307,13 +1304,13 @@ String safeJson(Object? v) {
   }
 }
 
-/// 复制到剪贴板（既有实现散在 utils 里）
+/// 复制到剪贴板
 Future<void> copyText(String text) =>
     Clipboard.setData(ClipboardData(text: text));
 
 // ============================================================ 本地持久化的键名
 
-/// 兼容基线的本地缓存键（音乐模块会读写这些状态）。
+/// 本地状态使用的键名（实际存在内存，见 [CacheManager]）。
 /// 本项目不落盘（见 CacheManager），键名保持一致以免改动调用点。
 class CacheKeys {
   const CacheKeys._();
@@ -1343,7 +1340,7 @@ extension CompatTrParams on String {
   }
 }
 
-/// 桌面壳的窗口作用域：兼容基线用它给标题栏按钮组留白。
+/// 桌面壳的窗口作用域：窗口按钮画在自绘标题栏里，这里恒给 0 留白。
 /// 本项目窗口按钮画在自绘标题栏里，这里恒给 0。
 class PcWindowScope {
   const PcWindowScope({this.titleBarControlsWidth = 0});
@@ -1353,12 +1350,11 @@ class PcWindowScope {
   static PcWindowScope? of(BuildContext context) => null;
 }
 
-// ============================================================ video_player 等价层
+// media_kit 薄封装
 //
-// 兼容基线在 Web / 桌面上用 `video_player` 播音频：`MusicPlayerVideoAdapter`
-// 直接吃 `VideoPlayerController`。本项目统一走 media_kit，所以这里给一层
-// 同名同语义的薄封装——`createVideoController()` 开一个 media_kit `Player`，
-// 把它的 stream 汇成 `value`，`MusicPlayerVideoAdapter` 一行都不用改。
+// 音乐播放统一走 media_kit；这里提供一层与旧播放适配层同语义的封装，
+// `createVideoController()` 开一个 media_kit `Player` 并把 stream 汇成 `value`，
+// 让 `MusicPlayerVideoAdapter` 保持稳定的接口。
 
 class DurationRange {
   const DurationRange(this.start, this.end);
@@ -1572,10 +1568,9 @@ void disposeVideoController(VideoPlayerController controller) {
   unawaited(controller.dispose());
 }
 
-// ============================================================ 顶层工具 / 小组件
+// 顶层工具与小组件
 //
-// 兼容基线这些散在 `utils/` 与 `modules/base/components/` 里，调用处都是裸名字，
-// 所以这里也导出成顶层符号，搬运过来的页面不用改一行。
+// 页面直接使用导出的顶层符号，无需额外前缀。
 
 /// 把「文件路径」折算成「所在目录」；本来就是目录就原样返回。
 ///
@@ -1600,9 +1595,8 @@ String browseFolderPathMusic(String path) {
 }
 
 /// 选目录：统一走相册 / 影视那套「逐级浏览」的目录选择器，
-/// 能返回上一层、也能一键回根。以前这里是粘贴绝对路径的文本框，
-/// 压根没有目录层级可返回。allowFileSelect / sourceType 是既有实现
-/// 留下的参数，统一选择器只选目录，保留签名不改 4 个调用点。
+/// 能返回上一层、也能一键回根。allowFileSelect / sourceType 为兼容既有调用点
+/// 保留的参数，当前选择器只选目录。
 Future<List<String>?> showFolderPickerBottomSheet(
   BuildContext context, {
   bool multiSelect = false,
@@ -1635,7 +1629,7 @@ class HttpResult {
       statusCode != null && statusCode! >= 200 && statusCode! < 300;
 }
 
-/// 兼容基线基于 dio 封的 `HttpUtil`，这里用 `http` 包给等价的两个方法。
+/// 轻量 HTTP 封装：基于 http 包提供 get/post 两个方法。
 class HttpUtil {
   const HttpUtil._();
 
@@ -1698,9 +1692,7 @@ enum PermissionStatus {
   bool get isRestricted => this == PermissionStatus.restricted;
 }
 
-/// 兼容基线用 `permission_handler`。本项目只用到「通知权限」这一项，
-/// 且音频走前台服务，通知权限被拒也不影响播放，所以这里恒给「已授予」，
-/// 不引一个只为一次询问的原生插件。
+/// 通知权限占位：音乐走前台服务，权限被拒也不影响播放，因此固定返回已授予。
 class Permission {
   const Permission._(this.name);
 
@@ -1716,7 +1708,7 @@ class Permission {
 /// 打开系统设置页（本项目没有对应原生通道，返回 false 表示没跳）
 Future<bool> openAppSettings() async => false;
 
-/// 兼容基线在移动端注册 FVP 播放内核；本项目统一 media_kit，无需注册。
+/// 移动端播放无需额外注册内核（统一 media_kit），保留空实现给调用点。
 void registerFvp() {}
 
 /// 断点续传下载用的 HttpClient（放行自签证书）。
@@ -1726,10 +1718,10 @@ dio_lite.Dio createDioWithBadCertificateCompat() =>
 
 // ============================================================ 二级侧边栏
 
-/// 兼容基线的二级侧边菜单（分组 + 子项 + 折叠）。
+/// 二级侧边菜单（分组 + 子项 + 折叠），仅音乐模块内部使用。
 ///
 /// 注意：本项目正式入口走 `AppNavShell`（菜单来自 `contracts/apps.json`），
-/// 这个组件只在音乐模块内部（比如独立窗口样式）用到，行为对齐既有实现即可。
+/// 这个组件只在音乐模块内部（比如独立窗口样式）使用。
 class TwoLevelSideMenu extends StatelessWidget {
   const TwoLevelSideMenu({
     super.key,

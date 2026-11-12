@@ -96,7 +96,7 @@ class _CoverTile extends StatelessWidget {
 
   static Widget _fallback(BuildContext context, dynamic m) {
     return Container(
-      color: Theme.of(context).colorScheme.surfaceVariant
+      color: Theme.of(context).colorScheme.surfaceContainerHighest
           .withValues(alpha: 0.4),
       child: Image.asset(
         _genreAsset(m),

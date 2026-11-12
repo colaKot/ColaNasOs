@@ -30,7 +30,7 @@ enum MusicListSortOrder { asc, desc }
 /// `list_batch_ops.dart`）、排序与目录偏好的本地持久化。三处翻页请求共用
 /// [_requestPage]，避免「刷新 / 追加 / 跳页」各抄一遍参数表。
 class MusicListController extends GetxController
-    implements MusicMultiSelectController {
+    implements ColaMusicMultiSelect {
   MusicListController({
     this.listType = '',
     this.listId,
@@ -230,19 +230,25 @@ class MusicListController extends GetxController
   @override
   void onInit() {
     super.onInit();
-    _restoreSort();
-    _restorePaths();
-    if (_pathsCacheApplicable) {
-      _selectedPathsWorker = ever<List<String>>(selectedPaths, (_) {
-        if (_restoringPaths) return;
-        _persistPaths();
-      });
-    }
-    // 扫描是后台任务，不订阅事件就会一直停留在旧列表
-    _scanDoneOff = listenMusicScanDone(
-      () => unawaited(refreshList(showLoading: false)),
-    );
-    unawaited(refreshList(showLoading: true));
+    // `GetBuilder(init:)` 在 initState 里创建控制器，此时 framework 还处于 build 锁内。
+    // 直接写 Rx（恢复排序、置 loading、拉首屏）会让已挂载的 Obx 报
+    // 「markNeedsBuild called when widget tree was locked」，统一挪到首帧之后。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (isClosed) return;
+      _restoreSort();
+      _restorePaths();
+      if (_pathsCacheApplicable) {
+        _selectedPathsWorker = ever<List<String>>(selectedPaths, (_) {
+          if (_restoringPaths) return;
+          _persistPaths();
+        });
+      }
+      // 扫描是后台任务，不订阅事件就会一直停留在旧列表
+      _scanDoneOff = listenMusicScanDone(
+        () => unawaited(refreshList(showLoading: false)),
+      );
+      unawaited(refreshList(showLoading: true));
+    });
   }
 
   @override
@@ -356,25 +362,25 @@ class MusicListController extends GetxController
   int get selectedCount => _selection.selectedCount;
 
   @override
-  bool get isAllCurrentSelected => _selection.allSelected;
+  bool get allCurrentSelected => _selection.allSelected;
 
   @override
-  void toggleSelectAllCurrent() => _selection.toggleAll();
+  void toggleSelectAll() => _selection.toggleAll();
 
   @override
-  void exitMultiSelectMode() => _selection.clear();
+  void leaveMultiSelect() => _selection.clear();
 
   @override
-  bool get isSelectedAllFavorited => _selection.allFavorited;
+  bool get allSelectedFavorited => _selection.allFavorited;
 
   @override
-  Future<void> toggleFavoriteSelected() async {
+  Future<void> switchSelectionFavorite() async {
     final ok = await applyBatchFavorite(
       ids: sortedIndexIds(selectedItems),
-      makeFavorite: !isSelectedAllFavorited,
+      makeFavorite: !allSelectedFavorited,
       onState: updateFavoriteState,
     );
-    if (ok) exitMultiSelectMode();
+    if (ok) leaveMultiSelect();
   }
 
   Future<void> _setFavoriteForSelection(bool next) async {
@@ -384,7 +390,7 @@ class MusicListController extends GetxController
       makeFavorite: next,
       onState: updateFavoriteState,
     );
-    if (ok) exitMultiSelectMode();
+    if (ok) leaveMultiSelect();
   }
 
   Future<void> favoriteSelected() => _setFavoriteForSelection(true);
@@ -392,7 +398,7 @@ class MusicListController extends GetxController
   Future<void> unfavoriteSelected() => _setFavoriteForSelection(false);
 
   @override
-  bool get isInPlayList => (listId ?? 0) > 0;
+  bool get insidePlaylist => (listId ?? 0) > 0;
 
   Future<void> _removeFromList(
     List<int> ids, {
@@ -406,7 +412,7 @@ class MusicListController extends GetxController
         ids: ids,
         items: items,
         total: total,
-        onRemoved: exitSelection ? exitMultiSelectMode : null,
+        onRemoved: exitSelection ? leaveMultiSelect : null,
       );
     } catch (_) {
       notifyFailure(null);
@@ -414,21 +420,21 @@ class MusicListController extends GetxController
   }
 
   @override
-  Future<void> removeFromPlayListSelected() =>
+  Future<void> removeSelectionFromPlaylist() =>
       _removeFromList(sortedIndexIds(selectedItems), exitSelection: true);
 
   Future<void> removeFromPlayListItem(MusicListItem item) =>
       _removeFromList(<int>[item.id]);
 
   @override
-  Future<void> addToPlayListSelected() async {
+  Future<void> addSelectionToPlaylist() async {
     final ids = sortedIndexIds(selectedItems);
     if (ids.isEmpty) return;
     try {
       final picked = await pickMusicPlayList();
       if (picked == null) return;
       final ok = await addIndexesToPlayList(listId: picked.id, ids: ids);
-      if (ok) exitMultiSelectMode();
+      if (ok) leaveMultiSelect();
     } catch (_) {
       notifyFailure(null);
     }
@@ -441,11 +447,11 @@ class MusicListController extends GetxController
     final paths = musicPathsOf(entries);
     if (paths.isEmpty) return;
     await submitMusicDownload(paths);
-    if (exitSelection) exitMultiSelectMode();
+    if (exitSelection) leaveMultiSelect();
   }
 
   @override
-  Future<void> downloadSelected() =>
+  Future<void> downloadSelection() =>
       _download(_selection.chosen, exitSelection: true);
 
   Future<void> downloadItem(MusicListItem item) =>
@@ -466,11 +472,11 @@ class MusicListController extends GetxController
       items: items,
       total: total,
     );
-    if (ok && exitSelection) exitMultiSelectMode();
+    if (ok && exitSelection) leaveMultiSelect();
   }
 
   @override
-  Future<void> deleteSelected() =>
+  Future<void> deleteSelection() =>
       _delete(_selection.chosen, exitSelection: true);
 
   Future<void> deleteItem(MusicListItem item) =>

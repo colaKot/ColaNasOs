@@ -1,226 +1,222 @@
-import '../../compat/cola_custom_colors.dart';
-
 import 'package:flutter/material.dart';
 
-import '../../compat/getx.dart';
-
 import '../../compat/cola_api_controller.dart';
+import '../../compat/cola_custom_colors.dart';
 import '../../compat/cola_device_utils.dart';
+import '../../compat/getx.dart';
 import '../../compat/host.dart';
 import '../../favorite/service/cola_favorite_api_service.dart';
 import '../../list/models/cola_list_models.dart';
 import '../../playlist/service/cola_playlist_api_service.dart';
 import '../../playlist/view/cola_playlist_view.dart';
+import '../../shared/music_item_logic.dart';
+import '../../shared/music_playback_logic.dart';
 import '../controller/cola_player_controller.dart';
 import '../play_ctrl_fullscreen/parts/cola_stage_playlist_drawer.dart';
 import 'parts/cola_dock_center_area.dart';
 import 'parts/cola_dock_left_area.dart';
 import 'parts/cola_dock_volume_control.dart';
 
-class MusicPlayCtrlBottomBar extends StatefulWidget {
+/// 挂在页面底部的播放条：左曲目、中进度、右工具区。
+class ColaMusicDockBar extends StatefulWidget {
+  const ColaMusicDockBar({super.key, this.onOpenFullscreen});
+
   final VoidCallback? onOpenFullscreen;
 
-  const MusicPlayCtrlBottomBar({super.key, this.onOpenFullscreen});
-
   @override
-  State<MusicPlayCtrlBottomBar> createState() => _MusicPlayCtrlBottomBarState();
+  State<ColaMusicDockBar> createState() => _ColaMusicDockBarState();
 }
 
-class _MusicPlayCtrlBottomBarState extends State<MusicPlayCtrlBottomBar> {
-  bool _dragging = false;
-  double _dragValueMs = 0;
-  bool _favoriteLoading = false;
+class _ColaMusicDockBarState extends State<ColaMusicDockBar> {
+  bool _favoriteBusy = false;
+  bool _seeking = false;
+  double _seekPreviewMs = 0;
 
-  MusicListItem? _currentItem(MusicPlayServiceController controller) {
-    final idx = controller.currentIndex.value;
-    if (idx < 0 || idx >= controller.playlist.length) return null;
-    return controller.playlist[idx];
+  MusicListItem? _activeTrack(MusicPlayServiceController player) {
+    final slot = player.currentIndex.value;
+    final queue = player.playlist;
+    final inRange = slot >= 0 && slot < queue.length;
+    return inRange ? queue[slot] : null;
   }
 
-  String _resolvePlayablePath(MusicListItem item) {
-    if (item.isSeries) {
-      final localP = item.firstFilePath.trim();
-      if (localP.isNotEmpty) return localP;
+  /// 优先内封曲目路径，其次完整路径，最后拼接目录与文件名。
+  String _playablePathOf(MusicListItem track) {
+    if (track.isSeries) {
+      final seriesEntry = track.firstFilePath.trim();
+      if (seriesEntry.isNotEmpty) return seriesEntry;
     }
-    final localFull = item.fullPath.trim();
-    if (localFull.isNotEmpty) return localFull;
-    final localName = item.filename.trim();
-    final base = item.path.trim();
-    if (base.isNotEmpty && localName.isNotEmpty) return '$base/$localName';
-    return base;
+    final full = track.fullPath.trim();
+    if (full.isNotEmpty) return full;
+    final folder = track.path.trim();
+    final name = track.filename.trim();
+    if (folder.isNotEmpty && name.isNotEmpty) return '$folder/$name';
+    return folder;
   }
 
-  String _resolveCoverUrl(MusicListItem item, {int size = 500}) {
-    if (item.hasInnerCover != 1) return '';
-    final localCoverPath = item.isSeries
-        ? item.firstFilePath.trim()
-        : (item.fullPath.trim().isNotEmpty
-              ? item.fullPath.trim()
-              : _resolvePlayablePath(item));
-    if (localCoverPath.isEmpty) return '';
+  /// 只有存在内嵌封面时才向后端请求缩略图。
+  String _coverUrlOf(MusicListItem track, {int size = 500}) {
+    if (track.hasInnerCover != 1) return '';
+
+    final String source;
+    if (track.isSeries) {
+      source = track.firstFilePath.trim();
+    } else {
+      final full = track.fullPath.trim();
+      source = full.isNotEmpty ? full : _playablePathOf(track);
+    }
+    if (source.isEmpty) return '';
+
     return ApiController.instance.getMusicCoverUrl(
-      filePath: localCoverPath,
+      filePath: source,
       size: size,
     );
   }
 
-  MusicLoopMode _nextLoopMode(MusicLoopMode mode) {
-    return switch (mode) {
-      MusicLoopMode.sequence => MusicLoopMode.listLoop,
-      MusicLoopMode.listLoop => MusicLoopMode.singleLoop,
-      MusicLoopMode.singleLoop => MusicLoopMode.shuffle,
-      MusicLoopMode.shuffle => MusicLoopMode.sequence,
-    };
-  }
-
-  IconData _loopModeIcon(MusicLoopMode mode) {
-    return switch (mode) {
-      MusicLoopMode.sequence => Icons.format_list_numbered,
-      MusicLoopMode.listLoop => Icons.repeat,
-      MusicLoopMode.singleLoop => Icons.repeat_one,
-      MusicLoopMode.shuffle => Icons.shuffle,
-    };
-  }
-
   Future<void> _toggleFavorite(
-    MusicPlayServiceController controller,
-    MusicListItem item,
+    MusicPlayServiceController player,
+    MusicListItem track,
   ) async {
-    if (_favoriteLoading) return;
-    final localId = item.id;
-    if (localId <= 0) return;
-    final localPrev = item.isFavorite;
-    final localNext = !localPrev;
+    if (_favoriteBusy) return;
+    final trackId = track.id;
+    if (trackId <= 0) return;
+    final target = !track.isFavorite;
 
     setState(() {
-      _favoriteLoading = true;
+      _favoriteBusy = true;
     });
 
     try {
-      final ok = localNext
-          ? await MusicFavoriteApiService.instance.addFavorite(localId)
-          : await MusicFavoriteApiService.instance.removeFavorite(localId);
-      if (!ok) {
+      final favorites = MusicFavoriteApiService.instance;
+      final accepted = target
+          ? await favorites.addFavorite(trackId)
+          : await favorites.removeFavorite(trackId);
+      if (!accepted) {
         ToastUtil.show('operation_failed'.tr);
         return;
       }
-      final idx = controller.playlist.indexWhere((e) => e.id == localId);
-      if (idx >= 0) {
-        controller.playlist[idx] = controller.playlist[idx].copyWith(
-          isFavorite: localNext,
-        );
-        controller.playlist.refresh();
-      }
+      final slot = player.playlist.indexWhere((entry) => entry.id == trackId);
+      if (slot < 0) return;
+      player.playlist[slot] = player.playlist[slot].copyWith(
+        isFavorite: target,
+      );
+      player.playlist.refresh();
     } finally {
       if (mounted) {
         setState(() {
-          _favoriteLoading = false;
+          _favoriteBusy = false;
         });
       }
     }
   }
 
-  Future<void> _addToPlayList(MusicListItem item) async {
-    final localIndexId = item.id;
-    if (localIndexId <= 0) return;
-    final context = Get.context;
-    if (context == null) return;
+  Future<void> _appendToPlayList(MusicListItem track) async {
+    final trackId = track.id;
+    if (trackId <= 0) return;
+    final dialogContext = Get.context;
+    if (dialogContext == null) return;
+
+    PlayListItem? target;
     try {
-      final localList = await showDialog<PlayListItem>(
-        context: context,
-        builder: (_) {
-          return Dialog(
-            insetPadding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 980, maxHeight: 720),
-              child: const PlayListListView(selectionMode: true),
-            ),
-          );
-        },
+      target = await showDialog<PlayListItem>(
+        context: dialogContext,
         barrierDismissible: true,
+        builder: (_) => Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 980, maxHeight: 720),
+            child: const PlayListListView(selectionMode: true),
+          ),
+        ),
       );
-      if (localList == null) return;
-      final localReply = await PlayListApiService.instance.addIndexes(
-        listId: localList.id,
-        indexIds: [localIndexId],
+    } catch (_) {
+      ToastUtil.show('operation_failed'.tr);
+      return;
+    }
+    if (target == null) return;
+
+    try {
+      final reply = await PlayListApiService.instance.addIndexes(
+        listId: target.id,
+        indexIds: <int>[trackId],
       );
-      if (localReply.success) {
-        ToastUtil.show('operation_success'.tr);
-      } else {
-        ToastUtil.show(localReply.message ?? 'operation_failed'.tr);
-      }
+      final message = reply.success
+          ? 'operation_success'.tr
+          : (reply.message ?? 'operation_failed'.tr);
+      ToastUtil.show(message);
     } catch (_) {
       ToastUtil.show('operation_failed'.tr);
     }
   }
 
-  Future<void> _showNowPlayingDrawer(
-    MusicPlayServiceController controller,
-  ) async {
-    final localCtx = Get.overlayContext ?? Get.context ?? context;
-    final useBottomSheet = DeviceUtils.isPhone(localCtx);
-    if (useBottomSheet) {
-      await MusicPlayCtrlFullScreenPlaylistDrawer.showBottomSheet(
-        coverUrlResolver: _resolveCoverUrl,
-        controller: controller,
-        context: localCtx,
+  Future<void> _openNowPlaying(MusicPlayServiceController player) {
+    final hostContext = Get.overlayContext ?? Get.context ?? context;
+    if (DeviceUtils.isPhone(hostContext)) {
+      return ColaMusicStageQueueSheet.showBottomSheet(
+        context: hostContext,
+        controller: player,
+        coverUrlResolver: _coverUrlOf,
       );
-      return;
     }
-    await MusicPlayCtrlFullScreenPlaylistDrawer.show(
-      coverUrlResolver: _resolveCoverUrl,
-      controller: controller,
-      context: localCtx,
+    return ColaMusicStageQueueSheet.show(
+      context: hostContext,
+      controller: player,
+      coverUrlResolver: _coverUrlOf,
     );
+  }
+
+  /// 拖动进度条开始：进入拖动态并记录预览毫秒值。
+  void _beginSeek(double milliseconds) {
+    setState(() {
+      _seeking = true;
+      _seekPreviewMs = milliseconds;
+    });
+  }
+
+  Future<void> _finishSeek(
+    MusicPlayServiceController player,
+    double milliseconds,
+  ) async {
+    setState(() {
+      _seeking = false;
+      _seekPreviewMs = milliseconds;
+    });
+    await player.seekTo(Duration(milliseconds: milliseconds.round()));
+  }
+
+  bool _isDownloading(MusicPlayServiceController player, MusicListItem track) {
+    if (!player.isDownloading.value) return false;
+    final activeHash = player.downloadingFileHash.value.trim();
+    if (activeHash.isEmpty) return false;
+    return activeHash == track.fileHash.trim();
   }
 
   @override
   Widget build(BuildContext context) {
-    final controller = MusicPlayServiceController.instance;
-    final localTheme = Theme.of(context);
+    final player = MusicPlayServiceController.instance;
+    final palette = Theme.of(context);
+    final customColors = palette.extension<CustomColors>();
 
     return Obx(() {
-      if (!controller.isReady.value) return const SizedBox.shrink();
-      if (controller.playlist.isEmpty) return const SizedBox.shrink();
-      final item = _currentItem(controller);
-      if (item == null) return const SizedBox.shrink();
+      if (!player.isReady.value || player.playlist.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      final track = _activeTrack(player);
+      if (track == null) return const SizedBox.shrink();
 
-      final localPosition = controller.position.value;
-      final isPlaying = controller.isPlaying.value;
-      final localBuffered = controller.buffered.value;
-      final localDuration = controller.duration.value;
-      final localVolume = controller.volume.value;
-      final loopMode = controller.loopMode.value;
-      final localDiscAsset = controller.discAsset;
-      final localLoopTip = switch (loopMode) {
-        MusicLoopMode.sequence => 'music_loop_sequence'.tr,
-        MusicLoopMode.listLoop => 'music_loop_list_loop'.tr,
-        MusicLoopMode.singleLoop => 'music_loop_single_loop'.tr,
-        MusicLoopMode.shuffle => 'music_loop_shuffle'.tr,
-      };
-      final localDownloading =
-          controller.isDownloading.value &&
-          controller.downloadingFileHash.value.trim().isNotEmpty &&
-          controller.downloadingFileHash.value.trim() == item.fileHash.trim();
-      final localDownloadProgress = localDownloading
-          ? controller.downloadProgress.value
-          : 0.0;
-      final localCanIndexActions =
-          item.id > 0 &&
-          !item.isFromFile &&
-          item.showType.trim().toLowerCase() != 'file_browser';
+      final playing = player.isPlaying.value;
+      final loopMode = player.loopMode.value;
+      final downloading = _isDownloading(player, track);
+      final indexable = track.canShowIndexActions;
 
-      final localExtendedPalette = Theme.of(context).extension<CustomColors>();
-      final localBg = localExtendedPalette!.leftTreeBgColor;
       return SafeArea(
         top: false,
         child: ClipRRect(
           child: Container(
             decoration: BoxDecoration(
-              color: localBg,
+              color: customColors!.leftTreeBgColor,
               border: Border(
                 top: BorderSide(
-                  color: localTheme.dividerColor.withValues(alpha: 0.55),
+                  color: palette.dividerColor.withValues(alpha: 0.55),
                 ),
               ),
             ),
@@ -232,94 +228,34 @@ class _MusicPlayCtrlBottomBarState extends State<MusicPlayCtrlBottomBar> {
                     flex: 3,
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: MusicPlayCtrlBottomLeftArea(
-                        onToggleFavorite: localCanIndexActions
-                            ? () => _toggleFavorite(controller, item)
-                            : null,
-                        onOpenFullscreen: widget.onOpenFullscreen,
-                        item: item,
-                        isPlaying: isPlaying,
-                        favoriteLoading: _favoriteLoading,
-                        downloadProgress: localDownloadProgress,
-                        downloading: localDownloading,
-                        discAsset: localDiscAsset,
-                        coverUrl: _resolveCoverUrl(item, size: 500),
+                      child: _buildTrackInfo(
+                        player: player,
+                        track: track,
+                        playing: playing,
+                        downloading: downloading,
+                        indexable: indexable,
                       ),
                     ),
                   ),
                   Expanded(
                     flex: 5,
-                    child: MusicPlayCtrlBottomCenterArea(
-                      showLoopButton: false,
-                      showAddToPlayListButton: false,
-                      position: localPosition,
-                      onToggleLoopMode: () =>
-                          controller.setLoopMode(_nextLoopMode(loopMode)),
-                      onPrev: controller.playPrevious,
-                      onPlayPause: () {
-                        if (isPlaying) {
-                          controller.pause();
-                        } else {
-                          controller.play();
-                        }
-                      },
-                      onNext: controller.playNext,
-                      onDragUpdate: (v) {
-                        setState(() {
-                          _dragging = true;
-                          _dragValueMs = v;
-                        });
-                      },
-                      onDragStart: (v) {
-                        setState(() {
-                          _dragging = true;
-                          _dragValueMs = v;
-                        });
-                      },
-                      onDragEnd: (v) async {
-                        setState(() {
-                          _dragging = false;
-                          _dragValueMs = v;
-                        });
-                        await controller.seekTo(
-                          Duration(milliseconds: v.round()),
-                        );
-                      },
-                      onAddToPlayList: localCanIndexActions
-                          ? () => _addToPlayList(item)
-                          : null,
+                    child: _buildProgress(
+                      player: player,
+                      track: track,
+                      playing: playing,
                       loopMode: loopMode,
-                      loopIcon: _loopModeIcon(loopMode),
-                      isPlaying: isPlaying,
-                      duration: localDuration,
-                      dragValueMs: _dragValueMs,
-                      dragging: _dragging,
-                      buffered: localBuffered,
+                      indexable: indexable,
                     ),
                   ),
                   Expanded(
                     flex: 3,
                     child: Align(
                       alignment: Alignment.centerRight,
-                      child: MusicPlayCtrlBottomVolumeControl(
-                        volume: localVolume,
-                        showPlayListButton: true,
-                        showNowPlayingButton: true,
-                        showLoopButton: true,
-                        showInlineSlider: false,
-                        playListTooltip: 'add_to_play_list'.tr,
-                        onToggleMute: controller.toggleMute,
-                        onToggleLoopMode: () =>
-                            controller.setLoopMode(_nextLoopMode(loopMode)),
-                        onShowNowPlaying: () =>
-                            _showNowPlayingDrawer(controller),
-                        onChanged: controller.setVolume,
-                        onAddToPlayList: localCanIndexActions
-                            ? () => _addToPlayList(item)
-                            : null,
-                        nowPlayingTooltip: 'player_playlist'.tr,
-                        loopTooltip: localLoopTip,
-                        loopIcon: _loopModeIcon(loopMode),
+                      child: _buildTools(
+                        player: player,
+                        track: track,
+                        loopMode: loopMode,
+                        indexable: indexable,
                       ),
                     ),
                   ),
@@ -330,5 +266,84 @@ class _MusicPlayCtrlBottomBarState extends State<MusicPlayCtrlBottomBar> {
         ),
       );
     });
+  }
+
+  Widget _buildTrackInfo({
+    required MusicPlayServiceController player,
+    required MusicListItem track,
+    required bool playing,
+    required bool downloading,
+    required bool indexable,
+  }) {
+    return ColaMusicDockInfo(
+      item: track,
+      isPlaying: playing,
+      favoriteLoading: _favoriteBusy,
+      downloading: downloading,
+      downloadProgress: downloading ? player.downloadProgress.value : 0.0,
+      coverUrl: _coverUrlOf(track),
+      discAsset: player.discAsset,
+      onToggleFavorite: indexable ? () => _toggleFavorite(player, track) : null,
+      onOpenFullscreen: widget.onOpenFullscreen,
+    );
+  }
+
+  Widget _buildProgress({
+    required MusicPlayServiceController player,
+    required MusicListItem track,
+    required bool playing,
+    required MusicLoopMode loopMode,
+    required bool indexable,
+  }) {
+    return ColaMusicDockProgress(
+      isPlaying: playing,
+      loopMode: loopMode,
+      loopIcon: loopMode.icon,
+      onToggleLoopMode: () => player.setLoopMode(loopMode.next),
+      showLoopButton: false,
+      onPrev: player.playPrevious,
+      onNext: player.playNext,
+      onPlayPause: () {
+        if (playing) {
+          player.pause();
+        } else {
+          player.play();
+        }
+      },
+      onAddToPlayList: indexable ? () => _appendToPlayList(track) : null,
+      showAddToPlayListButton: false,
+      position: player.position.value,
+      duration: player.duration.value,
+      buffered: player.buffered.value,
+      dragging: _seeking,
+      dragValueMs: _seekPreviewMs,
+      onDragStart: _beginSeek,
+      onDragUpdate: _beginSeek,
+      onDragEnd: (milliseconds) => _finishSeek(player, milliseconds),
+    );
+  }
+
+  Widget _buildTools({
+    required MusicPlayServiceController player,
+    required MusicListItem track,
+    required MusicLoopMode loopMode,
+    required bool indexable,
+  }) {
+    return ColaMusicDockVolume(
+      volume: player.volume.value,
+      onChanged: player.setVolume,
+      onToggleMute: player.toggleMute,
+      showInlineSlider: false,
+      showLoopButton: true,
+      loopIcon: loopMode.icon,
+      loopTooltip: loopMode.i18nKey.tr,
+      onToggleLoopMode: () => player.setLoopMode(loopMode.next),
+      showPlayListButton: true,
+      playListTooltip: 'add_to_play_list'.tr,
+      onAddToPlayList: indexable ? () => _appendToPlayList(track) : null,
+      showNowPlayingButton: true,
+      nowPlayingTooltip: 'player_playlist'.tr,
+      onShowNowPlaying: () => _openNowPlaying(player),
+    );
   }
 }

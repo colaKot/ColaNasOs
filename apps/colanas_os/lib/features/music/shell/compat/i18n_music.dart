@@ -1,4 +1,4 @@
-// AUTO-GENERATED from 既有实现的 zh_cn.dart；固定中文，暂不接本项目多语。
+// GENERATED：音乐模块固定中文文案，暂不接多语。
 // 覆盖 features/music/shell 下所有 `key.tr` 用到的键（缺的键回落原键名）。
 const Map<String, String> kMusicCompatZhCN = <String, String>{
   'add_to_play_list': '添加到歌单',

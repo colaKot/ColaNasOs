@@ -64,6 +64,58 @@ class _PlayListListViewState extends State<PlayListListView> {
     super.dispose();
   }
 
+  /// 选择模式的头部：窄屏用「关闭 + 标题」，宽屏交给完整工具条。
+  Widget _selectionHeader(
+    BuildContext context,
+    PlayListController ctrl, {
+    required bool compact,
+  }) {
+    if (!compact) {
+      return PlayListTopBar(controller: ctrl, selectionMode: true);
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: SizedBox(
+        height: 44,
+        child: Row(
+          children: <Widget>[
+            IconButton(
+              tooltip: 'back'.tr,
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(Icons.close),
+            ),
+            Expanded(
+              child: Text(
+                'music_playlist_select'.tr,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Get.textTheme.titleMedium,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 普通浏览模式的头部：窄屏叠一层与系统状态栏同色的底。
+  Widget _browseHeader(
+    PlayListController ctrl, {
+    required bool compact,
+    required Color barColor,
+  }) {
+    if (!compact) {
+      return PlayListTopBar(controller: ctrl, selectionMode: false);
+    }
+    return ColoredBox(
+      color: barColor,
+      child: SafeArea(
+        bottom: false,
+        child: AppPlayListTopBar(controller: ctrl),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final localCompactLayout = DeviceUtils.isPhone(context);
@@ -121,44 +173,16 @@ class _PlayListListViewState extends State<PlayListListView> {
         final localList = Column(
           children: <Widget>[
             selectionMode
-                ? (localCompactLayout
-                      ? Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                          child: SizedBox(
-                            height: 44.0,
-                            child: Row(
-                              children: <Widget>[
-                                IconButton(
-                                  tooltip: 'back'.tr,
-                                  onPressed: () =>
-                                      Navigator.of(context).maybePop(),
-                                  icon: const Icon(Icons.close),
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    'music_playlist_select'.tr,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Get.textTheme.titleMedium,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : PlayListTopBar(
-                          controller: ctrl,
-                          selectionMode: selectionMode,
-                        ))
-                : (localCompactLayout
-                      ? ColoredBox(
-                          color: localBarColor,
-                          child: SafeArea(
-                            bottom: false,
-                            child: AppPlayListTopBar(controller: ctrl),
-                          ),
-                        )
-                      : PlayListTopBar(controller: ctrl, selectionMode: false)),
+                ? _selectionHeader(
+                    context,
+                    ctrl,
+                    compact: localCompactLayout,
+                  )
+                : _browseHeader(
+                    ctrl,
+                    compact: localCompactLayout,
+                    barColor: localBarColor,
+                  ),
             Expanded(
               child: SafeArea(
                 top: false,

@@ -11,12 +11,12 @@ import '../service/cola_source_api_service.dart';
 /// 这里的写操作大多是「先改本地列表，再发请求，失败就回滚」；加载弹窗与
 /// 失败提示统一走 [withLoadingDialog] / [businessFailure]，控制器只保留
 /// 每个接口各自的业务判断和回滚位置。
-class MusicSourceSettingsController extends GetxController {
-  final RxList<MusicSource> sources = <MusicSource>[].obs;
+class ColaMusicSourceSettingsController extends GetxController {
+  final RxList<ColaMusicSource> sources = <ColaMusicSource>[].obs;
   final RxBool loadingSources = false.obs;
   final RxBool scanning = false.obs;
 
-  MusicSourceApiService get _api => MusicSourceApiService.instance;
+  ColaMusicSourceApiService get _api => ColaMusicSourceApiService.instance;
 
   @override
   void onInit() {
@@ -25,13 +25,13 @@ class MusicSourceSettingsController extends GetxController {
   }
 
   /// 界面上按小时展示间隔；未设置时给 2 小时默认值，范围锁在 1~24。
-  int getIntervalHours(MusicSource source) {
+  int getIntervalHours(ColaMusicSource source) {
     final ms = source.scanIntervalMs;
     if (ms <= 0) return 2;
     return (ms / (3600 * 1000)).round().clamp(1, 24);
   }
 
-  bool getIntervalEnabled(MusicSource source) =>
+  bool getIntervalEnabled(ColaMusicSource source) =>
       source.scanInterval == 1 || source.scanIntervalMs > 0;
 
   Future<void> fetchSources({bool showLoading = false}) async {
@@ -83,7 +83,7 @@ class MusicSourceSettingsController extends GetxController {
   };
 
   Future<void> updateSourceOptimistic(
-    MusicSource source, {
+    ColaMusicSource source, {
     int? scanWhenStart,
     int? scanWhenChange,
     int? scanInterval,
@@ -128,11 +128,11 @@ class MusicSourceSettingsController extends GetxController {
 
     // 服务端回整行才覆盖；只回 ok 就保留本地那条（连 path 都没有的不是完整记录）
     if (body?['path'] != null) {
-      sources[index] = MusicSource.fromJson(body!);
+      sources[index] = ColaMusicSource.fromJson(body!);
     }
   }
 
-  Future<void> relocateSource(MusicSource source, String newPath) async {
+  Future<void> relocateSource(ColaMusicSource source, String newPath) async {
     try {
       await withLoadingDialog(() async {
         final reply = await _api.relocateSource(
@@ -152,10 +152,10 @@ class MusicSourceSettingsController extends GetxController {
     }
   }
 
-  void _restore(int index, MusicSource removed) =>
+  void _restore(int index, ColaMusicSource removed) =>
       sources.insert(index.clamp(0, sources.length), removed);
 
-  Future<void> deleteSourceOptimistic(MusicSource source) async {
+  Future<void> deleteSourceOptimistic(ColaMusicSource source) async {
     final index = sources.indexWhere((entry) => entry.id == source.id);
     if (index < 0) return;
     final removed = sources.removeAt(index);

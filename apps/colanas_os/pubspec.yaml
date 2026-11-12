@@ -44,6 +44,12 @@ dependencies:
     path: ../../packages/nas_media
   file_selector: ^1.1.0
   path_provider: ^2.1.5
+  # 音乐模块直接用到（之前只靠传递依赖，analyze 会报 depend_on_referenced_packages）
+  path: ^1.9.1
+  # 播放器文件属性里的时间格式化 / 数字格式化
+  intl: ^0.20.3
+  # 播放器的音频会话（打断/焦点处理）按平台接线
+  audio_session: ^0.2.4
   # 手机相册备份：枚举系统相册 / 取原文件（含实况视频分量）
   photo_manager: ^3.9.0
   # 仅 WiFi 守卫与网络回切自动续跑

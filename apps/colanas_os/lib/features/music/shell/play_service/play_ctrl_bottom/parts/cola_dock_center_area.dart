@@ -5,28 +5,9 @@ import '../../../shared/music_playback_logic.dart';
 import '../../../shared/music_primitives.dart';
 import '../../controller/cola_player_controller.dart';
 
-class MusicPlayCtrlBottomCenterArea extends StatelessWidget {
-  final bool showLoopButton;
-  final bool showAddToPlayListButton;
-  final VoidCallback onToggleLoopMode;
-  final VoidCallback onPrev;
-  final VoidCallback onPlayPause;
-  final VoidCallback onNext;
-  final VoidCallback? onAddToPlayList;
-  final MusicLoopMode loopMode;
-  final IconData loopIcon;
-  final bool isPlaying;
-
-  final Duration position;
-  final ValueChanged<double> onDragUpdate;
-  final ValueChanged<double> onDragStart;
-  final ValueChanged<double> onDragEnd;
-  final Duration duration;
-  final double dragValueMs;
-  final bool dragging;
-  final Duration buffered;
-
-  const MusicPlayCtrlBottomCenterArea({
+/// 播放条中部：上一首 / 播放 / 下一首 + 进度条。
+class ColaMusicDockProgress extends StatelessWidget {
+  const ColaMusicDockProgress({
     super.key,
     required this.isPlaying,
     required this.loopMode,
@@ -47,6 +28,26 @@ class MusicPlayCtrlBottomCenterArea extends StatelessWidget {
     required this.onDragUpdate,
     required this.onDragEnd,
   });
+
+  final bool showLoopButton;
+  final bool showAddToPlayListButton;
+  final VoidCallback onToggleLoopMode;
+  final VoidCallback onPrev;
+  final VoidCallback onPlayPause;
+  final VoidCallback onNext;
+  final VoidCallback? onAddToPlayList;
+  final MusicLoopMode loopMode;
+  final IconData loopIcon;
+  final bool isPlaying;
+
+  final Duration position;
+  final ValueChanged<double> onDragUpdate;
+  final ValueChanged<double> onDragStart;
+  final ValueChanged<double> onDragEnd;
+  final Duration duration;
+  final double dragValueMs;
+  final bool dragging;
+  final Duration buffered;
 
   @override
   Widget build(BuildContext context) {
@@ -55,27 +56,27 @@ class MusicPlayCtrlBottomCenterArea extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          MusicPlayCtrlBottomCenterControls(
-            showLoopButton: showLoopButton,
-            showAddToPlayListButton: showAddToPlayListButton,
-            onToggleLoopMode: onToggleLoopMode,
-            onPrev: onPrev,
-            onPlayPause: onPlayPause,
-            onNext: onNext,
-            onAddToPlayList: onAddToPlayList,
+          ColaMusicDockControls(
+            isPlaying: isPlaying,
             loopMode: loopMode,
             loopIcon: loopIcon,
-            isPlaying: isPlaying,
+            onToggleLoopMode: onToggleLoopMode,
+            showLoopButton: showLoopButton,
+            onPrev: onPrev,
+            onNext: onNext,
+            onPlayPause: onPlayPause,
+            onAddToPlayList: onAddToPlayList,
+            showAddToPlayListButton: showAddToPlayListButton,
           ),
-          MusicPlayCtrlBottomSeekBarWithTime(
+          ColaMusicDockSeekBar(
             position: position,
-            onDragUpdate: onDragUpdate,
-            onDragStart: onDragStart,
-            onDragEnd: onDragEnd,
             duration: duration,
-            dragValueMs: dragValueMs,
-            dragging: dragging,
             buffered: buffered,
+            dragging: dragging,
+            dragValueMs: dragValueMs,
+            onDragStart: onDragStart,
+            onDragUpdate: onDragUpdate,
+            onDragEnd: onDragEnd,
           ),
           const SizedBox(height: 10.0),
         ],
@@ -84,17 +85,9 @@ class MusicPlayCtrlBottomCenterArea extends StatelessWidget {
   }
 }
 
-class MusicPlayCtrlBottomSeekBarWithTime extends StatelessWidget {
-  final Duration position;
-  final ValueChanged<double> onDragUpdate;
-  final ValueChanged<double> onDragStart;
-  final ValueChanged<double> onDragEnd;
-  final Duration duration;
-  final double dragValueMs;
-  final bool dragging;
-  final Duration buffered;
-
-  const MusicPlayCtrlBottomSeekBarWithTime({
+/// 两端显示时间、中间为可拖动滑块的进度条。
+class ColaMusicDockSeekBar extends StatelessWidget {
+  const ColaMusicDockSeekBar({
     required this.position,
     required this.onDragUpdate,
     required this.onDragStart,
@@ -106,67 +99,58 @@ class MusicPlayCtrlBottomSeekBarWithTime extends StatelessWidget {
     required this.buffered,
   });
 
+  final Duration position;
+  final ValueChanged<double> onDragUpdate;
+  final ValueChanged<double> onDragStart;
+  final ValueChanged<double> onDragEnd;
+  final Duration duration;
+  final double dragValueMs;
+  final bool dragging;
+  final Duration buffered;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final palette = Theme.of(context);
     final maxMs = MusicSeekBarMath.maxMs(duration);
-    final enabled = MusicSeekBarMath.isSeekEnabled(duration);
-    final value = MusicSeekBarMath.valueMs(
+    final seekable = MusicSeekBarMath.isSeekEnabled(duration);
+    final currentMs = MusicSeekBarMath.valueMs(
       position,
       duration,
       dragging: dragging,
       dragValueMs: dragValueMs,
     );
-
-    final leftLabel = MusicTimeText.of(MusicSeekBarMath.fromMs(value));
-    final rightLabel = MusicTimeText.of(duration);
+    final timeStyle = palette.textTheme.bodySmall?.copyWith(
+      color: palette.colorScheme.onSurface.withValues(alpha: 0.7),
+    );
 
     return Row(
       children: <Widget>[
         Text(
-          leftLabel,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-          ),
+          MusicTimeText.of(MusicSeekBarMath.fromMs(currentMs)),
+          style: timeStyle,
         ),
         const SizedBox(width: 1.0),
         Expanded(
           child: MusicSlider(
-            value: value,
+            value: currentMs,
             max: maxMs,
             trackHeight: 4,
-            enabled: enabled,
-            onChanged: enabled ? onDragUpdate : null,
-            onChangeStart: enabled ? onDragStart : null,
-            onChangeEnd: enabled ? onDragEnd : null,
+            enabled: seekable,
+            onChanged: seekable ? onDragUpdate : null,
+            onChangeStart: seekable ? onDragStart : null,
+            onChangeEnd: seekable ? onDragEnd : null,
           ),
         ),
         const SizedBox(width: 1.0),
-        Text(
-          rightLabel,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-          ),
-        ),
+        Text(MusicTimeText.of(duration), style: timeStyle),
       ],
     );
   }
 }
 
-class MusicPlayCtrlBottomCenterControls extends StatelessWidget {
-  final bool showLoopButton;
-  final bool showAddToPlayListButton;
-  final VoidCallback onToggleLoopMode;
-  final VoidCallback onPrev;
-  final VoidCallback onPlayPause;
-  final VoidCallback onNext;
-  final VoidCallback? onAddToPlayList;
-  final MusicLoopMode loopMode;
-  final IconData loopIcon;
-  final bool isPlaying;
-  final bool isNarrow;
-
-  const MusicPlayCtrlBottomCenterControls({
+/// 传输控制按钮组，全屏与悬浮两种尺寸共用。
+class ColaMusicDockControls extends StatelessWidget {
+  const ColaMusicDockControls({
     super.key,
     required this.isPlaying,
     required this.loopMode,
@@ -181,10 +165,20 @@ class MusicPlayCtrlBottomCenterControls extends StatelessWidget {
     this.isNarrow = false,
   });
 
+  final bool showLoopButton;
+  final bool showAddToPlayListButton;
+  final VoidCallback onToggleLoopMode;
+  final VoidCallback onPrev;
+  final VoidCallback onPlayPause;
+  final VoidCallback onNext;
+  final VoidCallback? onAddToPlayList;
+  final MusicLoopMode loopMode;
+  final IconData loopIcon;
+  final bool isPlaying;
+  final bool isNarrow;
+
   @override
   Widget build(BuildContext context) {
-    final loopTip = loopMode.i18nKey.tr;
-
     final iconSize = isNarrow ? 32.0 : 24.0;
 
     return Row(
@@ -192,64 +186,79 @@ class MusicPlayCtrlBottomCenterControls extends StatelessWidget {
       children: <Widget>[
         if (showLoopButton)
           IconButton(
-            tooltip: loopTip,
+            tooltip: loopMode.i18nKey.tr,
             onPressed: onToggleLoopMode,
             iconSize: iconSize,
             icon: Icon(loopIcon, size: iconSize),
           ),
-        IconButton(
+        _buildIconButton(
           tooltip: 'music_prev_track'.tr,
+          icon: Icons.skip_previous,
           onPressed: onPrev,
-          iconSize: iconSize,
-          icon: Icon(Icons.skip_previous, size: iconSize),
+          size: iconSize,
         ),
-        MusicPlayCtrlBottomPlayPauseButton(
-          onPressed: onPlayPause,
+        ColaMusicDockPlayButton(
           isPlaying: isPlaying,
+          onPressed: onPlayPause,
           isNarrow: isNarrow,
         ),
-        IconButton(
+        _buildIconButton(
           tooltip: 'music_next_track'.tr,
+          icon: Icons.skip_next,
           onPressed: onNext,
-          iconSize: iconSize,
-          icon: Icon(Icons.skip_next, size: iconSize),
+          size: iconSize,
         ),
         if (showAddToPlayListButton && onAddToPlayList != null)
-          IconButton(
+          _buildIconButton(
             tooltip: 'add_to_play_list'.tr,
+            icon: Icons.playlist_add,
             onPressed: onAddToPlayList,
-            iconSize: iconSize,
-            icon: Icon(Icons.playlist_add, size: iconSize),
+            size: iconSize,
           ),
       ],
     );
   }
+
+  Widget _buildIconButton({
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    required double size,
+  }) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: onPressed,
+      iconSize: size,
+      icon: Icon(icon, size: size),
+    );
+  }
 }
 
-class MusicPlayCtrlBottomPlayPauseButton extends StatelessWidget {
-  final VoidCallback onPressed;
-  final bool isPlaying;
-  final bool isNarrow;
-
-  const MusicPlayCtrlBottomPlayPauseButton({
+/// 主播放 / 暂停按钮，使用主题主色。
+class ColaMusicDockPlayButton extends StatelessWidget {
+  const ColaMusicDockPlayButton({
     super.key,
     required this.isPlaying,
     required this.onPressed,
     this.isNarrow = false,
   });
 
+  final VoidCallback onPressed;
+  final bool isPlaying;
+  final bool isNarrow;
+
   @override
   Widget build(BuildContext context) {
-    final size = isNarrow ? 46.8 : 36.0;
-    final theme = Theme.of(context);
+    final glyphSize = isNarrow ? 46.8 : 36.0;
+    final tint = Theme.of(context).colorScheme.primary;
     return IconButton(
       tooltip: isPlaying ? 'pause'.tr : 'play'.tr,
       onPressed: onPressed,
-      iconSize: size,
+      iconSize: glyphSize,
       icon: Icon(
         isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
-        color: theme.colorScheme.primary,
-        size: size,
+        color: tint,
+        size: glyphSize,
       ),
     );
   }

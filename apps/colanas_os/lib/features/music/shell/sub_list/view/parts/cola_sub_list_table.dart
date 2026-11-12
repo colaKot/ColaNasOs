@@ -3,6 +3,7 @@ import '../../../compat/ui_kit.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_context_menu/flutter_context_menu.dart';
 
 import '../../../compat/spinkit.dart';
 import '../../../compat/getx.dart';
@@ -15,6 +16,80 @@ import '../../controller/cola_sub_list_controller.dart';
 import '../../../list/models/cola_list_models.dart';
 import '../../../list/view/parts/cola_item_context_menu.dart';
 import '../../../play_service/controller/cola_player_controller.dart';
+
+String _trackPath(MusicListItem item) {
+  if (item.isSeries) {
+    final seriesEntry = item.firstFilePath.trim();
+    if (seriesEntry.isNotEmpty) return seriesEntry;
+  }
+  final full = item.fullPath.trim();
+  if (full.isNotEmpty) return full;
+  final base = item.path.trim();
+  final name = item.filename.trim();
+  if (base.isEmpty) return '';
+  return name.isEmpty ? base : '$base/$name';
+}
+
+String _coverPath(MusicListItem item) {
+  final full = item.fullPath.trim();
+  if (full.isNotEmpty) return full;
+  final base = item.path.trim();
+  final name = item.filename.trim();
+  return base.isNotEmpty && name.isNotEmpty ? '$base/$name' : '';
+}
+
+MusicListItem? _playingEntry(MusicPlayServiceController ctrl) {
+  final index = ctrl.currentIndex.value;
+  if (index < 0 || index >= ctrl.playlist.length) return null;
+  return ctrl.playlist[index];
+}
+
+bool _isCurrentTrack(MusicPlayServiceController ctrl, MusicListItem item) {
+  final playing = _playingEntry(ctrl);
+  if (playing == null) return false;
+  final now = _trackPath(playing);
+  return now.isNotEmpty && now == _trackPath(item);
+}
+
+Widget _waveIndicator(double size, {Color? color}) => SpinKitWave(
+  size: size,
+  itemCount: 6,
+  color: (color ?? Colors.white).withValues(alpha: 0.9),
+);
+
+void _openFolderFor(BuildContext context, MusicListItem item) {
+  final full = item.fullPath.trim();
+  final base = item.path.trim();
+  final target = browseFolderPathMusic(full.isNotEmpty ? full : base);
+  if (target.isEmpty) return;
+  if (DeviceUtils.isDesktop && Get.isRegistered<PcHomeController>()) {
+    PcHomeController.instance.openFolderAt(target);
+    return;
+  }
+  AppRoutes.toFiles(initialPath: target);
+}
+
+String _khzText(int hz) {
+  final value = hz / 1000;
+  final text = value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(1);
+  return '${text}khz';
+}
+
+String _audioTagText(MusicListItem item) {
+  final parts = <String>[];
+  final bitDepth = item.bitDepth ?? 0;
+  final sampleRate = item.sampleRate ?? 0;
+  final bitrate = item.bitrate ?? 0;
+  if (bitDepth > 0) parts.add('${bitDepth}bit');
+  if (sampleRate > 0) {
+    parts.add(_khzText(sampleRate));
+  } else if (bitrate > 0) {
+    parts.add('${(bitrate / 1000).round()}kbps');
+  }
+  return parts.join('|');
+}
 
 class MusicSubListTable extends StatelessWidget {
   final MusicSubListController controller;
@@ -33,67 +108,71 @@ class MusicSubListTable extends StatelessWidget {
         return const MusicEmptyState();
       }
 
-      final localPlayCtrl = Get.isRegistered<MusicPlayServiceController>()
+      final playCtrl = Get.isRegistered<MusicPlayServiceController>()
           ? Get.find<MusicPlayServiceController>()
           : null;
-      final localShowPlayerBar =
-          localPlayCtrl != null &&
-          localPlayCtrl.isReady.value &&
-          localPlayCtrl.playlist.isNotEmpty;
-      final localPlayerExtraSpace = localShowPlayerBar
+      final playerBar =
+          playCtrl != null &&
+          playCtrl.isReady.value &&
+          playCtrl.playlist.isNotEmpty;
+      final playerSpace = playerBar
           ? (112.0 + MediaQuery.of(context).padding.bottom)
           : 0.0;
 
-      final localShowMultiBar = controller.isMultiSelectMode.value;
-      final isApp = DeviceUtils.isMobile || DeviceUtils.isPhone(context);
-      final localBottomSpace =
-          (localShowMultiBar ? 66.0 : 20.0) + localPlayerExtraSpace;
+      final multi = controller.isMultiSelectMode.value;
+      final compact = DeviceUtils.isMobile || DeviceUtils.isPhone(context);
+      final tailSpace = (multi ? 66.0 : 20.0) + playerSpace;
+
       return Scrollbar(
         thumbVisibility: true,
         controller: scrollController,
         child: CustomScrollView(
           controller: scrollController,
           slivers: <Widget>[
-            SliverFixedExtentList(
-              itemExtent: 62,
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final item = controller.items[index];
-                if (isApp) {
-                  return _MobileDataRow(
-                    key: ValueKey('music_sub_row_mobile_${item.id}'),
-                    item: item,
-                    index: index,
-                    controller: controller,
-                  );
-                }
-                return _DataRow(
-                  key: ValueKey('music_sub_row_${item.id}'),
-                  item: item,
-                  index: index,
-                  controller: controller,
-                );
-              }, childCount: controller.items.length),
-            ),
+            _buildRows(compact),
             SliverToBoxAdapter(
               child: KeyedSubtree(
-                key: ValueKey('music_sub_list_footer'),
-                child: _Footer(controller: controller),
+                key: const ValueKey('music_sub_list_footer'),
+                child: _PagingFooter(controller: controller),
               ),
             ),
-            SliverToBoxAdapter(child: SizedBox(height: localBottomSpace)),
+            SliverToBoxAdapter(child: SizedBox(height: tailSpace)),
           ],
         ),
       );
     });
   }
+
+  Widget _buildRows(bool compact) {
+    return SliverFixedExtentList(
+      itemExtent: 62,
+      delegate: SliverChildBuilderDelegate((context, index) {
+        final item = controller.items[index];
+        if (compact) {
+          return _TrackRowCompact(
+            key: ValueKey('music_sub_row_mobile_${item.id}'),
+            item: item,
+            index: index,
+            controller: controller,
+          );
+        }
+        return _TrackRowDesktop(
+          key: ValueKey('music_sub_row_${item.id}'),
+          item: item,
+          index: index,
+          controller: controller,
+        );
+      }, childCount: controller.items.length),
+    );
+  }
 }
 
-class _DataRow extends StatefulWidget {
+class _TrackRowDesktop extends StatefulWidget {
   final MusicListItem item;
   final int index;
   final MusicSubListController controller;
 
-  const _DataRow({
+  const _TrackRowDesktop({
     super.key,
     required this.item,
     required this.index,
@@ -101,136 +180,53 @@ class _DataRow extends StatefulWidget {
   });
 
   @override
-  State<_DataRow> createState() => _DataRowState();
+  State<_TrackRowDesktop> createState() => _TrackRowDesktopState();
 }
 
-class _DataRowState extends State<_DataRow> {
+class _TrackRowDesktopState extends State<_TrackRowDesktop> {
   bool _hovered = false;
-
-  String _resolvePlayablePath(MusicListItem item) {
-    if (item.isSeries) {
-      final localP = item.firstFilePath.trim();
-      if (localP.isNotEmpty) return localP;
-    }
-    final full = item.fullPath.trim();
-    if (full.isNotEmpty) return full;
-    final localName = item.filename.trim();
-    final base = item.path.trim();
-    if (base.isNotEmpty && localName.isNotEmpty) return '$base/$localName';
-    return base;
-  }
-
-  MusicListItem? _currentPlayingItem(MusicPlayServiceController controller) {
-    final localIdx = controller.currentIndex.value;
-    if (localIdx < 0 || localIdx >= controller.playlist.length) return null;
-    return controller.playlist[localIdx];
-  }
-
-  Widget _buildWaveIndicator(double size, {Color? color}) {
-    return SpinKitWave(
-      size: size,
-      itemCount: 6,
-      color: (color ?? Colors.white).withValues(alpha: 0.9),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final selectionMode = widget.controller.isMultiSelectMode.value;
-      final localTheme = Theme.of(context);
-      final localPlayCtrl = MusicPlayServiceController.instance;
-      final localSelected = widget.controller.selectedItems.contains(
-        widget.item.id,
-      );
-      final localCurrentItem = _currentPlayingItem(localPlayCtrl);
-      final localCurrentPath = localCurrentItem == null
-          ? ''
-          : _resolvePlayablePath(localCurrentItem);
-      final localItemPath = _resolvePlayablePath(widget.item);
-      final isCurrent =
-          localCurrentPath.isNotEmpty && localCurrentPath == localItemPath;
-      final localIsPlaying = isCurrent && localPlayCtrl.isPlaying.value;
-      final localTitleStyle = localTheme.textTheme.bodyMedium?.copyWith(
+      final multi = widget.controller.isMultiSelectMode.value;
+      final theme = Theme.of(context);
+      final selected = widget.controller.selectedItems.contains(widget.item.id);
+      final playCtrl = MusicPlayServiceController.instance;
+      final current = _isCurrentTrack(playCtrl, widget.item);
+      final playing = current && playCtrl.isPlaying.value;
+      final titleStyle = theme.textTheme.bodyMedium?.copyWith(
         fontWeight: FontWeight.w600,
       );
-      final localEffectiveTitleStyle = isCurrent
-          ? (localTitleStyle?.copyWith(color: localTheme.colorScheme.primary) ??
-                TextStyle(color: localTheme.colorScheme.primary))
-          : localTitleStyle;
-      final localSubStyle = localTheme.textTheme.bodyMedium?.copyWith(
-        color: localTheme.colorScheme.onSurface.withValues(alpha: 0.65),
+      final activeTitleStyle = current
+          ? (titleStyle ?? const TextStyle()).copyWith(
+              color: theme.colorScheme.primary,
+            )
+          : titleStyle;
+      final subStyle = theme.textTheme.bodyMedium?.copyWith(
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
       );
-      final localTagStyle = localTheme.textTheme.labelSmall?.copyWith(
-        color: localTheme.colorScheme.onSurface.withValues(alpha: 0.8),
+      final tagStyle = theme.textTheme.labelSmall?.copyWith(
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
       );
-      final localSubtitle = [
+      final tag = _audioTagText(widget.item);
+      final subtitle = <String>[
         widget.item.artist.trim(),
         widget.item.album.trim(),
-      ].where((v) => v.isNotEmpty).join(' · ');
-      final localTagText = _buildAudioTagText(widget.item);
-      final localEntries = MusicItemContextMenu.buildEntries(
-        selectionMode: selectionMode,
-        onToggleFavorite: () => widget.controller.toggleFavorite(widget.item),
-        onShowInSystem: () async {
-          final item = widget.item;
-          final full = item.fullPath.trim();
-          final localPath = full.isNotEmpty
-              ? full
-              : (item.path.trim().isNotEmpty && item.filename.trim().isNotEmpty)
-              ? '${item.path.trim()}/${item.filename.trim()}'
-              : '';
-          if (localPath.isEmpty) return;
-          final localReply = await FileApiService.instance.showInSystem(
-            localPath,
-          );
-          if (!localReply.success) {
-            ToastUtil.show(localReply.message ?? 'operation_failed'.tr);
-          }
-        },
-        onRemoveFromPlayList: () =>
-            widget.controller.removeFromPlayListItem(widget.item),
-        onOpenInSystem: () async {
-          final item = widget.item;
-          final full = item.fullPath.trim();
-          final localPath = full.isNotEmpty
-              ? full
-              : (item.path.trim().isNotEmpty && item.filename.trim().isNotEmpty)
-              ? '${item.path.trim()}/${item.filename.trim()}'
-              : '';
-          if (localPath.isEmpty) return;
-          final localReply = await FileApiService.instance.openInSystem(
-            localPath,
-          );
-          if (!localReply.success) {
-            ToastUtil.show(localReply.message ?? 'operation_failed'.tr);
-          }
-        },
-        onFileBrowse: () => _openInFileBrowser(context),
-        onDownload: () => widget.controller.downloadItem(widget.item),
-        onDelete: () => widget.controller.deleteItem(widget.item),
-        onAddToPlayList: () => widget.controller.addToPlayListItem(widget.item),
-        isSameMachine:
-            DeviceUtils.isDesktopOrWeb && ApiController.instance.isSameMachine,
-        isFavorite: widget.item.isFavorite,
-        inPlayList: widget.controller.isInPlayList,
-      );
-      final localOverlayColor = localSelected
-          ? localTheme.colorScheme.primary.withValues(alpha: 0.08)
-          : localTheme.colorScheme.onSurface.withValues(alpha: 0.03);
+      ].where((value) => value.isNotEmpty).join(' · ');
+      final entries = _buildEntries(context);
+      final overlayColor = selected
+          ? theme.colorScheme.primary.withValues(alpha: 0.08)
+          : theme.colorScheme.onSurface.withValues(alpha: 0.03);
 
-      final localRow = InkWell(
+      final row = InkWell(
         onTap: () {
-          if (selectionMode) {
+          if (multi) {
             widget.controller.toggleSelection(widget.item.id);
             return;
           }
-          if (isCurrent) {
-            if (localPlayCtrl.isPlaying.value) {
-              localPlayCtrl.pause();
-            } else {
-              localPlayCtrl.play();
-            }
+          if (current) {
+            playCtrl.isPlaying.value ? playCtrl.pause() : playCtrl.play();
             return;
           }
           widget.controller.playAt(widget.index);
@@ -245,226 +241,207 @@ class _DataRowState extends State<_DataRow> {
                   SizedBox(
                     width: 26,
                     child: Center(
-                      child: selectionMode
-                          ? CustomCheckbox(
-                              value: localSelected,
-                              onChanged: (_) => widget.controller
-                                  .toggleSelection(widget.item.id),
-                              isCircle: false,
-                            )
-                          : (_hovered
-                                ? Icon(
-                                    localIsPlaying
-                                        ? Icons.pause
-                                        : Icons.play_arrow,
-                                    size: 18,
-                                  )
-                                : localIsPlaying
-                                ? _buildWaveIndicator(
-                                    14,
-                                    color: localTheme.colorScheme.primary,
-                                  )
-                                : Text(
-                                    '${widget.index + 1}',
-                                    style: localSubStyle,
-                                  )),
+                      child: _buildLeading(
+                        multi: multi,
+                        selected: selected,
+                        playing: playing,
+                        subStyle: subStyle,
+                        theme: theme,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
-                  _CoverThumb(
-                    filePath: _resolvePathForCover(widget.item),
+                  _TrackCover(
+                    filePath: _coverPath(widget.item),
                     hasInnerCover: widget.item.hasInnerCover,
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Text(
-                          widget.item.displayTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: localEffectiveTitleStyle,
-                        ),
-                        if (localTagText.isNotEmpty ||
-                            localSubtitle.isNotEmpty) ...[
-                          const SizedBox(height: 4),
-                          Row(
-                            children: <Widget>[
-                              if (localTagText.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: localTheme.colorScheme.secondary
-                                          .withValues(alpha: 0.4),
-                                    ),
-                                    borderRadius: BorderRadius.all(
-                                      Radius.circular(6),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    localTagText,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: localTagStyle,
-                                  ),
-                                ),
-                              if (localTagText.isNotEmpty &&
-                                  localSubtitle.isNotEmpty)
-                                const SizedBox(width: 6),
-                              if (localSubtitle.isNotEmpty)
-                                Expanded(
-                                  child: Text(
-                                    localSubtitle,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: localSubStyle,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ],
+                    child: _buildInfo(
+                      activeTitleStyle: activeTitleStyle,
+                      subStyle: subStyle,
+                      tagStyle: tagStyle,
+                      tag: tag,
+                      subtitle: subtitle,
                     ),
                   ),
                   const SizedBox(width: 12),
-                  IconButton(
-                    tooltip: widget.item.isFavorite
-                        ? 'unfavorite'.tr
-                        : 'favorites'.tr,
-                    onPressed: () =>
-                        widget.controller.toggleFavorite(widget.item),
-                    icon: Icon(
-                      widget.item.isFavorite
-                          ? Icons.favorite
-                          : Icons.favorite_border,
-                      size: 20,
-                      color: widget.item.isFavorite ? Colors.red : null,
-                    ),
-                  ),
+                  _buildFavoriteButton(),
                   SizedBox(
                     width: 72,
-                    child: Align(
-                      alignment: Alignment.center,
+                    child: Center(
                       child: Text(
                         FormatUtil.formatDurationSeconds(
                           widget.item.duration,
                           autoPadZero: true,
                         ),
+                        style: subStyle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: localSubStyle,
                       ),
                     ),
                   ),
                 ],
               ),
-              if (selectionMode)
+              if (multi)
                 Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(color: localOverlayColor),
-                  ),
+                  child: IgnorePointer(child: Container(color: overlayColor)),
                 ),
             ],
           ),
         ),
       );
 
-      if (!DeviceUtils.isDesktop && !DeviceUtils.isWeb) return localRow;
+      if (!DeviceUtils.isDesktop && !DeviceUtils.isWeb) return row;
 
-      final localHoverChild = MouseRegion(
+      final hoverChild = MouseRegion(
+        onEnter: (_) {
+          if (widget.controller.isScrolling.value || _hovered) return;
+          setState(() => _hovered = true);
+        },
         onExit: (_) {
           if (!_hovered) return;
           setState(() => _hovered = false);
         },
-        onEnter: (_) {
-          if (widget.controller.isScrolling.value) return;
-          if (_hovered) return;
-          setState(() => _hovered = true);
-        },
-        child: localRow,
+        child: row,
       );
 
-      if (localEntries.isEmpty) return localHoverChild;
-      return ContextMenuUtil.region(
-        child: localHoverChild,
-        entries: localEntries,
-      );
+      if (entries.isEmpty) return hoverChild;
+      return ContextMenuUtil.region(child: hoverChild, entries: entries);
     });
   }
 
-  static String _resolvePathForCover(MusicListItem item) {
-    final base = item.path.trim();
-    final full = item.fullPath.trim();
-    final localName = item.filename.trim();
-    return full.isNotEmpty
-        ? full
-        : (base.isNotEmpty && localName.isNotEmpty ? '$base/$localName' : '');
+  Widget _buildLeading({
+    required bool multi,
+    required bool selected,
+    required bool playing,
+    required TextStyle? subStyle,
+    required ThemeData theme,
+  }) {
+    if (multi) {
+      return CustomCheckbox(
+        value: selected,
+        onChanged: (_) => widget.controller.toggleSelection(widget.item.id),
+        isCircle: false,
+      );
+    }
+    if (_hovered) {
+      return Icon(playing ? Icons.pause : Icons.play_arrow, size: 18);
+    }
+    if (playing) {
+      return _waveIndicator(14, color: theme.colorScheme.primary);
+    }
+    return Text('${widget.index + 1}', style: subStyle);
   }
 
-  static String _buildAudioTagText(MusicListItem item) {
-    final sampleRate = item.sampleRate ?? 0;
-    final localParts = <String>[];
-    final bitDepth = item.bitDepth ?? 0;
-    final bitrate = item.bitrate ?? 0;
-    if (bitDepth > 0) {
-      localParts.add('${bitDepth}bit');
-    }
-    if (sampleRate > 0) {
-      localParts.add(_formatSampleRate(sampleRate));
-    } else if (bitrate > 0) {
-      localParts.add(_formatBitrate(bitrate));
-    }
-    if (localParts.isEmpty) return '';
-    return localParts.join('|');
+  Widget _buildInfo({
+    required TextStyle? activeTitleStyle,
+    required TextStyle? subStyle,
+    required TextStyle? tagStyle,
+    required String tag,
+    required String subtitle,
+  }) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          widget.item.displayTitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: activeTitleStyle,
+        ),
+        if (tag.isNotEmpty || subtitle.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Row(
+            children: <Widget>[
+              if (tag.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.secondary
+                          .withValues(alpha: 0.4),
+                    ),
+                    borderRadius: BorderRadius.all(Radius.circular(6)),
+                  ),
+                  child: Text(
+                    tag,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: tagStyle,
+                  ),
+                ),
+              if (tag.isNotEmpty && subtitle.isNotEmpty)
+                const SizedBox(width: 6),
+              if (subtitle.isNotEmpty)
+                Expanded(
+                  child: Text(
+                    subtitle,
+                    style: subStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
   }
 
-  static String _formatBitrate(int bitrate) {
-    final localKbps = (bitrate / 1000).round();
-    return '${localKbps}kbps';
+  Widget _buildFavoriteButton() {
+    return IconButton(
+      tooltip: widget.item.isFavorite ? 'unfavorite'.tr : 'favorites'.tr,
+      onPressed: () => widget.controller.toggleFavorite(widget.item),
+      icon: Icon(
+        widget.item.isFavorite ? Icons.favorite : Icons.favorite_border,
+        size: 20,
+        color: widget.item.isFavorite ? Colors.red : null,
+      ),
+    );
   }
 
-  static String _formatSampleRate(int sampleRate) {
-    final localKhz = sampleRate / 1000;
-    final localText = localKhz % 1 == 0
-        ? localKhz.toStringAsFixed(0)
-        : localKhz.toStringAsFixed(1);
-    return '${localText}khz';
-  }
+  List<ContextMenuEntry> _buildEntries(BuildContext context) {
+    Future<void> systemCall(Future<ApiResult> Function(String p) call) async {
+      final path = _coverPath(widget.item);
+      if (path.isEmpty) return;
+      final result = await call(path);
+      if (!result.success) {
+        ToastUtil.show(result.message ?? 'operation_failed'.tr);
+      }
+    }
 
-  void _openInFileBrowser(BuildContext context) {
-    final item = widget.item;
-    final base = item.path.trim();
-    final full = item.fullPath.trim();
-    final String target;
-    if (item.isSeries) {
-      final localRaw = full.isNotEmpty ? full : base;
-      target = browseFolderPathMusic(localRaw);
-    } else if (full.isNotEmpty) {
-      target = browseFolderPathMusic(full);
-    } else {
-      target = browseFolderPathMusic(base);
-    }
-    if (target.isEmpty) return;
-    if (DeviceUtils.isDesktop && Get.isRegistered<PcHomeController>()) {
-      PcHomeController.instance.openFolderAt(target);
-      return;
-    }
-    AppRoutes.toFiles(initialPath: target);
+    return MusicItemContextMenu.buildEntries(
+      selectionMode: widget.controller.isMultiSelectMode.value,
+      onToggleFavorite: () => widget.controller.toggleFavorite(widget.item),
+      onShowInSystem: () =>
+          systemCall((path) => FileApiService.instance.showInSystem(path)),
+      onRemoveFromPlayList: () =>
+          widget.controller.removeFromPlayListItem(widget.item),
+      onOpenInSystem: () =>
+          systemCall((path) => FileApiService.instance.openInSystem(path)),
+      onFileBrowse: () => _openFolderFor(context, widget.item),
+      onDownload: () => widget.controller.downloadItem(widget.item),
+      onDelete: () => widget.controller.deleteItem(widget.item),
+      onAddToPlayList: () => widget.controller.addToPlayListItem(widget.item),
+      isSameMachine:
+          DeviceUtils.isDesktopOrWeb && ApiController.instance.isSameMachine,
+      isFavorite: widget.item.isFavorite,
+      inPlayList: widget.controller.insidePlaylist,
+    );
   }
 }
 
-class _MobileDataRow extends StatefulWidget {
+class _TrackRowCompact extends StatefulWidget {
   final MusicListItem item;
   final int index;
   final MusicSubListController controller;
 
-  const _MobileDataRow({
+  const _TrackRowCompact({
     super.key,
     required this.item,
     required this.index,
@@ -472,285 +449,176 @@ class _MobileDataRow extends StatefulWidget {
   });
 
   @override
-  State<_MobileDataRow> createState() => _MobileDataRowState();
+  State<_TrackRowCompact> createState() => _TrackRowCompactState();
 }
 
-class _MobileDataRowState extends State<_MobileDataRow> {
-  String _resolvePlayablePath(MusicListItem item) {
-    if (item.isSeries) {
-      final localP = item.firstFilePath.trim();
-      if (localP.isNotEmpty) return localP;
-    }
-    final full = item.fullPath.trim();
-    if (full.isNotEmpty) return full;
-    final localName = item.filename.trim();
-    final base = item.path.trim();
-    if (base.isNotEmpty && localName.isNotEmpty) return '$base/$localName';
-    return base;
-  }
-
-  MusicListItem? _currentPlayingItem(MusicPlayServiceController controller) {
-    final localIdx = controller.currentIndex.value;
-    if (localIdx < 0 || localIdx >= controller.playlist.length) return null;
-    return controller.playlist[localIdx];
-  }
-
-  void _openItem() {
+class _TrackRowCompactState extends State<_TrackRowCompact> {
+  void _activate() {
     if (widget.item.isSeries) {
-      _openSeries();
+      _enterSeries();
       return;
     }
-    final localPlayCtrl = MusicPlayServiceController.instance;
-    final localCurrentItem = _currentPlayingItem(localPlayCtrl);
-    final localCurrentPath = localCurrentItem == null
-        ? ''
-        : _resolvePlayablePath(localCurrentItem);
-    final localItemPath = _resolvePlayablePath(widget.item);
-    final isCurrent =
-        localCurrentPath.isNotEmpty && localCurrentPath == localItemPath;
-    if (isCurrent) {
-      if (localPlayCtrl.isPlaying.value) {
-        localPlayCtrl.pause();
-      } else {
-        localPlayCtrl.play();
-      }
+    final playCtrl = MusicPlayServiceController.instance;
+    if (_isCurrentTrack(playCtrl, widget.item)) {
+      playCtrl.isPlaying.value ? playCtrl.pause() : playCtrl.play();
       return;
     }
     widget.controller.playAt(widget.index);
   }
 
-  void _openSeries() {
-    final localSeriesIndexId = widget.item.id;
-    if (localSeriesIndexId <= 0) return;
-    final localOverlayCtrl = Get.isRegistered<MusicSubListOverlayController>()
+  void _enterSeries() {
+    final seriesId = widget.item.id;
+    if (seriesId <= 0) return;
+    final overlay = Get.isRegistered<MusicSubListOverlayController>()
         ? Get.find<MusicSubListOverlayController>()
         : Get.put(MusicSubListOverlayController());
-    localOverlayCtrl.open(
-      seriesIndexId: localSeriesIndexId,
+    overlay.open(
+      seriesIndexId: seriesId,
       name: widget.item.displayTitle,
       keyType: 'series',
     );
   }
 
-  static String _resolvePathForCover(MusicListItem item) {
-    final base = item.path.trim();
-    final full = item.fullPath.trim();
-    final localName = item.filename.trim();
-    return full.isNotEmpty
-        ? full
-        : (base.isNotEmpty && localName.isNotEmpty ? '$base/$localName' : '');
-  }
-
-  List<AppItemActionSheetEntry> _buildMobileActionSheetEntries(
-    BuildContext context,
-  ) {
-    final selectionMode = widget.controller.isMultiSelectMode.value;
-    if (selectionMode) return const <AppItemActionSheetEntry>[];
-    final localInPlayList = widget.controller.isInPlayList;
+  List<AppItemActionSheetEntry> _sheetEntries(BuildContext context) {
+    if (widget.controller.isMultiSelectMode.value) {
+      return const <AppItemActionSheetEntry>[];
+    }
     return <AppItemActionSheetEntry>[
       AppItemActionSheetAction(
+        onTap: _activate,
         title: 'open'.tr,
-        onTap: _openItem,
         icon: const Icon(Icons.open_in_new),
       ),
       AppItemActionSheetAction(
+        onTap: () => _openFolderFor(context, widget.item),
         title: 'file_browse'.tr,
-        onTap: () => _openInFileBrowser(context),
         icon: const Icon(Icons.folder_open_outlined),
       ),
       const AppItemActionSheetDivider(),
       AppItemActionSheetAction(
-        title: (widget.item.isFavorite ? 'unfavorite'.tr : 'favorites'.tr),
         onTap: () => widget.controller.toggleFavorite(widget.item),
+        title: widget.item.isFavorite ? 'unfavorite'.tr : 'favorites'.tr,
         icon: Icon(
           widget.item.isFavorite ? Icons.favorite : Icons.favorite_border,
           color: widget.item.isFavorite ? Colors.red : null,
         ),
       ),
       AppItemActionSheetAction(
-        title: 'download'.tr,
         onTap: () => widget.controller.downloadItem(widget.item),
+        title: 'download'.tr,
         icon: const Icon(Icons.download_outlined),
       ),
       const AppItemActionSheetDivider(),
       AppItemActionSheetAction(
-        title: 'add_to_play_list'.tr,
         onTap: () => widget.controller.addToPlayListItem(widget.item),
+        title: 'add_to_play_list'.tr,
         icon: const Icon(Icons.playlist_add),
       ),
-      if (localInPlayList)
+      if (widget.controller.insidePlaylist)
         AppItemActionSheetAction(
-          title: 'remove_from_play_list'.tr,
           onTap: () => widget.controller.removeFromPlayListItem(widget.item),
+          title: 'remove_from_play_list'.tr,
           icon: const Icon(Icons.playlist_remove),
         ),
       const AppItemActionSheetDivider(),
       AppItemActionSheetAction(
-        titleColor: Colors.red,
-        title: 'delete'.tr,
         onTap: () => widget.controller.deleteItem(widget.item),
+        title: 'delete'.tr,
+        titleColor: Colors.red,
         icon: const Icon(Icons.delete_outline, color: Colors.red),
       ),
     ];
   }
 
-  Widget _buildActionSheetLeading(BuildContext context) {
-    final filePath = _resolvePathForCover(widget.item);
-    final localTheme = Theme.of(context);
-    final localUrl = filePath.trim().isEmpty || widget.item.hasInnerCover != 1
-        ? ''
-        : ApiController.instance.getMusicCoverUrl(
-            filePath: filePath,
-            size: 180,
-          );
-    final localBorder = BorderRadius.all(Radius.circular(10));
-
-    Widget fallback() {
-      final localSeed = filePath.hashCode;
-      final localIdx = Random(localSeed).nextInt(20) + 1;
-      return ClipRRect(
-        borderRadius: localBorder,
-        child: Container(
-          width: 52,
-          height: 52,
-          color: localTheme.colorScheme.surfaceVariant.withValues(alpha: 0.4),
-          child: Image.asset(
-            'assets/music/musicCover/other$localIdx.jpg',
-            fit: BoxFit.cover,
-          ),
-        ),
-      );
-    }
-
-    if (localUrl.isEmpty) return fallback();
-    return ClipRRect(
-      borderRadius: localBorder,
-      child: CustomExtendedImage(
-        width: 52,
-        showLoading: false,
-        imageUrl: localUrl,
-        height: 52,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => fallback(),
-        borderRadius: 0,
-      ),
-    );
-  }
-
-  Future<void> _showMobileActionSheet(BuildContext context) async {
+  Future<void> _openSheet(BuildContext context) async {
     await AppItemActionSheet.show(
       context,
-      headerLeading: _buildActionSheetLeading(context),
+      headerLeading: _TrackCover(
+        filePath: _coverPath(widget.item),
+        hasInnerCover: widget.item.hasInnerCover,
+        size: 52,
+        radius: 10,
+        requestSize: 180,
+      ),
       headerTitle: widget.item.displayTitle,
       headerSubtitle: widget.item.displaySubtitle,
-      entries: _buildMobileActionSheetEntries(context),
+      entries: _sheetEntries(context),
     );
   }
 
-  void _openInFileBrowser(BuildContext context) {
-    final item = widget.item;
-    final base = item.path.trim();
-    final full = item.fullPath.trim();
-    final String target;
-    if (item.isSeries) {
-      final localRaw = full.isNotEmpty ? full : base;
-      target = browseFolderPathMusic(localRaw);
-    } else if (full.isNotEmpty) {
-      target = browseFolderPathMusic(full);
-    } else {
-      target = browseFolderPathMusic(base);
-    }
-    if (target.isEmpty) return;
-    if (DeviceUtils.isDesktop && Get.isRegistered<PcHomeController>()) {
-      PcHomeController.instance.openFolderAt(target);
-      return;
-    }
-    AppRoutes.toFiles(initialPath: target);
+  Widget _cover(bool playing, ThemeData theme) {
+    final base = _TrackCover(
+      filePath: _coverPath(widget.item),
+      hasInnerCover: widget.item.hasInnerCover,
+    );
+    if (!playing) return base;
+    return Stack(
+      children: <Widget>[
+        base,
+        Positioned.fill(
+          child: ClipRRect(
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+            child: Container(
+              color: Colors.black.withValues(alpha: 0.25),
+              child: Center(
+                child: SpinKitWave(
+                  size: 16,
+                  itemCount: 6,
+                  color: theme.colorScheme.primary.withValues(alpha: 0.9),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final selectionMode = widget.controller.isMultiSelectMode.value;
-      final localTheme = Theme.of(context);
-      final localSelected = widget.controller.selectedItems.contains(
-        widget.item.id,
-      );
+      final multi = widget.controller.isMultiSelectMode.value;
+      final theme = Theme.of(context);
+      final selected = widget.controller.selectedItems.contains(widget.item.id);
+      final playCtrl = MusicPlayServiceController.instance;
+      final current = _isCurrentTrack(playCtrl, widget.item);
+      final playing = current && playCtrl.isPlaying.value;
 
-      final localPlayCtrl = MusicPlayServiceController.instance;
-      final localCurrentItem = _currentPlayingItem(localPlayCtrl);
-      final localCurrentPath = localCurrentItem == null
-          ? ''
-          : _resolvePlayablePath(localCurrentItem);
-      final localItemPath = _resolvePlayablePath(widget.item);
-      final isCurrent =
-          localCurrentPath.isNotEmpty && localCurrentPath == localItemPath;
-      final localIsPlaying = isCurrent && localPlayCtrl.isPlaying.value;
-
-      final localTitleStyle = localTheme.textTheme.bodyMedium?.copyWith(
+      final titleStyle = theme.textTheme.bodyMedium?.copyWith(
         fontWeight: FontWeight.w600,
       );
-      final localEffectiveTitleStyle = isCurrent
-          ? (localTitleStyle?.copyWith(color: localTheme.colorScheme.primary) ??
-                TextStyle(color: localTheme.colorScheme.primary))
-          : localTitleStyle;
-      final localSubStyle = localTheme.textTheme.bodyMedium?.copyWith(
-        color: localTheme.colorScheme.onSurface.withValues(alpha: 0.65),
+      final activeTitleStyle = current
+          ? (titleStyle ?? const TextStyle()).copyWith(
+              color: theme.colorScheme.primary,
+            )
+          : titleStyle;
+      final subStyle = theme.textTheme.bodyMedium?.copyWith(
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
       );
 
-      Widget cover() {
-        final base = _CoverThumb(
-          filePath: _resolvePathForCover(widget.item),
-          hasInnerCover: widget.item.hasInnerCover,
-        );
-        if (!localIsPlaying) return base;
-        return Stack(
-          children: <Widget>[
-            base,
-            Positioned.fill(
-              child: ClipRRect(
-                borderRadius: BorderRadius.all(Radius.circular(8)),
-                child: Container(
-                  color: Colors.black.withValues(alpha: 0.25),
-                  child: Center(
-                    child: SpinKitWave(
-                      size: 16,
-                      itemCount: 6,
-                      color: localTheme.colorScheme.primary.withValues(
-                        alpha: 0.9,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      }
-
-      final localRow = InkWell(
+      final row = InkWell(
         onTap: () {
-          if (selectionMode) {
+          if (multi) {
             widget.controller.toggleSelection(widget.item.id);
             return;
           }
-          _openItem();
+          _activate();
         },
         child: Container(
           padding: const EdgeInsets.fromLTRB(15, 0, 15, 0),
           height: 62,
           child: Row(
             children: <Widget>[
-              if (selectionMode) ...[
+              if (multi) ...[
                 CustomCheckbox(
-                  value: localSelected,
+                  value: selected,
                   onChanged: (_) =>
                       widget.controller.toggleSelection(widget.item.id),
                   isCircle: false,
                 ),
                 const SizedBox(width: 10),
               ],
-              cover(),
+              _cover(playing, theme),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -759,26 +627,24 @@ class _MobileDataRowState extends State<_MobileDataRow> {
                   children: <Widget>[
                     Text(
                       widget.item.displayTitle,
+                      style: activeTitleStyle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: localEffectiveTitleStyle,
                     ),
                     if (widget.item.displaySubtitle.trim().isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
                         widget.item.displaySubtitle,
+                        style: subStyle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: localSubStyle,
                       ),
                     ],
                   ],
                 ),
               ),
               IconButton(
-                onPressed: selectionMode
-                    ? null
-                    : () => _showMobileActionSheet(context),
+                onPressed: multi ? null : () => _openSheet(context),
                 icon: const Icon(Icons.more_vert, size: 20),
               ),
             ],
@@ -786,16 +652,16 @@ class _MobileDataRowState extends State<_MobileDataRow> {
         ),
       );
 
-      if (!selectionMode) return localRow;
+      if (!multi) return row;
 
-      final localOverlayColor = localSelected
-          ? localTheme.colorScheme.primary.withValues(alpha: 0.08)
-          : localTheme.colorScheme.onSurface.withValues(alpha: 0.03);
+      final overlayColor = selected
+          ? theme.colorScheme.primary.withValues(alpha: 0.08)
+          : theme.colorScheme.onSurface.withValues(alpha: 0.03);
       return Stack(
         children: <Widget>[
-          localRow,
+          row,
           Positioned.fill(
-            child: IgnorePointer(child: Container(color: localOverlayColor)),
+            child: IgnorePointer(child: Container(color: overlayColor)),
           ),
         ],
       );
@@ -803,58 +669,61 @@ class _MobileDataRowState extends State<_MobileDataRow> {
   }
 }
 
-class _CoverThumb extends StatelessWidget {
+class _TrackCover extends StatelessWidget {
   final String filePath;
   final int hasInnerCover;
-  const _CoverThumb({required this.filePath, this.hasInnerCover = 0});
+  final double size;
+  final double radius;
+  final int requestSize;
+
+  const _TrackCover({
+    required this.filePath,
+    this.hasInnerCover = 0,
+    this.size = 46,
+    this.radius = 8,
+    this.requestSize = 120,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final localTheme = Theme.of(context);
-    final localUrl = filePath.trim().isEmpty || hasInnerCover != 1
+    final theme = Theme.of(context);
+    final url = (filePath.trim().isEmpty || hasInnerCover != 1)
         ? ''
         : ApiController.instance.getMusicCoverUrl(
             filePath: filePath,
-            size: 120,
+            size: requestSize,
           );
-    final localBorder = BorderRadius.all(Radius.circular(8));
-
-    Widget fallback() {
-      final localSeed = filePath.hashCode;
-      final localIdx = Random(localSeed).nextInt(20) + 1;
-      return ClipRRect(
-        borderRadius: localBorder,
-        child: Container(
-          width: 46,
-          height: 46,
-          color: localTheme.colorScheme.surfaceVariant.withValues(alpha: 0.4),
-          child: Image.asset(
-            'assets/music/musicCover/other$localIdx.jpg',
-            fit: BoxFit.cover,
-          ),
+    final fallback = ClipRRect(
+      borderRadius: BorderRadius.all(Radius.circular(radius)),
+      child: Container(
+        width: size,
+        height: size,
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        child: Image.asset(
+          'assets/music/musicCover/other${Random(filePath.hashCode).nextInt(20) + 1}.jpg',
+          fit: BoxFit.cover,
         ),
-      );
-    }
-
-    if (localUrl.isEmpty) return fallback();
+      ),
+    );
+    if (url.isEmpty) return fallback;
     return ClipRRect(
-      borderRadius: localBorder,
+      borderRadius: BorderRadius.all(Radius.circular(radius)),
       child: CustomExtendedImage(
-        width: 46,
+        width: size,
         showLoading: false,
-        imageUrl: localUrl,
-        height: 46,
+        imageUrl: url,
+        height: size,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => fallback(),
+        errorBuilder: (context, error, stackTrace) => fallback,
         borderRadius: 0,
       ),
     );
   }
 }
 
-class _Footer extends StatelessWidget {
+class _PagingFooter extends StatelessWidget {
   final MusicSubListController controller;
-  const _Footer({required this.controller});
+  const _PagingFooter({required this.controller});
 
   @override
   Widget build(BuildContext context) {

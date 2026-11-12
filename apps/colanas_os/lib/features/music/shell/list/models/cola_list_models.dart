@@ -1,43 +1,48 @@
 import '../../compat/json_read.dart';
 import '../../shared/music_item_logic.dart';
 
-/// 一首歌（或一个「系列」条目）在列表 / 播放器里用的视图模型。
+/// 音乐列表的条目视图模型（单曲或「系列」整包）。
 ///
-/// 字段与后端 compat 层一一对应；`duration` 单位是**秒**（接口口径），
-/// 播放器内部的 `Duration` 由上层自己换算，模型层不做单位转换。
-///
-/// 这是一个纯值对象：所有字段 final，只提供 `copyWith` 做局部替换，
-/// 避免列表里就地改状态导致 UI 与数据不同步。
+/// 字段与服务端 compat 层约定一一对应；`duration` 使用接口口径的**秒**，
+/// 需要 `Duration` 的地方由调用方换算。对象本身不可变，局部修改走 `copyWith`，
+/// 避免列表状态被就地改写后与 UI 不一致。
 class MusicListItem {
-  final String year;
-  final String title;
-  final String path;
+  // ---- 唯一标识与文件定位 ----
   final int id;
-  final String genre;
+  final String path;
   final String filename;
   final String fileHash;
+
+  // ---- 展示信息 ----
+  final String title;
   final String artist;
   final String album;
+  final String year;
+  final String genre;
 
-  /// 时长（秒），与数据库及接口约定一致。
+  // ---- 音频属性 ----
+  /// 时长，单位秒（与数据库、接口保持一致）。
   final int duration;
-
   final int size;
   final String ext;
-
-  /// 是否带内嵌封面（1 = 有，0 = 没有）
-  final String showType;
-  final int? sampleRate;
-  final int musicCount;
-  final String? mtime;
-  final bool isFromFile;
-  final bool isFavorite;
-  final int hasInnerCover;
-  final String fullPath;
-  final String firstFilePath;
-  final String? ctime;
   final int? bitrate;
+  final int? sampleRate;
   final int? bitDepth;
+  final int hasInnerCover;
+  final String showType;
+
+  // ---- 多曲聚合与绝对路径 ----
+  final int musicCount;
+  final String firstFilePath;
+  final String fullPath;
+
+  // ---- 状态标记 ----
+  final bool isFavorite;
+  final bool isFromFile;
+
+  // ---- 文件时间 ----
+  final String? ctime;
+  final String? mtime;
   final String? birthtime;
 
   const MusicListItem({
@@ -53,39 +58,34 @@ class MusicListItem {
     required this.duration,
     required this.size,
     required this.ext,
+    required this.bitrate,
+    required this.sampleRate,
+    required this.bitDepth,
     required this.hasInnerCover,
     required this.showType,
     required this.musicCount,
+    required this.firstFilePath,
+    required this.fullPath,
     required this.isFavorite,
     this.isFromFile = false,
     required this.ctime,
     required this.mtime,
     required this.birthtime,
-    required this.firstFilePath,
-    required this.fullPath,
-    required this.bitrate,
-    required this.sampleRate,
-    required this.bitDepth,
   });
 
-  /// 多曲打包的条目（整张碟 / 整张专辑当一个条目播）
+  /// 整张碟 / 整张专辑作为一个条目播放时，`showType` 为 series。
   bool get isSeries => showType.trim().toLowerCase() == 'series';
 
-  /// 列表里显示的名字：文件名优先。
-  ///
-  /// 故意不用 `title`：同一个文件被刮削前后 title 会变，用文件名能让用户
-  /// 一眼对上自己磁盘上的东西（内部编号 / 音轨号都在文件名里）。
+  /// 列表展示名优先用文件名：刮削前后 title 可能变化，文件名与用户磁盘一致。
   String get displayTitle => filename.trim();
 
-  /// 「艺人 · 专辑」，缺一个就只显示有的那个，都没有返回空串
+  /// 「艺人 · 专辑」；缺一边就只显示另一边，都没有则为空串。
   String get displaySubtitle {
-    final localRecord = album.trim();
-    final localName = artist.trim();
-    if (localName.isNotEmpty && localRecord.isNotEmpty)
-      return '$localName · $localRecord';
-    if (localName.isNotEmpty) return localName;
-    if (localRecord.isNotEmpty) return localRecord;
-    return '';
+    final parts = <String>[
+      if (artist.trim().isNotEmpty) artist.trim(),
+      if (album.trim().isNotEmpty) album.trim(),
+    ];
+    return parts.join(' · ');
   }
 
   MusicListItem copyWith({
@@ -93,33 +93,35 @@ class MusicListItem {
     int? id,
     String? showType,
     bool? isFromFile,
-  }) => MusicListItem(
-    id: id ?? this.id,
-    path: path,
-    filename: filename,
-    fileHash: fileHash,
-    title: title,
-    artist: artist,
-    album: album,
-    year: year,
-    genre: genre,
-    duration: duration,
-    size: size,
-    ext: ext,
-    hasInnerCover: hasInnerCover,
-    showType: showType ?? this.showType,
-    musicCount: musicCount,
-    isFavorite: isFavorite ?? this.isFavorite,
-    isFromFile: isFromFile ?? this.isFromFile,
-    ctime: ctime,
-    mtime: mtime,
-    birthtime: birthtime,
-    firstFilePath: firstFilePath,
-    fullPath: fullPath,
-    bitrate: bitrate,
-    sampleRate: sampleRate,
-    bitDepth: bitDepth,
-  );
+  }) {
+    return MusicListItem(
+      id: id ?? this.id,
+      path: path,
+      filename: filename,
+      fileHash: fileHash,
+      title: title,
+      artist: artist,
+      album: album,
+      year: year,
+      genre: genre,
+      duration: duration,
+      size: size,
+      ext: ext,
+      bitrate: bitrate,
+      sampleRate: sampleRate,
+      bitDepth: bitDepth,
+      hasInnerCover: hasInnerCover,
+      showType: showType ?? this.showType,
+      musicCount: musicCount,
+      firstFilePath: firstFilePath,
+      fullPath: fullPath,
+      isFavorite: isFavorite ?? this.isFavorite,
+      isFromFile: isFromFile ?? this.isFromFile,
+      ctime: ctime,
+      mtime: mtime,
+      birthtime: birthtime,
+    );
+  }
 
   factory MusicListItem.fromJson(Map<String, dynamic> json) => MusicListItem(
     id: json.readInt(const ['id']),
@@ -134,36 +136,36 @@ class MusicListItem {
     duration: json.readInt(const ['duration']),
     size: json.readInt(const ['size']),
     ext: json.readString(const ['ext']),
+    bitrate: json.readIntOrNull(const ['bitrate']),
+    sampleRate: json.readIntOrNull(const ['sample_rate', 'sampleRate']),
+    bitDepth: json.readIntOrNull(const ['bit_depth', 'bitDepth']),
     hasInnerCover: json.readInt(const ['has_inner_cover', 'hasInnerCover']),
     showType: json.readString(const ['show_type', 'showType']),
     musicCount: json.readInt(const ['music_count', 'musicCount']),
+    firstFilePath: json.readString(const ['first_file_path', 'firstFilePath']),
+    fullPath: json.readString(const ['full_path', 'fullPath']),
     isFavorite: json.readBool(const ['is_favorite', 'isFavorite']),
     isFromFile: json.readBool(const ['is_from_file', 'isFromFile']),
     ctime: json.readStringOrNull(const ['ctime']),
     mtime: json.readStringOrNull(const ['mtime']),
     birthtime: json.readStringOrNull(const ['birthtime']),
-    firstFilePath: json.readString(const ['first_file_path', 'firstFilePath']),
-    fullPath: json.readString(const ['full_path', 'fullPath']),
-    bitrate: json.readIntOrNull(const ['bitrate']),
-    sampleRate: json.readIntOrNull(const ['sample_rate', 'sampleRate']),
-    bitDepth: json.readIntOrNull(const ['bit_depth', 'bitDepth']),
   );
 }
 
-/// 分页信息（服务端 `pagination` 块）
+/// 服务端返回的 `pagination` 块。
 class MusicListPagination {
-  final int totalPages;
   final int total;
   final int page;
   final int limit;
+  final int totalPages;
   final bool hasPrevPage;
   final bool hasNextPage;
 
   const MusicListPagination({
-    required this.totalPages,
     required this.total,
     required this.page,
     required this.limit,
+    required this.totalPages,
     required this.hasPrevPage,
     required this.hasNextPage,
   });
@@ -173,8 +175,8 @@ class MusicListPagination {
       page = 1,
       limit = 30,
       totalPages = 0,
-      hasNextPage = false,
-      hasPrevPage = false;
+      hasPrevPage = false,
+      hasNextPage = false;
 
   factory MusicListPagination.fromJson(Map<String, dynamic> json) =>
       MusicListPagination(
@@ -182,12 +184,12 @@ class MusicListPagination {
         page: json.readInt(const ['page'], fallback: 1),
         limit: json.readInt(const ['limit'], fallback: 30),
         totalPages: json.readInt(const ['totalPages', 'total_pages']),
-        hasNextPage: json.readBool(const ['hasNextPage', 'has_next_page']),
         hasPrevPage: json.readBool(const ['hasPrevPage', 'has_prev_page']),
+        hasNextPage: json.readBool(const ['hasNextPage', 'has_next_page']),
       );
 }
 
-/// 筛选下拉里用的候选值
+/// 列表筛选下拉的候选值。
 class MusicListFilterOptions {
   final List<String> genres;
   final List<String> artists;
@@ -201,13 +203,13 @@ class MusicListFilterOptions {
 
   factory MusicListFilterOptions.fromJson(Map<String, dynamic> json) =>
       MusicListFilterOptions(
+        genres: json.readStringList(const ['genres']),
         artists: json.readStringList(const ['artists']),
         albums: json.readStringList(const ['albums']),
-        genres: json.readStringList(const ['genres']),
       );
 }
 
-/// 来源目录 + 它当前是否可达（盘掉了 / 路径改了都会是 false）
+/// 来源目录及其可达状态（盘符离线或路径变化时为 false）。
 class MusicListPathItem {
   final String path;
   final bool valid;
@@ -220,40 +222,43 @@ class MusicListPathItem {
         valid: json.readBool(const ['valid']),
       );
 
-  /// 批量解析来源目录。
-  ///
-  /// 后端两种形态都有：一种是纯字符串数组（老接口），一种是 `{path, valid}`
-  /// 对象数组（新接口，能告诉客户端哪个盘掉了）。专辑/歌手列表也要用同一套
-  /// 规则，所以收口成静态方法，别在三个 `fromJson` 里各写一遍。
+  /// 兼容两种返回形态：老接口是纯字符串数组，新接口是 `{path, valid}`。
   static List<MusicListPathItem> parseList(Object? raw) {
     if (raw is! List) return const <MusicListPathItem>[];
-    final out = <MusicListPathItem>[];
+
+    final parsed = <MusicListPathItem>[];
     for (final entry in raw) {
-      if (entry is String) {
-        final localText = entry.trim();
-        if (localText.isNotEmpty)
-          out.add(MusicListPathItem(path: localText, valid: true));
-      } else if (entry is Map) {
-        final item = MusicListPathItem.fromJson(entry.cast<String, dynamic>());
-        if (item.path.isNotEmpty) out.add(item);
+      switch (entry) {
+        case String text:
+          final path = text.trim();
+          if (path.isNotEmpty) {
+            parsed.add(MusicListPathItem(path: path, valid: true));
+          }
+        case Map map:
+          final item = MusicListPathItem.fromJson(
+            map.cast<String, dynamic>(),
+          );
+          if (item.path.isNotEmpty) parsed.add(item);
+        default:
+          break;
       }
     }
-    return out;
+    return parsed;
   }
 }
 
-/// 一次列表请求的完整结果
+/// 一次列表请求的完整结果。
 class MusicListPagedResult {
-  final List<MusicListPathItem> validPaths;
-  final MusicListPagination pagination;
   final List<MusicListItem> items;
+  final MusicListPagination pagination;
   final MusicListFilterOptions? filters;
+  final List<MusicListPathItem> validPaths;
 
   const MusicListPagedResult({
-    required this.validPaths,
-    required this.pagination,
     required this.items,
+    required this.pagination,
     required this.filters,
+    required this.validPaths,
   });
 
   const MusicListPagedResult.empty()
@@ -263,10 +268,11 @@ class MusicListPagedResult {
       validPaths = const <MusicListPathItem>[];
 
   factory MusicListPagedResult.fromJson(Map<String, dynamic> json) {
-    final filters = json.readMap(const ['filters', 'filterOptions']);
     final envelope = MusicPagedEnvelope.read(json);
+    final filters = json.readMap(const ['filters', 'filterOptions']);
+
     return MusicListPagedResult(
-      // 没有真实 id 的行是脏数据（历史遗留的空壳条目），列表里不展示
+      // id 非正的行是历史脏数据，不进入列表。
       items: json
           .readList(const ['items'], MusicListItem.fromJson)
           .where((item) => item.id > 0)
@@ -280,25 +286,24 @@ class MusicListPagedResult {
   }
 }
 
-/// 翻页游标：把「当前在哪个列表、第几页、带什么筛选」打包成一个不可变对象，
-/// 翻页时只改 page，其余原样带过去，避免每次重新拼一长串参数。
+/// 翻页游标：打包「列表来源 + 页码 + 筛选条件」，翻页时只替换 page。
 class MusicListPagingQuery {
-  final List<String>? sourceList;
-  final String? sortOrder;
-  final String? sortBy;
-  final int? seriesIndexId;
-  final String? search;
-  final int pageSize;
   final int page;
+  final int pageSize;
+  final bool hasMore;
   final String? listType;
   final int? listId;
-  final bool isHistory;
-  final bool isFavorite;
-  final bool hasMore;
-  final List<String>? genres;
+  final int? seriesIndexId;
   final int? collectionId;
+  final bool isFavorite;
+  final bool isHistory;
+  final String? search;
   final List<String>? artists;
   final List<String>? albums;
+  final List<String>? genres;
+  final List<String>? sourceList;
+  final String? sortBy;
+  final String? sortOrder;
 
   const MusicListPagingQuery({
     required this.page,

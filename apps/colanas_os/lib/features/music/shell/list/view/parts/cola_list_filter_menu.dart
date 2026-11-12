@@ -10,160 +10,13 @@ class MusicListFilterMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final localTheme = Theme.of(context);
+    final theme = Theme.of(context);
     return Obx(() {
-      final localAlbums = controller.availableAlbums.toList();
-      final localArtists = controller.availableArtists.toList();
-      final localGenres = controller.availableGenres.toList();
+      final albums = controller.availableAlbums.toList();
+      final artists = controller.availableArtists.toList();
+      final genres = controller.availableGenres.toList();
 
-      Widget chip({
-        required String text,
-        required bool selected,
-        required VoidCallback onTap,
-      }) {
-        final localFg = selected
-            ? localTheme.colorScheme.primary
-            : localTheme.colorScheme.onSurface;
-        final localBg = selected
-            ? localTheme.colorScheme.primary.withValues(alpha: 0.14)
-            : Colors.transparent;
-        return Material(
-          color: localBg,
-          borderRadius: BorderRadius.all(Radius.circular(8)),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.all(Radius.circular(8)),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-              child: Text(
-                text,
-                style: localTheme.textTheme.bodyMedium?.copyWith(
-                  color: localFg,
-                ),
-              ),
-            ),
-          ),
-        );
-      }
-
-      Widget groupRow({required String label, required List<Widget> options}) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              SizedBox(
-                width: 92.0,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 6, 0, 0),
-                  child: Text(
-                    label,
-                    style: localTheme.textTheme.bodyMedium?.copyWith(
-                      color: localTheme.colorScheme.onSurface.withValues(
-                        alpha: 0.6,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Wrap(spacing: 10, runSpacing: 10, children: options),
-              ),
-            ],
-          ),
-        );
-      }
-
-      List<Widget> artistOptions() {
-        if (localArtists.isEmpty) {
-          return [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(0, 6, 0, 6),
-              child: Text('no_data'.tr, style: localTheme.textTheme.bodyMedium),
-            ),
-          ];
-        }
-        return [
-          chip(
-            text: 'all'.tr,
-            selected: controller.artists.isEmpty,
-            onTap: () {
-              controller.artists.clear();
-              controller.refreshList(showLoading: true);
-            },
-          ),
-          ...localArtists.map((a) {
-            final selected = controller.artists.contains(a);
-            return chip(
-              text: a,
-              selected: selected,
-              onTap: () => controller.toggleArtist(a),
-            );
-          }),
-        ];
-      }
-
-      List<Widget> albumOptions() {
-        if (localAlbums.isEmpty) {
-          return [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(0, 6, 0, 6),
-              child: Text('no_data'.tr, style: localTheme.textTheme.bodyMedium),
-            ),
-          ];
-        }
-        return [
-          chip(
-            text: 'all'.tr,
-            selected: controller.albums.isEmpty,
-            onTap: () {
-              controller.albums.clear();
-              controller.refreshList(showLoading: true);
-            },
-          ),
-          ...localAlbums.map((a) {
-            final selected = controller.albums.contains(a);
-            return chip(
-              text: a,
-              selected: selected,
-              onTap: () => controller.toggleAlbum(a),
-            );
-          }),
-        ];
-      }
-
-      List<Widget> genreOptions() {
-        if (localGenres.isEmpty) {
-          return [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(0, 6, 0, 6),
-              child: Text('no_data'.tr, style: localTheme.textTheme.bodyMedium),
-            ),
-          ];
-        }
-        return [
-          chip(
-            text: 'all'.tr,
-            selected: controller.genres.isEmpty,
-            onTap: () {
-              controller.genres.clear();
-              controller.refreshList(showLoading: true);
-            },
-          ),
-          ...localGenres.map((g) {
-            final selected = controller.genres.contains(g);
-            return chip(
-              text: g,
-              selected: selected,
-              onTap: () => controller.toggleGenre(g),
-            );
-          }),
-        ];
-      }
-
-      final localCount = controller.activeFilterCount;
-
-      return CustomHoverMenuAnchor(
+      return ColaHoverMenuAnchor(
         menuChildren: <Widget>[
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 860, minWidth: 560),
@@ -172,17 +25,38 @@ class MusicListFilterMenu extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  groupRow(
+                  _optionGroup(
+                    theme,
                     label: 'music_list_filter_artists'.tr,
-                    options: artistOptions(),
+                    values: artists,
+                    chosen: controller.artists,
+                    onToggle: controller.toggleArtist,
+                    onClear: () {
+                      controller.artists.clear();
+                      controller.refreshList(showLoading: true);
+                    },
                   ),
-                  groupRow(
+                  _optionGroup(
+                    theme,
                     label: 'music_list_filter_albums'.tr,
-                    options: albumOptions(),
+                    values: albums,
+                    chosen: controller.albums,
+                    onToggle: controller.toggleAlbum,
+                    onClear: () {
+                      controller.albums.clear();
+                      controller.refreshList(showLoading: true);
+                    },
                   ),
-                  groupRow(
+                  _optionGroup(
+                    theme,
                     label: 'music_list_filter_genres'.tr,
-                    options: genreOptions(),
+                    values: genres,
+                    chosen: controller.genres,
+                    onToggle: controller.toggleGenre,
+                    onClear: () {
+                      controller.genres.clear();
+                      controller.refreshList(showLoading: true);
+                    },
                   ),
                   const SizedBox(height: 6.0),
                   Row(
@@ -201,7 +75,7 @@ class MusicListFilterMenu extends StatelessWidget {
           ),
         ],
         child: VideoListBadge(
-          count: localCount,
+          count: controller.activeFilterCount,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
@@ -213,5 +87,93 @@ class MusicListFilterMenu extends StatelessWidget {
         ),
       );
     });
+  }
+
+  Widget _optionGroup(
+    ThemeData theme, {
+    required String label,
+    required List<String> values,
+    required List<String> chosen,
+    required ValueChanged<String> onToggle,
+    required VoidCallback onClear,
+  }) {
+    final options = <Widget>[];
+    if (values.isEmpty) {
+      options.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(0, 6, 0, 6),
+          child: Text('no_data'.tr, style: theme.textTheme.bodyMedium),
+        ),
+      );
+    } else {
+      options.add(
+        _optionChip(
+          theme,
+          text: 'all'.tr,
+          selected: chosen.isEmpty,
+          onTap: onClear,
+        ),
+      );
+      for (final value in values) {
+        options.add(
+          _optionChip(
+            theme,
+            text: value,
+            selected: chosen.contains(value),
+            onTap: () => onToggle(value),
+          ),
+        );
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SizedBox(
+            width: 92.0,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(0, 6, 0, 0),
+              child: Text(
+                label,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ),
+          ),
+          Expanded(child: Wrap(spacing: 10, runSpacing: 10, children: options)),
+        ],
+      ),
+    );
+  }
+
+  Widget _optionChip(
+    ThemeData theme, {
+    required String text,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final foreground = selected
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurface;
+    return Material(
+      color: selected
+          ? theme.colorScheme.primary.withValues(alpha: 0.14)
+          : Colors.transparent,
+      borderRadius: BorderRadius.all(Radius.circular(8)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.all(Radius.circular(8)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+          child: Text(
+            text,
+            style: theme.textTheme.bodyMedium?.copyWith(color: foreground),
+          ),
+        ),
+      ),
+    );
   }
 }

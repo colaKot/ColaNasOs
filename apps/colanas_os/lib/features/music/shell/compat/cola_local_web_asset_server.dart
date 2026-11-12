@@ -1,10 +1,7 @@
-/// 既有实现 `utils/cola_local_web_asset_server.dart` 的最小等价实现。
+/// Web 端音乐资源地址解析。
 ///
-/// 兼容基线在 Web 端把本地音乐文件起一个 localhost 静态服务再喂给播放器，
-/// 用来给 iOS AVPlayer 补 MIME / 解容器格式。本项目：
-/// - Web 端直接播服务端 `/api/v1/music/stream`（已带 Range 支持）；
-/// - 原生端统一 media_kit，自己解容器。
-/// 所以这里不启本地服务，`acquire()` 只把服务端地址交回去。
+/// Web 直接播服务端 `/api/v1/music/stream`（已支持 Range）；原生端统一走
+/// media_kit。因此这里不需要本地静态服务，`acquire()` 只返回服务端地址。
 library;
 
 import '../../../../core/session.dart';

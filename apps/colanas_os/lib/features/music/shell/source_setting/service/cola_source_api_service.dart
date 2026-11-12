@@ -6,7 +6,7 @@ import '../models/cola_music_source.dart';
 ///
 /// 六个接口的返回体都是同一个 `{ok, ...}` 形状，差别只在路径与请求体，
 /// 所以路径抽成常量、调用收口到 `_post`，避免五处重复的泛型样板。
-class MusicSourceApiService extends BaseApiService {
+class ColaMusicSourceApiService extends BaseApiService {
   static const String _listPath = '/api/music/source/list';
   static const String _addPath = '/api/music/source/add';
   static const String _deletePath = '/api/music/source/delete';
@@ -14,22 +14,22 @@ class MusicSourceApiService extends BaseApiService {
   static const String _updatePrefix = '/api/music/source/update/';
   static const String _relocatePrefix = '/api/music/source/relocate/';
 
-  static MusicSourceApiService get instance =>
-      Get.isRegistered<MusicSourceApiService>()
-      ? Get.find<MusicSourceApiService>()
-      : MusicSourceApiService();
+  static ColaMusicSourceApiService get instance =>
+      Get.isRegistered<ColaMusicSourceApiService>()
+      ? Get.find<ColaMusicSourceApiService>()
+      : ColaMusicSourceApiService();
 
-  Future<List<MusicSource>> listSources({bool showLoading = false}) async {
+  Future<List<ColaMusicSource>> listSources({bool showLoading = false}) async {
     final res = await apiPost<List<dynamic>>(
       _listPath,
       body: const <String, dynamic>{},
       showLoading: showLoading,
     );
     final raw = res.success ? res.data : null;
-    if (raw == null) return const <MusicSource>[];
-    return <MusicSource>[
+    if (raw == null) return const <ColaMusicSource>[];
+    return <ColaMusicSource>[
       for (final entry in raw)
-        if (entry is Map) MusicSource.fromJson(entry.cast<String, dynamic>()),
+        if (entry is Map) ColaMusicSource.fromJson(entry.cast<String, dynamic>()),
     ];
   }
 

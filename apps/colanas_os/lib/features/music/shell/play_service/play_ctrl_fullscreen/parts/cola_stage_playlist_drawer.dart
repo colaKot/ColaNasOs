@@ -1,218 +1,233 @@
-import 'dart:math';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../../../compat/getx.dart';
-
 import '../../../list/models/cola_list_models.dart';
 import '../../../shared/music_primitives.dart';
 import '../../controller/cola_player_controller.dart';
 
-typedef MusicCoverUrlResolver = String Function(MusicListItem item, {int size});
+typedef MusicStageCoverResolver = String Function(
+  MusicListItem item, {
+  int size,
+});
 
-/// 抽屉主体：标题栏 + 播放列表。两个 show 方法只负责各自的容器，
-/// 重复的标题栏 / Obx / ListView.builder / ListTile / 封面都收在这里。
-class _PlaylistEntries extends StatelessWidget {
-  const _PlaylistEntries({
-    required this.controller,
-    required this.coverUrlResolver,
-    required this.theme,
-  });
+/// 播放队列面板：窄屏弹底部抽屉，宽屏从右侧滑出。
+class ColaMusicStageQueueSheet {
+  const ColaMusicStageQueueSheet._();
 
-  final MusicPlayServiceController controller;
-  final MusicCoverUrlResolver coverUrlResolver;
-  final ThemeData theme;
-
-  Widget _titleBar(VoidCallback onClose) => SizedBox(
-    height: 56,
-    child: Row(
-      children: <Widget>[
-        const SizedBox(width: 16),
-        Expanded(
-          child: Text(
-            'player_playlist'.tr,
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        IconButton(onPressed: onClose, icon: const Icon(Icons.close)),
-        const SizedBox(width: 8),
-      ],
-    ),
-  );
-
-  @override
-  Widget build(BuildContext context) => Column(
-    children: <Widget>[
-      _titleBar(() => Navigator.of(context).pop()),
-      Expanded(
-        child: Obx(() {
-          final localCurrent = controller.currentIndex.value;
-          final localList = controller.playlist;
-          return ListView.builder(
-            itemCount: localList.length,
-            itemBuilder: (c, i) {
-              final localSelected = i == localCurrent;
-              final localIt = localList[i];
-              final localCoverUrl = coverUrlResolver(localIt, size: 120);
-              return ListTile(
-                selected: localSelected,
-                leading: SizedBox(
-                  width: 42,
-                  height: 42,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: <Widget>[
-                      ClipRRect(
-                        borderRadius: const BorderRadius.all(
-                          Radius.circular(8),
-                        ),
-                        child: MusicCoverImage(
-                          url: localCoverUrl,
-                          width: 42,
-                          height: 42,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      if (localSelected)
-                        Container(
-                          color: Colors.black.withValues(alpha: 0.35),
-                          child: const Icon(
-                            Icons.play_arrow,
-                            color: Colors.white,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                title: Text(
-                  localIt.displayTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Text(
-                  localIt.artist.trim(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onTap: () async {
-                  await controller.playAt(i);
-                  if (context.mounted) Navigator.of(context).pop();
-                },
-              );
-            },
-          );
-        }),
-      ),
-    ],
-  );
-}
-
-class MusicPlayCtrlFullScreenPlaylistDrawer {
   static Future<void> showBottomSheet({
     required BuildContext context,
     required MusicPlayServiceController controller,
-    required MusicCoverUrlResolver coverUrlResolver,
+    required MusicStageCoverResolver coverUrlResolver,
   }) async {
-    final localMedia = MediaQuery.of(context);
-    final localTheme = Theme.of(context);
-    final localHeight = (localMedia.size.height * 0.86).clamp(
-      380.0,
-      localMedia.size.height,
-    );
+    final media = MediaQuery.of(context);
+    final theme = Theme.of(context);
+    final height = (media.size.height * 0.86).clamp(380.0, media.size.height);
 
-    await showModalBottomSheet(
+    await showModalBottomSheet<void>(
       useSafeArea: true,
+      isScrollControlled: true,
+      context: context,
+      backgroundColor: theme.colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      isScrollControlled: true,
-      context: context,
-      builder: (ctx) => SizedBox(
-        height: localHeight,
-        child: _PlaylistEntries(
+      builder: (_) => SizedBox(
+        height: height,
+        child: _QueuePanel(
           controller: controller,
           coverUrlResolver: coverUrlResolver,
-          theme: localTheme,
+          theme: theme,
         ),
       ),
-      backgroundColor: localTheme.colorScheme.surface,
     );
   }
 
   static Future<void> show({
     required BuildContext context,
     required MusicPlayServiceController controller,
-    required MusicCoverUrlResolver coverUrlResolver,
+    required MusicStageCoverResolver coverUrlResolver,
   }) async {
-    final localMedia = MediaQuery.of(context);
-    final localTheme = Theme.of(context);
-    final localAnchor = context.findRenderObject();
-    final localScreenSize = localMedia.size;
-    final localAnchorBox = localAnchor is RenderBox ? localAnchor : null;
-    final localAnchorOffset = localAnchorBox == null
-        ? Offset.zero
-        : localAnchorBox.localToGlobal(Offset.zero);
-    final localLeftPad = localAnchorOffset.dx.clamp(0.0, localScreenSize.width);
-    final localAnchorSize = localAnchorBox?.size ?? localScreenSize;
-    final localRightPad =
-        (localScreenSize.width - (localAnchorOffset.dx + localAnchorSize.width))
-            .clamp(0.0, localScreenSize.width);
-    final localTopPad = localAnchorOffset.dy.clamp(0.0, localScreenSize.height);
-    final localBottomPad =
-        (localScreenSize.height -
-                (localAnchorOffset.dy + localAnchorSize.height))
-            .clamp(0.0, localScreenSize.height);
-    final localDrawerMinWidth = min(
-      380.0,
-      localAnchorSize.width * 0.92,
-    ).toDouble();
-    final localDrawerMaxWidth = min(
-      520.0,
-      localAnchorSize.width * 0.92,
-    ).toDouble();
+    final theme = Theme.of(context);
+    final panelWidth = _panelWidth(context);
 
-    await showGeneralDialog(
+    await showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black.withValues(alpha: 0.35),
       transitionDuration: const Duration(milliseconds: 220),
-      transitionBuilder: (ctx, anim, _, child) {
-        final localOffset = Tween<Offset>(
+      transitionBuilder: (_, anim, _, child) {
+        final slide = Tween<Offset>(
           begin: const Offset(1, 0),
           end: Offset.zero,
         ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic));
-        return SlideTransition(position: localOffset, child: child);
+        return SlideTransition(position: slide, child: child);
       },
-      pageBuilder: (ctx, a1, a2) {
+      pageBuilder: (_, _, _) {
         return Padding(
-          padding: EdgeInsets.fromLTRB(
-            localLeftPad,
-            localTopPad,
-            localRightPad,
-            localBottomPad,
-          ),
+          padding: _surroundingInsets(context),
           child: Align(
             alignment: Alignment.centerRight,
             child: Material(
-              color: localTheme.colorScheme.surface,
+              color: theme.colorScheme.surface,
               child: ConstrainedBox(
                 constraints: BoxConstraints(
-                  maxWidth: localDrawerMaxWidth,
-                  minWidth: localDrawerMinWidth,
+                  maxWidth: panelWidth.max,
+                  minWidth: panelWidth.min,
                 ),
-                child: _PlaylistEntries(
+                child: _QueuePanel(
                   controller: controller,
                   coverUrlResolver: coverUrlResolver,
-                  theme: localTheme,
+                  theme: theme,
                 ),
               ),
             ),
           ),
         );
       },
-      context: context,
-      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      barrierDismissible: true,
-      barrierColor: Colors.black.withValues(alpha: 0.35),
+    );
+  }
+
+  /// 只遮住唤起按钮以外的区域，避免抽屉压住播放条。
+  static EdgeInsets _surroundingInsets(BuildContext context) {
+    final screen = MediaQuery.of(context).size;
+    final anchor = context.findRenderObject();
+    final box = anchor is RenderBox ? anchor : null;
+    final origin = box?.localToGlobal(Offset.zero) ?? Offset.zero;
+    final size = box?.size ?? screen;
+    return EdgeInsets.fromLTRB(
+      origin.dx.clamp(0.0, screen.width),
+      origin.dy.clamp(0.0, screen.height),
+      (screen.width - (origin.dx + size.width)).clamp(0.0, screen.width),
+      (screen.height - (origin.dy + size.height)).clamp(0.0, screen.height),
+    );
+  }
+
+  static ({double min, double max}) _panelWidth(BuildContext context) {
+    final anchor = context.findRenderObject();
+    final box = anchor is RenderBox ? anchor : null;
+    final width = (box?.size ?? MediaQuery.of(context).size).width * 0.92;
+    return (min: math.min(380.0, width), max: math.min(520.0, width));
+  }
+}
+
+/// 面板内容：标题栏 + 队列列表，两种容器共用。
+class _QueuePanel extends StatelessWidget {
+  const _QueuePanel({
+    required this.controller,
+    required this.coverUrlResolver,
+    required this.theme,
+  });
+
+  final MusicPlayServiceController controller;
+  final MusicStageCoverResolver coverUrlResolver;
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: <Widget>[
+        _titleBar(context),
+        Expanded(
+          child: Obx(() {
+            final tracks = controller.playlist;
+            final playingIndex = controller.currentIndex.value;
+            return ListView.builder(
+              itemCount: tracks.length,
+              itemBuilder: (_, index) => _QueueTile(
+                item: tracks[index],
+                selected: index == playingIndex,
+                coverUrl: coverUrlResolver(tracks[index], size: 120),
+                onTap: () async {
+                  await controller.playAt(index);
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _titleBar(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: Row(
+        children: <Widget>[
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              'player_playlist'.tr,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _QueueTile extends StatelessWidget {
+  const _QueueTile({
+    required this.item,
+    required this.selected,
+    required this.coverUrl,
+    required this.onTap,
+  });
+
+  final MusicListItem item;
+  final bool selected;
+  final String coverUrl;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      selected: selected,
+      leading: SizedBox(
+        width: 42,
+        height: 42,
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            ClipRRect(
+              borderRadius: const BorderRadius.all(Radius.circular(8)),
+              child: MusicCoverImage(
+                url: coverUrl,
+                width: 42,
+                height: 42,
+                fit: BoxFit.cover,
+              ),
+            ),
+            if (selected)
+              Container(
+                color: Colors.black.withValues(alpha: 0.35),
+                child: const Icon(Icons.play_arrow, color: Colors.white),
+              ),
+          ],
+        ),
+      ),
+      title: Text(
+        item.displayTitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        item.artist.trim(),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      onTap: onTap,
     );
   }
 }

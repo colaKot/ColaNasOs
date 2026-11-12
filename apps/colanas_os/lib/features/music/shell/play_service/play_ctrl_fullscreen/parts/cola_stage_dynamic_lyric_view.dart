@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../compat/lyric_kit.dart';
 
 /// 单个字在当前进度下的高亮比例，取值 [0, 1]。
-double resolveMusicPlayCtrlFullScreenDynamicLyricHighlightProgress({
+double resolveStageWordHighlight({
   required Duration progress,
   required Duration start,
   required Duration? end,
@@ -22,8 +22,8 @@ double resolveMusicPlayCtrlFullScreenDynamicLyricHighlightProgress({
 }
 
 /// 逐字歌词视图：跟随播放进度逐字染色，并自动把当前行滚到可见位置。
-class MusicPlayCtrlFullScreenDynamicLyricView extends StatefulWidget {
-  const MusicPlayCtrlFullScreenDynamicLyricView({
+class ColaMusicStageWordLyricView extends StatefulWidget {
+  const ColaMusicStageWordLyricView({
     required this.style,
     required this.onSeekTo,
     required this.model,
@@ -39,12 +39,12 @@ class MusicPlayCtrlFullScreenDynamicLyricView extends StatefulWidget {
   final Future<void> Function(Duration position) onSeekTo;
 
   @override
-  State<MusicPlayCtrlFullScreenDynamicLyricView> createState() =>
-      _DynamicLyricViewState();
+  State<ColaMusicStageWordLyricView> createState() =>
+      _ColaMusicStageWordLyricViewState();
 }
 
-class _DynamicLyricViewState
-    extends State<MusicPlayCtrlFullScreenDynamicLyricView> {
+class _ColaMusicStageWordLyricViewState
+    extends State<ColaMusicStageWordLyricView> {
   late List<GlobalKey> _anchors;
   int _lastScrolledTo = -1;
 
@@ -63,9 +63,7 @@ class _DynamicLyricViewState
   }
 
   @override
-  void didUpdateWidget(
-    covariant MusicPlayCtrlFullScreenDynamicLyricView oldWidget,
-  ) {
+  void didUpdateWidget(covariant ColaMusicStageWordLyricView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.model == widget.model) return;
     _lastScrolledTo = -1;
@@ -264,7 +262,7 @@ class _WordHighlightedText extends StatelessWidget {
 
   Color? _colorFor(LyricWord word, int index, Color dimmed, Color highlight) {
     final nextAt = index + 1 < words.length ? words[index + 1].start : null;
-    final ratio = resolveMusicPlayCtrlFullScreenDynamicLyricHighlightProgress(
+    final ratio = resolveStageWordHighlight(
       start: word.start,
       progress: progress,
       nextStart: nextAt,

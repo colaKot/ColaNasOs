@@ -81,8 +81,8 @@ class _WordSplitter {
 /// 一次扫描同时完成「元信息收集 / 时间轴展开 / 是否含逐字标记」判断，
 /// 再交给 [_WordSplitter] 切词、按同时间戳合并译文。没有逐字标记时返回 null，
 /// 交由普通 LRC 解析器处理。
-class MusicPlayCtrlFullScreenDynamicLyricParser {
-  const MusicPlayCtrlFullScreenDynamicLyricParser._();
+class ColaMusicStageWordLyricParser {
+  const ColaMusicStageWordLyricParser._();
 
   static final RegExp _metadata = RegExp(r'^\[(\D[^:]*):(.*?)\]\s*$');
   static final RegExp _lineBreak = RegExp(r'\r?\n');

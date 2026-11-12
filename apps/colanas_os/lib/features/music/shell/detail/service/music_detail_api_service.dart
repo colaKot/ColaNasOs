@@ -4,7 +4,7 @@ import '../models/music_detail_models.dart';
 
 /// 专辑 / 歌手详情与 Last.fm 配置的接口封装。
 ///
-/// 路径写「既有实现形状」（`/api/music/...`），由 `compat/api_ns.dart` 统一
+/// 路径使用兼容接口形状（`/api/music/...`），由 `compat/api_ns.dart` 统一
 /// 翻译成 `/api/v1/music/compat/...` —— 与音乐模块其它 service 保持一致。
 class MusicDetailApiService extends BaseApiService {
   static const String _albumDetail = '/api/music/album/detail';

@@ -2,33 +2,39 @@ import '../../compat/api_base.dart';
 import '../../compat/getx.dart';
 import '../models/cola_album_artist_models.dart';
 
-/// 专辑 / 歌手聚合列表的接口封装。
+/// 专辑 / 歌手聚合列表的数据源。
 ///
-/// 两个列表除请求路径不同外，入参与返回结构完全一致，所以用 `keyType` 分流，
-/// 不写两套几乎相同的调用。
+/// 两种聚合的入参与返回结构一致，只有请求地址不同，因此按 [keyType] 查表选路，
+/// 入参组装共用一份实现。
 class AlbumArtistListApiService extends BaseApiService {
-  static const String _artistEndpoint = '/api/music/artist/list';
-  static const String _albumEndpoint = '/api/music/album/list';
+  static const String _albumPath = '/api/music/album/list';
+  static const String _artistPath = '/api/music/artist/list';
 
-  static AlbumArtistListApiService get instance =>
-      Get.isRegistered<AlbumArtistListApiService>()
-      ? Get.find<AlbumArtistListApiService>()
-      : AlbumArtistListApiService();
+  static const Map<String, String> _pathsByType = <String, String>{
+    'album': _albumPath,
+    'artist': _artistPath,
+  };
+
+  static AlbumArtistListApiService get instance {
+    if (Get.isRegistered<AlbumArtistListApiService>()) {
+      return Get.find<AlbumArtistListApiService>();
+    }
+    return AlbumArtistListApiService();
+  }
 
   Future<AlbumArtistListPagedResult> listPaged({
-    required String keyType,
     required int page,
     required int pageSize,
-    String? search,
-    List<String>? sourceList,
+    required String keyType,
     String? sortBy,
     String? sortOrder,
+    String? search,
+    List<String>? sourceList,
     bool showLoading = false,
   }) async {
-    final isArtist = keyType.trim().toLowerCase() == 'artist';
-    final res = await apiPost<Map<String, dynamic>>(
-      isArtist ? _artistEndpoint : _albumEndpoint,
-      body: _requestBody(
+    final response = await apiPost<Map<String, dynamic>>(
+      _pathOf(keyType),
+      body: _payload(
         page: page,
         pageSize: pageSize,
         search: search,
@@ -39,14 +45,16 @@ class AlbumArtistListApiService extends BaseApiService {
       showLoading: showLoading,
     );
 
-    // 失败返回空结果而不是 null：调用方只需要渲染列表，空结构更省事
-    final data = res.success ? res.data : null;
+    final data = response.success ? response.data : null;
     if (data == null) return const AlbumArtistListPagedResult.empty();
     return AlbumArtistListPagedResult.fromJson(data);
   }
 
-  /// 只把非空参数放进去，避免后端把 `search: null` 当成「搜空串」
-  Map<String, dynamic> _requestBody({
+  String _pathOf(String keyType) =>
+      _pathsByType[keyType.trim().toLowerCase()] ?? _albumPath;
+
+  /// 可选参数为空时不下发，防止后端把 `null` 当成空串过滤条件。
+  Map<String, dynamic> _payload({
     required int page,
     required int pageSize,
     String? search,
@@ -54,13 +62,11 @@ class AlbumArtistListApiService extends BaseApiService {
     String? sortBy,
     String? sortOrder,
   }) {
-    return <String, dynamic>{
-      'page': page,
-      'page_size': pageSize,
-      if (search != null) 'search': search,
-      if (sourceList != null) 'sourceList': sourceList,
-      if (sortBy != null) 'sort_by': sortBy,
-      if (sortOrder != null) 'sort_order': sortOrder,
-    };
+    final payload = <String, dynamic>{'page': page, 'page_size': pageSize};
+    if (search != null) payload['search'] = search;
+    if (sourceList != null) payload['sourceList'] = sourceList;
+    if (sortBy != null) payload['sort_by'] = sortBy;
+    if (sortOrder != null) payload['sort_order'] = sortOrder;
+    return payload;
   }
 }

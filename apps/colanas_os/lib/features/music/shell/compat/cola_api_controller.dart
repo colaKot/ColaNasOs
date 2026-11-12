@@ -1,13 +1,12 @@
-/// 既有实现 `core/api/cola_api_controller.dart` 的最小等价实现。
+/// 音乐模块的接口地址与鉴权入口。
 ///
-/// 兼容基线是「一个 ApiController 管所有 URL / token / P2P」，音乐模块只用到其中
-/// 很小一部分：封面地址、原始文件地址、转码地址、token 刷新、几个能力探测开关。
-/// 这里全部映射到本项目的 `ApiSession` + `/api/v1/music/*`。
+/// 只暴露音乐用到的能力：封面地址、原始文件地址、转码地址、token 刷新、
+/// 能力探测开关；底层统一走 `ApiSession` 与 `/api/v1/music/*`。
 library;
 
 import '../../../../core/session.dart';
 
-/// 能力探测开关（兼容基线有 P2P / shell 支持等差异，本项目一律「支持」）
+/// 能力探测开关：本项目固定为「支持」，不再区分 P2P / shell 差异。
 class ApiRuntimeState {
   const ApiRuntimeState();
 
@@ -41,7 +40,7 @@ class ApiController {
   /// 这里只需把当前 token 交回去；真过期时 ApiSession 自己有密码兜底。
   Future<bool> refreshAuthToken() async => (accessToken ?? '').isNotEmpty;
 
-  /// 音乐封面：搬运过来的页面全程按「文件路径」取图，
+  /// 音乐封面：页面按「文件路径」取图，
   /// 走内核的兼容口 `/music/compat/cover`（内部按 rel_path 找曲目再取内嵌封面）。
   String getMusicCoverUrl({required String filePath, int size = 0}) {
     if (filePath.trim().isEmpty) return '';

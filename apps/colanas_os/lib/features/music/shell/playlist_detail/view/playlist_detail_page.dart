@@ -16,8 +16,8 @@ import '../controller/playlist_detail_controller.dart';
 /// 差别只在内容 —— 歌单没有发行年份 / 流派 / 简介，也就没有简介区块；
 /// 其余（封面、曲目表、播放全部 / 随机 / 收藏 / 下载 / 复制、多选）全部保留。
 ///
-/// 多选工具条上的「移出歌单」是**从歌单移除**（`removeFromPlayListSelected`），
-/// 不是删除磁盘文件 —— 这一点由 `MusicSubListController.isInPlayList` 自动决定。
+/// 多选工具条上的「移出歌单」是**从歌单移除**（`removeSelectionFromPlaylist`），
+/// 不是删除磁盘文件 —— 这一点由 `MusicSubListController.insidePlaylist` 自动决定。
 class PlaylistDetailPage extends StatefulWidget {
   const PlaylistDetailPage({
     super.key,

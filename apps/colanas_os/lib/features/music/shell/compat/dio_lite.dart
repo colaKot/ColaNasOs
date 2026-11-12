@@ -1,9 +1,8 @@
-/// `dio` 的最小等价层。
+/// `dio` 的轻量替代层。
 ///
-/// 搬运过来的 `cola_audio_cache_io.dart` 用 dio 做断点续传下载，用到的那一小撮
-/// API 只有：`Dio.get` + `ResponseType.stream` + `ResponseBody.stream` +
-/// `CancelToken` + `DioException`。本项目不引 dio（离线拉包会挂），所以这里按
-/// **同名同语义**用 `dart:io` 的 HttpClient 实现一份，源文件只换 import 行。
+/// 音频缓存下载只需要 `Dio.get` + `ResponseType.stream` + `ResponseBody.stream`
+/// + `CancelToken` + `DioException` 这一小撮 API。为避免引入 dio 依赖，这里用
+/// `dart:io` 的 HttpClient 实现同名同语义的最小版本。
 library;
 
 import 'dart:async';
@@ -247,7 +246,6 @@ class Dio {
 }
 
 /// 自签证书放行的 HttpClient（NAS 多为 https + 自签）。
-/// 兼容基线用 dio 的 badCertificateCallback，这里等价。
 Dio createDioWithBadCertificateCompat() {
   final client = HttpClient()
     ..connectionTimeout = const Duration(seconds: 30)

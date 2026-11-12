@@ -1,7 +1,6 @@
-/// 兼容基线用 `flutter_spinkit` 的波浪加载动画。
+/// 波浪加载动画：一排小竖条按正弦相位高低起伏。
 ///
-/// 本项目不引那个包（只为一处 loading 加一个依赖不划算），这里用同样外观的
-/// 自绘实现：一排小竖条按正弦相位高低起伏。签名对齐 `SpinKitWave`。
+/// 自绘实现，避免为单个 loading 引入额外依赖；对外参数与 `SpinKitWave` 对齐。
 library;
 
 import 'dart:math' as math;

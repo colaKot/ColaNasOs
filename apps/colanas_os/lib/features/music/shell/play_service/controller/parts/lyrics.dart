@@ -18,16 +18,6 @@ extension MusicPlayServiceLyrics on MusicPlayServiceController {
     }
   }
 
-  Future<void> _maybeAutoSetLyricForCurrent() async {
-    if (playlist.isEmpty) return;
-    final at = currentIndex.value;
-    if (at < 0 || at >= playlist.length) return;
-    final path = _resolvePlayablePath(playlist[at]).trim();
-    if (path.isEmpty || (_lyricsCache[path] ?? '').trim().isNotEmpty) return;
-    if (duration.value.inMilliseconds <= 0) return;
-    unawaited(_tryAutoSetLyricIfNoLyric(filePath: path, item: playlist[at]));
-  }
-
   /// 详情里的收藏态与来源标记以列表项为准，避免服务端详情把本地状态覆盖掉。
   MusicListItem _mergeDetail(MusicListItem source, MusicListItem existing) {
     final fromFile =

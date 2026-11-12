@@ -57,8 +57,10 @@ MusicSubListController _createController(_SubListBase v) =>
       collectionId: v.collectionId,
     );
 
-/// 公共骨架：Positioned.fill(Material(SafeArea(Column(header, body))))。
-/// 两个容器都把它放进各自的 Stack，header 由调用方按端型/页面差异注入。
+/// 公共骨架：Stack(Material(SafeArea(Column(header, body))))。
+/// 本身**不带 Positioned**：调用方（shell 的 Positioned.fill / MusicOverlayHost /
+/// 手机整页）已经负责铺满，这里再包一层 Positioned.fill 会让同一个 RenderStack
+/// 被两个 Positioned 同时写 StackParentData，debug 下直接抛 ParentDataWidget 冲突。
 class _SubListScaffold extends StatelessWidget {
   const _SubListScaffold({
     required this.backgroundColor,
@@ -74,31 +76,29 @@ class _SubListScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: Stack(
-        fit: StackFit.expand,
-        children: <Widget>[
-          // 遮罩必须自己铺一层背景：它盖在列表页上面，
-          // 透明的话会看见底下列表的文字/图片（`backgroundColor` 现在是透明色）。
-          context.nasStyle.background,
-          Material(
-            type: MaterialType.transparency,
-            child: SafeArea(
-              child: Column(
-                children: <Widget>[
-                  header,
-                  Expanded(
-                    child: MusicSubListOverlayBody(
-                      controller: controller,
-                      scrollController: scrollController,
-                    ),
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        // 遮罩必须自己铺一层背景：它盖在列表页上面，
+        // 透明的话会看见底下列表的文字/图片（`backgroundColor` 现在是透明色）。
+        context.nasStyle.background,
+        Material(
+          type: MaterialType.transparency,
+          child: SafeArea(
+            child: Column(
+              children: <Widget>[
+                header,
+                Expanded(
+                  child: MusicSubListOverlayBody(
+                    controller: controller,
+                    scrollController: scrollController,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -334,7 +334,7 @@ class _MusicSubListMobilePageState
     if (!_showFullPlayer) return null;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: MusicPlayCtrlFullScreenSheet(onClose: _closeFullscreen),
+      body: ColaMusicStageSheet(onClose: _closeFullscreen),
     );
   }
 
@@ -352,17 +352,19 @@ class _MusicSubListMobilePageState
       body: Stack(
         children: <Widget>[
           Positioned.fill(child: context.nasStyle.background),
-          _SubListScaffold(
-            backgroundColor: backgroundColor,
-            controller: controller,
-            scrollController: scrollController,
-            header: MusicSubListMobilePageHeader(controller: controller),
+          Positioned.fill(
+            child: _SubListScaffold(
+              backgroundColor: backgroundColor,
+              controller: controller,
+              scrollController: scrollController,
+              header: MusicSubListMobilePageHeader(controller: controller),
+            ),
           ),
           Positioned(
             right: 12.0,
             left: 12.0,
             bottom: 35.0,
-            child: AppMusicPlayCtrlFloatingBar(
+            child: ColaMusicFloatingBar(
               onOpenFullscreen: _openFullscreen,
             ),
           ),

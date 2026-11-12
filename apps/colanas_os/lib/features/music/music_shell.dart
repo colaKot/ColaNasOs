@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/session.dart';
 import '../../shell/app_nav_shell.dart';
 import 'music_library_pages.dart';
 import 'music_page.dart';
@@ -24,6 +25,11 @@ class MusicShellPage extends StatefulWidget {
 
 class _MusicShellPageState extends State<MusicShellPage> {
   Widget _content(String key) {
+    // 路由守卫与菜单一致：非超级管理员直接切到设置项也回落歌曲列表
+    if (!ApiSession.instance.isAdmin &&
+        (key == 'settings.source' || key == 'settings.app')) {
+      key = 'songs';
+    }
     switch (key) {
       case 'favorites':
         return const MusicFavoritesPage();
@@ -53,6 +59,14 @@ class _MusicShellPageState extends State<MusicShellPage> {
 
   @override
   Widget build(BuildContext context) {
-    return AppNavShell(appId: 'music', defaultKey: 'songs', content: _content);
+    return AppNavShell(
+      appId: 'music',
+      defaultKey: 'songs',
+      content: _content,
+      conditions: {
+        // 音乐来源 / 音乐设置是服务端级配置，只有超级管理员能进
+        if (ApiSession.instance.isAdmin) 'superAdmin',
+      },
+    );
   }
 }

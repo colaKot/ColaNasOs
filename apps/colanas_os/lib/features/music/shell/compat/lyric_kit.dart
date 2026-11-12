@@ -1,15 +1,14 @@
-/// 歌词组件层：复刻兼容基线依赖的 `flutter_lyric` 核心 API。
+/// 歌词解析与渲染的核心模型（纯 Dart + Flutter 绘制）。
 ///
-/// 搬运过来的三个歌词文件直接 `import 'package:flutter_lyric/...'`，本项目
-/// 不引这个包（也尽量不加新依赖），所以这里按**原签名**给一份等价实现：
-/// `LyricModel` / `LyricLine` / `LyricWord` / `LrcParser` / `LyricController` /
-/// `LyricStyle` / `LyricStyles` / `FadeRange` / `LyricView`。
+/// 对外提供 `LyricModel` / `LyricLine` / `LyricWord` / `LrcParser` /
+/// `LyricController` / `LyricStyle` / `LyricStyles` / `FadeRange` / `LyricView`
+/// 这组类型，供歌词页与逐字歌词视图复用。
 ///
-/// 行为对齐要点：
+/// 解析约定：
 /// - `LrcParser.extractLine` 只认**行首**的时间标签，正文里的 `[xx:yy]` 不当时间；
 /// - 一行多标签（副歌复用）会展开成多行；
 /// - `LyricController` 暴露 `progressNotifier` / `activeIndexNotifiter`
-///   （注意后者原库就拼错了，保持一致，调用方按这个名字写的）。
+///   （后者沿用历史拼写，避免改动既有调用点）。
 library;
 
 import 'dart:async';
@@ -282,7 +281,7 @@ class LyricStyle {
   final EdgeInsets contentPadding;
   final Color activeHighlightColor;
 
-  /// 用户手动点选行时的高亮色（兼容基线的参数，未用到时回落到 activeStyle）
+  /// 用户手动点选行时的高亮色（未配置时回落到当前行样式）
   final Color? selectedColor;
   final EdgeInsets linePadding;
 
@@ -328,8 +327,7 @@ class LyricStyles {
 
 /// 普通（非逐字）歌词视图：整行滚动居中，当前行高亮。
 ///
-/// 逐字歌词不走这里 —— 兼容基线用 `MusicPlayCtrlFullScreenDynamicLyricView`
-/// 自己按 word 时间轴涂色。
+/// 逐字歌词由 `ColaMusicStageWordLyricView` 单独按 word 时间轴涂色。
 class LyricView extends StatefulWidget {
   const LyricView({
     super.key,

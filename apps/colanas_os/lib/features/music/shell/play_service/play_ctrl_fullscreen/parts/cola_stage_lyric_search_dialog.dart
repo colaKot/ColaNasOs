@@ -1,65 +1,56 @@
 import 'package:flutter/material.dart';
 
-import '../../../compat/getx.dart';
-
 import '../../../compat/api_base.dart';
+import '../../../compat/getx.dart';
 import '../../../compat/host.dart';
 import '../../controller/cola_player_controller.dart';
 
-class _LyricSearchItem {
-  final String title;
-  final String source;
-  final String preview;
-  final String lrc;
-  final String id;
-  final int durationMs;
-  final String artist;
-  final String album;
-
-  const _LyricSearchItem({
-    required this.title,
-    required this.source,
-    required this.preview,
-    required this.lrc,
+/// 一条在线歌词搜索结果。
+class _LyricHit {
+  const _LyricHit({
     required this.id,
-    required this.durationMs,
+    required this.title,
     required this.artist,
     required this.album,
+    required this.durationMs,
+    required this.lrc,
   });
 
-  factory _LyricSearchItem.fromMap(Map<dynamic, dynamic> map) {
-    return _LyricSearchItem(
-      title: map['title']?.toString() ?? '',
-      source: map['source']?.toString() ?? '',
-      preview: map['preview']?.toString() ?? '',
-      lrc: map['lrc']?.toString() ?? '',
-      id: map['id']?.toString() ?? '',
-      durationMs: int.tryParse(map['duration']?.toString() ?? '') ?? 0,
-      artist: map['artist']?.toString() ?? '',
-      album: map['album']?.toString() ?? '',
+  factory _LyricHit.fromMap(Map<dynamic, dynamic> map) {
+    String read(String key) => map[key]?.toString() ?? '';
+    return _LyricHit(
+      id: read('id'),
+      title: read('title'),
+      artist: read('artist'),
+      album: read('album'),
+      durationMs: int.tryParse(read('duration')) ?? 0,
+      lrc: read('lrc'),
     );
   }
+
+  final String id;
+  final String title;
+  final String artist;
+  final String album;
+  final int durationMs;
+  final String lrc;
 
   Duration get duration =>
       Duration(milliseconds: durationMs < 0 ? 0 : durationMs);
 
-  String get previewLine {
-    return _firstLyricLineFromLrc(lrc);
-  }
+  /// 列表里展示第一句有效歌词，整段放在 tooltip 里。
+  String get previewLine => _firstContentLine(lrc);
 
-  static String _firstLyricLineFromLrc(String lrc) {
-    final localText = lrc.trim();
-    if (localText.isEmpty) return '';
-    final lines = localText.split(RegExp(r'\r?\n'));
-    for (final raw in lines) {
+  static String _firstContentLine(String lrc) {
+    final text = lrc.trim();
+    if (text.isEmpty) return '';
+    for (final raw in text.split(RegExp(r'\r?\n'))) {
       final line = raw.trim();
       if (line.isEmpty) continue;
       if (line.startsWith('[') && line.contains(']')) {
-        final localIdx = line.lastIndexOf(']');
-        final localAfter = localIdx >= 0
-            ? line.substring(localIdx + 1).trim()
-            : '';
-        if (localAfter.isNotEmpty) return localAfter;
+        final close = line.lastIndexOf(']');
+        final content = close >= 0 ? line.substring(close + 1).trim() : '';
+        if (content.isNotEmpty) return content;
         continue;
       }
       return line;
@@ -68,90 +59,56 @@ class _LyricSearchItem {
   }
 }
 
-class _LyricApiService extends BaseApiService {
-  static _LyricApiService get instance => _LyricApiService();
+class _LyricLookupApi extends BaseApiService {
+  static _LyricLookupApi get instance => _LyricLookupApi();
 
-  Future<List<_LyricSearchItem>> searchLyric(
-    String localKeyword, {
+  Future<List<_LyricHit>> search(
+    String keyword, {
     bool showLoading = false,
   }) async {
-    final localQ = localKeyword.trim();
-    if (localQ.isEmpty) return const <_LyricSearchItem>[];
-    final localReply = await apiPost<List<dynamic>>(
+    final query = keyword.trim();
+    if (query.isEmpty) return const <_LyricHit>[];
+    final reply = await apiPost<List<dynamic>>(
       '/api/music/lyric/search',
-      body: {'keyword': localQ},
+      body: {'keyword': query},
       showLoading: showLoading,
     );
-    if (!localReply.success) return const <_LyricSearchItem>[];
-    final raw = localReply.data ?? const <dynamic>[];
-    return raw
-        .whereType<Map>()
-        .map((e) => _LyricSearchItem.fromMap(e))
-        .toList();
+    if (!reply.success) return const <_LyricHit>[];
+    final rows = reply.data ?? const <dynamic>[];
+    return rows.whereType<Map>().map(_LyricHit.fromMap).toList();
   }
 
-  Future<bool> setLyric({
+  Future<bool> write({
     required String musicPath,
     required String lrc,
     bool showLoading = false,
   }) async {
-    final localLyric = lrc.trim();
-    final localP = musicPath.trim();
-    if (localP.isEmpty || localLyric.isEmpty) return false;
-    final localReply = await apiPost<Map<String, dynamic>>(
+    final path = musicPath.trim();
+    final lyric = lrc.trim();
+    if (path.isEmpty || lyric.isEmpty) return false;
+    final reply = await apiPost<Map<String, dynamic>>(
       '/api/music/lyric/set',
-      body: {'music_path': localP, 'lrc': localLyric},
+      body: {'music_path': path, 'lrc': lyric},
       showLoading: showLoading,
     );
-    return localReply.success;
+    return reply.success;
   }
 }
 
-class MusicPlayCtrlFullScreenLyricSearchDialog {
-  static String _fileStem(String filePath) {
-    final raw = filePath.trim();
-    if (raw.isEmpty) return '';
-    final localNormalized = raw.replaceAll('\\', '/');
-    final localSlash = localNormalized.lastIndexOf('/');
-    final name = localSlash >= 0
-        ? localNormalized.substring(localSlash + 1)
-        : localNormalized;
-    final localDot = name.lastIndexOf('.');
-    if (localDot > 0) return name.substring(0, localDot);
-    return name;
-  }
+/// 在线歌词搜索弹窗。
+class ColaMusicStageLyricSearch {
+  const ColaMusicStageLyricSearch._();
 
-  static String _normalizeForContains(String input) {
-    final localS = input.trim().toLowerCase();
-    if (localS.isEmpty) return '';
-    return localS.replaceAll(RegExp(r'[^0-9a-z\u4e00-\u9fff]+'), '');
-  }
-
-  static final RegExp _audioExt = RegExp(
+  static final RegExp _audioExtension = RegExp(
     r'\.(flac|mp3|ape|wav|m4a|aac|ogg|opus|wma|alac|aiff|aif)$',
     caseSensitive: false,
   );
 
-  /// 搜索用的关键词**只取歌名**。
-  ///
-  /// 以前这里是 `'$title $artist'`，而 `displayTitle` 返回的是**完整文件名**
-  /// （`01 永夜.flac`），拼完变成 `01 永夜.flac 任贤齐` —— LRCLIB 的 `q=` 对词序敏感，
-  /// 这种串一个结果都不会有。现在剥掉扩展名 / 开头的音轨号，艺人也不拼进去
-  /// （服务端查不到时会自动按单词再查一轮）。
-  static String _searchTitle(String title, String musicPath) {
-    var localT = title.trim();
-    if (localT.isEmpty || _audioExt.hasMatch(localT))
-      localT = _fileStem(musicPath);
-    localT = localT.replaceFirst(_audioExt, '');
-    // 开头音轨号：`01 永夜` / `01. 永夜` / `01-永夜` / `[01] 永夜` / `(01)永夜`
-    localT = localT.replaceFirst(
-      RegExp(r'^\s*[\[\(]?\d{1,3}[\]\)]?[\s\.\-_、]+'),
-      '',
-    );
-    localT = localT.replaceFirst(RegExp(r'^\s*[\[\(]\d{1,3}[\]\)]\s*'), '');
-    localT = localT.trim();
-    return localT.isEmpty ? _fileStem(musicPath).trim() : localT;
-  }
+  // 开头的音轨号：`01 永夜`、`01. 永夜`、`[01] 永夜`、`(01)永夜`
+  static final RegExp _leadingTrackNo = RegExp(
+    r'^\s*[\[\(]?\d{1,3}[\]\)]?[\s\.\-_、]+',
+  );
+  static final RegExp _bracketedTrackNo = RegExp(r'^\s*[\[\(]\d{1,3}[\]\)]\s*');
 
   static Future<String?> show(
     BuildContext context, {
@@ -159,309 +116,324 @@ class MusicPlayCtrlFullScreenLyricSearchDialog {
     required String title,
     required String artist,
     required Duration trackDuration,
-  }) async {
-    var localKeyword = _searchTitle(title, musicPath);
-    final localTheme = Theme.of(context);
-    var localSelectingId = '';
-    var loading = false;
-    var didAutoSearch = false;
-    var localResults = <_LyricSearchItem>[];
-
-    Future<void> doSearch(StateSetter setState) async {
-      final localQ = localKeyword.trim();
-      if (localQ.isEmpty) {
-        ToastUtil.show('input_please'.tr);
-        return;
-      }
-      setState(() {
-        loading = true;
-        localResults = <_LyricSearchItem>[];
-      });
-      try {
-        final localList = await _LyricApiService.instance.searchLyric(localQ);
-        setState(() {
-          localResults = localList;
-        });
-      } finally {
-        setState(() {
-          loading = false;
-        });
-      }
-    }
-
+  }) {
     return showDialog<String>(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            if (!didAutoSearch) {
-              didAutoSearch = true;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (context.mounted) doSearch(setState);
-              });
-            }
-            final input = TextFormField(
-              textInputAction: TextInputAction.search,
-              onFieldSubmitted: (_) => doSearch(setState),
-              onChanged: (v) => localKeyword = v,
-              initialValue: localKeyword,
-              decoration: InputDecoration(
-                hintText: 'search'.tr,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(12)),
-                ),
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: IconButton(
-                  tooltip: 'search'.tr,
-                  onPressed: loading ? null : () => doSearch(setState),
-                  icon: const Icon(Icons.search),
-                ),
-              ),
-              autofocus: true,
-            );
+      builder: (_) => _LyricSearchSheet(
+        musicPath: musicPath,
+        trackDuration: trackDuration,
+        initialKeyword: _keywordFor(title, musicPath),
+      ),
+    );
+  }
 
-            Widget body;
-            if (loading) {
-              body = const Center(
-                child: SizedBox(
-                  width: 22.0,
-                  height: 22.0,
-                  child: CircularProgressIndicator(strokeWidth: 2.0),
-                ),
-              );
-            } else if (localResults.isEmpty) {
-              body = Padding(
-                padding: const EdgeInsets.fromLTRB(0, 26, 0, 26),
-                child: Center(child: Text('no_data'.tr)),
-              );
-            } else {
-              body = ListView.separated(
-                separatorBuilder: (context, _) => const Divider(height: 1.0),
-                itemCount: localResults.length,
-                itemBuilder: (context, index) {
-                  final localItem = localResults[index];
-                  final localDurationDiffMs =
-                      (localItem.durationMs - trackDuration.inMilliseconds)
-                          .abs();
-                  final localDurationMatch =
-                      localItem.durationMs > 0 && localDurationDiffMs <= 5000;
-                  final localFileStemNorm = _normalizeForContains(
-                    _fileStem(musicPath),
-                  );
-                  final localTitleNorm = _normalizeForContains(localItem.title);
-                  final localNameMatch =
-                      localTitleNorm.isNotEmpty &&
-                      localFileStemNorm.isNotEmpty &&
-                      localFileStemNorm.contains(localTitleNorm);
-                  final localHighMatch = localDurationMatch && localNameMatch;
-                  final localMeta = [
-                    if (localItem.artist.trim().isNotEmpty)
-                      localItem.artist.trim(),
-                    if (localItem.album.trim().isNotEmpty)
-                      localItem.album.trim(),
-                    if (localItem.durationMs > 0)
-                      FormatUtil.formatDuration(localItem.duration),
-                  ].join(' · ');
+  /// 检索词只保留歌名。
+  ///
+  /// `title` 实际是完整文件名（如 `01 永夜.flac`），直接拼艺人会让
+  /// LRCLIB 的 `q=` 一个结果都返回不了，所以这里剥掉扩展名与音轨号，
+  /// 艺人交给服务端在查不到时自行放宽。
+  static String _keywordFor(String title, String musicPath) {
+    var text = title.trim();
+    if (text.isEmpty || _audioExtension.hasMatch(text)) {
+      text = _stemOf(musicPath);
+    }
+    text = text.replaceFirst(_audioExtension, '');
+    text = text
+        .replaceFirst(_leadingTrackNo, '')
+        .replaceFirst(_bracketedTrackNo, '')
+        .trim();
+    return text.isEmpty ? _stemOf(musicPath).trim() : text;
+  }
 
-                  final localSelecting = localSelectingId == localItem.id;
+  /// 路径 → 去掉目录与扩展名的文件名。
+  static String _stemOf(String filePath) {
+    final raw = filePath.trim();
+    if (raw.isEmpty) return '';
+    final normalized = raw.replaceAll('\\', '/');
+    final slash = normalized.lastIndexOf('/');
+    final name = slash >= 0 ? normalized.substring(slash + 1) : normalized;
+    final dot = name.lastIndexOf('.');
+    return dot > 0 ? name.substring(0, dot) : name;
+  }
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10.0,
-                      vertical: 6.0,
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Row(
-                                children: <Widget>[
-                                  if (localHighMatch)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6.0,
-                                        vertical: 2.0,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        border: Border.all(
-                                          color: localTheme
-                                              .colorScheme
-                                              .onSurface
-                                              .withValues(alpha: 0.6),
-                                        ),
-                                        borderRadius: BorderRadius.all(
-                                          Radius.circular(6),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        '高匹配度',
-                                        style: localTheme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              fontSize: 11.0,
-                                              height: 1.2,
-                                              color: localTheme
-                                                  .colorScheme
-                                                  .onSurface
-                                                  .withValues(alpha: 0.85),
-                                            ),
-                                      ),
-                                    ),
-                                  if (localHighMatch)
-                                    const SizedBox(width: 8.0),
-                                  Expanded(
-                                    child: Text(
-                                      localItem.title.trim().isEmpty
-                                          ? localItem.id
-                                          : localItem.title,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: localTheme.textTheme.bodyLarge
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              if (localMeta.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    0,
-                                    2,
-                                    0,
-                                    0,
-                                  ),
-                                  child: Text(
-                                    localMeta,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: localTheme.textTheme.bodySmall
-                                        ?.copyWith(
-                                          color: localTheme
-                                              .colorScheme
-                                              .onSurface
-                                              .withValues(alpha: 0.65),
-                                        ),
-                                  ),
-                                ),
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(0, 2, 0, 0),
-                                child: Tooltip(
-                                  message: localItem.lrc.trim(),
-                                  waitDuration: const Duration(
-                                    milliseconds: 250,
-                                  ),
-                                  child: Text(
-                                    localItem.previewLine.trim().isEmpty
-                                        ? '\u00A0'
-                                        : localItem.previewLine.trim(),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: localTheme.textTheme.bodySmall
-                                        ?.copyWith(
-                                          color: localTheme
-                                              .colorScheme
-                                              .onSurface
-                                              .withValues(alpha: 0.65),
-                                        ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 10.0),
-                        SizedBox(
-                          width: 90.0,
-                          child: TextButton(
-                            onPressed: localSelecting
-                                ? null
-                                : () async {
-                                    final lrc = localItem.lrc.trim();
-                                    if (lrc.isEmpty) {
-                                      ToastUtil.show('operation_failed'.tr);
-                                      return;
-                                    }
-                                    setState(() {
-                                      localSelectingId = localItem.id;
-                                    });
-                                    try {
-                                      final ok = await _LyricApiService.instance
-                                          .setLyric(
-                                            musicPath: musicPath,
-                                            lrc: lrc,
-                                          );
-                                      if (!ok) {
-                                        ToastUtil.show('operation_failed'.tr);
-                                        return;
-                                      }
-                                      MusicPlayServiceController.instance
-                                          .applyLyricOverride(musicPath, lrc);
-                                      if (ctx.mounted) {
-                                        Navigator.of(ctx).pop(lrc);
-                                      }
-                                      ToastUtil.show('operation_success'.tr);
-                                    } finally {
-                                      if (context.mounted) {
-                                        setState(() {
-                                          localSelectingId = '';
-                                        });
-                                      }
-                                    }
-                                  },
-                            child: localSelecting
-                                ? const SizedBox(
-                                    width: 16.0,
-                                    height: 16.0,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.0,
-                                    ),
-                                  )
-                                : Text('select'.tr),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              );
-            }
+  /// 只留字母数字与汉字，用于「文件名是否包含歌名」的宽松比对。
+  static String _squash(String input) {
+    final text = input.trim().toLowerCase();
+    if (text.isEmpty) return '';
+    return text.replaceAll(RegExp(r'[^0-9a-z\u4e00-\u9fff]+'), '');
+  }
+}
 
-            return DialogUtil.createAlertDialog(
-              title: Row(
-                children: <Widget>[
-                  Expanded(child: Text('music_search_lyric'.tr)),
-                  IconButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: 740.0,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+class _LyricSearchSheet extends StatefulWidget {
+  const _LyricSearchSheet({
+    required this.musicPath,
+    required this.trackDuration,
+    required this.initialKeyword,
+  });
+
+  final String musicPath;
+  final Duration trackDuration;
+  final String initialKeyword;
+
+  @override
+  State<_LyricSearchSheet> createState() => _LyricSearchSheetState();
+}
+
+class _LyricSearchSheetState extends State<_LyricSearchSheet> {
+  late String _keyword;
+  List<_LyricHit> _hits = const <_LyricHit>[];
+  String _applyingId = '';
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _keyword = widget.initialKeyword;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _search();
+    });
+  }
+
+  Future<void> _search() async {
+    final query = _keyword.trim();
+    if (query.isEmpty) {
+      ToastUtil.show('input_please'.tr);
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _hits = const <_LyricHit>[];
+    });
+    try {
+      final found = await _LyricLookupApi.instance.search(query);
+      if (!mounted) return;
+      setState(() => _hits = found);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _apply(_LyricHit hit) async {
+    final lrc = hit.lrc.trim();
+    if (lrc.isEmpty) {
+      ToastUtil.show('operation_failed'.tr);
+      return;
+    }
+    setState(() => _applyingId = hit.id);
+    try {
+      final ok = await _LyricLookupApi.instance.write(
+        musicPath: widget.musicPath,
+        lrc: lrc,
+      );
+      if (!ok) {
+        ToastUtil.show('operation_failed'.tr);
+        return;
+      }
+      MusicPlayServiceController.instance.applyLyricOverride(
+        widget.musicPath,
+        lrc,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(lrc);
+      ToastUtil.show('operation_success'.tr);
+    } finally {
+      if (mounted) setState(() => _applyingId = '');
+    }
+  }
+
+  Widget _searchField() {
+    return TextFormField(
+      initialValue: _keyword,
+      autofocus: true,
+      textInputAction: TextInputAction.search,
+      onChanged: (value) => _keyword = value,
+      onFieldSubmitted: (_) => _search(),
+      decoration: InputDecoration(
+        hintText: 'search'.tr,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+        ),
+        prefixIcon: const Icon(Icons.search),
+        suffixIcon: IconButton(
+          tooltip: 'search'.tr,
+          onPressed: _loading ? null : _search,
+          icon: const Icon(Icons.search),
+        ),
+      ),
+    );
+  }
+
+  Widget _hitTile(ThemeData theme, _LyricHit hit) {
+    final closeEnoughDuration =
+        hit.durationMs > 0 &&
+        (hit.durationMs - widget.trackDuration.inMilliseconds).abs() <= 5000;
+    final fileStem = ColaMusicStageLyricSearch._squash(
+      ColaMusicStageLyricSearch._stemOf(widget.musicPath),
+    );
+    final hitTitle = ColaMusicStageLyricSearch._squash(hit.title);
+    final nameMatches =
+        hitTitle.isNotEmpty &&
+        fileStem.isNotEmpty &&
+        fileStem.contains(hitTitle);
+    final highMatch = closeEnoughDuration && nameMatches;
+
+    final meta = <String>[
+      if (hit.artist.trim().isNotEmpty) hit.artist.trim(),
+      if (hit.album.trim().isNotEmpty) hit.album.trim(),
+      if (hit.durationMs > 0) FormatUtil.formatDuration(hit.duration),
+    ].join(' · ');
+    final applying = _applyingId == hit.id;
+    final mutedStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Row(
                   children: <Widget>[
-                    input,
-                    const SizedBox(height: 8.0),
-                    Flexible(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 420),
-                        child: body,
+                    if (highMatch) _matchBadge(theme),
+                    if (highMatch) const SizedBox(width: 8.0),
+                    Expanded(
+                      child: Text(
+                        hit.title.trim().isEmpty ? hit.id : hit.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
                 ),
+                if (meta.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(0, 2, 0, 0),
+                    child: Text(
+                      meta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: mutedStyle,
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 2, 0, 0),
+                  child: Tooltip(
+                    message: hit.lrc.trim(),
+                    waitDuration: const Duration(milliseconds: 250),
+                    child: Text(
+                      hit.previewLine.trim().isEmpty
+                          ? '\u00A0'
+                          : hit.previewLine.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: mutedStyle,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10.0),
+          SizedBox(
+            width: 90.0,
+            child: TextButton(
+              onPressed: applying ? null : () => _apply(hit),
+              child: applying
+                  ? const SizedBox(
+                      width: 16.0,
+                      height: 16.0,
+                      child: CircularProgressIndicator(strokeWidth: 2.0),
+                    )
+                  : Text('select'.tr),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _matchBadge(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+        borderRadius: BorderRadius.all(Radius.circular(6)),
+      ),
+      child: Text(
+        '高匹配度',
+        style: theme.textTheme.bodySmall?.copyWith(
+          fontSize: 11.0,
+          height: 1.2,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+        ),
+      ),
+    );
+  }
+
+  Widget _results(ThemeData theme) {
+    if (_loading) {
+      return const Center(
+        child: SizedBox(
+          width: 22.0,
+          height: 22.0,
+          child: CircularProgressIndicator(strokeWidth: 2.0),
+        ),
+      );
+    }
+    if (_hits.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(0, 26, 0, 26),
+        child: Center(child: Text('no_data'.tr)),
+      );
+    }
+    return ListView.separated(
+      itemCount: _hits.length,
+      separatorBuilder: (_, _) => const Divider(height: 1.0),
+      itemBuilder: (_, index) => _hitTile(theme, _hits[index]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return DialogUtil.createAlertDialog(
+      title: Row(
+        children: <Widget>[
+          Expanded(child: Text('music_search_lyric'.tr)),
+          IconButton(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 740.0,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            _searchField(),
+            const SizedBox(height: 8.0),
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 420),
+                child: _results(theme),
               ),
-              constraints: const BoxConstraints(maxWidth: 780, minWidth: 540),
-            );
-          },
-        );
-      },
+            ),
+          ],
+        ),
+      ),
+      constraints: const BoxConstraints(maxWidth: 780, minWidth: 540),
     );
   }
 }

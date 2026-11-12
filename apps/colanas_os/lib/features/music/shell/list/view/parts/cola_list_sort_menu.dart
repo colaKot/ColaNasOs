@@ -78,7 +78,7 @@ class MusicListSortMenu extends StatelessWidget {
           if (_isFavoriteOption(choice) ? favoriteOnly : true) choice,
       ];
 
-      return CustomHoverMenuAnchor(
+      return ColaHoverMenuAnchor(
         menuChildren: buildSortMenuItems<MusicListSortBy, MusicListSortOrder>(
           currentBy: controller.sortBy.value,
           currentOrder: controller.sortOrder.value,

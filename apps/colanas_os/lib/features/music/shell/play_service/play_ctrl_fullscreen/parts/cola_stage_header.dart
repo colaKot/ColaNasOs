@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 
-class MusicPlayCtrlFullScreenHeader extends StatelessWidget {
-  final double topPadding;
-  final VoidCallback onClose;
-  final double height;
-
-  const MusicPlayCtrlFullScreenHeader({
+/// 全屏舞台顶栏：只承担「收起」入口，高度与顶部留白由调用方按屏幕宽度给定。
+class ColaMusicStageHeader extends StatelessWidget {
+  const ColaMusicStageHeader({
     super.key,
     required this.onClose,
     this.height = 96,
     this.topPadding = 40,
   });
+
+  final double height;
+  final double topPadding;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -19,14 +20,14 @@ class MusicPlayCtrlFullScreenHeader extends StatelessWidget {
       child: SizedBox(
         height: height,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(0, topPadding, 0, 0),
+          padding: EdgeInsets.only(top: topPadding),
           child: Row(
             children: <Widget>[
               IconButton(
                 onPressed: onClose,
                 icon: const Icon(Icons.keyboard_arrow_down, size: 28.0),
               ),
-              const Expanded(child: SizedBox.shrink()),
+              const Spacer(),
               const SizedBox(width: 8.0),
             ],
           ),

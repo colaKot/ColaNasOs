@@ -232,7 +232,7 @@ List<ContextMenuEntry<dynamic>> detailTrackMenuEntries(
   return MusicItemContextMenu.buildEntries(
     selectionMode: selectionMode,
     isFavorite: item.isFavorite,
-    inPlayList: ctrl.isInPlayList,
+    inPlayList: ctrl.insidePlaylist,
     isSameMachine:
         DeviceUtils.isDesktopOrWeb && ApiController.instance.isSameMachine,
     onFileBrowse: () => openTrackInFiles(context, item),

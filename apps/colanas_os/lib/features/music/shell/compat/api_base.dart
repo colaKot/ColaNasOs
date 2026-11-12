@@ -1,15 +1,14 @@
-/// 兼容基线 `core/api/base_api_service.dart` 在音乐模块里的等价实现。
+/// 音乐模块 service 层共用的 HTTP 基类与响应包装。
 ///
-/// 音乐模块的 service 层只用到 `apiPost`（全部 POST）+ `ApiResponse` 这几件事，
-/// 所以这里只保留这套表面：请求交给 [CompatApi.send]，
-/// 由它把 既有实现 的 `/api/music/*` 翻译成本项目的 `/api/v1/music/*`。
+/// 音乐接口全部走 POST，所以只保留 `apiPost` 与 [ApiResponse] 这套表面；
+/// 请求由 [CompatApi.send] 发往本项目的 `/api/v1/music/*`。
 library;
 
 import 'package:flutter/foundation.dart';
 
 import 'api_ns.dart';
 
-/// 统一的接口响应包装（字段与既有实现一致，调用点不用改）
+/// 统一的接口响应包装。
 class ApiResponse<T> {
   ApiResponse({
     required this.success,
@@ -61,9 +60,9 @@ class ApiResponse<T> {
 
 typedef DataParser<T> = T Function(Map<String, dynamic> json, int code);
 
-/// 既有实现同名基类：音乐模块的 6 个 ApiService 都继承它
+/// 音乐模块 6 个 ApiService 共用的基类。
 abstract class BaseApiService {
-  /// 统一的 POST 出口。既有实现里所有音乐接口都是 POST。
+  /// 统一的 POST 出口（音乐接口均为 POST）。
   Future<ApiResponse<T>> apiPost<T>(
     String path, {
     Map<String, dynamic>? body,

@@ -77,7 +77,7 @@ class MusicSubListOverlayController extends GetxController {
 /// 与主列表共用多选、批量收藏、下载、删除、歌单操作；这里额外负责
 /// 聚合维度的筛选参数、封面地址，以及把分页查询交给播放服务做续播。
 class MusicSubListController extends GetxController
-    implements MusicMultiSelectController {
+    implements ColaMusicMultiSelect {
   MusicSubListController({
     required this.keyType,
     required this.name,
@@ -291,16 +291,16 @@ class MusicSubListController extends GetxController
   int get selectedCount => _selection.selectedCount;
 
   @override
-  bool get isAllCurrentSelected => _selection.allSelected;
+  bool get allCurrentSelected => _selection.allSelected;
 
   @override
-  void toggleSelectAllCurrent() => _selection.toggleAll();
+  void toggleSelectAll() => _selection.toggleAll();
 
   @override
-  void exitMultiSelectMode() => _selection.clear();
+  void leaveMultiSelect() => _selection.clear();
 
   @override
-  bool get isSelectedAllFavorited => _selection.allFavorited;
+  bool get allSelectedFavorited => _selection.allFavorited;
 
   void setSort(MusicSubListSortBy by, MusicSubListSortOrder order) {
     if (sortBy.value == by && sortOrder.value == order) return;
@@ -392,7 +392,7 @@ class MusicSubListController extends GetxController
     final paths = musicPathsOf(entries);
     if (paths.isEmpty) return;
     await submitMusicDownload(paths);
-    if (exitSelection) exitMultiSelectMode();
+    if (exitSelection) leaveMultiSelect();
   }
 
   Future<void> downloadAll() => _download(items, exitSelection: false);
@@ -401,7 +401,7 @@ class MusicSubListController extends GetxController
       _download(<MusicListItem>[item], exitSelection: false);
 
   @override
-  Future<void> downloadSelected() =>
+  Future<void> downloadSelection() =>
       _download(_selection.chosen, exitSelection: true);
 
   Future<void> toggleFavorite(MusicListItem item) async {
@@ -414,13 +414,13 @@ class MusicSubListController extends GetxController
   }
 
   @override
-  Future<void> toggleFavoriteSelected() async {
+  Future<void> switchSelectionFavorite() async {
     final ok = await applyBatchFavorite(
       ids: sortedIndexIds(selectedItems),
-      makeFavorite: !isSelectedAllFavorited,
+      makeFavorite: !allSelectedFavorited,
       onState: updateFavoriteState,
     );
-    if (ok) exitMultiSelectMode();
+    if (ok) leaveMultiSelect();
   }
 
   void updateFavoriteState(int indexId, bool nextIsFavorite) {
@@ -437,7 +437,7 @@ class MusicSubListController extends GetxController
   }
 
   @override
-  bool get isInPlayList => (listId ?? 0) > 0;
+  bool get insidePlaylist => (listId ?? 0) > 0;
 
   /// 删掉几首后列表可能不满一页，静默补一次，异常不外抛打断界面。
   void _autoLoadMoreIfNeeded() {
@@ -468,7 +468,7 @@ class MusicSubListController extends GetxController
         items: items,
         total: total,
         onRemoved: () {
-          if (exitSelection) exitMultiSelectMode();
+          if (exitSelection) leaveMultiSelect();
           if (refill) _autoLoadMoreIfNeeded();
         },
       );
@@ -481,7 +481,7 @@ class MusicSubListController extends GetxController
       _removeFromList(<int>[item.id], refill: true);
 
   @override
-  Future<void> removeFromPlayListSelected() => _removeFromList(
+  Future<void> removeSelectionFromPlaylist() => _removeFromList(
     sortedIndexIds(selectedItems),
     exitSelection: true,
     refill: true,
@@ -496,14 +496,14 @@ class MusicSubListController extends GetxController
       final picked = await pickMusicPlayList();
       if (picked == null) return;
       final ok = await addIndexesToPlayList(listId: picked.id, ids: ids);
-      if (ok && exitSelection) exitMultiSelectMode();
+      if (ok && exitSelection) leaveMultiSelect();
     } catch (_) {
       notifyFailure(null);
     }
   }
 
   @override
-  Future<void> addToPlayListSelected() =>
+  Future<void> addSelectionToPlaylist() =>
       _addToPlayList(sortedIndexIds(selectedItems), exitSelection: true);
 
   Future<void> addToPlayListItem(MusicListItem item) =>
@@ -525,11 +525,11 @@ class MusicSubListController extends GetxController
       total: total,
       onRemoved: _autoLoadMoreIfNeeded,
     );
-    if (ok && exitSelection) exitMultiSelectMode();
+    if (ok && exitSelection) leaveMultiSelect();
   }
 
   @override
-  Future<void> deleteSelected() =>
+  Future<void> deleteSelection() =>
       _delete(_selection.chosen, exitSelection: true);
 
   Future<void> deleteItem(MusicListItem item) =>

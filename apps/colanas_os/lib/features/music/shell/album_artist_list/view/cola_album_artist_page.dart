@@ -21,23 +21,30 @@ class AlbumArtistListPage extends StatefulWidget {
   const AlbumArtistListPage({
     super.key,
     required this.keyType,
-    this.initialSortBy = AlbumArtistListSortBy.count,
     this.initialSortOrder = AlbumArtistListSortOrder.desc,
+    this.initialSortBy = AlbumArtistListSortBy.count,
   });
 
   @override
-  State<AlbumArtistListPage> createState() => _AlbumArtistListPageState();
+  State<AlbumArtistListPage> createState() => _AlbumArtistCollectionPageState();
 }
 
-class _AlbumArtistListPageState extends State<AlbumArtistListPage> {
-  final ScrollController _scrollController = ScrollController();
-  late final String _controllerTag;
+class _AlbumArtistCollectionPageState extends State<AlbumArtistListPage> {
+  final ScrollController _scroll = ScrollController();
+  late final String _controllerTag = _buildTag();
+
+  String _buildTag() =>
+      'music_key_list_${widget.keyType}_${widget.initialSortBy}'
+      '_${widget.initialSortOrder}_${UniqueKey()}';
+
+  AlbumArtistListController? get _listController =>
+      Get.isRegistered<AlbumArtistListController>(tag: _controllerTag)
+      ? Get.find<AlbumArtistListController>(tag: _controllerTag)
+      : null;
 
   @override
   void initState() {
     super.initState();
-    _controllerTag =
-        'music_key_list_${widget.keyType}_${widget.initialSortBy}_${widget.initialSortOrder}_${UniqueKey()}';
     if (!Get.isRegistered<AlbumArtistListController>(tag: _controllerTag)) {
       Get.put(
         AlbumArtistListController(
@@ -48,152 +55,179 @@ class _AlbumArtistListPageState extends State<AlbumArtistListPage> {
         tag: _controllerTag,
       );
     }
-    _scrollController.addListener(_onScroll);
+    _scroll.addListener(_handleScroll);
   }
 
   @override
   void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
+    _scroll.removeListener(_handleScroll);
+    _scroll.dispose();
     if (Get.isRegistered<AlbumArtistListController>(tag: _controllerTag)) {
       Get.delete<AlbumArtistListController>(tag: _controllerTag);
     }
     if (Get.isRegistered<MusicSubListOverlayController>()) {
-      final overlayCtrl = Get.find<MusicSubListOverlayController>();
-      overlayCtrl.close();
+      Get.find<MusicSubListOverlayController>().close();
     }
     super.dispose();
   }
 
-  void _onScroll() {
-    final listState =
-        Get.isRegistered<AlbumArtistListController>(tag: _controllerTag)
-        ? Get.find<AlbumArtistListController>(tag: _controllerTag)
-        : null;
-    if (listState == null) return;
+  void _handleScroll() {
+    final controller = _listController;
+    if (controller == null) return;
     attachPagedScroll(
-      _scrollController,
-      loadMore: () => listState.loadMore(fromAuto: true).catchError((_) {}),
+      _scroll,
+      loadMore: () => controller.loadMore(fromAuto: true).catchError((_) {}),
       threshold: 360,
     );
   }
 
-  Widget _letterFilter(
-    BuildContext context,
-    AlbumArtistListController listState,
-  ) => Obx(() {
-    final rawSearch = listState.searchText.value.trim();
-    final selectedLetter =
-        rawSearch.length == 1 &&
-            (rawSearch == '#' || RegExp(r'^[a-zA-Z]$').hasMatch(rawSearch))
-        ? rawSearch.toUpperCase()
-        : null;
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Padding(
-        padding: DeviceUtils.isPhone(context)
-            ? const EdgeInsets.fromLTRB(0, 0, 10, 0)
-            : const EdgeInsets.fromLTRB(0, 0, 10, 10),
-        child: CustomLetterFilter(
-          value: selectedLetter,
-          onChanged: (v) => listState.setSearchImmediate(v ?? ''),
-          centerWhenBoundedHeight: DeviceUtils.isPhone(context),
-        ),
-      ),
-    );
-  });
+  MusicSubListOverlayController _overlayController() =>
+      Get.isRegistered<MusicSubListOverlayController>()
+      ? Get.find<MusicSubListOverlayController>()
+      : Get.put(MusicSubListOverlayController());
+
+  /// 点开一个聚合分组：专辑/歌手交给三级详情路由，其余维度仍走内容区遮罩。
+  void _openGroup(MusicSubListOverlayController overlay, String groupName) {
+    final type = widget.keyType.trim().toLowerCase();
+    if (type == 'album' || type == 'artist') {
+      MusicDetailRouter.instance.open(
+        type == 'album'
+            ? MusicDetailTarget.album(name: groupName)
+            : MusicDetailTarget.artist(groupName),
+      );
+      return;
+    }
+    overlay.open(keyType: widget.keyType, name: groupName);
+  }
 
   @override
   Widget build(BuildContext context) {
     return GetBuilder<AlbumArtistListController>(
       tag: _controllerTag,
-      builder: (listState) {
+      builder: (controller) {
         final theme = Theme.of(context);
-        final extendedPalette = theme.extension<CustomColors>();
-        final barColor =
-            extendedPalette?.oprationBarBgColor ?? theme.colorScheme.surface;
-        final overlayCtrl = Get.isRegistered<MusicSubListOverlayController>()
-            ? Get.find<MusicSubListOverlayController>()
-            : Get.put(MusicSubListOverlayController());
-
-        void openSubList(String name) {
-          // 专辑 / 歌手改成三级详情页（留在右侧内容区、左栏不动、可返回）。
-          // 以前这里是「桌面开 overlay、手机 push 整页」，两种形态都不符合要求。
-          final keyType = widget.keyType.trim().toLowerCase();
-          if (keyType == 'album' || keyType == 'artist') {
-            MusicDetailRouter.instance.open(
-              keyType == 'album'
-                  ? MusicDetailTarget.album(name: name)
-                  : MusicDetailTarget.artist(name),
-            );
-            return;
-          }
-          // 只剩「系列 / 其它聚合维度」走内容区遮罩；专辑与歌手已在上面转三级页。
-          // 这里不再 `Navigator.push` 整页 —— 那会盖住左侧一二级栏。
-          overlayCtrl.open(keyType: widget.keyType, name: name);
-        }
-
-        final list = Column(
-          children: <Widget>[
-            DeviceUtils.isPhone(context)
-                ? ColoredBox(
-                    color: barColor,
-                    child: AppAlbumArtistListTopBar(controller: listState),
-                  )
-                : AlbumArtistListTopBar(controller: listState),
-            Expanded(
-              child: MusicAsyncListState(
-                loading: listState.loading,
-                isEmpty: () => listState.items.isEmpty,
-                empty: const MusicEmptyState(),
-                overlayOnEmpty: _letterFilter(context, listState),
-                child: Stack(
-                  children: <Widget>[
-                    Scrollbar(
-                      thumbVisibility: true,
-                      controller: _scrollController,
-                      child: CustomScrollView(
-                        controller: _scrollController,
-                        slivers: <Widget>[
-                          SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 28, 66),
-                            sliver: AlbumArtistListGrid(
-                              controller: listState,
-                              onOpenSubList: openSubList,
-                            ),
-                          ),
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(0, 0, 0, 20),
-                              child: AlbumArtistListFooter(
-                                controller: listState,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _letterFilter(context, listState),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-
+        final palette = theme.extension<CustomColors>();
+        final overlay = _overlayController();
         return MusicOverlayHost<MusicSubListPayload>(
-          active: overlayCtrl.active,
+          active: overlay.active,
           overlayBuilder: (payload) => MusicSubListOverlay(
-            onClose: overlayCtrl.close,
-            name: payload.name,
-            keyType: payload.keyType,
             key: ValueKey(
               'music_sub_list_${payload.keyType}_${payload.seriesIndexId ?? 0}_${payload.name}',
             ),
+            name: payload.name,
+            keyType: payload.keyType,
+            onClose: overlay.close,
           ),
-          child: list,
+          child: _AlbumArtistListBody(
+            controller: controller,
+            barColor: palette?.oprationBarBgColor ?? theme.colorScheme.surface,
+            scrollController: _scroll,
+            onOpenGroup: (name) => _openGroup(overlay, name),
+          ),
         );
       },
     );
+  }
+}
+
+/// 顶栏 + 列表主体；窄屏顶栏铺一层底色，宽屏交给页面自身背景。
+class _AlbumArtistListBody extends StatelessWidget {
+  const _AlbumArtistListBody({
+    required this.controller,
+    required this.barColor,
+    required this.scrollController,
+    required this.onOpenGroup,
+  });
+
+  final AlbumArtistListController controller;
+  final Color barColor;
+  final ScrollController scrollController;
+  final ValueChanged<String> onOpenGroup;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: <Widget>[
+      if (DeviceUtils.isPhone(context))
+        ColoredBox(
+          color: barColor,
+          child: AppAlbumArtistListTopBar(controller: controller),
+        )
+      else
+        AlbumArtistListTopBar(controller: controller),
+      Expanded(
+        child: MusicAsyncListState(
+          loading: controller.loading,
+          isEmpty: () => controller.items.isEmpty,
+          empty: const MusicEmptyState(),
+          overlayOnEmpty: _LetterRail(controller: controller),
+          child: Stack(
+            children: <Widget>[
+              _buildScrollView(),
+              _LetterRail(controller: controller),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildScrollView() => Scrollbar(
+    thumbVisibility: true,
+    controller: scrollController,
+    child: CustomScrollView(
+      controller: scrollController,
+      slivers: <Widget>[
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 28, 66),
+          sliver: AlbumArtistListGrid(
+            controller: controller,
+            onOpenSubList: onOpenGroup,
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: AlbumArtistListFooter(controller: controller),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// 右侧字母快捷筛选：只认单个字母或 `#`，点击即立刻搜索。
+class _LetterRail extends StatelessWidget {
+  const _LetterRail({required this.controller});
+
+  final AlbumArtistListController controller;
+
+  static final RegExp _latinLetter = RegExp(r'^[a-zA-Z]$');
+
+  @override
+  Widget build(BuildContext context) => Obx(() {
+    final keyword = controller.searchText.value.trim();
+    final occupied = _asLetter(keyword);
+    final phone = DeviceUtils.isPhone(context);
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: phone
+            ? const EdgeInsets.fromLTRB(0, 0, 10, 0)
+            : const EdgeInsets.fromLTRB(0, 0, 10, 10),
+        child: CustomLetterFilter(
+          value: occupied,
+          onChanged: (letter) => controller.setSearchImmediate(letter ?? ''),
+          centerWhenBoundedHeight: phone,
+        ),
+      ),
+    );
+  });
+
+  String? _asLetter(String keyword) {
+    if (keyword.length != 1) return null;
+    if (keyword == '#' || _latinLetter.hasMatch(keyword)) {
+      return keyword.toUpperCase();
+    }
+    return null;
   }
 }

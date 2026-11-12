@@ -2,40 +2,42 @@ import '../../compat/json_read.dart';
 import '../../list/models/cola_list_models.dart';
 import '../../shared/music_item_logic.dart';
 
-/// 专辑 / 歌手聚合列表里的一行
+/// 专辑 / 歌手聚合列表中的一行。
 ///
-/// 两个列表共用同一个模型：`keyType` 区分是「专辑」还是「歌手」，
-/// 聚合出来的名字放 `name`，封面用组内第一首的路径去取。
+/// 两种列表共用本模型：`keyType` 标记分组维度，`name` 是聚合后的组名，
+/// 封面取组内第一首曲目的路径。
 class AlbumArtistGroupItem {
-  final String keyType;
   final String name;
-  final String firstFilePath;
+  final String keyType;
   final int indexCount;
+  final String firstFilePath;
 
   const AlbumArtistGroupItem({
-    required this.keyType,
     required this.name,
-    required this.firstFilePath,
+    required this.keyType,
     required this.indexCount,
+    required this.firstFilePath,
   });
 
-  bool get isAlbum => keyType.trim().toLowerCase() == 'album';
+  bool get isAlbum => _type == 'album';
 
-  bool get isArtist => keyType.trim().toLowerCase() == 'artist';
+  bool get isArtist => _type == 'artist';
+
+  String get _type => keyType.trim().toLowerCase();
 
   factory AlbumArtistGroupItem.fromJson(Map<String, dynamic> json) =>
       AlbumArtistGroupItem(
-        keyType: json.readString(const ['key_type', 'keyType']),
         name: json.readString(const ['name']).trim(),
+        keyType: json.readString(const ['key_type', 'keyType']),
+        indexCount: json.readInt(const ['index_count', 'indexCount']),
         firstFilePath: json.readString(const [
           'first_file_path',
           'firstFilePath',
         ]),
-        indexCount: json.readInt(const ['index_count', 'indexCount']),
       );
 }
 
-/// 专辑 / 歌手列表的一次返回
+/// 专辑 / 歌手列表的一次分页返回。
 class AlbumArtistListPagedResult {
   final List<AlbumArtistGroupItem> items;
   final MusicListPagination pagination;
@@ -55,7 +57,7 @@ class AlbumArtistListPagedResult {
   factory AlbumArtistListPagedResult.fromJson(Map<String, dynamic> json) {
     final envelope = MusicPagedEnvelope.read(json);
     return AlbumArtistListPagedResult(
-      // 名字为空的组没法点进去，属于脏数据，直接丢
+      // 组名为空时无法进入详情，视为脏数据丢弃。
       items: json
           .readList(const ['items'], AlbumArtistGroupItem.fromJson)
           .where((item) => item.name.isNotEmpty)

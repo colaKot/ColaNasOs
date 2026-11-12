@@ -1,73 +1,60 @@
 import 'dart:async';
 
-import '../../../compat/base_components.dart';
-import '../../../compat/lyric_kit.dart';
-
 import 'package:flutter/material.dart';
 
+import '../../../compat/base_components.dart';
 import '../../../compat/getx.dart';
-
+import '../../../compat/lyric_kit.dart';
 import 'cola_stage_dynamic_lyric_parser.dart';
 import 'cola_stage_dynamic_lyric_view.dart';
 import 'cola_stage_lyric_search_dialog.dart';
 
-const Color _kLyricHighlightColor = Colors.white;
+/// 歌词高亮统一用纯白，普通行按主题透明度变暗。
+const Color _kHighlight = Colors.white;
 
-/// 依据主题与居中模式生成歌词样式：把原先 State 里的 4 层 copyWith 链
-/// 收成纯函数，样式计算不再依赖 widget / State。
-LyricStyle _styleFor(ThemeData theme, bool centerMode) {
-  final localBase = LyricStyles.default1;
-  final localActive = localBase.activeStyle;
-  final localNormal = localBase.textStyle;
+LyricStyle _styleFor(ThemeData theme, bool centered) {
+  final base = LyricStyles.default1;
+  final normal = base.textStyle;
+  final active = base.activeStyle;
+  final translation = base.translationStyle;
 
-  return localBase.copyWith(
-    translationStyle: (localBase.translationStyle).copyWith(
-      fontSize: ((localBase.translationStyle).fontSize ?? 14) + 2,
-      color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-    ),
-    textStyle: localNormal.copyWith(
-      fontSize: (localNormal.fontSize ?? 16) + 2,
-      color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-    ),
-    textAlign: centerMode ? TextAlign.center : TextAlign.left,
-    selectedColor: _kLyricHighlightColor,
-    highlightAlign: centerMode
+  return base.copyWith(
+    textAlign: centered ? TextAlign.center : TextAlign.left,
+    contentAlignment: centered
+        ? CrossAxisAlignment.center
+        : CrossAxisAlignment.start,
+    highlightAlign: centered
+        ? MainAxisAlignment.center
+        : MainAxisAlignment.start,
+    activeAlignment: centered
         ? MainAxisAlignment.center
         : MainAxisAlignment.start,
     fadeRange: FadeRange(
-      top: (localBase.fadeRange?.top ?? 80) * 0.35,
-      bottom: (localBase.fadeRange?.bottom ?? 80),
+      top: (base.fadeRange?.top ?? 80) * 0.35,
+      bottom: base.fadeRange?.bottom ?? 80,
     ),
-    contentPadding: centerMode
-        ? const EdgeInsets.fromLTRB(0, 64, 0, 20)
-        : const EdgeInsets.fromLTRB(0, 64, 10, 20),
-    contentAlignment: centerMode
-        ? CrossAxisAlignment.center
-        : CrossAxisAlignment.start,
-    activeStyle: localActive.copyWith(
+    contentPadding: EdgeInsets.fromLTRB(0, 64, centered ? 0 : 10, 20),
+    selectedColor: _kHighlight,
+    activeHighlightColor: _kHighlight,
+    textStyle: normal.copyWith(
+      fontSize: (normal.fontSize ?? 16) + 2,
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+    ),
+    translationStyle: translation.copyWith(
+      fontSize: (translation.fontSize ?? 14) + 2,
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+    ),
+    activeStyle: active.copyWith(
+      fontSize: (active.fontSize ?? 18) + 8,
       fontWeight: FontWeight.w700,
-      fontSize: (localActive.fontSize ?? 18) + 8,
-      color: _kLyricHighlightColor,
+      color: _kHighlight,
     ),
-    activeHighlightColor: _kLyricHighlightColor,
-    activeAlignment: centerMode
-        ? MainAxisAlignment.center
-        : MainAxisAlignment.start,
   );
 }
 
-class MusicPlayCtrlFullScreenLyricBlock extends StatefulWidget {
-  final Duration trackDuration;
-  final String title;
-  final Duration position;
-  final String musicPath;
-  final String lyrics;
-  final String artist;
-  final String album;
-  final Future<void> Function(Duration position) onSeekTo;
-  final bool centerMode;
-
-  const MusicPlayCtrlFullScreenLyricBlock({
+/// 歌词区：曲目信息 + 在线歌词搜索入口 + 歌词滚动视图。
+class ColaMusicStageLyrics extends StatefulWidget {
+  const ColaMusicStageLyrics({
     super.key,
     required this.musicPath,
     required this.title,
@@ -80,141 +67,187 @@ class MusicPlayCtrlFullScreenLyricBlock extends StatefulWidget {
     this.centerMode = false,
   });
 
+  final String musicPath;
+  final String title;
+  final String album;
+  final String artist;
+  final String lyrics;
+  final Duration trackDuration;
+  final Duration position;
+  final Future<void> Function(Duration position) onSeekTo;
+  final bool centerMode;
+
   @override
-  State<MusicPlayCtrlFullScreenLyricBlock> createState() =>
-      _MusicPlayCtrlFullScreenLyricBlockState();
+  State<ColaMusicStageLyrics> createState() => _ColaMusicStageLyricsState();
 }
 
-class _MusicPlayCtrlFullScreenLyricBlockState
-    extends State<MusicPlayCtrlFullScreenLyricBlock> {
-  late final LyricController _controller;
-  LyricModel? _dynamicLyricModel;
+class _ColaMusicStageLyricsState extends State<ColaMusicStageLyrics> {
+  late final LyricController _lyric;
+  LyricModel? _wordTimedModel;
 
-  void _loadLyric(String lyric) {
-    final localParsed = MusicPlayCtrlFullScreenDynamicLyricParser.tryParse(
-      lyric,
-    );
-    _dynamicLyricModel = localParsed;
-    // 表驱动：解析结果有无 → 对应的加载动作
-    final loaders = <bool, void Function()>{
-      true: () => _controller.loadLyricModel(localParsed!),
-      false: () => _controller.loadLyric(lyric),
-    };
-    loaders[localParsed != null]!();
+  @override
+  void initState() {
+    super.initState();
+    _lyric = LyricController()..setOnTapLineCallback(_seekToLine);
+    final raw = widget.lyrics.trim();
+    if (raw.isNotEmpty) _loadLyric(raw);
+    _lyric.setProgress(widget.position);
   }
 
-  Future<void> _showLyricSearchDialog() async {
-    final localOpenedMusicPath = widget.musicPath;
-    final localLrc = await MusicPlayCtrlFullScreenLyricSearchDialog.show(
+  @override
+  void didUpdateWidget(covariant ColaMusicStageLyrics oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.onSeekTo != oldWidget.onSeekTo) {
+      _lyric.setOnTapLineCallback(_seekToLine);
+    }
+    final next = widget.lyrics.trim();
+    if (next != oldWidget.lyrics.trim()) _loadLyric(next);
+    if (widget.position != oldWidget.position) {
+      _lyric.setProgress(widget.position);
+    }
+  }
+
+  @override
+  void dispose() {
+    _lyric.dispose();
+    super.dispose();
+  }
+
+  void _seekToLine(Duration at) => unawaited(widget.onSeekTo(at));
+
+  /// 带逐字时间轴的歌词交给专用视图，否则走普通 LRC 解析。
+  void _loadLyric(String raw) {
+    final parsed = ColaMusicStageWordLyricParser.tryParse(raw);
+    _wordTimedModel = parsed;
+    if (parsed == null) {
+      _lyric.loadLyric(raw);
+    } else {
+      _lyric.loadLyricModel(parsed);
+    }
+  }
+
+  Future<void> _openLyricSearch() async {
+    final pathAtOpen = widget.musicPath;
+    final picked = await ColaMusicStageLyricSearch.show(
       context,
       musicPath: widget.musicPath,
       title: widget.title,
       artist: widget.artist,
       trackDuration: widget.trackDuration,
     );
-    final localNext = (localLrc ?? '').trim();
-    if (localNext.isEmpty) return;
-    if (!mounted || widget.musicPath != localOpenedMusicPath) return;
+    final lrc = (picked ?? '').trim();
+    if (lrc.isEmpty) return;
+    // 搜索期间可能已经切歌，路径变了就不要把歌词塞给新曲目。
+    if (!mounted || widget.musicPath != pathAtOpen) return;
     setState(() {
-      _loadLyric(localNext);
+      _loadLyric(lrc);
     });
-    _controller.setProgress(widget.position);
+    _lyric.setProgress(widget.position);
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = LyricController();
-    _controller.setOnTapLineCallback((position) {
-      unawaited(widget.onSeekTo(position));
-    });
-    final lyric = widget.lyrics.trim();
-    if (lyric.isNotEmpty) {
-      _loadLyric(lyric);
-    }
-    _controller.setProgress(widget.position);
-  }
-
-  @override
-  void didUpdateWidget(covariant MusicPlayCtrlFullScreenLyricBlock oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final localNextLyric = widget.lyrics.trim();
-    // 表驱动：把「字段是否变化」与「对应要执行的动作」列成一张表，按序执行命中项
-    final changes = <({bool changed, void Function() apply})>[
-      (
-        changed: widget.onSeekTo != oldWidget.onSeekTo,
-        apply: () => _controller.setOnTapLineCallback(
-          (position) => unawaited(widget.onSeekTo(position)),
+  Widget _metaLine(ThemeData theme, String label, String value) {
+    if (value.trim().isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
+      child: Text(
+        '$label: $value',
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
         ),
       ),
-      (
-        changed: localNextLyric != oldWidget.lyrics.trim(),
-        apply: () => _loadLyric(localNextLyric),
-      ),
-      (
-        changed: widget.position != oldWidget.position,
-        apply: () => _controller.setProgress(widget.position),
-      ),
-    ];
-    for (final change in changes) {
-      if (change.changed) change.apply();
-    }
+    );
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  Widget _header(ThemeData theme) {
+    final centered = widget.centerMode;
+    final tint = theme.colorScheme.onSurface.withValues(alpha: 0.65);
 
-  Widget _buildLyricArea(ThemeData theme, {required double height}) {
-    final localLyricStyle = _styleFor(theme, widget.centerMode);
-    final localLyricText = widget.lyrics.trim();
-    if (localLyricText.isEmpty) {
-      // 没歌词时把「搜索歌词」直接摆在这儿：以前只有标题栏那一个入口，
-      // 窗口矮 / 手机竖屏时标题栏被挤走，用户就找不到搜索词的地方了。
-      return Align(
-        alignment: widget.centerMode ? Alignment.topCenter : Alignment.topLeft,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: widget.centerMode
-              ? CrossAxisAlignment.center
-              : CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: centered
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          widget.title,
+          textAlign: centered ? TextAlign.center : TextAlign.left,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.92),
+          ),
+        ),
+        _metaLine(theme, 'music_label_album'.tr, widget.album),
+        _metaLine(theme, 'music_label_singer'.tr, widget.artist),
+        const SizedBox(height: 14.0),
+        Row(
+          mainAxisAlignment: centered
+              ? MainAxisAlignment.center
+              : MainAxisAlignment.start,
           children: <Widget>[
-            Text(
-              'music_no_lyric'.tr,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                height: 1.5,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
-              ),
-            ),
-            const SizedBox(height: 10.0),
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: theme.colorScheme.onSurface.withValues(
-                  alpha: 0.75,
-                ),
-                side: BorderSide(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
-                ),
-              ),
-              onPressed: _showLyricSearchDialog,
-              label: Text('music_search_lyric'.tr),
-              icon: const Icon(Icons.search, size: 18.0),
+            CustomOutlinedButton(
+              text: 'music_search_lyric'.tr,
+              onPressed: _openLyricSearch,
+              icon: const Icon(Icons.search),
+              foregroundColor: tint,
+              borderColor: tint,
             ),
           ],
         ),
-      );
-    }
+        const SizedBox(height: 12.0),
+      ],
+    );
+  }
 
-    if (_dynamicLyricModel != null) {
+  /// 没有歌词时不只提示，还把搜索入口一起摆在这里；
+  /// 窄屏上标题栏可能被挤出视野，只靠标题栏的按钮会找不到入口。
+  Widget _emptyLyrics(ThemeData theme) {
+    final centered = widget.centerMode;
+    final tint = theme.colorScheme.onSurface.withValues(alpha: 0.75);
+
+    return Align(
+      alignment: centered ? Alignment.topCenter : Alignment.topLeft,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: centered
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'music_no_lyric'.tr,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              height: 1.5,
+              color: tint,
+            ),
+          ),
+          const SizedBox(height: 10.0),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: tint,
+              side: BorderSide(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+              ),
+            ),
+            onPressed: _openLyricSearch,
+            label: Text('music_search_lyric'.tr),
+            icon: const Icon(Icons.search, size: 18.0),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _lyricBody(ThemeData theme, double height) {
+    if (widget.lyrics.trim().isEmpty) return _emptyLyrics(theme);
+
+    final style = _styleFor(theme, widget.centerMode);
+    final model = _wordTimedModel;
+    if (model != null) {
       return SizedBox(
         height: height,
-        child: MusicPlayCtrlFullScreenDynamicLyricView(
-          style: localLyricStyle,
+        child: ColaMusicStageWordLyricView(
+          style: style,
           onSeekTo: widget.onSeekTo,
-          model: _dynamicLyricModel!,
-          controller: _controller,
+          model: model,
+          controller: _lyric,
           centerMode: widget.centerMode,
         ),
       );
@@ -222,9 +255,9 @@ class _MusicPlayCtrlFullScreenLyricBlockState
 
     return LyricView(
       width: double.infinity,
-      style: localLyricStyle,
+      style: style,
       height: height,
-      controller: _controller,
+      controller: _lyric,
     );
   }
 
@@ -232,75 +265,17 @@ class _MusicPlayCtrlFullScreenLyricBlockState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    Widget metaLine(String label, String value) {
-      if (value.trim().isEmpty) return const SizedBox.shrink();
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(0, 10, 0, 0),
-        child: Text(
-          '$label: $value',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-          ),
-        ),
-      );
-    }
-
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 640),
       child: LayoutBuilder(
-        builder: (context, constraints) {
-          final bounded =
-              constraints.hasBoundedHeight && constraints.maxHeight.isFinite;
-
-          final localHeader = Column(
-            crossAxisAlignment: widget.centerMode
-                ? CrossAxisAlignment.center
-                : CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                widget.title,
-                textAlign: widget.centerMode
-                    ? TextAlign.center
-                    : TextAlign.left,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.92),
-                ),
-              ),
-              metaLine('music_label_album'.tr, widget.album),
-              metaLine('music_label_singer'.tr, widget.artist),
-              const SizedBox(height: 14.0),
-              Row(
-                mainAxisAlignment: widget.centerMode
-                    ? MainAxisAlignment.center
-                    : MainAxisAlignment.start,
-                children: <Widget>[
-                  CustomOutlinedButton(
-                    text: 'music_search_lyric'.tr,
-                    onPressed: _showLyricSearchDialog,
-                    icon: const Icon(Icons.search),
-                    foregroundColor: theme.colorScheme.onSurface.withValues(
-                      alpha: 0.65,
-                    ),
-                    borderColor: theme.colorScheme.onSurface.withValues(
-                      alpha: 0.65,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12.0),
-            ],
-          );
-
+        builder: (_, box) {
+          final bounded = box.hasBoundedHeight && box.maxHeight.isFinite;
           if (!bounded) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                localHeader,
-                SizedBox(
-                  height: 360.0,
-                  child: _buildLyricArea(theme, height: 360.0),
-                ),
+                _header(theme),
+                SizedBox(height: 360.0, child: _lyricBody(theme, 360.0)),
               ],
             );
           }
@@ -308,13 +283,13 @@ class _MusicPlayCtrlFullScreenLyricBlockState
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              localHeader,
+              _header(theme),
               Expanded(
                 child: LayoutBuilder(
-                  builder: (context, c) {
-                    final localH = c.maxHeight <= 0 ? 1.0 : c.maxHeight;
-                    return _buildLyricArea(theme, height: localH);
-                  },
+                  builder: (_, inner) => _lyricBody(
+                    theme,
+                    inner.maxHeight <= 0 ? 1.0 : inner.maxHeight,
+                  ),
                 ),
               ),
             ],

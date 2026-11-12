@@ -4,34 +4,34 @@ import '../../compat/getx.dart';
 ///
 /// 只声明视图与批量动作需要的最小集合；具体列表各自决定「选中项从哪来」、
 /// 「删除走哪个接口」。两个派生 getter 让调用方不必每次自己判空。
-abstract class MusicMultiSelectController {
+abstract class ColaMusicMultiSelect {
   /// 当前选中的 indexId 集合
   RxSet<int> get selectedItems;
 
   /// 当前页是否全选
-  bool get isAllCurrentSelected;
+  bool get allCurrentSelected;
 
   /// 选中项是否都已收藏
-  bool get isSelectedAllFavorited;
+  bool get allSelectedFavorited;
 
   /// 当前是否处在某个歌单内部（决定能不能「从歌单移除」）
-  bool get isInPlayList;
+  bool get insidePlaylist;
 
   bool get hasSelection;
 
   int get selectedCount;
 
-  void toggleSelectAllCurrent();
+  void toggleSelectAll();
 
-  Future<void> toggleFavoriteSelected();
+  Future<void> switchSelectionFavorite();
 
-  Future<void> downloadSelected();
+  Future<void> downloadSelection();
 
-  Future<void> deleteSelected();
+  Future<void> deleteSelection();
 
-  Future<void> addToPlayListSelected();
+  Future<void> addSelectionToPlaylist();
 
-  Future<void> removeFromPlayListSelected();
+  Future<void> removeSelectionFromPlaylist();
 
-  void exitMultiSelectMode();
+  void leaveMultiSelect();
 }

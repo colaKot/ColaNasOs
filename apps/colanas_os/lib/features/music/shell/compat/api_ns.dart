@@ -1,15 +1,11 @@
-/// 既有实现 `/api/music/*` → 本项目 `/api/v1/music/compat/*` 的唯一映射点。
+/// 音乐兼容接口的地址映射点：客户端 `/api/music/*` → `/api/v1/music/compat/*`。
 ///
-/// 为什么只有「转发」而没有字段映射：30 多个字段的映射、cursor → page 的换算、
-/// int id ↔ uuid 的互转，全部放在服务端 `src/modules/music/routes/compat.ts` 里。
-/// 这样做的好处是改一次、跑个 `smoke:music-compat` 就能回归，不用重编客户端。
+/// 字段映射、cursor → page 换算、int id ↔ uuid 互转全部在服务端
+/// `src/modules/music/routes/compat.ts` 完成；客户端只处理两处本地差异：
+/// 1. `/api/music/detail/get` 对应服务端 `/compat/detail`；
+/// 2. `source/update/$id`、`source/relocate/$id` 的 id 改为收在 body 里。
 ///
-/// 这里只处理两件本地差异：
-/// 1. `/api/music/detail/get` 在服务端叫 `/compat/detail`；
-/// 2. `source/update/$id`、`source/relocate/$id` 在既有实现里是**路径参数**，
-///    服务端统一收 body 里的 `id`。
-///
-/// **不要改搬运过来的 controller / view 源文件**，差异就该烂在这一层。
+/// 所有差异集中在这一层，业务 service / view 不再感知地址差异。
 library;
 
 import 'dart:convert';

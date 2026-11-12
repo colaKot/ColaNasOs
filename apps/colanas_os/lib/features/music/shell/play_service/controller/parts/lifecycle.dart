@@ -84,7 +84,7 @@ extension MusicPlayServiceLifecycle on MusicPlayServiceController {
   }
 
   void _subscribeAudioSessionEvents(AudioSession session) {
-    // 来电/其他 app 抢占焦点时自动暂停，焦点归还后恢复播放
+    // 被电话或其他应用打断时先暂停，焦点回来后再按中断前的播放意图续播。
     _audioSessionSubs.add(
       session.interruptionEventStream.listen((event) {
         if (isClosed) return;
@@ -103,7 +103,7 @@ extension MusicPlayServiceLifecycle on MusicPlayServiceController {
         }
       }),
     );
-    // 耳机拔出时暂停（Becoming Noisy）
+    // 耳机被拔出（Becoming Noisy）时停止当前播放，避免声音外放。
     _audioSessionSubs.add(
       session.becomingNoisyEventStream.listen((_) {
         if (isClosed) return;

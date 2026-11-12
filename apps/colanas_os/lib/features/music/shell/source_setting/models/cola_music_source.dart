@@ -1,7 +1,7 @@
 import '../../compat/json_read.dart';
 
 /// 后端同一字段存在 snake_case / camelCase 两套键，这里集中声明，
-/// `MusicSource.fromJson` 只引用常量，避免逐个字段重复拼键数组。
+/// `ColaMusicSource.fromJson` 只引用常量，避免逐个字段重复拼键数组。
 const _kId = <String>['id'];
 const _kPath = <String>['path'];
 const _kExists = <String>['exists'];
@@ -58,7 +58,7 @@ const _kFields = <String, _FieldSpec>{
 };
 
 /// 从字段名 Map 落回强类型构造；fromJson / copyWith 共用这一处出口。
-MusicSource _fromValues(Map<String, dynamic> v) => MusicSource(
+ColaMusicSource _fromValues(Map<String, dynamic> v) => ColaMusicSource(
   id: v['id'] as int,
   path: v['path'] as String,
   exists: v['exists'] as bool,
@@ -82,7 +82,7 @@ MusicSource _fromValues(Map<String, dynamic> v) => MusicSource(
 ///
 /// 旧结构里 `scanInterval`（0/1）和 `scanIntervalMs` 是**冗余**的，前者只是
 /// 后者的开关形态；这里保留字段以兼容接口，但判定一律看 `scanIntervalMs`。
-class MusicSource {
+class ColaMusicSource {
   final int id;
   final String path;
   final bool exists;
@@ -96,7 +96,7 @@ class MusicSource {
   final String? scanIntervalConfig;
   final int lastScanTime;
 
-  const MusicSource({
+  const ColaMusicSource({
     required this.id,
     required this.path,
     required this.exists,
@@ -111,7 +111,7 @@ class MusicSource {
     required this.lastScanTime,
   });
 
-  factory MusicSource.fromJson(Map<String, dynamic> json) {
+  factory ColaMusicSource.fromJson(Map<String, dynamic> json) {
     final values = <String, dynamic>{
       for (final entry in _kFields.entries) entry.key: entry.value.read(json),
     };
@@ -129,7 +129,7 @@ class MusicSource {
 
   bool get scanOnChange => scanWhenChange != 0;
 
-  MusicSource copyWith({
+  ColaMusicSource copyWith({
     String? path,
     bool? exists,
     int? scanWhenStart,

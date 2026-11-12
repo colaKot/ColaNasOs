@@ -127,7 +127,7 @@ class MusicCollectionCard extends StatelessWidget {
     for (final action in actions) {
       if (action.dividerBefore) entries.add(const MenuDivider());
       entries.add(
-        CustomContextMenuItem.create(
+        ColaContextMenuItem.create(
           value: action.id,
           onSelected: (_) => action.run(),
           label: Text(action.label),

@@ -1,10 +1,9 @@
-import 'dart:math';
+import 'dart:math' as math;
 import 'dart:ui';
-
-import '../../../compat/cola_device_utils.dart';
 
 import 'package:flutter/material.dart';
 
+import '../../../compat/cola_device_utils.dart';
 import '../../../list/models/cola_list_models.dart';
 import '../../../shared/music_item_logic.dart';
 import '../../../shared/music_playback_logic.dart';
@@ -14,244 +13,237 @@ import '../../play_ctrl_bottom/parts/cola_dock_center_area.dart';
 import '../../play_ctrl_bottom/parts/cola_dock_left_area.dart';
 import '../../play_ctrl_bottom/parts/cola_dock_volume_control.dart';
 
-class MusicPlayCtrlFullScreenBottomBar extends StatefulWidget {
-  final double volume;
-  final Duration position;
-  final ValueChanged<double> onVolumeChanged;
-  final VoidCallback onToggleLoopMode;
-  final VoidCallback? onToggleFavorite;
-  final VoidCallback onPrev;
-  final VoidCallback onPlayPause;
-  final VoidCallback onNext;
-  final VoidCallback? onAddToPlayList;
-  final MusicLoopMode loopMode;
-  final IconData loopIcon;
-  final MusicListItem item;
-  final bool isPlaying;
-  final bool favoriteLoading;
-  final Duration duration;
-  final String discAsset;
-  final String coverUrl;
-  final MusicPlayServiceController controller;
-  final Duration buffered;
-  final Future<void> Function(Duration position) onSeekTo;
-
-  const MusicPlayCtrlFullScreenBottomBar({
-    required this.volume,
-    required this.position,
-    required this.onVolumeChanged,
-    required this.onToggleLoopMode,
-    required this.onToggleFavorite,
-    required this.onSeekTo,
-    required this.onPrev,
-    required this.onPlayPause,
-    required this.onNext,
-    required this.onAddToPlayList,
-    required this.loopMode,
-    required this.loopIcon,
+/// 舞台底部控制区：磨砂背景 + 进度条 + 曲目信息 + 播放控制。
+class ColaMusicStageControls extends StatefulWidget {
+  const ColaMusicStageControls({
     super.key,
+    required this.controller,
     required this.item,
     required this.isPlaying,
-    required this.favoriteLoading,
-    required this.duration,
     required this.discAsset,
-    required this.coverUrl,
-    required this.controller,
+    required this.position,
+    required this.duration,
     required this.buffered,
+    required this.loopIcon,
+    required this.loopMode,
+    required this.volume,
+    required this.favoriteLoading,
+    required this.coverUrl,
+    required this.onToggleFavorite,
+    required this.onToggleLoopMode,
+    required this.onPrev,
+    required this.onNext,
+    required this.onPlayPause,
+    required this.onAddToPlayList,
+    required this.onVolumeChanged,
+    required this.onSeekTo,
   });
 
+  final MusicPlayServiceController controller;
+  final MusicListItem item;
+  final bool isPlaying;
+  final String discAsset;
+  final Duration position;
+  final Duration duration;
+  final Duration buffered;
+  final IconData loopIcon;
+  final MusicLoopMode loopMode;
+  final double volume;
+  final bool favoriteLoading;
+  final String coverUrl;
+  final VoidCallback? onToggleFavorite;
+  final VoidCallback onToggleLoopMode;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+  final VoidCallback onPlayPause;
+  final VoidCallback? onAddToPlayList;
+  final ValueChanged<double> onVolumeChanged;
+  final Future<void> Function(Duration position) onSeekTo;
+
   @override
-  State<MusicPlayCtrlFullScreenBottomBar> createState() =>
-      _MusicPlayCtrlFullScreenBottomBarState();
+  State<ColaMusicStageControls> createState() => _ColaMusicStageControlsState();
 }
 
-class _MusicPlayCtrlFullScreenBottomBarState
-    extends State<MusicPlayCtrlFullScreenBottomBar> {
-  @override
-  Widget build(BuildContext context) {
-    final isNarrow = DeviceUtils.isMobile;
-    final localTheme = Theme.of(context);
-
-    final localDecoration = BoxDecoration(
-      color: isNarrow
-          ? Colors.black.withValues(alpha: 0.15)
-          : Colors.black.withValues(alpha: 0.28),
-      border: Border(
-        top: BorderSide(
-          color: Colors.white.withValues(alpha: 0.06),
-          width: 0.8,
+class _ColaMusicStageControlsState extends State<ColaMusicStageControls> {
+  Widget _scrim(bool narrow) {
+    final sigma = narrow ? 50.0 : 24.0;
+    return Positioned.fill(
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: narrow ? 0.15 : 0.28),
+              border: Border(
+                top: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.06),
+                  width: 0.8,
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
+  }
 
-    final localBlurSigma = isNarrow ? 50.0 : 24.0;
+  /// 窄屏标题行：曲名 + （下载百分比）副标题。
+  Widget _titleRow(ThemeData theme, bool downloading, double progress) {
+    final item = widget.item;
+    final percent = downloading ? MusicTimeText.percent(progress) : '';
+    final subtitle = item.isSeries
+        ? ''
+        : (item.displaySubtitleText.isNotEmpty
+              ? item.displaySubtitleText
+              : item.album.trim());
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          ColaMusicDockMarqueeText(
+            text: item.displayTitle,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 4.0),
+          Row(
+            children: <Widget>[
+              if (percent.isNotEmpty)
+                Text(
+                  percent,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: muted,
+                ),
+              if (percent.isNotEmpty) const SizedBox(width: 8.0),
+              if (subtitle.isNotEmpty)
+                Expanded(
+                  child: Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: muted,
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _transport(bool narrow) {
+    return ColaMusicDockControls(
+      onToggleLoopMode: widget.onToggleLoopMode,
+      onPrev: widget.onPrev,
+      onPlayPause: widget.onPlayPause,
+      onNext: widget.onNext,
+      onAddToPlayList: widget.onAddToPlayList,
+      loopMode: widget.loopMode,
+      loopIcon: widget.loopIcon,
+      isPlaying: widget.isPlaying,
+      isNarrow: narrow,
+    );
+  }
+
+  Widget _seekBar(bool narrow) {
+    return _StageSeekBar(
+      showTimeLabels: narrow,
+      position: widget.position,
+      onSeekTo: widget.onSeekTo,
+      isNarrow: narrow,
+      duration: widget.duration,
+      buffered: widget.buffered,
+    );
+  }
+
+  Widget _narrowContent(ThemeData theme, bool downloading, double progress) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        _titleRow(theme, downloading, progress),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+          child: _seekBar(true),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: Center(child: _transport(true)),
+        ),
+      ],
+    );
+  }
+
+  Widget _wideContent(ThemeData theme, bool downloading, double progress) {
+    final left = ColaMusicDockInfo(
+      onToggleFavorite: widget.onToggleFavorite,
+      onOpenFullscreen: null,
+      item: widget.item,
+      isPlaying: widget.isPlaying,
+      favoriteLoading: widget.favoriteLoading,
+      downloadProgress: progress,
+      downloading: downloading,
+      discAsset: widget.discAsset,
+      coverUrl: widget.coverUrl,
+    );
+    final volume = ColaMusicDockVolume(
+      volume: widget.volume,
+      onToggleMute: widget.controller.toggleMute,
+      onChanged: widget.onVolumeChanged,
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        _seekBar(false),
+        const SizedBox(height: 6.0),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: Row(
+            children: <Widget>[
+              Expanded(flex: 3, child: left),
+              Expanded(flex: 5, child: Center(child: _transport(false))),
+              Expanded(
+                flex: 3,
+                child: Align(alignment: Alignment.centerRight, child: volume),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final narrow = DeviceUtils.isMobile;
+    final theme = Theme.of(context);
+    final download = MusicDownloadState(
+      downloading: widget.controller.isDownloading.value,
+      fileHash: widget.controller.downloadingFileHash.value,
+      progress: widget.controller.downloadProgress.value,
+    );
+    final downloading = download.matches(widget.item.fileHash);
+    final progress = downloading ? download.progress : 0.0;
 
     return Stack(
       clipBehavior: Clip.none,
       children: <Widget>[
-        Positioned.fill(
-          child: ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(
-                sigmaX: localBlurSigma,
-                sigmaY: localBlurSigma,
-              ),
-              child: Container(decoration: localDecoration),
-            ),
-          ),
-        ),
+        _scrim(narrow),
         SafeArea(
           top: false,
           child: LayoutBuilder(
-            builder: (ctx, c) {
-              final isNarrow = DeviceUtils.isMobile;
-              final downloadState = MusicDownloadState(
-                downloading: widget.controller.isDownloading.value,
-                fileHash: widget.controller.downloadingFileHash.value,
-                progress: widget.controller.downloadProgress.value,
-              );
-              final localDownloading = downloadState.matches(
-                widget.item.fileHash,
-              );
-              final localDownloadProgress = localDownloading
-                  ? downloadState.progress
-                  : 0.0;
-
-              final localSubtitle = widget.item.isSeries
-                  ? ''
-                  : widget.item.displaySubtitleText.isNotEmpty
-                  ? widget.item.displaySubtitleText
-                  : widget.item.album.trim();
-              final localSubtitleColor = localTheme.colorScheme.onSurface
-                  .withValues(alpha: 0.6);
-              final localProgressText = localDownloading
-                  ? MusicTimeText.percent(localDownloadProgress)
-                  : '';
-
-              final localTitleRow = Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 6),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    MusicPlayCtrlBottomMarqueeText(
-                      text: widget.item.displayTitle,
-                      style: localTheme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: localTheme.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 4.0),
-                    Row(
-                      children: <Widget>[
-                        if (localProgressText.isNotEmpty)
-                          Text(
-                            localProgressText,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: localTheme.textTheme.bodySmall?.copyWith(
-                              color: localSubtitleColor,
-                            ),
-                          ),
-                        if (localProgressText.isNotEmpty)
-                          const SizedBox(width: 8.0),
-                        if (localSubtitle.isNotEmpty)
-                          Expanded(
-                            child: Text(
-                              localSubtitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: localTheme.textTheme.bodySmall?.copyWith(
-                                color: localSubtitleColor,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-
-              final localControls = MusicPlayCtrlBottomCenterControls(
-                onToggleLoopMode: widget.onToggleLoopMode,
-                onPrev: widget.onPrev,
-                onPlayPause: widget.onPlayPause,
-                onNext: widget.onNext,
-                onAddToPlayList: widget.onAddToPlayList,
-                loopMode: widget.loopMode,
-                loopIcon: widget.loopIcon,
-                isPlaying: widget.isPlaying,
-                isNarrow: isNarrow,
-              );
-
-              final localSeekBar = _FullScreenHoverSeekBar(
-                showTimeLabels: isNarrow,
-                position: widget.position,
-                onSeekTo: widget.onSeekTo,
-                isNarrow: isNarrow,
-                duration: widget.duration,
-                buffered: widget.buffered,
-              );
-
-              if (isNarrow) {
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    localTitleRow,
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-                      child: localSeekBar,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                      child: Center(child: localControls),
-                    ),
-                  ],
-                );
-              }
-
-              final localLeft = MusicPlayCtrlBottomLeftArea(
-                onToggleFavorite: widget.onToggleFavorite,
-                onOpenFullscreen: null,
-                item: widget.item,
-                isPlaying: widget.isPlaying,
-                favoriteLoading: widget.favoriteLoading,
-                downloadProgress: localDownloadProgress,
-                downloading: localDownloading,
-                discAsset: widget.discAsset,
-                coverUrl: widget.coverUrl,
-              );
-
-              final localVol = MusicPlayCtrlBottomVolumeControl(
-                volume: widget.volume,
-                onToggleMute: widget.controller.toggleMute,
-                onChanged: widget.onVolumeChanged,
-              );
-
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  localSeekBar,
-                  const SizedBox(height: 6.0),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                    child: Row(
-                      children: <Widget>[
-                        Expanded(flex: 3, child: localLeft),
-                        Expanded(flex: 5, child: Center(child: localControls)),
-                        Expanded(
-                          flex: 3,
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: localVol,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
+            builder: (_, _) => narrow
+                ? _narrowContent(theme, downloading, progress)
+                : _wideContent(theme, downloading, progress),
           ),
         ),
       ],
@@ -259,15 +251,9 @@ class _MusicPlayCtrlFullScreenBottomBarState
   }
 }
 
-class _FullScreenHoverSeekBar extends StatefulWidget {
-  final Duration position;
-  final Duration duration;
-  final Duration buffered;
-  final Future<void> Function(Duration position) onSeekTo;
-  final bool isNarrow;
-  final bool showTimeLabels;
-
-  const _FullScreenHoverSeekBar({
+/// 全屏进度条：悬停 / 拖拽时轨道变粗，并在滑块上方浮出时间气泡。
+class _StageSeekBar extends StatefulWidget {
+  const _StageSeekBar({
     required this.position,
     required this.duration,
     required this.buffered,
@@ -276,209 +262,239 @@ class _FullScreenHoverSeekBar extends StatefulWidget {
     this.showTimeLabels = false,
   });
 
+  final Duration position;
+  final Duration duration;
+  final Duration buffered;
+  final Future<void> Function(Duration position) onSeekTo;
+  final bool isNarrow;
+  final bool showTimeLabels;
+
   @override
-  State<_FullScreenHoverSeekBar> createState() =>
-      _FullScreenHoverSeekBarState();
+  State<_StageSeekBar> createState() => _StageSeekBarState();
 }
 
-class _FullScreenHoverSeekBarState extends State<_FullScreenHoverSeekBar> {
-  bool _hover = false;
+class _StageSeekBarState extends State<_StageSeekBar> {
+  bool _hovered = false;
   bool _dragging = false;
   double _dragValueMs = 0;
 
+  void _setHovered(bool value) {
+    if (_hovered == value) return;
+    setState(() => _hovered = value);
+  }
+
+  void _beginDrag(double value) {
+    setState(() {
+      _dragging = true;
+      _dragValueMs = value;
+    });
+  }
+
+  Future<void> _finishDrag(double value) async {
+    setState(() {
+      _dragging = false;
+      _dragValueMs = value;
+    });
+    await widget.onSeekTo(MusicSeekBarMath.fromMs(value));
+  }
+
+  static double _mix(double from, double to, double t) =>
+      from + (to - from) * t;
+
   @override
   Widget build(BuildContext context) {
-    final localTheme = Theme.of(context);
-    final localMaxMs = MusicSeekBarMath.maxMs(widget.duration);
-    final localEnabled = MusicSeekBarMath.isSeekEnabled(widget.duration);
-    final localValue = MusicSeekBarMath.valueMs(
+    final theme = Theme.of(context);
+    final maxMs = MusicSeekBarMath.maxMs(widget.duration);
+    final enabled = MusicSeekBarMath.isSeekEnabled(widget.duration);
+    final valueMs = MusicSeekBarMath.valueMs(
       widget.position,
       widget.duration,
       dragging: _dragging,
       dragValueMs: _dragValueMs,
     );
-
-    final localShowOverlay = _hover || _dragging;
-    final localPosText = MusicTimeText.of(MusicSeekBarMath.fromMs(localValue));
-    final localDurText = MusicTimeText.of(widget.duration);
+    final overlayVisible = _hovered || _dragging;
 
     return MouseRegion(
-      onExit: (_) => setState(() => _hover = false),
-      onEnter: (_) => setState(() => _hover = true),
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
       child: TweenAnimationBuilder<double>(
-        tween: Tween<double>(end: localShowOverlay ? 1 : 0),
+        tween: Tween<double>(end: overlayVisible ? 1 : 0),
         duration: const Duration(milliseconds: 140),
         curve: Curves.easeOut,
-        builder: (context, t, _) {
-          final localMaxTrackHeight = widget.isNarrow ? 8 : 4;
-          final localBaseTrackHeight = widget.isNarrow ? 6 : 2;
-          final localMaxThumbRadius = widget.isNarrow ? 10 : 8;
-          final localBaseThumbRadius = widget.isNarrow ? 8 : 4;
-          final localMaxOverlayRadius = widget.isNarrow ? 18 : 14;
-          final localBaseOverlayRadius = widget.isNarrow ? 16 : 10;
-          final localSliderBoxHeight = widget.isNarrow ? 18.0 : 12.0;
+        builder: (context, t, _) => _buildBar(
+          context,
+          theme,
+          t,
+          valueMs: valueMs,
+          maxMs: maxMs,
+          enabled: enabled,
+          overlayVisible: overlayVisible,
+        ),
+      ),
+    );
+  }
 
-          final localTrackHeight =
-              localBaseTrackHeight +
-              (localMaxTrackHeight - localBaseTrackHeight) * t;
-          final localThumbRadius =
-              localBaseThumbRadius +
-              (localMaxThumbRadius - localBaseThumbRadius) * t;
-          final localOverlayRadius =
-              localBaseOverlayRadius +
-              (localMaxOverlayRadius - localBaseOverlayRadius) * t;
-          final localSliderTop = -(localSliderBoxHeight / 2);
-          final localTextStyle =
-              localTheme.textTheme.titleMedium?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ) ??
-              const TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 16.0,
-                color: Colors.white,
-              );
-          final localSmallTextStyle = localTheme.textTheme.bodySmall?.copyWith(
-            color: localTheme.colorScheme.onSurface.withValues(alpha: 0.7),
-          );
-          final localTooltipText = MusicTimeText.pair(
-            MusicSeekBarMath.fromMs(localValue),
-            widget.duration,
-          );
-          final localTextPainter = TextPainter(
-            textDirection: Directionality.of(context),
-            text: TextSpan(text: localTooltipText, style: localTextStyle),
-            maxLines: 1,
-          )..layout();
-          final localTooltipHeight = localTextPainter.height + 16;
-          final localTooltipWidth = localTextPainter.width + 32;
+  Widget _buildBar(
+    BuildContext context,
+    ThemeData theme,
+    double t, {
+    required double valueMs,
+    required double maxMs,
+    required bool enabled,
+    required bool overlayVisible,
+  }) {
+    final narrow = widget.isNarrow;
+    final trackHeight = _mix(narrow ? 6 : 2, narrow ? 8 : 4, t);
+    final thumbRadius = _mix(narrow ? 8 : 4, narrow ? 10 : 8, t);
+    final overlayRadius = _mix(narrow ? 16 : 10, narrow ? 18 : 14, t);
+    final boxHeight = narrow ? 18.0 : 12.0;
 
-          final cornerRadius = widget.isNarrow ? 4.0 : 0.0;
+    final bubbleStyle =
+        theme.textTheme.titleMedium?.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+        ) ??
+        const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 16.0,
+        );
+    final bubbleLabel = MusicTimeText.pair(
+      MusicSeekBarMath.fromMs(valueMs),
+      widget.duration,
+    );
+    final painter = TextPainter(
+      text: TextSpan(text: bubbleLabel, style: bubbleStyle),
+      textDirection: Directionality.of(context),
+      maxLines: 1,
+    )..layout();
+    final bubbleWidth = painter.width + 32;
+    final bubbleHeight = painter.height + 16;
 
-          final sliderWidget = SizedBox(
-            height: localSliderBoxHeight,
-            child: LayoutBuilder(
-              builder: (context, c) {
-                final localFraction = (localValue / localMaxMs).clamp(0.0, 1.0);
-                final localThumbX = c.maxWidth * localFraction;
-                final localTooltipLeft = min(
-                  max(0.0, localThumbX - localTooltipWidth / 2),
-                  max(0.0, c.maxWidth - localTooltipWidth),
-                );
-
-                return Stack(
-                  clipBehavior: Clip.none,
-                  children: <Widget>[
-                    Positioned(
-                      left: 0.0,
-                      right: 0.0,
-                      top: localSliderTop,
-                      height: localSliderBoxHeight,
-                      child: MusicSlider(
-                        value: localValue,
-                        max: localMaxMs,
-                        enabled: localEnabled,
-                        trackHeight: localTrackHeight,
-                        thumbRadius: localThumbRadius,
-                        overlayRadius: localOverlayRadius,
-                        inactiveTrackColor: Theme.of(context).dividerColor
-                            .withValues(alpha: 0.42),
-                        trackShape: _FullWidthRectTrackShape(
-                          useRoundedCorners: widget.isNarrow,
-                          cornerRadius: cornerRadius,
-                        ),
-                        onChanged: localEnabled
-                            ? (v) => setState(() {
-                                _dragging = true;
-                                _dragValueMs = v;
-                              })
-                            : null,
-                        onChangeStart: localEnabled
-                            ? (v) => setState(() {
-                                _dragging = true;
-                                _dragValueMs = v;
-                              })
-                            : null,
-                        onChangeEnd: localEnabled
-                            ? (v) async {
-                                setState(() {
-                                  _dragging = false;
-                                  _dragValueMs = v;
-                                });
-                                await widget.onSeekTo(
-                                  MusicSeekBarMath.fromMs(v),
-                                );
-                              }
-                            : null,
-                      ),
-                    ),
-                    Positioned(
-                      left: localTooltipLeft,
-                      top: -localTooltipHeight - 10,
-                      width: localTooltipWidth,
-                      child: IgnorePointer(
-                        child: AnimatedOpacity(
-                          opacity: localShowOverlay ? 1 : 0,
-                          duration: const Duration(milliseconds: 120),
-                          curve: Curves.easeOut,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.55),
-                              borderRadius: BorderRadius.all(
-                                Radius.circular(18),
-                              ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16.0,
-                                vertical: 8.0,
-                              ),
-                              child: Text(
-                                localTooltipText,
-                                style: localTextStyle,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
+    final slider = SizedBox(
+      height: boxHeight,
+      child: LayoutBuilder(
+        builder: (_, box) {
+          final fraction = (valueMs / maxMs).clamp(0.0, 1.0);
+          final thumbX = box.maxWidth * fraction;
+          final bubbleLeft = math.min(
+            math.max(0.0, thumbX - bubbleWidth / 2),
+            math.max(0.0, box.maxWidth - bubbleWidth),
           );
 
-          if (widget.showTimeLabels) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                sliderWidget,
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: <Widget>[
-                    Text(localPosText, style: localSmallTextStyle),
-                    Text(localDurText, style: localSmallTextStyle),
-                  ],
+          return Stack(
+            clipBehavior: Clip.none,
+            children: <Widget>[
+              Positioned(
+                left: 0.0,
+                right: 0.0,
+                top: -(boxHeight / 2),
+                height: boxHeight,
+                child: MusicSlider(
+                  value: valueMs,
+                  max: maxMs,
+                  enabled: enabled,
+                  trackHeight: trackHeight,
+                  thumbRadius: thumbRadius,
+                  overlayRadius: overlayRadius,
+                  inactiveTrackColor: theme.dividerColor.withValues(
+                    alpha: 0.42,
+                  ),
+                  trackShape: _StageTrackShape(
+                    useRoundedCorners: narrow,
+                    cornerRadius: narrow ? 4.0 : 0.0,
+                  ),
+                  onChanged: enabled ? _beginDrag : null,
+                  onChangeStart: enabled ? _beginDrag : null,
+                  onChangeEnd: enabled ? _finishDrag : null,
                 ),
-              ],
-            );
-          }
-
-          return sliderWidget;
+              ),
+              Positioned(
+                left: bubbleLeft,
+                top: -bubbleHeight - 10,
+                width: bubbleWidth,
+                child: _TimeBubble(
+                  text: bubbleLabel,
+                  style: bubbleStyle,
+                  visible: overlayVisible,
+                ),
+              ),
+            ],
+          );
         },
+      ),
+    );
+
+    if (!widget.showTimeLabels) return slider;
+
+    final labelStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+    );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        slider,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: <Widget>[
+            Text(
+              MusicTimeText.of(MusicSeekBarMath.fromMs(valueMs)),
+              style: labelStyle,
+            ),
+            Text(MusicTimeText.of(widget.duration), style: labelStyle),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// 拖动时跟随滑块的时间提示气泡。
+class _TimeBubble extends StatelessWidget {
+  const _TimeBubble({
+    required this.text,
+    required this.style,
+    required this.visible,
+  });
+
+  final String text;
+  final TextStyle style;
+  final bool visible;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.all(Radius.circular(18)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 8.0,
+            ),
+            child: Text(text, style: style),
+          ),
+        ),
       ),
     );
   }
 }
 
-class _FullWidthRectTrackShape extends RectangularSliderTrackShape {
-  final bool useRoundedCorners;
-  final double cornerRadius;
-
-  const _FullWidthRectTrackShape({
+/// 通栏矩形轨道；窄屏时左右两端带圆角，宽屏保持直角。
+class _StageTrackShape extends RectangularSliderTrackShape {
+  const _StageTrackShape({
     this.useRoundedCorners = false,
     this.cornerRadius = 4.0,
   });
+
+  final bool useRoundedCorners;
+  final double cornerRadius;
 
   @override
   Rect getPreferredRect({
@@ -488,17 +504,9 @@ class _FullWidthRectTrackShape extends RectangularSliderTrackShape {
     bool isEnabled = false,
     bool isDiscrete = false,
   }) {
-    final localTrackLeft = offset.dx;
-    final localTrackHeight = sliderTheme.trackHeight ?? 2;
-    final localTrackWidth = parentBox.size.width;
-    final localTrackTop =
-        offset.dy + (parentBox.size.height - localTrackHeight) / 2;
-    return Rect.fromLTWH(
-      localTrackLeft,
-      localTrackTop,
-      localTrackWidth,
-      localTrackHeight,
-    );
+    final height = sliderTheme.trackHeight ?? 2;
+    final top = offset.dy + (parentBox.size.height - height) / 2;
+    return Rect.fromLTWH(offset.dx, top, parentBox.size.width, height);
   }
 
   @override
@@ -530,60 +538,40 @@ class _FullWidthRectTrackShape extends RectangularSliderTrackShape {
       return;
     }
 
-    final Rect localTrackRect = getPreferredRect(
-      sliderTheme: sliderTheme,
+    final rect = getPreferredRect(
       parentBox: parentBox,
       offset: offset,
+      sliderTheme: sliderTheme,
       isEnabled: isEnabled,
       isDiscrete: isDiscrete,
     );
-
-    final ColorTween localActiveTrackColorTween = ColorTween(
+    final activeColor = ColorTween(
       begin: sliderTheme.disabledActiveTrackColor,
       end: sliderTheme.activeTrackColor,
-    );
-    final ColorTween localInactiveTrackColorTween = ColorTween(
+    ).evaluate(enableAnimation)!;
+    final inactiveColor = ColorTween(
       begin: sliderTheme.disabledInactiveTrackColor,
       end: sliderTheme.inactiveTrackColor,
-    );
-    final Paint localActivePaint = Paint()
-      ..color = localActiveTrackColorTween.evaluate(enableAnimation)!;
-    final Paint localInactivePaint = Paint()
-      ..color = localInactiveTrackColorTween.evaluate(enableAnimation)!;
+    ).evaluate(enableAnimation)!;
+    final ltr = textDirection == TextDirection.ltr;
+    final radius = Radius.circular(cornerRadius);
 
-    final Paint leftTrackPaint;
-    final Paint rightTrackPaint;
-    switch (textDirection) {
-      case TextDirection.ltr:
-        leftTrackPaint = localActivePaint;
-        rightTrackPaint = localInactivePaint;
-      case TextDirection.rtl:
-        leftTrackPaint = localInactivePaint;
-        rightTrackPaint = localActivePaint;
-    }
-
-    final RRect localLeftRRect = RRect.fromRectAndCorners(
-      Rect.fromLTWH(
-        localTrackRect.left,
-        localTrackRect.top,
-        thumbCenter.dx - localTrackRect.left,
-        localTrackRect.height,
-      ),
-      topLeft: Radius.circular(cornerRadius),
-      bottomLeft: Radius.circular(cornerRadius),
+    final played = RRect.fromRectAndCorners(
+      Rect.fromLTRB(rect.left, rect.top, thumbCenter.dx, rect.bottom),
+      topLeft: radius,
+      bottomLeft: radius,
     );
-    final RRect localRightRRect = RRect.fromRectAndCorners(
-      Rect.fromLTWH(
-        thumbCenter.dx,
-        localTrackRect.top,
-        localTrackRect.right - thumbCenter.dx,
-        localTrackRect.height,
-      ),
-      topRight: Radius.circular(cornerRadius),
-      bottomRight: Radius.circular(cornerRadius),
+    final remaining = RRect.fromRectAndCorners(
+      Rect.fromLTRB(thumbCenter.dx, rect.top, rect.right, rect.bottom),
+      topRight: radius,
+      bottomRight: radius,
     );
 
-    context.canvas.drawRRect(localLeftRRect, leftTrackPaint);
-    context.canvas.drawRRect(localRightRRect, rightTrackPaint);
+    context.canvas
+      ..drawRRect(played, Paint()..color = ltr ? activeColor : inactiveColor)
+      ..drawRRect(
+        remaining,
+        Paint()..color = ltr ? inactiveColor : activeColor,
+      );
   }
 }

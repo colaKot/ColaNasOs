@@ -1,8 +1,6 @@
-/// 兼容基线 `modules/base/components/` 里音乐模块用到的那几个通用组件。
+/// 音乐模块用到的几个通用视觉组件（网络图片、玻璃卡片、按钮等）。
 ///
-/// 原实现依赖 `app_tokens` / `app_skin` / `extended_image` 三个宿主东西，
-/// 搬不过来也用不上（本项目是 Material 3 + media_kit 体系）。
-/// 这里按**原构造参数签名**重写一份等价外观：调用点一行都不用改。
+/// 统一使用 Material 3 主题与项目色板，构造参数保持简洁，页面按需组合。
 library;
 
 import 'package:flutter/material.dart';
@@ -140,7 +138,10 @@ class CustomGlassCard extends StatelessWidget {
               width: 0.5,
             ),
       ),
-      child: child,
+      // 卡片里会直接放 ListTile / SwitchListTile：水波纹画在**最近的 Material** 上，
+      // 这层背景会把它盖住（debug 下抛「ListTile background color or ink splashes
+      // may be invisible」）。补一层透明 Material，让涟漪落在卡片内部、背景之上。
+      child: Material(type: MaterialType.transparency, child: child),
     );
     if (onTap == null) return box;
     return InkWell(

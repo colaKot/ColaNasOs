@@ -1,13 +1,17 @@
-import '../../../compat/cola_custom_colors.dart';
-
 import 'package:flutter/material.dart';
+import 'package:nas_ui/nas_ui.dart';
 
 import '../../../compat/getx.dart';
-import '../../../compat/host.dart';
 import '../../controller/cola_multi_select_controller.dart';
 
+/// 音乐多选工具条（列表 / 专辑详情 / 歌手详情 / 歌单详情共用）。
+///
+/// 视觉与交互统一走 [NasSelectionBar]（与电视剧列表同一套选择态口径）：
+/// 计数 + 全选 / 取消全选 + 业务动作 + 关闭。
+/// 音乐壳把它放在**底部**（替掉播放条的位置），所以用 `dense` 让动作收成图标，
+/// 否则手机端 390 宽放不下五个动作。
 class MusicListMultiSelectBottomBar extends StatelessWidget {
-  final MusicMultiSelectController controller;
+  final ColaMusicMultiSelect controller;
 
   /// 是否显示「删除文件」。歌单详情页要关掉 —— 那里只说「移出歌单」，
   /// 误点垃圾桶就是删磁盘文件，太危险。
@@ -21,109 +25,67 @@ class MusicListMultiSelectBottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final localExtendedPalette = Theme.of(context).extension<CustomColors>();
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-      height: 56.0,
-      decoration: BoxDecoration(
-        color: localExtendedPalette?.oprationBarBgColor,
-        border: Border(
-          top: BorderSide(color: Get.theme.dividerColor, width: 1.0),
-        ),
-      ),
-      child: Obx(() {
-        final localAllSelected = controller.isAllCurrentSelected;
-        final localCount = controller.selectedItems.length;
-        final localDisabled = localCount <= 0;
-        return Row(
-          children: <Widget>[
-            Expanded(
-              child: Row(
-                children: <Widget>[
-                  CustomCheckbox(
-                    value: localAllSelected,
-                    onChanged: (_) => controller.toggleSelectAllCurrent(),
-                    isCircle: false,
-                  ),
-                  const SizedBox(width: 6.0),
-                  Text(
-                    localAllSelected
-                        ? 'timeline_deselect_all'.tr
-                        : 'timeline_select_all'.tr,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(width: 12.0),
-                  Text(
-                    '$localCount ${'selected'.tr}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                // IconButton(
-                //   tooltip: 'play'.tr,
-                //   onPressed: null,
-                //   icon: const Icon(Icons.play_circle_fill_rounded),
-                // ),
+    final tint = Theme.of(context).colorScheme.primary.withValues(alpha: 0.08);
+    return Obx(() {
+      final allSelected = controller.allCurrentSelected;
+      final count = controller.selectedItems.length;
+      final disabled = count <= 0;
+      return ColoredBox(
+        color: tint,
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 56,
+            child: NasSelectionBar(
+              dense: true,
+              title: '$count ${'selected'.tr}',
+              allSelected: allSelected,
+              onToggleAll: controller.toggleSelectAll,
+              onClose: controller.leaveMultiSelect,
+              actions: [
                 // 「加入歌单」放在收藏前面：多选最常用的动作是攒歌单
-                IconButton(
-                  tooltip: 'add_to_play_list'.tr,
-                  onPressed: localDisabled
-                      ? null
-                      : controller.addToPlayListSelected,
-                  icon: Icon(Icons.playlist_add),
+                NasSelectionAction(
+                  label: 'add_to_play_list'.tr,
+                  icon: Icons.playlist_add,
+                  enabled: !disabled,
+                  onPressed: controller.addSelectionToPlaylist,
                 ),
-                if (controller.isInPlayList)
-                  IconButton(
-                    tooltip: 'remove_from_play_list'.tr,
-                    onPressed: localDisabled
-                        ? null
-                        : controller.removeFromPlayListSelected,
-                    icon: Icon(Icons.playlist_remove),
+                if (controller.insidePlaylist)
+                  NasSelectionAction(
+                    label: 'remove_from_play_list'.tr,
+                    icon: Icons.playlist_remove,
+                    enabled: !disabled,
+                    onPressed: controller.removeSelectionFromPlaylist,
                   ),
-                IconButton(
-                  tooltip: controller.isSelectedAllFavorited
+                NasSelectionAction(
+                  label: controller.allSelectedFavorited
                       ? 'unfavorite'.tr
                       : 'favorites'.tr,
-                  onPressed: localDisabled
-                      ? null
-                      : controller.toggleFavoriteSelected,
-                  icon: Icon(
-                    controller.isSelectedAllFavorited
-                        ? Icons.favorite_border
-                        : Icons.favorite,
-                  ),
+                  icon: controller.allSelectedFavorited
+                      ? Icons.favorite_border
+                      : Icons.favorite,
+                  enabled: !disabled,
+                  onPressed: controller.switchSelectionFavorite,
                 ),
-                IconButton(
-                  tooltip: 'download'.tr,
-                  onPressed: localDisabled ? null : controller.downloadSelected,
-                  icon: const Icon(Icons.download_rounded),
+                NasSelectionAction(
+                  label: 'download'.tr,
+                  icon: Icons.download_rounded,
+                  enabled: !disabled,
+                  onPressed: controller.downloadSelection,
                 ),
                 if (allowDeleteFile)
-                  IconButton(
-                    tooltip: 'delete'.tr,
-                    onPressed: localDisabled ? null : controller.deleteSelected,
-                    icon: Icon(
-                      Icons.delete_outline,
-                      color: localDisabled ? null : Colors.red,
-                    ),
+                  NasSelectionAction(
+                    label: 'delete'.tr,
+                    icon: Icons.delete_outline,
+                    enabled: !disabled,
+                    danger: true,
+                    onPressed: controller.deleteSelection,
                   ),
-                IconButton(
-                  tooltip: 'cancel'.tr,
-                  onPressed: controller.exitMultiSelectMode,
-                  icon: const Icon(Icons.close),
-                ),
               ],
             ),
-          ],
-        );
-      }),
-    );
+          ),
+        ),
+      );
+    });
   }
 }

@@ -31,13 +31,13 @@ class MusicListPage extends StatefulWidget {
   final int? collectionId;
   const MusicListPage({
     super.key,
+    this.isFavorite = false,
+    this.collectionId,
+    this.seriesIndexId,
     this.listType = '',
     this.listId,
-    this.seriesIndexId,
-    this.collectionId,
-    this.isFavorite = false,
-    this.initialSortBy = MusicListSortBy.mtime,
     this.initialSortOrder = MusicListSortOrder.desc,
+    this.initialSortBy = MusicListSortBy.mtime,
   });
 
   @override
@@ -45,424 +45,297 @@ class MusicListPage extends StatefulWidget {
 }
 
 class _MusicListPageState extends State<MusicListPage> {
-  final ScrollController _scrollController = ScrollController();
-  Timer? _throttleTimer;
-  bool? _lastShowMultiBar;
-  late final String _controllerTag;
-  MusicListController? _controller;
-  Timer? _autoTimer;
-  bool _dragging = false;
-  bool _marqueeActive = false;
-  bool _multiModeAtStart = false;
-  bool _additiveAtStart = false;
-  Offset _lastGridLocal = const Offset(0, 0);
-  Offset? _pointerDownGridPos;
   static const double _kMarqueeThreshold = 8;
 
-  String _rectCacheKey = '';
-  List<_GridRectEntry> _gridRectCache = const [];
-  List<double> _gridRectBottoms = const [];
-  double _gridViewportHeight = 0;
+  final ScrollController _scroll = ScrollController();
+  MusicListController? _list;
+  Timer? _autoScrollTimer;
+  Timer? _hitTestTimer;
+  bool? _lastMultiBar;
+  late final String _ctrlTag;
+
+  bool _marqueeOn = false;
+  bool _dragging = false;
+  bool _multiAtPress = false;
+  bool _shiftAtPress = false;
+  Offset _dragLocal = const Offset(0, 0);
+  Offset? _pressLocal;
+  double _viewportH = 0;
+
+  String _cellCacheKey = '';
+  List<_CellBox> _cellBoxes = const <_CellBox>[];
 
   @override
   void initState() {
     super.initState();
-    _controllerTag =
-        'music_list_${widget.listType}_${widget.listId ?? 0}_${widget.seriesIndexId ?? 0}_${widget.collectionId ?? 0}_${widget.isFavorite}_${widget.initialSortBy}_${widget.initialSortOrder}_${UniqueKey()}';
-    _scrollController.addListener(_onScroll);
+    _ctrlTag = _buildCtrlTag();
+    _scroll.addListener(_handleScroll);
   }
 
   @override
   void dispose() {
-    _autoTimer?.cancel();
-    _throttleTimer?.cancel();
-    if (Get.isRegistered<MusicMainController>()) {
-      final mainCtrl = Get.find<MusicMainController>();
-      if (mainCtrl.hidePlayerBar.value) {
-        mainCtrl.hidePlayerBar.value = false;
-      }
-    }
-    if (Get.isRegistered<MusicSubListOverlayController>()) {
-      final overlayCtrl = Get.find<MusicSubListOverlayController>();
-      overlayCtrl.close();
-    }
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
+    _autoScrollTimer?.cancel();
+    _hitTestTimer?.cancel();
+    _releaseSharedState();
+    _scroll.removeListener(_handleScroll);
+    _scroll.dispose();
     super.dispose();
   }
 
-  void _onScroll() {
-    final listState =
-        _controller ??
-        (Get.isRegistered<MusicListController>(tag: _controllerTag)
-            ? Get.find<MusicListController>(tag: _controllerTag)
-            : null);
-    if (listState == null) return;
-    // 列表是翻页模式：触底不累加下一页，loadMore 留空；这里只借公共组件
-    // 统一滚动阈值，并把框选滚动与 markScrolling 收进 onScrolling。
+  String _buildCtrlTag() {
+    final w = widget;
+    return [
+      'music_list',
+      w.listType,
+      w.listId ?? 0,
+      w.seriesIndexId ?? 0,
+      w.collectionId ?? 0,
+      w.isFavorite,
+      w.initialSortBy,
+      w.initialSortOrder,
+      UniqueKey(),
+    ].join('_');
+  }
+
+  void _releaseSharedState() {
+    // dispose 发生在 build / unmount 期间（framework 处于锁内），此处直接改 Rx
+    // 会让仍在树上的 Obx 报「markNeedsBuild called when widget tree was locked」。
+    // 共享状态（播放条 / 框选浮层）收回统一挪到本帧结束之后。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (Get.isRegistered<MusicMainController>()) {
+        Get.find<MusicMainController>().hidePlayerBar.value = false;
+      }
+      if (Get.isRegistered<MusicSubListOverlayController>()) {
+        Get.find<MusicSubListOverlayController>().close();
+      }
+    });
+  }
+
+  MusicListController? _locateList() =>
+      _list ??
+      (Get.isRegistered<MusicListController>(tag: _ctrlTag)
+          ? Get.find<MusicListController>(tag: _ctrlTag)
+          : null);
+
+  void _handleScroll() {
+    final list = _locateList();
+    if (list == null) return;
+    // 列表按页加载，滚动到底不自动续页；这里只复用公共滚动手势：
+    // 框选跟随、停止滚动标记与阈值判定都在 onScrolling 内完成。
     attachPagedScroll(
-      _scrollController,
+      _scroll,
       loadMore: () {},
       onScrolling: () {
         if (_dragging) {
-          listState.updateDragSelection(
-            _lastGridLocal,
-            scrollOffset: _scrollController.offset,
-          );
-          _scheduleHitTest();
+          list.updateDragSelection(_dragLocal, scrollOffset: _scroll.offset);
+          _queueHitTest();
         }
-        listState.markScrolling();
+        list.markScrolling();
       },
       threshold: 360,
     );
   }
 
-  bool get _isAdditiveSelectionActive {
-    final keys = HardwareKeyboard.instance.logicalKeysPressed;
-    return keys.contains(LogicalKeyboardKey.shiftLeft) ||
-        keys.contains(LogicalKeyboardKey.shiftRight);
+  bool get _shiftPressed {
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    return pressed.contains(LogicalKeyboardKey.shiftLeft) ||
+        pressed.contains(LogicalKeyboardKey.shiftRight);
   }
 
-  void _scheduleHitTest() {
-    if (_throttleTimer?.isActive ?? false) return;
-    _throttleTimer = Timer(const Duration(milliseconds: 60), _performHitTest);
+  void _queueHitTest() {
+    if (_hitTestTimer?.isActive ?? false) return;
+    _hitTestTimer = Timer(const Duration(milliseconds: 60), _collectHits);
   }
 
-  int _lowerBoundBottom(List<double> bottoms, double value) {
-    var hi = bottoms.length;
-    var lo = 0;
-    while (lo < hi) {
-      final mid = (lo + hi) >> 1;
-      if (bottoms[mid] <= value) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
-      }
+  Set<int> _collectHits() {
+    final list = _list;
+    if (!_dragging || list == null) return const <int>{};
+    final area = list.selectionRectContent.value;
+    if (area == null) return const <int>{};
+    final hitIds = <int>{};
+    for (final cell in _cellBoxes) {
+      if (cell.rect.bottom <= area.top) continue;
+      if (cell.rect.top > area.bottom) break;
+      if (cell.rect.overlaps(area)) hitIds.add(cell.id);
     }
-    return lo;
+    list.updateDragPreview(hitIds, additive: _shiftAtPress);
+    return hitIds;
   }
 
-  Set<int> _performHitTest() {
-    if (!_dragging) return const {};
-    final listState = _controller;
-    if (listState == null) return const {};
-    final rect = listState.selectionRectContent.value;
-    if (rect == null) return const {};
-    final start = _lowerBoundBottom(_gridRectBottoms, rect.top);
-    final hits = <int>{};
-    for (var i = start; i < _gridRectCache.length; i++) {
-      final r = _gridRectCache[i].rect;
-      if (r.top > rect.bottom) break;
-      if (r.overlaps(rect)) hits.add(_gridRectCache[i].id);
+  void _startEdgeAutoScroll() {
+    _autoScrollTimer ??= Timer.periodic(
+      const Duration(milliseconds: 30),
+      (_) => _edgeScrollTick(),
+    );
+  }
+
+  void _edgeScrollTick() {
+    if (!_dragging || !_scroll.hasClients) return;
+    final position = _scroll.position;
+    if (!position.hasPixels) return;
+    final step = _edgeStepFor(_dragLocal.dy);
+    if (step == 0) return;
+    _scroll.jumpTo(
+      (position.pixels + step).clamp(0.0, position.maxScrollExtent),
+    );
+  }
+
+  double _edgeStepFor(double y) {
+    const zone = 30.0;
+    const speed = 12.0;
+    if (y < zone) {
+      return -speed * ((zone - y).clamp(0.0, zone) / zone);
     }
-    listState.updateDragPreview(hits, additive: _additiveAtStart);
-    return hits;
+    final toBottom = _viewportH - y;
+    if (toBottom < zone) {
+      return speed * ((zone - toBottom).clamp(0.0, zone) / zone);
+    }
+    return 0.0;
   }
 
-  void _ensureAutoTimer() {
-    _autoTimer ??= Timer.periodic(const Duration(milliseconds: 30), (_) {
-      if (!_dragging) return;
-      if (!_scrollController.hasClients) return;
-      final pos = _scrollController.position;
-      if (!pos.hasPixels) return;
-      const edge = 30.0;
-      double delta = 0.0;
-      if (_lastGridLocal.dy < edge) {
-        final t = (edge - _lastGridLocal.dy).clamp(0.0, edge) / edge;
-        delta = -12.0 * t;
-      } else {
-        final distBottom = (_gridViewportHeight - _lastGridLocal.dy);
-        if (distBottom < edge) {
-          final t = (edge - distBottom).clamp(0.0, edge) / edge;
-          delta = 12.0 * t;
-        }
-      }
-      if (delta != 0.0) {
-        final target = (pos.pixels + delta).clamp(0.0, pos.maxScrollExtent);
-        _scrollController.jumpTo(target);
-      }
-    });
-  }
+  void _syncCellCache(MusicListController list, double maxWidth) {
+    final key = '${list.items.length}@${maxWidth.toStringAsFixed(2)}';
+    if (key == _cellCacheKey) return;
+    _cellCacheKey = key;
 
-  void _rebuildGridRectCache({required List items, required double maxWidth}) {
-    const rightPadding = 16.0;
-    const leftPadding = 16.0;
-    const desiredWidth = 115.0;
-    final contentWidth = math.max(0.0, maxWidth - leftPadding - rightPadding);
-    const spacing = 4.0;
-    final crossAxisCount = (contentWidth / desiredWidth).floor().clamp(2, 10);
-    final totalSpacing = spacing * (crossAxisCount - 1);
-    final cellW = ((contentWidth - totalSpacing) / crossAxisCount)
-        .floorToDouble();
+    const gutter = 16.0;
+    const tileWidth = 115.0;
+    const gap = 4.0;
+    final usable = math.max(0.0, maxWidth - gutter * 2);
+    final columns = (usable / tileWidth).floor().clamp(2, 10);
+    final cellW = ((usable - gap * (columns - 1)) / columns).floorToDouble();
     final cellH = cellW + 56.0;
 
-    final bottoms = <double>[];
-    final entries = <_GridRectEntry>[];
-    for (var i = 0; i < items.length; i++) {
-      final id = (items[i].id as int?) ?? 0;
+    final boxes = <_CellBox>[];
+    for (var i = 0; i < list.items.length; i++) {
+      final id = (list.items[i].id as int?) ?? 0;
       if (id <= 0) continue;
-      final col = i % crossAxisCount;
-      final row = i ~/ crossAxisCount;
-      final y = row * (cellH + spacing);
-      final x = leftPadding + col * (cellW + spacing);
-      final r = Rect.fromLTWH(x, y, cellW, cellH);
-      entries.add(_GridRectEntry(id: id, rect: r));
-      bottoms.add(r.bottom);
+      final row = i ~/ columns;
+      final col = i % columns;
+      boxes.add(
+        _CellBox(
+          id: id,
+          rect: Rect.fromLTWH(
+            gutter + col * (cellW + gap),
+            row * (cellH + gap),
+            cellW,
+            cellH,
+          ),
+        ),
+      );
     }
-    _gridRectCache = entries;
-    _gridRectBottoms = bottoms;
+    _cellBoxes = boxes;
+  }
+
+  void _onMarqueeDown(PointerDownEvent event, MusicListController list) {
+    if (event.buttons != kPrimaryButton) return;
+    _pressLocal = event.localPosition;
+    _multiAtPress = list.isMultiSelectMode.value;
+    _shiftAtPress = _shiftPressed;
+    _marqueeOn = false;
+  }
+
+  void _onMarqueeMove(PointerMoveEvent event, MusicListController list) {
+    if (event.buttons != kPrimaryButton) return;
+    final origin = _pressLocal;
+    if (origin == null) return;
+    final local = event.localPosition;
+    if (!_marqueeOn && (local - origin).distance > _kMarqueeThreshold) {
+      _marqueeOn = true;
+      _dragging = true;
+      _dragLocal = local;
+      _startEdgeAutoScroll();
+      _shiftAtPress = _shiftPressed;
+      list.startDragSelection(origin, scrollOffset: _scroll.offset);
+    }
+    if (!_marqueeOn) return;
+    _dragLocal = local;
+    list.updateDragSelection(local, scrollOffset: _scroll.offset);
+    _queueHitTest();
+  }
+
+  void _onMarqueeUp(PointerUpEvent event, MusicListController list) {
+    if (_marqueeOn) {
+      final hitIds = _collectHits();
+      _dragging = false;
+      list.finishDragSelection();
+      list.applyDragSelection(
+        hitIds,
+        multiModeAtStart: _multiAtPress,
+        additive: _shiftAtPress,
+      );
+    } else {
+      list.finishDragSelection();
+    }
+    _pressLocal = null;
+    _marqueeOn = false;
+  }
+
+  void _onMarqueeCancel(PointerCancelEvent event, MusicListController list) {
+    _dragging = false;
+    list.finishDragSelection();
+    _pressLocal = null;
+    _marqueeOn = false;
+  }
+
+  MusicListController _createController() => MusicListController(
+    seriesIndexId: widget.seriesIndexId,
+    listType: widget.listType,
+    listId: widget.listId,
+    isFavorite: widget.isFavorite,
+    initialSortOrder: widget.initialSortOrder,
+    initialSortBy: widget.initialSortBy,
+    collectionId: widget.collectionId,
+  );
+
+  MusicSubListOverlayController _overlayController() =>
+      Get.isRegistered<MusicSubListOverlayController>()
+      ? Get.find<MusicSubListOverlayController>()
+      : Get.put(MusicSubListOverlayController());
+
+  void _syncPlayerBar(bool multiVisible) {
+    if (_lastMultiBar == multiVisible) return;
+    _lastMultiBar = multiVisible;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !Get.isRegistered<MusicMainController>()) return;
+      final main = Get.find<MusicMainController>();
+      if (main.hidePlayerBar.value != multiVisible) {
+        main.hidePlayerBar.value = multiVisible;
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return GetBuilder<MusicListController>(
-      tag: _controllerTag,
-      init: MusicListController(
-        seriesIndexId: widget.seriesIndexId,
-        listType: widget.listType,
-        listId: widget.listId,
-        isFavorite: widget.isFavorite,
-        initialSortOrder: widget.initialSortOrder,
-        initialSortBy: widget.initialSortBy,
-        collectionId: widget.collectionId,
-      ),
-      builder: (listState) {
-        _controller = listState;
+      tag: _ctrlTag,
+      init: _createController(),
+      builder: (list) {
+        _list = list;
         final theme = Theme.of(context);
-        final extendedPalette = theme.extension<CustomColors>();
+        final palette = theme.extension<CustomColors>();
         final barColor =
-            extendedPalette?.oprationBarBgColor ?? theme.colorScheme.surface;
-        final overlayCtrl = Get.isRegistered<MusicSubListOverlayController>()
-            ? Get.find<MusicSubListOverlayController>()
-            : Get.put(MusicSubListOverlayController());
+            palette?.oprationBarBgColor ?? theme.colorScheme.surface;
+        final overlay = _overlayController();
 
-        final list = Column(
+        final page = Column(
           children: <Widget>[
             DeviceUtils.isPhone(context)
                 ? ColoredBox(
                     color: barColor,
-                    child: AppMusicListTopBar(controller: listState),
+                    child: AppMusicListTopBar(controller: list),
                   )
-                : MusicListTopBar(controller: listState),
-            Expanded(
-              child: MusicAsyncListState(
-                loading: listState.loading,
-                isEmpty: () => listState.items.isEmpty,
-                emptyBuilder: (_) => Stack(
-                  children: <Widget>[Center(child: const MusicEmptyState())],
-                ),
-                child: Obx(() {
-                  final showMultiBar = listState.isMultiSelectMode.value;
-                  if (_lastShowMultiBar != showMultiBar) {
-                    _lastShowMultiBar = showMultiBar;
-                    final desired = showMultiBar;
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted) return;
-                      if (!Get.isRegistered<MusicMainController>()) return;
-                      final mainCtrl = Get.find<MusicMainController>();
-                      if (mainCtrl.hidePlayerBar.value != desired) {
-                        mainCtrl.hidePlayerBar.value = desired;
-                      }
-                    });
-                  }
-
-                  final playCtrl =
-                      Get.isRegistered<MusicPlayServiceController>()
-                      ? Get.find<MusicPlayServiceController>()
-                      : null;
-                  final showPlayerBar =
-                      !showMultiBar &&
-                      playCtrl != null &&
-                      playCtrl.isReady.value &&
-                      playCtrl.playlist.isNotEmpty;
-                  final playerExtraSpace = showPlayerBar
-                      ? (112.0 + MediaQuery.of(context).padding.bottom)
-                      : 0.0;
-
-                  final bottomSpace =
-                      (showMultiBar ? 86.0 : 30.0) + playerExtraSpace;
-
-                  return Stack(
-                    children: <Widget>[
-                      Scrollbar(
-                        thumbVisibility: true,
-                        controller: _scrollController,
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final enableMarquee =
-                                DeviceUtils.isDesktop ||
-                                (DeviceUtils.isWeb &&
-                                    DeviceUtils.isDesktopLayout(context));
-                            _gridViewportHeight = constraints.maxHeight;
-
-                            final rectKey = [
-                              listState.items.length,
-                              constraints.maxWidth.toStringAsFixed(2),
-                            ].join('|');
-                            if (_rectCacheKey != rectKey) {
-                              _rectCacheKey = rectKey;
-                              _rebuildGridRectCache(
-                                items: listState.items,
-                                maxWidth: constraints.maxWidth,
-                              );
-                            }
-
-                            final scrollView = CustomScrollView(
-                              controller: _scrollController,
-                              slivers: <Widget>[
-                                SliverPadding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    16,
-                                    0,
-                                    16,
-                                    16,
-                                  ),
-                                  sliver: MusicListGrid(controller: listState),
-                                ),
-                                SliverToBoxAdapter(
-                                  child: Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      0,
-                                      0,
-                                      0,
-                                      20,
-                                    ),
-                                    child: MusicListFooter(
-                                      controller: listState,
-                                    ),
-                                  ),
-                                ),
-                                SliverToBoxAdapter(
-                                  child: SizedBox(height: bottomSpace),
-                                ),
-                              ],
-                            );
-
-                            final scrollLayer = enableMarquee
-                                ? Listener(
-                                    onPointerUp: (e) {
-                                      if (_marqueeActive) {
-                                        final hits = _performHitTest();
-                                        _dragging = false;
-                                        listState.finishDragSelection();
-                                        listState.applyDragSelection(
-                                          hits,
-                                          multiModeAtStart: _multiModeAtStart,
-                                          additive: _additiveAtStart,
-                                        );
-                                      } else {
-                                        listState.finishDragSelection();
-                                      }
-                                      _pointerDownGridPos = null;
-                                      _marqueeActive = false;
-                                    },
-                                    onPointerMove: (e) {
-                                      if (e.buttons != kPrimaryButton) return;
-                                      final origin = _pointerDownGridPos;
-                                      if (origin == null) return;
-                                      final local = e.localPosition;
-                                      if (!_marqueeActive) {
-                                        if ((local - origin).distance >
-                                            _kMarqueeThreshold) {
-                                          _marqueeActive = true;
-                                          _dragging = true;
-                                          _lastGridLocal = local;
-                                          _ensureAutoTimer();
-                                          _additiveAtStart =
-                                              _isAdditiveSelectionActive;
-                                          listState.startDragSelection(
-                                            origin,
-                                            scrollOffset:
-                                                _scrollController.offset,
-                                          );
-                                        }
-                                      }
-                                      if (_marqueeActive) {
-                                        _lastGridLocal = local;
-                                        listState.updateDragSelection(
-                                          local,
-                                          scrollOffset:
-                                              _scrollController.offset,
-                                        );
-                                        _scheduleHitTest();
-                                      }
-                                    },
-                                    onPointerDown: (e) {
-                                      if (e.buttons != kPrimaryButton) return;
-                                      _pointerDownGridPos = e.localPosition;
-                                      _multiModeAtStart =
-                                          listState.isMultiSelectMode.value;
-                                      _additiveAtStart =
-                                          _isAdditiveSelectionActive;
-                                      _marqueeActive = false;
-                                    },
-                                    onPointerCancel: (e) {
-                                      _dragging = false;
-                                      listState.finishDragSelection();
-                                      _pointerDownGridPos = null;
-                                      _marqueeActive = false;
-                                    },
-                                    behavior: HitTestBehavior.opaque,
-                                    child: scrollView,
-                                  )
-                                : scrollView;
-
-                            return Stack(
-                              children: <Widget>[
-                                scrollLayer,
-                                if (enableMarquee)
-                                  Obx(() {
-                                    final r = listState.selectionRect.value;
-                                    if (r == null)
-                                      return const SizedBox.shrink();
-                                    return Positioned(
-                                      width: r.width,
-                                      top: r.top,
-                                      left: r.left,
-                                      height: r.height,
-                                      child: IgnorePointer(
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            color: Colors.blue.withValues(
-                                              alpha: 0.15,
-                                            ),
-                                            border: Border.all(
-                                              color: Colors.blue,
-                                              width: 1.0,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                      if (showMultiBar)
-                        Positioned(
-                          right: 0.0,
-                          left: 0.0,
-                          child: MusicListMultiSelectBottomBar(
-                            controller: listState,
-                          ),
-                          bottom: playerExtraSpace,
-                        ),
-                    ],
-                  );
-                }),
-              ),
-            ),
+                : MusicListTopBar(controller: list),
+            Expanded(child: _buildBody(context, list)),
           ],
         );
 
         return MusicOverlayHost<MusicSubListPayload>(
-          child: list,
-          active: overlayCtrl.active,
+          active: overlay.active,
+          child: page,
           overlayBuilder: (payload) => MusicSubListOverlay(
             seriesIndexId: payload.seriesIndexId,
-            onClose: overlayCtrl.close,
+            onClose: overlay.close,
             name: payload.name,
             keyType: payload.keyType,
             key: ValueKey(
@@ -473,11 +346,124 @@ class _MusicListPageState extends State<MusicListPage> {
       },
     );
   }
+
+  Widget _buildBody(BuildContext context, MusicListController list) {
+    return MusicAsyncListState(
+      loading: list.loading,
+      isEmpty: () => list.items.isEmpty,
+      emptyBuilder: (_) =>
+          Stack(children: <Widget>[Center(child: const MusicEmptyState())]),
+      child: Obx(() {
+        final multi = list.isMultiSelectMode.value;
+        _syncPlayerBar(multi);
+
+        final playCtrl = Get.isRegistered<MusicPlayServiceController>()
+            ? Get.find<MusicPlayServiceController>()
+            : null;
+        final playerBar =
+            !multi &&
+            playCtrl != null &&
+            playCtrl.isReady.value &&
+            playCtrl.playlist.isNotEmpty;
+        final playerSpace = playerBar
+            ? (112.0 + MediaQuery.of(context).padding.bottom)
+            : 0.0;
+        final tailSpace = (multi ? 86.0 : 30.0) + playerSpace;
+
+        return Stack(
+          children: <Widget>[
+            Scrollbar(
+              thumbVisibility: true,
+              controller: _scroll,
+              child: LayoutBuilder(
+                builder: (context, constraints) =>
+                    _buildScrollingLayer(context, list, constraints, tailSpace),
+              ),
+            ),
+            if (multi)
+              Positioned(
+                right: 0.0,
+                left: 0.0,
+                bottom: playerSpace,
+                child: MusicListMultiSelectBottomBar(controller: list),
+              ),
+          ],
+        );
+      }),
+    );
+  }
+
+  Widget _buildScrollingLayer(
+    BuildContext context,
+    MusicListController list,
+    BoxConstraints constraints,
+    double tailSpace,
+  ) {
+    final marqueeEnabled =
+        DeviceUtils.isDesktop ||
+        (DeviceUtils.isWeb && DeviceUtils.isDesktopLayout(context));
+    _viewportH = constraints.maxHeight;
+    _syncCellCache(list, constraints.maxWidth);
+
+    final scrollView = CustomScrollView(
+      controller: _scroll,
+      slivers: <Widget>[
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          sliver: MusicListGrid(controller: list),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(0, 0, 0, 20),
+            child: MusicListFooter(controller: list),
+          ),
+        ),
+        SliverToBoxAdapter(child: SizedBox(height: tailSpace)),
+      ],
+    );
+
+    if (!marqueeEnabled) return scrollView;
+
+    return Stack(
+      children: <Widget>[
+        Listener(
+          onPointerDown: (event) => _onMarqueeDown(event, list),
+          onPointerMove: (event) => _onMarqueeMove(event, list),
+          onPointerUp: (event) => _onMarqueeUp(event, list),
+          onPointerCancel: (event) => _onMarqueeCancel(event, list),
+          behavior: HitTestBehavior.opaque,
+          child: scrollView,
+        ),
+        _buildSelectionBand(list),
+      ],
+    );
+  }
+
+  Widget _buildSelectionBand(MusicListController list) {
+    return Obx(() {
+      final band = list.selectionRect.value;
+      if (band == null) return const SizedBox.shrink();
+      return Positioned(
+        width: band.width,
+        top: band.top,
+        left: band.left,
+        height: band.height,
+        child: IgnorePointer(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.blue.withValues(alpha: 0.15),
+              border: Border.all(color: Colors.blue, width: 1.0),
+            ),
+          ),
+        ),
+      );
+    });
+  }
 }
 
-class _GridRectEntry {
+class _CellBox {
   final int id;
   final Rect rect;
 
-  const _GridRectEntry({required this.id, required this.rect});
+  const _CellBox({required this.id, required this.rect});
 }

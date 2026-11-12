@@ -79,7 +79,7 @@ class _DiscSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final backdrop = Theme.of(context).colorScheme.surfaceVariant
+    final backdrop = Theme.of(context).colorScheme.surfaceContainerHighest
         .withValues(alpha: 0.4);
 
     return SizedBox(

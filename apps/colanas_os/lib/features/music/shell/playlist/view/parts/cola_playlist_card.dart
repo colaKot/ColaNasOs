@@ -62,14 +62,14 @@ class PlayListListCard extends StatelessWidget {
   );
 
   List<ContextMenuEntry> _menu() => <ContextMenuEntry>[
-    CustomContextMenuItem.create(
+    ColaContextMenuItem.create(
       value: 'rename',
       onSelected: (_) => onRename(),
       label: Text('rename'.tr),
       icon: const Icon(Icons.edit_outlined, size: 18.0),
     ),
     const MenuDivider(),
-    CustomContextMenuItem.create(
+    ColaContextMenuItem.create(
       value: 'delete',
       onSelected: (_) => onDelete(),
       label: Text('delete'.tr),

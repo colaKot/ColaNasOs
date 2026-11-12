@@ -25,7 +25,7 @@ class _Command {
   final bool danger;
   final VoidCallback? action;
 
-  ContextMenuEntry toEntry() => CustomContextMenuItem.create(
+  ContextMenuEntry toEntry() => ColaContextMenuItem.create(
     value: id,
     onSelected: (_) => action?.call(),
     label: Text(

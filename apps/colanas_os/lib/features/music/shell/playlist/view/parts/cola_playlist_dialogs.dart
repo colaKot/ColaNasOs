@@ -25,7 +25,7 @@ class PlayListDialogs {
     );
   }
 
-  /// 选择模式下空列表：输入名称创建歌单并返回新建项。
+  /// 选择歌单时列表为空：先走「新建」表单，再把新建项作为选择结果返回。
   static Future<PlayListItem?> showCreateForSelection(
     BuildContext context, {
     required PlayListController controller,

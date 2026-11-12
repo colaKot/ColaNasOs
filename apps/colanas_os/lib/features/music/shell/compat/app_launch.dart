@@ -1,7 +1,6 @@
-/// 既有实现 `core/bootstrap/app_launch.dart` 的最小等价实现。
+/// 启动模式声明。
 ///
-/// 兼容基线能「以音乐模式单独启动」（`AppLaunchMode.music`），用来隐藏
-/// 侧边栏只留播放器。本项目是统一桌面壳，永远走 full 模式。
+/// 本项目是统一桌面壳，始终以 full 模式启动；音乐模块仅复用该枚举做类型约束。
 library;
 
 enum AppLaunchMode { full, music, files }

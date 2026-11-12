@@ -4,6 +4,7 @@ import 'package:nas_ui/nas_ui.dart';
 import '../../../shell/app_nav_shell.dart';
 import '../../../shell/app_shell.dart';
 import '../../../shell/shell_back.dart';
+import '../../../core/session.dart';
 import 'album_artist_list/controller/cola_album_artist_controller.dart';
 import 'album_artist_list/view/cola_album_artist_page.dart';
 import 'cache_setting/view/cola_cache_settings_view.dart';
@@ -36,7 +37,7 @@ const bool kMusicShell = true;
 /// 所以这里**不搬左栏**，菜单项来自契约，页面映射在 [_content]。
 ///
 /// 参考 `MusicMainView._buildRight` 里除了页面还有两样东西必须一起搬：
-/// 底部播放条 `MusicPlayCtrlBottomBar` 和全屏播放器 `MusicPlayCtrlFullScreenSheet`，
+/// 底部播放条 `ColaMusicDockBar` 和全屏播放器 `ColaMusicStageSheet`，
 /// 它们是全局的（任何页面都能唤起），因此挂在壳这一层而不是页面里。
 class MusicShellView extends StatefulWidget {
   const MusicShellView({super.key});
@@ -90,6 +91,11 @@ class _MusicShellViewState extends State<MusicShellView> {
   /// 页面外面那层 Stack 是参考 `MusicMainView._buildRight` 的形态：
   /// 底部常驻播放条（`hidePlayerBar` 可关），页面本身撑满。
   Widget _content(String key) {
+    // 路由守卫与菜单一致：非超级管理员直接切到「音乐来源 / 音乐设置」也回落歌曲列表
+    if (!ApiSession.instance.isAdmin &&
+        (key == 'settings.source' || key == 'settings.app')) {
+      key = 'songs';
+    }
     final Widget page;
     switch (key) {
       case 'favorites':
@@ -134,10 +140,10 @@ class _MusicShellViewState extends State<MusicShellView> {
         page = const PlayListListView();
         break;
       case 'settings.source':
-        page = const MusicSourceSettingsView();
+        page = const ColaMusicSourceSettingsView();
         break;
       case 'settings.client':
-        page = const MusicCacheSettingsView();
+        page = const ColaMusicCacheSettingsView();
         break;
       case 'settings.app':
         // 契约里这一项原本没有对应页面（既有实现只有「来源 / 缓存」两页），
@@ -197,7 +203,7 @@ class _MusicShellViewState extends State<MusicShellView> {
             child: Obx(
               () => _ctrl.hidePlayerBar.value
                   ? const SizedBox.shrink()
-                  : MusicPlayCtrlBottomBar(
+                  : ColaMusicDockBar(
                       onOpenFullscreen: _ctrl.openFullPlayer,
                     ),
             ),
@@ -244,13 +250,17 @@ class _MusicShellViewState extends State<MusicShellView> {
                 // 手机端底部 tab 的排列也把 playlists 放到了第一位（apps.json#nav.mobile）。
                 defaultKey: 'playlists',
                 content: _content,
+                conditions: {
+                  // 音乐来源 / 音乐设置是服务端级配置，只有超级管理员能进
+                  if (ApiSession.instance.isAdmin) 'superAdmin',
+                },
               ),
             ),
             // 全屏播放器：盖在整个二级栏之上（参考侧也是这样）
             Positioned.fill(
               child: Obx(
                 () => ctrl.showFullPlayer.value
-                    ? MusicPlayCtrlFullScreenSheet(
+                    ? ColaMusicStageSheet(
                         key: const ValueKey('shell-music-full-player'),
                         onClose: ctrl.closeFullPlayer,
                       )

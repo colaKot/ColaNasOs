@@ -1,11 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-/// 既有实现 `utils/cola_device_utils.dart` 的最小等价实现。
+/// 设备形态判断工具（右键菜单、布局断点使用）。
 ///
-/// 参考版依赖 `device_utils_io.dart` / `device_utils_web.dart` 两个平台文件
-/// （要读 dart:io / window.navigator），这里只用 `defaultTargetPlatform` +
-/// 宽度断点，够音乐模块判断「是不是手机/桌面」，且 Web 可编译。
+/// 只用 `defaultTargetPlatform` + 宽度断点，足够判断「手机 / 桌面」，
+/// 且 Web 端可直接编译。
 class DeviceUtils {
   const DeviceUtils._();
 

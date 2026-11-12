@@ -34,14 +34,14 @@ class AlbumArtistListGrid extends StatelessWidget {
               badgeLabel: controller.badgeLabel,
             );
             final menuEntries = <ContextMenuEntry>[
-              CustomContextMenuItem.create(
+              ColaContextMenuItem.create(
                 value: 'open',
                 onSelected: (_) => onOpenSubList(item.name),
                 label: Text('open'.tr),
                 icon: const Icon(Icons.open_in_new, size: 18.0),
               ),
               const MenuDivider(),
-              CustomContextMenuItem.create(
+              ColaContextMenuItem.create(
                 value: 'add_to_play_list',
                 onSelected: (_) => controller.addToPlayList(item, context),
                 label: Text('add_to_play_list'.tr),
