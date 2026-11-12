@@ -42,6 +42,17 @@ jobs:
         if: steps.nm.outputs.cache-hit != 'true'
         run: npm run rebuild
 
+      # 缓存里可能只有 node_modules 而缺 electron 的可执行文件（缓存是整体恢复的），
+      # 缺了所有 smoke 都会 FATAL「找不到 electron」，这里补一次下载。
+      - name: Ensure Electron runtime
+        if: steps.nm.outputs.cache-hit == 'true'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'node_modules/electron/dist/electron.exe')) {
+            Write-Host 'electron binary missing in cache, downloading …'
+            node node_modules/electron/install.js
+          }
+
       - name: Verify (build / lint / test / contracts / smokes)
         # 发布门禁一律全量（发版前不省步骤）
         run: node tool/verify.js --jobs=4
@@ -68,7 +79,8 @@ jobs:
           retention-days: 7
 
   # 客户端门禁：`verify` 不覆盖 apps/，这里补 analyze / test / 一个可跨平台的端构建。
-  # 本机实测为 Flutter 3.47.8（stable）；CI 用 stable 通道，避免版本号不存在时任务直接失败。
+  # 固定 3.47.8（与开发机同版本）：stable 会漂到更高的 SDK，新 SDK 把
+  # `package:flutter/material.dart` 标成 deprecated，`flutter analyze` 会因 info 直接失败。
   flutter:
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -80,6 +92,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.8'
           channel: stable
           cache: true
 
@@ -136,8 +149,19 @@ jobs:
         if: steps.nm.outputs.cache-hit != 'true'
         run: npm run rebuild
 
+      # 同 verify：缓存命中但缺 electron 可执行文件时补下载，否则打包直接失败
+      - name: Ensure Electron runtime
+        if: steps.nm.outputs.cache-hit == 'true'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'node_modules/electron/dist/electron.exe')) {
+            Write-Host 'electron binary missing in cache, downloading …'
+            node node_modules/electron/install.js
+          }
+
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.8'
           channel: stable
           cache: true
 

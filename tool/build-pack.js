@@ -75,14 +75,20 @@ if (!lite) {
   if (fs.existsSync(pyExe)) {
     console.log('[build-pack] 便携 python 运行时已就绪');
   } else {
-    console.log('[build-pack] 缺少便携 python 运行时，尝试生成 …');
-    const r = spawnSync(process.execPath, [path.join(__dirname, 'bundle-python.js')], {
-      cwd: root,
-      stdio: 'inherit',
-    });
-    if (r.status !== 0) {
-      console.warn('[build-pack] [!] 未生成 python 运行时：装机版的 AI 语音合成会不可用。');
-      console.warn('            pip install kokoro-onnx "misaki-fork[zh]" 后重跑 npm run python:bundle');
+    const bundler = path.join(__dirname, 'bundle-python.js');
+    if (!fs.existsSync(bundler)) {
+      console.warn('[build-pack] [!] 未生成 python 运行时（本机没有 vendor/python-runtime，也没有打包脚本）：');
+      console.warn('            装机版的 AI 语音合成不可用，其余功能照常。');
+      console.warn('            需要时手动放一份便携 python 到 vendor/python-runtime 后重跑打包。');
+    } else {
+      console.log('[build-pack] 缺少便携 python 运行时，尝试生成 …');
+      const r = spawnSync(process.execPath, [bundler], {
+        cwd: root,
+        stdio: 'inherit',
+      });
+      if (r.status !== 0) {
+        console.warn('[build-pack] [!] 未生成 python 运行时：装机版的 AI 语音合成会不可用。');
+      }
     }
   }
 }

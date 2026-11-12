@@ -64,6 +64,16 @@ Electron 44.9.3（外壳）+ `utilityProcess` 内核（TypeScript / Fastify / Ky
 
 ## 快速开始
 
+下载安装（当前版本 **1.1.0**，全部产物见 [Releases](https://github.com/colaKot/ColaNasOs/releases/latest)）：
+
+| 平台 | 产物 | 说明 |
+| --- | --- | --- |
+| Windows | `ColaNasOs-Setup-1.1.0.exe` | 安装版（含服务端内核与本地 AI 运行时） |
+| Windows 便携 | `ColaNasOs-1.1.0-windows-x64.zip` | 解压即用，适合不想安装的场景 |
+| Android | `ColaNasOs-1.1.0-arm64.apk` | arm64 手机 / 平板 |
+
+服务端随 Windows 安装包一起分发（Electron 外壳内置内核），不单独提供安装包。
+
 本地起服务端（**默认方式**，内核与 Flutter 都热更新）：
 
 ```bat
@@ -90,6 +100,16 @@ npm run verify       # 全量门禁
 ```
 
 > 冒烟与生成脚本会自动自举 Electron 运行时（`ELECTRON_RUN_AS_NODE=1`），因为 `better-sqlite3` 是 Electron ABI。
+
+## 支持
+
+如果 ColaNasOs 对你有帮助，欢迎扫码支持这个项目继续维护下去。
+
+<p align="center">
+  <img src="docs/assets/donate-wechat.webp" width="220" alt="微信收款码" />
+</p>
+
+微信扫码即可（收款码，金额随意）。也欢迎通过 Issue / PR 反馈问题、补充文档。
 
 ## 许可
 
@@ -139,6 +159,6 @@ GPL-3.0。第三方组件见 `docs/06-产品与运维.md` 的「第三方上游�
 
 ## 状态
 
-主干功能已成型：14 个应用（13 个已开放、1 个规划中）、6 端界面、15 个服务端域，契约生成链与定向验收门禁保持全绿。当前迭代重点与待办见 `docs/09-任务清单.md`、`docs/10-DoD.md`。
+主干功能已成型：14 个应用全部开放、6 端界面、15 个服务端域，契约生成链与定向验收门禁保持全绿。当前迭代重点与待办见 `docs/09-任务清单.md`、`docs/10-DoD.md`。
 
 冷启动 → `/health` 约 1.2 s；`flutter analyze lib` 0 error，服务端 `tsc` / ESLint / 生成物一致性 / 迁移清单 / i18n / 文件监控 / 影视等定向验收通过。
