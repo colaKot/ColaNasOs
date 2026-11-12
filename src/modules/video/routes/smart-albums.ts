@@ -3,6 +3,7 @@ import { secured } from '../../../../kernel/route';
 import { Err } from '../../../../kernel/errors';
 import { TAG, toItem, type MediaRow } from '../util';
 import { offlineCond, offlineSmbPrefixes } from '../sources';
+import { pathWhere, visibilityOf } from '../../files/visibility';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { VideoHelpers } from '../helpers';
@@ -64,6 +65,7 @@ export async function registerVideoSmartAlbums(
     }),
     async (req: FastifyRequest) => {
       const uid = String(req.user?.sub || '');
+      const vis = visibilityOf(k.config, req.user);
       const cutoff = Math.floor(Date.now() / 1000) - 30 * 24 * 3600;
       // 离线 SMB 来源的条目列表里看不到，计数也不能算进去（否则「最近添加 20 部」点进去只有 3 部）
       const offline = await offlineSmbPrefixes(k.db);
@@ -74,7 +76,9 @@ export async function registerVideoSmartAlbums(
           await sql<{ n: number }>`
             select count(*) as n
               from video_items v
-             where v.media_type = 'video' ${offlineFilter} and ${ruleWhere(key, uid, cutoff)}
+             where v.media_type = 'video' ${offlineFilter}
+               and ${pathWhere(vis, 'v.rel_path')}
+               and ${ruleWhere(key, uid, cutoff)}
           `.execute(k.db)
         ).rows;
         items.push({ key, count: Number(rows[0]?.n) || 0 });
@@ -109,6 +113,7 @@ export async function registerVideoSmartAlbums(
       const libFilter = q.libraryId ? sql`and v.library_id = ${q.libraryId}` : sql``;
       const offline = await offlineSmbPrefixes(k.db);
       const offlineFilter = offline.length > 0 ? sql`and ${offlineCond(offline, 'v.rel_path')}` : sql``;
+      const vis = visibilityOf(k.config, req.user);
 
       const rows = (
         await sql<MediaRow>`
@@ -117,6 +122,7 @@ export async function registerVideoSmartAlbums(
            where v.media_type = 'video'
              ${libFilter}
              ${offlineFilter}
+             and ${pathWhere(vis, 'v.rel_path')}
              and ${ruleWhere(key, uid, cutoff)}
            order by v.mtime desc, v.id asc
            limit ${limit}

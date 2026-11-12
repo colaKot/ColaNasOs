@@ -3,6 +3,7 @@ import { Type } from '@sinclair/typebox';
 import { secured } from '../../../../kernel/route';
 import { Err } from '../../../../kernel/errors';
 import { newId, TAG, toItem, type MediaRow } from '../util';
+import { pathWhere, visibilityOf } from '../../files/visibility';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { VideoHelpers } from '../helpers';
@@ -80,15 +81,22 @@ export async function registerVideoCollections(
       },
     }),
     async (req: FastifyRequest) => {
+      // 条目数 / 封面也要按授权目录算：否则列表显示「12 部」，点进去只剩 3 部。
+      const cond = pathWhere(visibilityOf(k.config, req.user), 'v.rel_path');
       const rows = (
         await sql<CollectionRow>`
           select c.*,
-                 (select count(*) from video_collection_items i where i.collection_id = c.id) as items,
+                 (select count(*) from video_collection_items i
+                    join video_items v on v.id = i.item_id
+                   where i.collection_id = c.id and ${cond}) as items,
                  coalesce(
                    (select i.item_id from video_collection_items i
-                     where i.collection_id = c.id and i.item_id = c.cover_item_id),
+                      join video_items v on v.id = i.item_id
+                     where i.collection_id = c.id and i.item_id = c.cover_item_id and ${cond}),
                    (select i.item_id from video_collection_items i
-                     where i.collection_id = c.id order by i.added_at, i.item_id limit 1)
+                      join video_items v on v.id = i.item_id
+                     where i.collection_id = c.id and ${cond}
+                     order by i.added_at, i.item_id limit 1)
                  ) as cover_resolved
             from video_collections c
            where c.uid = ${uidOf(req)}
@@ -333,6 +341,7 @@ export async function registerVideoCollections(
             from video_collection_items i
             join video_items v on v.id = i.item_id
            where i.collection_id = ${col.id}
+             and ${pathWhere(visibilityOf(k.config, req.user), 'v.rel_path')}
            order by i.added_at desc, v.id asc
            limit 2000
         `.execute(k.db)
@@ -388,6 +397,7 @@ export async function registerVideoCollections(
             from video_collection_items i
             join video_items v on v.id = i.item_id
            where i.collection_id = ${col.id}
+             and ${pathWhere(visibilityOf(k.config, req.user), 'v.rel_path')}
            order by i.added_at desc, v.id asc
            limit 2000
         `.execute(k.db)
