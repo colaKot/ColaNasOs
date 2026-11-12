@@ -5,8 +5,12 @@ import '../../shell/app_widgets.dart';
 
 import '../../core/session.dart';
 import 'detail/video_detail_router.dart';
+import 'series_display.dart';
+import 'video_card.dart';
 import 'video_item_actions.dart';
 import 'video_page.dart';
+import 'video_series_actions.dart';
+import 'video_series_widgets.dart';
 
 /// 智能合集（预设规则）：最近添加 / 未看 / 继续观看 / 4K / HDR / 全景声 / 长片。
 ///
@@ -302,10 +306,6 @@ class _SmartAlbumItemsPageState extends State<_SmartAlbumItemsPage> {
   }
 
   Widget _body(BuildContext context) {
-    final base = ApiSession.instance.baseUrl;
-    final token = ApiSession.instance.token;
-    final headers =
-        token == null ? const <String, String>{} : {'Authorization': 'Bearer $token'};
     return _loading
           ? const NasLoading()
           : _error != null
@@ -334,57 +334,138 @@ class _SmartAlbumItemsPageState extends State<_SmartAlbumItemsPage> {
                           itemCount: _items.length,
                           itemBuilder: (context, i) {
                             final item = _items[i];
-                            return NasContextMenuRegion(
-                              entries: videoItemMenuEntries(
-                                item,
-                                onAction: (a) => _runAction(item, a),
-                                context: context,
-                              ),
-                              child: GestureDetector(
-                                onLongPress: () async {
-                                  final a =
-                                      await showVideoItemActionSheet(context, item);
-                                  if (a != null && mounted) {
-                                    await _runAction(item, a);
-                                  }
-                                },
-                                child: InkWell(
-                                  onTap: () => openVideoDetail(context, item),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            NasTokens.radiusSm,
-                                          ),
-                                          child: NasCoverImage(
-                                            url:
-                                                '$base/api/v1/video/poster?id=${Uri.encodeComponent(item.id)}',
-                                            headers: headers,
-                                            cacheWidth: 480,
-                                            icon: Icons.movie_outlined,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: NasTokens.spaceXs),
-                                      Text(
-                                        item.title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: NasTokens.fontBody,
-                                        ),
-                                      ),
-                                      MediaFlagsRow(item: item, compact: true),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
+                            // 服务端把电视剧按剧聚合过：这一条代表整部剧
+                            // （一部剧一张卡），封面用竖版海报，不是某一集的截图
+                            final info = item.seriesInfo;
+                            if (info != null) return _seriesCard(context, item, info);
+                            return _movieCard(context, item);
                           },
                         );
                       },
                     );
+  }
+
+  /// 剧卡：整部剧一张竖版封面（有刮削海报就用它，没有退 TMDB 剧海报）
+  Widget _seriesCard(
+    BuildContext context,
+    VideoItem item,
+    VideoSeriesItem info,
+  ) {
+    final name = SeriesDisplayStore.nameOf(info.name) ?? info.name;
+    return NasAsyncMenuRegion(
+      entries: () => seriesMenuEntries(
+        context,
+        info,
+        libraryId: item.libraryId,
+        onChanged: () => _load(),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+        onTap: () => openVideoSeries(
+          context,
+          name: info.name,
+          coverId: info.coverId,
+          posterId: info.posterId,
+          libraryId: item.libraryId,
+          headers: videoArtHeaders,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+                    child: SeriesCoverImage(
+                      artUrl: seriesArtUrl(info.posterId, size: 480),
+                      posterUrl: SeriesDisplayStore.posterOf(info.name),
+                      fallbackText: name,
+                      cacheWidth: 480,
+                    ),
+                  ),
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: SeriesWatchBadge(
+                      watched: info.watchedEpisodes ?? 0,
+                      total: info.episodes,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: NasTokens.spaceXs),
+            Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: NasTokens.fontBody),
+            ),
+            Text(
+              tr('video.seasonsEpisodes', {
+                'seasons': '${info.seasons}',
+                'episodes': '${info.episodes}',
+              }),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: NasTokens.fontMicro,
+                color: context.nasTextSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _movieCard(BuildContext context, VideoItem item) {
+    return NasContextMenuRegion(
+      entries: videoItemMenuEntries(
+        item,
+        onAction: (a) => _runAction(item, a),
+        context: context,
+      ),
+      child: GestureDetector(
+        onLongPress: () async {
+          final a = await showVideoItemActionSheet(context, item);
+          if (a != null && mounted) {
+            await _runAction(item, a);
+          }
+        },
+        child: InkWell(
+          borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+          onTap: () => openVideoDetail(context, item),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+                  child: NasCoverImage(
+                    // 刮削海报优先；没有海报时服务端会退到缩略图 / 首帧，
+                    // 但绝不再直接拿 `/video/poster`（那是视频截图）
+                    url: videoPosterUrl(item, kind: 'poster', size: 480),
+                    headers: videoArtHeaders,
+                    cacheWidth: 480,
+                    icon: Icons.movie_outlined,
+                  ),
+                ),
+              ),
+              const SizedBox(height: NasTokens.spaceXs),
+              Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: NasTokens.fontBody),
+              ),
+              MediaFlagsRow(item: item, compact: true),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
