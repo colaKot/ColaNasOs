@@ -214,6 +214,35 @@ function partsOf(k: KernelApi, id: string): PlaylistPart[] {
 const transcodedMsOf = (parts: PlaylistPart[]) =>
   parts.reduce((sum, p) => sum + playlistDurationMs(p.text), 0);
 
+/**
+ * 等「播放列表里至少有 1 个分片」再返回地址（最多 ms）。
+ *
+ * 为什么建会话要等：起播链路是「建会话 → 立刻把 m3u8 交给播放器」。首个分片
+ * 落盘前，`/player/hls/:id/index.m3u8` 会**挂住连接最多 25s** 等分片（见路由里的
+ * 就绪等待），而手机/PC 经外网域名（反向代理）打开时，代理往往 10~20s 就把
+ * 这个「没有任何字节」的响应掐掉 —— 播放器拿到 `Failed to open ...m3u8`。
+ * 用户看到的现象就是「第一次打开必定失败，关掉重开就好」：第二次复用同一会话，
+ * 分片早就有了，秒开。这里改成建会话时先等分片（界面本来就在转圈），
+ * 播放器拿到的地址一定是可播的。
+ */
+async function waitPlayable(k: KernelApi, id: string, maxMs: number): Promise<boolean> {
+  const deadline = Date.now() + maxMs;
+  for (;;) {
+    if (partsOf(k, id).length > 0) return true;
+    for (const root of [sessionDirOf(k, id), path.join(k.paths.dataDir, 'hls', id)]) {
+      try {
+        if (fs.readFileSync(path.join(root, 'index.m3u8'), 'utf8').includes('#EXTINF')) {
+          return true;
+        }
+      } catch {
+        // 播放列表还没写出来
+      }
+    }
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
 const segmentCountOf = (parts: PlaylistPart[]) =>
   parts.reduce((sum, p) => sum + (p.text.match(/#EXTINF/g) || []).length, 0);
 
@@ -609,13 +638,19 @@ export const videoPlayer: ServerModule = {
 
   async register(app, k) {
     for (const schema of PLAYER_SCHEMAS) app.addSchema(schema);
-    await sql`update player_sessions set status = 'pending' where status = 'running'`.execute(k.db);
-    pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
-    // 清过期分片：启动先扫一遍（把上次的垃圾收掉），之后每半小时一次
-    sweepHls(k).catch((err) => k.log.warn({ err: String(err) }, 'player hls sweep failed'));
-    setInterval(() => {
+    // 重叠模式（开发实例 + 另一个实例在跑）：会话表与分片目录都是共享的，
+    // 重置 running 会打断正式版正在转的会话，pump 也会领走它的任务。
+    if (k.background.enabled) {
+      await sql`update player_sessions set status = 'pending' where status = 'running'`.execute(k.db);
+      pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
+      // 清过期分片：启动先扫一遍（把上次的垃圾收掉），之后每半小时一次
       sweepHls(k).catch((err) => k.log.warn({ err: String(err) }, 'player hls sweep failed'));
-    }, HLS_SWEEP_MS).unref?.();
+      setInterval(() => {
+        sweepHls(k).catch((err) => k.log.warn({ err: String(err) }, 'player hls sweep failed'));
+      }, HLS_SWEEP_MS).unref?.();
+    } else {
+      k.log.info('[dev] 重叠模式：跳过播放器会话领取与 HLS 分片清理');
+    }
 
     app.post(
       '/api/v1/player/sessions',
@@ -634,6 +669,12 @@ export const videoPlayer: ServerModule = {
         },
       }),
       async (req, reply) => {
+        // 重叠模式不创建转码会话：会话表共享，正式版的 pump 会把它领走执行
+        if (!k.background.enabled) {
+          return reply
+            .code(503)
+            .send({ error: Err.unavailable, message: '开发实例已跳过后台转码（检测到另一个实例）' });
+        }
         const body = (req.body || {}) as {
           id?: string;
           preset?: string;
@@ -732,6 +773,8 @@ export const videoPlayer: ServerModule = {
         if (dupe) {
           // 内核重启可能留下 pending 会话、没有 pump 在跑，顺手补一次
           pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
+          // 复用的会话可能刚建、还没出片：等一小会再给地址，别让播放器去撞 25s 挂起
+          await waitPlayable(k, dupe.id, 6_000);
           return {
             id: dupe.id,
             url: urlOf(dupe.id, hlsToken(k, dupe.id)),
@@ -750,6 +793,11 @@ export const videoPlayer: ServerModule = {
                   ${audioIndex}, ${forceSdr}, ${forceSdr}, ${leadMs}, ${startMs}, 'pending', ${ts}, ${ts})
         `.execute(k.db);
         pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
+        // 等首片（最多 6s）：多数 1080p 片源 2~5s 就有首片，等到了播放器就能秒开。
+        // 不能等太久 —— 外网域名经过反向代理时，一个 10s 以上没有任何字节的响应
+        // 会被代理掐断，反而把「建会话」这一步弄成失败。超时就照常返回地址，
+        // 播放列表接口那边还有 25s 就绪等待兜底。
+        await waitPlayable(k, id, 6_000);
         return { id, url: urlOf(id, hlsToken(k, id)), startedMs: startMs };
       },
     );
@@ -865,13 +913,17 @@ export const videoPlayer: ServerModule = {
         const parts = isPlaylist ? partsOf(k, session) : [];
         let body: Buffer | null =
           isPlaylist && parts.length > 0 ? Buffer.from(mergePlaylists(parts), 'utf8') : null;
-        // 首片还没落盘时**短暂等一下**：直接返回空 EVENT 播放列表，很多播放器
-        // （实测 Web 的 hls.js）拿到「没有任何分片」就停在黑屏，而 ffmpeg 其实
-        // 1~2 秒后就有首片了。等最多 25s，能等到就直接给真实播放列表。
-        // 15s 是给 1080p 定的；4K + HDR 色调映射时首片（-hls_init_time 2s）要
-        // 十几秒，卡在 15s 边界上就是「4K 一播就报错」。会话失败会提前跳出。
+        // 首片还没落盘时**短暂等一下**：直接返回「没有任何分片」的播放列表，
+        // 有些播放器会停在黑屏，而 ffmpeg 通常 1~2 秒后就有首片。
+        //
+        // 但不能等太久：这条请求经外网域名（反向代理）时，一个十几秒没有任何字节的
+        // 响应会被代理掐断，播放器拿到的是 `Failed to open ...m3u8` —— 用户看到的
+        // 就是「第一次打开必定失败，关掉重开就好」（第二次会话已有分片，秒回）。
+        // 10s 是折中：建会话那边已经先等过 6s，绝大多数片到这一步就已经就绪；
+        // 真没就绪就返回空 EVENT 播放列表（hls.js / mpv 都会按 6s 轮询），
+        // 分片一出现自然起播，而不是把连接吊死。
         if (body === null) {
-          const deadline = Date.now() + 25_000;
+          const deadline = Date.now() + 10_000;
           for (;;) {
             try {
               body = await fsp.readFile(abs);
