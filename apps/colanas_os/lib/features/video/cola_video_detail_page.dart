@@ -19,6 +19,7 @@ import 'video_scrape_dialogs.dart';
 import 'video_item_actions.dart';
 import 'series_display.dart';
 import 'video_series_widgets.dart';
+import 'video_series_actions.dart';
 import 'short_play_page.dart';
 import 'library_types.dart';
 import 'detail/video_detail_kit.dart';
@@ -85,6 +86,10 @@ class VideoDetailPageState extends State<VideoDetailPage> {
   ///
   /// 单集页 / 季详情是同一页：`null` 表示还没点过，等价于本页自带的这一集。
   String? _selectedId;
+
+  /// 集层多选（只有本季的集参与；「加入合集」不在这层给）
+  bool _epSelection = false;
+  final Set<String> _epSel = {};
 
   /// 选集网格里要展示的集。**只列当前这一季**——跨季混排会让人以为
   /// 「第 3 季第 2 集」是这部片的第 2 集（总览页负责选季）。
@@ -191,6 +196,13 @@ class VideoDetailPageState extends State<VideoDetailPage> {
     } catch (_) {
       // 剧集读取失败不影响详情
     }
+  }
+
+  /// 批量标记已看 / 未看后拉一次：集列表的勾选态与本页这一条的角标都要跟着变。
+  Future<void> _reloadEpisodes() async {
+    await _loadEpisodes();
+    await _refreshItem();
+    if (mounted) setState(() {});
   }
 
   void _toast(String text) {
@@ -603,11 +615,23 @@ class VideoDetailPageState extends State<VideoDetailPage> {
                             ),
                           ),
                         ),
+                        if (_epSelection)
+                          SliverPadding(
+                            padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 8),
+                            sliver: SliverToBoxAdapter(
+                              child: _episodeSelectionBar(context, eps),
+                            ),
+                          ),
                         videoEpisodeGridSliver(
                           episodes: eps,
                           selectedId: _selected.id,
                           onPlay: (ep) => _playEpisode(ep),
                           padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 0),
+                          selectionMode: _epSelection,
+                          selectedIds: _epSel,
+                          onToggle: (ep) => setState(() {
+                            if (!_epSel.remove(ep.id)) _epSel.add(ep.id);
+                          }),
                           menuEntries: (ep) => videoItemMenuEntries(
                             ep,
                             onAction: (action) => _episodeAction(action, ep),
@@ -690,6 +714,11 @@ class VideoDetailPageState extends State<VideoDetailPage> {
 
   void _onMenuSelected(String v) {
     switch (v) {
+      case 'select':
+        setState(() {
+          _epSelection = true;
+          _epSel.clear();
+        });
       case 'force':
         _scrape(force: true);
       case 'match':
@@ -707,6 +736,13 @@ class VideoDetailPageState extends State<VideoDetailPage> {
 
   List<PopupMenuEntry<String>> _menuItems() {
     return [
+      // 集层多选：这一页是按季展开的集列表，多选只作用于本季的集
+      if (_episodes.length > 1)
+        PopupMenuItem(
+          value: 'select',
+          child: Text(tr('video.list.multiSelect')),
+        ),
+      if (_episodes.length > 1) const PopupMenuDivider(),
       PopupMenuItem(
         value: 'force',
         child: Text(tr('video.action.scrapeForce')),
@@ -1156,6 +1192,69 @@ class VideoDetailPageState extends State<VideoDetailPage> {
         ),
         TextButton(onPressed: _saveProgress, child: Text(tr('common.save'))),
       ],
+    );
+  }
+
+  /// 集层多选条：标记已看 / 未看 / 全选 / 关闭
+  /// （「加入合集」只在剧库那一层给 —— 那里才是「整部剧」）
+  Widget _episodeSelectionBar(BuildContext context, List<VideoItem> eps) {
+    final scheme = Theme.of(context).colorScheme;
+    final ids = _epSel.toList();
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Row(
+        children: [
+          Text(
+            tr('video.list.selected', {'count': '${_epSel.length}'}),
+            style: const TextStyle(fontSize: NasTokens.fontCaption),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () => setState(() {
+              _epSel
+                ..clear()
+                ..addAll(eps.map((e) => e.id));
+            }),
+            child: Text(tr('video.list.filter.all')),
+          ),
+          TextButton(
+            onPressed: ids.isEmpty
+                ? null
+                : () => markVideos(
+                      context,
+                      ids,
+                      watched: true,
+                      count: ids.length,
+                      onChanged: () => _reloadEpisodes(),
+                    ),
+            child: Text(tr('video.action.markWatched')),
+          ),
+          TextButton(
+            onPressed: ids.isEmpty
+                ? null
+                : () => markVideos(
+                      context,
+                      ids,
+                      watched: false,
+                      count: ids.length,
+                      onChanged: () => _reloadEpisodes(),
+                    ),
+            child: Text(tr('video.action.markUnwatched')),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            tooltip: tr('common.cancel'),
+            onPressed: () => setState(() {
+              _epSelection = false;
+              _epSel.clear();
+            }),
+          ),
+        ],
+      ),
     );
   }
 

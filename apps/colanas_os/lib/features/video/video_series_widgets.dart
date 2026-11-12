@@ -179,26 +179,30 @@ class _SeriesCoverImageState extends State<SeriesCoverImage> {
   @override
   Widget build(BuildContext context) {
     final art = widget.artUrl;
-    if (art == null || art.isEmpty) return _placeholder(context);
-    if (_artFailed) {
-      final poster = widget.posterUrl;
+    // 没有「竖版海报那一集」时，优先用 TMDB 剧海报 —— 剧照 / 首帧铺进 2:3
+    // 的封面位会被裁成一条，用户反馈「整部剧的封面都是影视截图」就是这个原因。
+    final poster = widget.posterUrl;
+    if (art == null || art.isEmpty) {
       if (poster == null || poster.isEmpty) return _placeholder(context);
-      return Image.network(
-        poster,
-        fit: BoxFit.cover,
-        headers: videoArtHeaders,
-        errorBuilder: (ctx, _, _) => _placeholder(ctx),
-      );
+      return _network(poster, context);
     }
+    if (_artFailed) {
+      if (poster == null || poster.isEmpty) return _placeholder(context);
+      return _network(poster, context);
+    }
+    return _network(art, context);
+  }
+
+  Widget _network(String url, BuildContext context) {
     return Image.network(
-      art,
+      url,
       fit: BoxFit.cover,
       headers: videoArtHeaders,
       cacheWidth: widget.cacheWidth,
       errorBuilder: (ctx, _, _) {
         // 不能在 build 里同步 setState，挪到下一帧
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() => _artFailed = true);
+          if (mounted && !_artFailed) setState(() => _artFailed = true);
         });
         return _placeholder(ctx);
       },
@@ -231,9 +235,122 @@ class _SeriesCoverImageState extends State<SeriesCoverImage> {
   }
 }
 
+/// 多选勾选框（剧卡 / 季卡共用，压在海报左上角）。
+class SeriesSelectChip extends StatelessWidget {
+  const SeriesSelectChip({super.key, required this.selected});
+
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 20,
+      height: 20,
+      decoration: BoxDecoration(
+        color: selected
+            ? Theme.of(context).colorScheme.primary
+            : Colors.black.withValues(alpha: 0.5),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.85),
+          width: 1.4,
+        ),
+      ),
+      child: selected
+          ? const Icon(Icons.check, size: 13, color: Colors.white)
+          : null,
+    );
+  }
+}
+
 /// 一集的缩略图（剧照优先，没有就退首帧）。
 String episodeStillUrl(VideoItem ep, {int size = 0}) {
   return videoPosterUrl(ep, kind: 'fanart', size: size);
+}
+
+/// 剧 / 季 / 集的观看三态。
+///
+/// 用户 2026-11-12 定的口径：一集没看 = 未看；看了一部分 = 未看完；
+/// 全看完 = 已看完。季和整部剧都按「本季 / 本剧的已看集数 ÷ 总集数」折算，
+/// 所以三处的标签永远是同一套算法、同一套颜色。
+enum SeriesWatchState { none, partial, done }
+
+SeriesWatchState seriesWatchStateOf(int watched, int total) {
+  if (total <= 0 || watched <= 0) return SeriesWatchState.none;
+  if (watched >= total) return SeriesWatchState.done;
+  return SeriesWatchState.partial;
+}
+
+/// 角标文案：未看 / 已看 3/8 / 已看完
+String seriesWatchLabel(int watched, int total) {
+  switch (seriesWatchStateOf(watched, total)) {
+    case SeriesWatchState.none:
+      return tr('video.series.watch.none');
+    case SeriesWatchState.partial:
+      return tr('video.series.watch.progress', {
+        'done': '${watched.clamp(0, total)}',
+        'total': '$total',
+      });
+    case SeriesWatchState.done:
+      return tr('video.series.watch.done');
+  }
+}
+
+/// 封面左上角的观看状态角标（与影片卡的 `VideoWatchedBadge` 同一套视觉：
+/// 未看是黑色半透明小标签、已看完是绿色圆底白勾，未看完用琥珀色比例）。
+class SeriesWatchBadge extends StatelessWidget {
+  const SeriesWatchBadge({
+    super.key,
+    required this.watched,
+    required this.total,
+    this.compact = false,
+  });
+
+  final int watched;
+  final int total;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = seriesWatchStateOf(watched, total);
+    if (state == SeriesWatchState.done) {
+      final size = compact ? 18.0 : 22.0;
+      return Container(
+        width: size,
+        height: size,
+        decoration: const BoxDecoration(
+          color: Color(0xFF22C55E),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(
+          Icons.check_rounded,
+          size: compact ? 12 : 15,
+          color: Colors.white,
+        ),
+      );
+    }
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 5 : 6,
+        vertical: compact ? 1.5 : 2,
+      ),
+      decoration: BoxDecoration(
+        color: state == SeriesWatchState.partial
+            ? const Color(0xFFE0A030).withValues(alpha: 0.92)
+            : Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: Text(
+        seriesWatchLabel(watched, total),
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: compact ? 9.5 : 11,
+          fontWeight: FontWeight.w600,
+          height: 1.2,
+        ),
+      ),
+    );
+  }
 }
 
 /// 竖版海报网格的尺寸口径 —— 剧库列表、剧详情里的季网格共用同一套算法。
@@ -283,6 +400,9 @@ class VideoSeasonGrid extends StatelessWidget {
     this.coverId,
     this.onTap,
     this.menuEntries,
+    this.selectionMode = false,
+    this.selected = const <int>{},
+    this.onSelectToggle,
   });
 
   /// 季号 → 该季全部集（升序）
@@ -300,6 +420,12 @@ class VideoSeasonGrid extends StatelessWidget {
   /// 季卡的右键菜单（标记本季已看 / 删除本季），由调用方按季生成
   final List<NasMenuEntry> Function(int season, List<VideoItem> episodes)?
   menuEntries;
+
+  /// 多选态：季卡左上角换成勾选框，点击改为选中（用户 2026-11-12：
+  /// 电视剧每一层都要能多选，但「加入合集」只在最外层的整部剧上给）
+  final bool selectionMode;
+  final Set<int> selected;
+  final void Function(int season)? onSelectToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -328,9 +454,14 @@ class VideoSeasonGrid extends StatelessWidget {
               width: m.itemWidth,
               progress: progress,
               coverId: coverId,
+              selectionMode: selectionMode,
+              selected: selected.contains(e.key),
+              onSelectToggle: onSelectToggle == null
+                  ? null
+                  : () => onSelectToggle!(e.key),
               onTap: onTap == null ? null : () => onTap!(e.key),
             );
-            if (menu.isEmpty) return card;
+            if (menu.isEmpty || selectionMode) return card;
             return NasContextMenuRegion(entries: menu, child: card);
           },
         );
@@ -352,6 +483,9 @@ class SeasonPosterCard extends StatelessWidget {
     required this.progress,
     this.coverId,
     this.onTap,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onSelectToggle,
   });
 
   final int season;
@@ -360,6 +494,11 @@ class SeasonPosterCard extends StatelessWidget {
   final Map<String, int> progress;
   final String? coverId;
   final VoidCallback? onTap;
+
+  /// 多选态（点到季卡 = 选中本季，不打开）
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onSelectToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -403,6 +542,17 @@ class SeasonPosterCard extends StatelessWidget {
               ),
             ),
           ),
+          // 左上角：多选勾选框 / 本季观看三态（未看 · 已看 n/m · 已看完）
+          Positioned(
+            top: 6,
+            left: 6,
+            child: selectionMode
+                ? SeriesSelectChip(selected: selected)
+                : SeriesWatchBadge(
+                    watched: watched,
+                    total: episodes.length,
+                  ),
+          ),
           // 右上角：本季集数（与剧库卡片的角标同一款式）
           if (episodes.isNotEmpty)
             Positioned(
@@ -438,7 +588,7 @@ class SeasonPosterCard extends StatelessWidget {
       width: width,
       child: InkWell(
         borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-        onTap: onTap,
+        onTap: selectionMode ? onSelectToggle : onTap,
         child: LayoutBuilder(
           builder: (context, box) {
             final bounded = box.maxHeight.isFinite;

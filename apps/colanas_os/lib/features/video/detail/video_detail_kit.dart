@@ -865,6 +865,9 @@ SliverPadding videoEpisodeGridSliver({
   required void Function(VideoItem ep) onPlay,
   required EdgeInsetsGeometry padding,
   List<NasMenuEntry> Function(VideoItem ep)? menuEntries,
+  bool selectionMode = false,
+  Set<String> selectedIds = const <String>{},
+  void Function(VideoItem ep)? onToggle,
 }) {
   return SliverPadding(
     padding: padding,
@@ -881,10 +884,14 @@ SliverPadding videoEpisodeGridSliver({
           number: ep.episode ?? (i + 1),
           watched: ep.watched,
           selected: ep.id == selectedId,
-          onTap: () => onPlay(ep),
+          selectionMode: selectionMode,
+          picked: selectedIds.contains(ep.id),
+          onTap: selectionMode && onToggle != null
+              ? () => onToggle(ep)
+              : () => onPlay(ep),
         );
         final menu = menuEntries?.call(ep) ?? const <NasMenuEntry>[];
-        final wrapped = menu.isEmpty
+        final wrapped = (menu.isEmpty || selectionMode)
             ? cell
             : NasContextMenuRegion(entries: menu, child: cell);
         return Tooltip(message: ep.title, child: wrapped);
@@ -899,12 +906,18 @@ class _EpisodeNumberCell extends StatefulWidget {
     required this.watched,
     required this.selected,
     required this.onTap,
+    this.selectionMode = false,
+    this.picked = false,
   });
 
   final int number;
   final bool watched;
   final bool selected;
   final VoidCallback onTap;
+
+  /// 多选态：格子上盖一个勾选框，点击改为切换选中
+  final bool selectionMode;
+  final bool picked;
 
   @override
   State<_EpisodeNumberCell> createState() => _EpisodeNumberCellState();
@@ -939,14 +952,18 @@ class _EpisodeNumberCellState extends State<_EpisodeNumberCell> {
           duration: const Duration(milliseconds: NasTokens.durationFast),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: color,
+            color: widget.selectionMode && widget.picked
+                ? scheme.primary.withValues(alpha: 0.18)
+                : color,
             borderRadius: BorderRadius.circular(NasTokens.radiusMd),
             border: selected
                 ? null
                 : Border.all(
-                    color: widget.watched
-                        ? scheme.primary.withValues(alpha: 0.35)
-                        : Colors.transparent,
+                    color: widget.selectionMode && widget.picked
+                        ? scheme.primary
+                        : (widget.watched
+                              ? scheme.primary.withValues(alpha: 0.35)
+                              : Colors.transparent),
                   ),
           ),
           child: Stack(
@@ -968,6 +985,31 @@ class _EpisodeNumberCellState extends State<_EpisodeNumberCell> {
                     Icons.check,
                     size: 11,
                     color: scheme.primary.withValues(alpha: 0.9),
+                  ),
+                ),
+              // 多选态：右上角一个小圆勾，比整格换色更容易看清选中了哪几集
+              if (widget.selectionMode)
+                Positioned(
+                  top: 1,
+                  right: 1,
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: widget.picked
+                          ? scheme.primary
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: widget.picked
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant.withValues(alpha: 0.6),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: widget.picked
+                        ? const Icon(Icons.check, size: 8, color: Colors.white)
+                        : null,
                   ),
                 ),
             ],

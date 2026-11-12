@@ -3396,6 +3396,16 @@
       "n": {}
     },
     "video.series.seasonList": {},
+    "video.series.sort.episodes": {},
+    "video.series.sort.seasons": {},
+    "video.series.sort.updated": {},
+    "video.series.watch.done": {},
+    "video.series.watch.none": {},
+    "video.series.watch.partial": {},
+    "video.series.watch.progress": {
+      "done": {},
+      "total": {}
+    },
     "video.seriesLoadFailed": {
       "error": {}
     },

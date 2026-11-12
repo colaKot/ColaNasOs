@@ -32,6 +32,7 @@ class VideoSeriesDetailPage extends StatefulWidget {
     super.key,
     required this.name,
     this.coverId,
+    this.posterId,
     this.libraryId,
     this.posterUrl,
     this.headers = const {},
@@ -40,6 +41,10 @@ class VideoSeriesDetailPage extends StatefulWidget {
 
   final String name;
   final String? coverId;
+
+  /// 真有竖版海报的那一集（整部剧都没刮到 poster 时为 null，头部改走 TMDB 剧海报）
+  final String? posterId;
+
   final String? libraryId;
   final String? posterUrl;
   final Map<String, String> headers;
@@ -61,6 +66,10 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
   Map<String, Map<String, dynamic>> _actorInfo = const {};
 
   bool _favBusy = false;
+
+  /// 季层多选：选中季号，动作落到「这些季的每一集」
+  bool _seasonSelection = false;
+  final Set<int> _seasonSel = {};
 
   /// 剧库的「海报大小」档位：季卡片跟剧库卡片用同一个尺寸，用户在剧库调大调小
   /// 之后进来看季不会突然变大变小（同一把 key，见 `VideoSeriesGridPage`）。
@@ -294,7 +303,7 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
           mode: mode,
           originalTitle: sample?.originalName,
           posterUrl: seriesArtUrl(
-            widget.coverId ?? sample?.id,
+            widget.posterId ?? widget.coverId ?? sample?.id,
             size: mode == LayoutMode.compact ? 320 : 480,
           ),
           posterText: _displayName(sample?.series ?? widget.name, sample?.path),
@@ -339,18 +348,32 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
           trailing: '${seasons.length}',
           // 季卡是竖版海报网格，套一层深色卡反而把海报压暗
           card: false,
-          child: VideoSeasonGrid(
-            seasons: seasons,
-            progress: b.progress,
-            scale: _posterScale,
-            coverId: widget.coverId ?? sample?.id,
-            onTap: (s) => _openSeason(context, b, s),
-            // 季卡右键：本季标记已看 / 删除本季
-            menuEntries: (season, eps) => seasonMenuEntries(
-              context,
-              episodes: eps,
-              onChanged: () => _load(silent: true),
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_seasonSelection) ...<Widget>[
+                _seasonSelectionBar(context, b, seasons),
+                const SizedBox(height: NasTokens.spaceSm),
+              ],
+              VideoSeasonGrid(
+                seasons: seasons,
+                progress: b.progress,
+                scale: _posterScale,
+                coverId: widget.coverId ?? sample?.id,
+                selectionMode: _seasonSelection,
+                selected: _seasonSel,
+                onSelectToggle: (s) => setState(() {
+                  if (!_seasonSel.remove(s)) _seasonSel.add(s);
+                }),
+                onTap: (s) => _openSeason(context, b, s),
+                // 季卡右键：本季标记已看 / 删除本季
+                menuEntries: (season, eps) => seasonMenuEntries(
+                  context,
+                  episodes: eps,
+                  onChanged: () => _load(silent: true),
+                ),
+              ),
+            ],
           ),
         ),
         if (people.isNotEmpty) ...<Widget>[
@@ -413,6 +436,76 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
 
   bool _allFavorited(SeriesBundle b) =>
       b.items.isNotEmpty && b.items.every((e) => e.favorite);
+
+  /// 季层多选条：标记已看 / 未看（**没有**「加入合集」——合集只在整部剧那层给）
+  Widget _seasonSelectionBar(
+    BuildContext context,
+    SeriesBundle b,
+    Map<int, List<VideoItem>> seasons,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final ids = <String>[
+      for (final s in _seasonSel)
+        for (final e in seasons[s] ?? const <VideoItem>[]) e.id,
+    ];
+    final empty = ids.isEmpty;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Row(
+        children: [
+          Text(
+            tr('video.list.selected', {'count': '${_seasonSel.length}'}),
+            style: const TextStyle(fontSize: NasTokens.fontCaption),
+          ),
+          const Spacer(),
+          TextButton(
+            onPressed: () => setState(() {
+              _seasonSel
+                ..clear()
+                ..addAll(seasons.keys);
+            }),
+            child: Text(tr('video.list.filter.all')),
+          ),
+          TextButton(
+            onPressed: empty
+                ? null
+                : () => markVideos(
+                      context,
+                      ids,
+                      watched: true,
+                      count: ids.length,
+                      onChanged: () => _load(silent: true),
+                    ),
+            child: Text(tr('video.action.markWatched')),
+          ),
+          TextButton(
+            onPressed: empty
+                ? null
+                : () => markVideos(
+                      context,
+                      ids,
+                      watched: false,
+                      count: ids.length,
+                      onChanged: () => _load(silent: true),
+                    ),
+            child: Text(tr('video.action.markUnwatched')),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            tooltip: tr('common.cancel'),
+            onPressed: () => setState(() {
+              _seasonSelection = false;
+              _seasonSel.clear();
+            }),
+          ),
+        ],
+      ),
+    );
+  }
 
   /// 收藏口径：一部剧 = 它的每一集。剧没有自己的收藏列，
   /// 按集收藏才能让「收藏」筛选里看到这部剧。
@@ -488,6 +581,11 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
               onTap: () => Navigator.pop(ctx, 'watch'),
             ),
             ListTile(
+              leading: const Icon(Icons.checklist),
+              title: Text(tr('video.list.multiSelect')),
+              onTap: () => Navigator.pop(ctx, 'select'),
+            ),
+            ListTile(
               leading: const Icon(Icons.refresh),
               title: Text(tr('common.refresh')),
               onTap: () => Navigator.pop(ctx, 'refresh'),
@@ -506,6 +604,11 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
           count: b.items.length,
           onChanged: () => _load(silent: true),
         );
+      case 'select':
+        setState(() {
+          _seasonSelection = true;
+          _seasonSel.clear();
+        });
       case 'refresh':
         await _load(silent: true);
     }
@@ -553,6 +656,7 @@ Future<void> openVideoSeries(
   BuildContext context, {
   required String name,
   String? coverId,
+  String? posterId,
   String? libraryId,
   String? posterUrl,
   Map<String, String> headers = const {},
@@ -565,6 +669,7 @@ Future<void> openVideoSeries(
         build: (_) => VideoSeriesDetailPage(
           name: name,
           coverId: coverId,
+          posterId: posterId,
           libraryId: libraryId,
           posterUrl: posterUrl,
           headers: headers,
@@ -579,6 +684,7 @@ Future<void> openVideoSeries(
       builder: (_) => VideoSeriesDetailPage(
         name: name,
         coverId: coverId,
+        posterId: posterId,
         libraryId: libraryId,
         posterUrl: posterUrl,
         headers: headers,
