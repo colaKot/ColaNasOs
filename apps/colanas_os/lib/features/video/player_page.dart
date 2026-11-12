@@ -605,6 +605,8 @@ class _PlayerPageState extends State<PlayerPage> {
     String preset,
     String codec, {
     int startMs = 0,
+    /// 覆盖「提前量（分钟）」：跳转到未转位置时用小段，首片更快落地。
+    int? leadOverride,
   }) async {
     final id = widget.itemId!;
     // 请求的编码在本机解不出来时回落 H.264（桌面端一律解得出来，浏览器由
@@ -624,7 +626,7 @@ class _PlayerPageState extends State<PlayerPage> {
         audioNormalize: PlayPreferences.audioNormalize ? true : null,
         audioDownmix: PlayPreferences.audioDownmix ? true : null,
         // 0 = 整片一次转完；>0 时服务端按段转，播放位置靠近末尾才续下一段
-        leadMinutes: PlayPreferences.leadMinutes,
+        leadMinutes: leadOverride ?? PlayPreferences.leadMinutes,
         // 0 = 从片头转。服务端会按片源时长夹取，越界不会建出空会话。
         startMs: startMs > 0 ? startMs : null,
       ),
@@ -1279,6 +1281,10 @@ class _PlayerPageState extends State<PlayerPage> {
         _preset,
         _codec,
         startMs: target.inMilliseconds,
+        // 跳转会话用 1 分钟的段：4K 源一段 3 分钟要转 25s 才铺满，用户点完进度条
+        // 对着黑屏等半分钟就会认定「跳不了」。1 分钟一段首片 8s 内落地，代价只是
+        // ffmpeg 启动次数变多（总帧数不变）。
+        leadOverride: 1,
       );
       // 新播放列表的时间轴 0 就是 target，不能再 seekTo（否则会跳过 target 那一段）
       await _openUrl(u, retries: 3);
