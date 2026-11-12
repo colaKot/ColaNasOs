@@ -42,6 +42,10 @@ const IMAGE_EXT = new Set([
   'avif',
   'heic',
   'heif',
+  // 刮削图缓存（`<hash>.img`，内容其实是 JPEG）与早期复制到片源目录的
+  // `<同名>-poster.img`：不认它，列表带 `?size=` 时直接 400，
+  // 表现就是「明明有海报却没有封面」。
+  'img',
 ]);
 
 const VIDEO_EXT = new Set([

@@ -20,6 +20,7 @@ import {
   searchTmdb,
   tmdbReady,
   type ScrapedMeta,
+  type TmdbCandidate,
 } from './tmdb';
 import type { VideoItemRow } from './util';
 
@@ -133,7 +134,7 @@ function absPathOf(row: { rel_path: string }): string | null {
 }
 
 function usableMediaType(libType: LibType, row: VideoItemRow): 'movie' | 'tv' {
-  if (libType === 'tv') return 'tv';
+  if (libType === 'tv' || libType === 'short_tv') return 'tv';
   if (libType === 'movie' || libType === 'jp_movie') return 'movie';
   // 混合库 / 图片库：按条目自身是否有剧集信息判断
   return row.series ? 'tv' : 'movie';
@@ -245,16 +246,32 @@ export async function scrapeItem(
         if (!meta) return { status: 'notfound', itemId, reason: 'tmdb detail empty' };
       } else {
         const seed = String(row.nfo_name ?? '').trim();
-        const guessed = guessTitle(seed || titleOf(row.rel_path));
-        const query = seed || guessed.title;
-        const year = Number(row.nfo_year) > 0 ? Number(row.nfo_year) : guessed.year;
-        if (!query) {
+        const fileGuess = guessTitle(titleOf(row.rel_path));
+        const seedGuess = guessTitle(seed || titleOf(row.rel_path));
+        const year = Number(row.nfo_year) > 0 ? Number(row.nfo_year) : (seedGuess.year ?? fileGuess.year);
+        // 查询词同时取「NFO 片名」和「文件名还原的片名」：
+        // NFO 可能来自第三方刮削器且已经写错（真实案例：《奥德赛》的 nfo 写成
+        // 「奥德赛：史诗的诞生」，那是同年的幕后纪录片），只信 nfo_name 永远纠不回来；
+        // 反过来，国产/译制片的中文名又往往只存在于 NFO 里。两边都搜、合并候选再打分最稳。
+        const queries = [
+          ...new Set(
+            [seedGuess.title, fileGuess.title].map((v) => String(v ?? '').trim()).filter(Boolean),
+          ),
+        ];
+        if (queries.length === 0) {
           if (!(await tryJpFallback())) {
             return { status: 'notfound', itemId, reason: 'no usable title' };
           }
         } else {
-          const candidates = await searchTmdb(cfg, query, mediaType, year ?? undefined);
-          const { best, score } = pickBestCandidate(candidates, { title: query, year });
+          const merged = new Map<number, TmdbCandidate>();
+          for (const q of queries) {
+            const list = await searchTmdb(cfg, q, mediaType, year ?? undefined);
+            for (const c of list) {
+              if (c.tmdbId > 0 && !merged.has(c.tmdbId)) merged.set(c.tmdbId, c);
+            }
+          }
+          const candidates = [...merged.values()];
+          const { best, score } = pickBestCandidate(candidates, { title: queries[0], titles: queries, year });
           if (!best || score < settings.minScore) {
             // 低置信度 / 无候选：开关打开时先按番号兜底，仍失败才上报
             if (!(await tryJpFallback())) {
@@ -263,7 +280,7 @@ export async function scrapeItem(
                 status: 'notfound',
                 itemId,
                 reason: `低置信度（${score.toFixed(1)} < ${settings.minScore}），建议手动匹配`,
-                title: query,
+                title: queries[0],
               };
             }
           } else {
@@ -477,6 +494,36 @@ export async function setMatchNfo(k: KernelApi, itemId: string, match: boolean):
   return Number(res.numAffectedRows ?? 0) > 0;
 }
 
+/**
+ * 判断图片真实格式并给出可用扩展名。
+ *
+ * 刮削图缓存统一落成 `<hash>.img`（内容是 JPEG/PNG），以前直接 `path.extname(from)`
+ * 复制到片源目录就得到 `<片名>-poster.img`；列表/详情带 `?size=` 走缩略图出口时
+ * 会被当成「非图片」拒掉（400），表现为**刮削成功却没有封面**。
+ */
+async function imageExtOf(file: string): Promise<string> {
+  try {
+    const fh = await fsp.open(file, 'r');
+    try {
+      const buf = Buffer.alloc(12);
+      const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
+      if (bytesRead >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+        return '.png';
+      }
+      if (bytesRead >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return '.jpg';
+      if (bytesRead >= 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') {
+        return '.webp';
+      }
+      if (bytesRead >= 3 && buf.toString('ascii', 0, 3) === 'GIF') return '.gif';
+    } finally {
+      await fh.close();
+    }
+  } catch {
+    // 读不到文件就按扩展名兜底
+  }
+  const ext = path.extname(file).toLowerCase();
+  return ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext) ? ext : '.jpg';
+}
 
 /**
  * 把刮削图复制到片子旁边，返回「相对片子的文件名」（供 nfo 引用）。
@@ -495,7 +542,7 @@ async function copyArtBeside(
   if (!from || /^https?:\/\//i.test(from)) return undefined;
   const dir = path.dirname(absVideo);
   const stem = path.basename(absVideo).replace(/\.[^.]+$/, '');
-  const ext = path.extname(from) || '.jpg';
+  const ext = await imageExtOf(from);
   const target = path.join(dir, `${stem}-${kind}${ext}`);
   try {
     if (path.resolve(from) === path.resolve(target)) return path.basename(target);

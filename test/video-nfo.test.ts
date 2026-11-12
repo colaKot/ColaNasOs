@@ -103,6 +103,20 @@ describe('video · NFO 解析', () => {
     );
   });
 
+  test('只有演员头像时不能把 <actor><thumb> 当成影片图', () => {
+    const meta = parseNfo(
+      '<movie><title>生化危机</title><year>2026</year>' +
+        '<actor><name>甲</name><role>乙</role><thumb>https://img/actor.jpg</thumb></actor>' +
+        '</movie>',
+    );
+    assert.ok(meta);
+    assert.equal(meta!.poster, undefined);
+    assert.equal(meta!.fanart, undefined);
+    assert.equal(meta!.thumb, undefined);
+    // 演员头像仍然要留给人物表
+    assert.deepEqual(meta!.actorThumbs, { 甲: 'https://img/actor.jpg' });
+  });
+
   test('写出后再读回，字段不丢', () => {
     const meta = parseNfo(MOVIE_NFO)!;
     const back = parseNfo(buildNfo(meta));

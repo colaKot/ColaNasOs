@@ -148,6 +148,19 @@ function pickScore(xml: string): number | undefined {
   return toNumber(tagText(xml, 'rating'));
 }
 
+/**
+ * 去掉 `<actor>` / `<director>` 块：里面的 `<thumb>` 是**人物头像**，不是影片图。
+ *
+ * 真实反例（2026-11-11）：《生化危机》的 nfo 只有演员 `<thumb>`、没有影片海报，
+ * 旧实现用 `tagText(xml,'thumb')` 取到全文档第一个 `<thumb>`，于是把男主的
+ * 头像 URL 写进 `nfo_thumb`，封面位显示成一张人物剧照。
+ */
+function stripPeopleBlocks(xml: string): string {
+  return xml
+    .replace(/<actor(?:\s[^>]*)?>[\s\S]*?<\/actor>/gi, ' ')
+    .replace(/<director(?:\s[^>]*)?>[\s\S]*?<\/director>/gi, ' ');
+}
+
 function pickArt(xml: string): { poster?: string; fanart?: string; thumb?: string } {
   const poster =
     tagTextWithAttr(xml, 'thumb', 'aspect', 'poster') ??
@@ -155,8 +168,9 @@ function pickArt(xml: string): { poster?: string; fanart?: string; thumb?: strin
     null;
   const fanartBlock = /<fanart(?:\s[^>]*)?>([\s\S]*?)<\/fanart>/i.exec(xml);
   const fanart = fanartBlock ? cleanText(fanartBlock[1]) || null : null;
-  // 无 aspect 的裸 <thumb> 当 thumb（剧集/海报兜底）；已有 poster 时不重复取
-  const plainThumb = poster ? null : tagText(xml, 'thumb');
+  // 无 aspect 的裸 <thumb> 当 thumb（剧集/海报兜底）；已有 poster 时不重复取。
+  // 只认影片级的 <thumb>，演员/导演块里的头像一个都不能要。
+  const plainThumb = poster ? null : tagText(stripPeopleBlocks(xml), 'thumb');
   return {
     poster: poster ?? undefined,
     fanart: fanart ?? undefined,

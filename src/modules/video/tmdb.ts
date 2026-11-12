@@ -18,6 +18,8 @@ export interface TmdbCandidate {
   originalTitle: string;
   year: number | null;
   score: number | null;
+  /** TMDB popularity：同名 / 同年的小成本纪录片与正片只能靠它区分 */
+  popularity?: number | null;
   overview: string;
   posterPath: string | null;
 }
@@ -62,6 +64,7 @@ export function toCandidates(payload: unknown, mediaType: 'movie' | 'tv'): TmdbC
       originalTitle: String(r.original_title ?? r.original_name ?? '').trim(),
       year: yearOf(r.release_date ?? r.first_air_date),
       score: num(r.vote_average) ?? null,
+      popularity: Number(r.popularity) || 0,
       overview: String(r.overview ?? '').trim(),
       posterPath: (r.poster_path as string) || null,
     };
@@ -299,14 +302,18 @@ const NOISE = [
   // 音频规格写在**最前面**：`DTS-HDMA7.1` 里的 `DTS` 会被下面那条短的
   // `\b(...|dts(-hd)?|...)\b` 先吃掉一半，剩 `-HDMA7.1` 再也匹配不到任何规则，
   // 结果片名里留着 `-HDMA7 1`，拿去搜 TMDB 命中 0 条（2026-11-11 实测）。
-  /(?:^|[\s._-])(?:dts[- .]?hd(?:ma)?|truehd|ddp|eac3|ac3|aac|flac|atmos|opus)[\s.-]*\d(?:[.\s]\d)?/gi,
+  /(?:^|[\s._-])(?:dts[- .]?hd(?:[- .]?ma)?|truehd|ddp|eac3|ac3|aac|flac|atmos|opus)[\s.-]*\d(?:[.\s]\d)?/gi,
   /\b(2160p|1440p|1080p|1080i|720p|576p|480p|4k|8k|uhd|muhd)\b/gi,
   /\b(x264|x265|h264|h265|hevc|avc|av1|10bit|8bit|12bit)\b/gi,
   // `H.265` / `H 265` 这种带分隔符的写法
   /\b[hb][ ._-]?26[45]\b/gi,
   /\b(hdr10\+?|hdr|sdr|dolby\s*vision|dv|hlg)\b/gi,
-  // iTunes 源标签（`iT.WEB-DL`）。必须排在下面 `web` 那条**前面**：
+  // 源标签顺序敏感：下面 MA 与 iTunes 两条都必须排在再下面的 `web` 那条**前面**：
   // 否则 `WEB` 先被清掉，前瞻里就找不到 web 了。带前瞻限定是为了不误删片名《It》。
+  // `DTS-HD.MA.5.1` 之外还会有**裸 `MA`**（`2160p.MA.WEB-DL`）。留在片名里搜 TMDB
+  // 会直接 0 命中（实测 `Resident Evil MA` / `The Odyssey MA`）。
+  // 只在后面紧跟 WEB / 编码 / 音轨标记时才删，避免误伤片名《Ma》。
+  /(?:^|[\s._-])ma(?=[\s._-]+(?:web[- .]?dl|webrip|web|x26[45]|h26[45]|hevc|avc|dts|truehd|ddp|atmos|aac|ac3)\b)/gi,
   /\bit(?=[\s._-]?web)/gi,
   /\b(remux|bluray|blu-ray|bdrip|brrip|web-dl|webdl|webrip|web|hdtv|dvdrip|hdrip|hdcam)\b/gi,
   /\b(aac|ac3|eac3|dts(-hd)?|truehd|atmos|flac|ddp?5\.1|dd5\.1|5\.1|7\.1)\b/gi,
@@ -319,7 +326,7 @@ const NOISE = [
   /\b(中字|中文字幕|简中|繁中|双字|字幕|无码|流出|破解)\b/gi,
   /\b(chs|cht|gb|big5|eng|jpn)\b/gi,
   // 半截括号：`(2026)` 被年份逻辑整段摘走后，留着孤零零的 `)` 会进片名
-  /[()\[\]{}]+/g,
+  /[()[\]{}]+/g,
 ];
 const GROUP_TAIL = /\s-\s*[A-Za-z0-9@._]+$/;
 // 发布组尾巴跟 `10bit-CHD` 连在一起时上面那条（要求「空格 + -」）匹配不到，
@@ -374,16 +381,21 @@ export function guessTitle(fileStem: string): { title: string; year: number | nu
  * 打分规则（刻意简单，可解释）：
  *   +3 年份完全匹配      +1 年份差 <= 1
  *   +2 标题（忽略大小写与空格）完全一致
- *   +1 候选有海报        +评分/10
+ *   +1 候选有海报        +评分/10        +min(2, log10(popularity+1))
  * 都为 0 分时返回第一条（有结果就比没有强），由调用方决定是否接受低分结果。
+ *
+ * 为什么要 popularity：TMDB 里同名条目很多，而且「幕后纪录片」常常和正片同年上映
+ * （《奥德赛》2026 的纪录片《…: The Making of an Epic》就有独立条目）。
+ * 只按年份 + 标题打分会把低热度纪录片排到正片前面，热度项把这类误配压下去。
  */
 export function pickBestCandidate(
   candidates: TmdbCandidate[],
-  wanted: { title: string; year: number | null },
+  wanted: { title: string; titles?: readonly string[]; year: number | null },
 ): { best: TmdbCandidate | null; score: number } {
   if (candidates.length === 0) return { best: null, score: 0 };
   const norm = (s: string) => String(s ?? '').toLowerCase().replace(/[\s:：·,，.。'’\-_]+/g, '');
-  const wantTitle = norm(wanted.title);
+  // 一次刮削会用多个查询词（NFO 片名 / 文件名），候选只要匹配其中任意一个即可
+  const wantTitles = [...new Set([wanted.title, ...(wanted.titles ?? [])].map(norm).filter(Boolean))];
   let best: TmdbCandidate | null = null;
   let bestScore = -1;
   for (const c of candidates) {
@@ -392,10 +404,16 @@ export function pickBestCandidate(
       if (wanted.year === c.year) score += 3;
       else if (Math.abs(wanted.year - c.year) <= 1) score += 1;
     }
-    if (wantTitle && (norm(c.title) === wantTitle || norm(c.originalTitle) === wantTitle)) score += 2;
-    else if (wantTitle && norm(c.title).includes(wantTitle)) score += 1;
+    let titleScore = 0;
+    for (const wantTitle of wantTitles) {
+      const exact = norm(c.title) === wantTitle || norm(c.originalTitle) === wantTitle;
+      const partial = norm(c.title).includes(wantTitle) || norm(c.originalTitle).includes(wantTitle);
+      titleScore = Math.max(titleScore, exact ? 2 : partial ? 1 : 0);
+    }
+    score += titleScore;
     if (c.posterPath) score += 1;
     score += Math.min(1, (c.score ?? 0) / 10);
+    score += Math.min(2, Math.log10((c.popularity ?? 0) + 1));
     if (score > bestScore) {
       bestScore = score;
       best = c;
