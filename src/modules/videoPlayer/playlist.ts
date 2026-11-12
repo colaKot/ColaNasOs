@@ -45,6 +45,10 @@ export function mergePlaylists(parts: PlaylistPart[]): string {
     '#EXT-X-TARGETDURATION:6',
     '#EXT-X-MEDIA-SEQUENCE:0',
     '#EXT-X-PLAYLIST-TYPE:EVENT',
+    // 转码产物是「从头播的整片」，但 EVENT 列表没有 ENDLIST，播放器会按直播语义
+    // 从**末尾**几片起播（实测只拉 seg00027~29，接着就一直等新片）。
+    // 明确要求从 0 秒开始，才有完整的 3 分钟可播内容。
+    '#EXT-X-START:TIME-OFFSET=0',
   ];
   const body: string[] = [];
   parts.forEach(({ name, text }, i) => {

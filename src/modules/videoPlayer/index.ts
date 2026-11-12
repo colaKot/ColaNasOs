@@ -954,7 +954,8 @@ export const videoPlayer: ServerModule = {
               .type('application/vnd.apple.mpegurl');
             return reply.send(
               '#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:6\n' +
-                '#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n',
+                '#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-PLAYLIST-TYPE:EVENT\n' +
+                '#EXT-X-START:TIME-OFFSET=0\n',
             );
           }
           return reply.code(404).send({ error: Err.notFound });
@@ -973,13 +974,18 @@ export const videoPlayer: ServerModule = {
         if (file.endsWith('.m3u8')) {
           // 分片由播放器按相对名请求，不会带请求头；把令牌写进播放列表（含 EXT-X-MAP）
           const token = hlsToken(k, session);
-          const text = body
+          const lines = body
             .toString('utf8')
             .replace(/\r\n/g, '\n')
             .split('\n')
-            .map((line) => withToken(line.replace(/\r$/, ''), token))
-            .join('\n');
-          return reply.send(text);
+            .map((line) => withToken(line.replace(/\r$/, ''), token));
+          // 单段会话（ffmpeg 直出的 index.m3u8）同样要求从 0 秒起播，
+          // 否则 EVENT 列表会被当成直播，播放器从最后几片开始然后一直等新片。
+          if (!lines.some((line) => line.startsWith('#EXT-X-START'))) {
+            const at = lines.findIndex((line) => line.trim() === '#EXTM3U');
+            lines.splice(at < 0 ? 0 : at + 1, 0, '#EXT-X-START:TIME-OFFSET=0');
+          }
+          return reply.send(lines.join('\n'));
         }
         return reply.send(body);
       },
