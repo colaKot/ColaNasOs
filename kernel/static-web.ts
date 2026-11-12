@@ -112,7 +112,8 @@ export function resolveWebDir(): string | null {
  * 浏览器会拦截；这里按请求的 origin 放行（**只在非 production 调用**）。
  */
 export function registerDevCors(app: FastifyInstance): void {
-  const allowHeaders = 'authorization,content-type,range,if-none-match,x-requested-with';
+  const allowHeaders =
+    'authorization,content-type,range,if-none-match,x-requested-with,x-colanas-client';
   app.addHook('onRequest', async (req, reply) => {
     const origin = req.headers.origin;
     if (!origin) return;

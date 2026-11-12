@@ -3,6 +3,7 @@ library nas_core;
 
 export 'api/api_error.dart';
 export 'api/client.dart';
+export 'api/client_id.dart';
 export 'api/face_paging.dart';
 export 'api/models.dart';
 export 'api/transport.dart';

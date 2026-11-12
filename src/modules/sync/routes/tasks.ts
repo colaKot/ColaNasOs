@@ -118,9 +118,9 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
         const syncJson = JSON.stringify(body.syncConfig ?? {});
         await sql`
           insert into sync_tasks
-            (id, uid, name, device_id, device_name, mode, status, local_dir, remote_dir,
+            (id, uid, client_id, name, device_id, device_name, mode, status, local_dir, remote_dir,
              include_json, exclude_json, filter_json, sync_json, created_at, updated_at, last_run_at, last_error)
-          values (${id}, ${h.uidOf(req)}, ${taskName}, ${body.deviceId}, ${body.deviceName ?? ''}, ${mode}, 'idle',
+          values (${id}, ${h.uidOf(req)}, ${h.clientIdOf(req)}, ${taskName}, ${body.deviceId}, ${body.deviceName ?? ''}, ${mode}, 'idle',
                   ${body.localDir}, ${body.remoteDir}, ${include}, ${exclude}, ${filterJson}, ${syncJson},
                   ${ts}, ${ts}, null, null)
         `.execute(k.db);
@@ -141,9 +141,21 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
         },
       }),
       async (req: FastifyRequest) => {
+        const uid = h.uidOf(req);
+        const cid = h.clientIdOf(req);
+        // 老任务（client_id = ''）归第一个打开任务列表的客户端：认领之后
+        // 同账号在别的机器上就看不到它们了 —— 这正是「每个客户端独立」的语义。
+        if (cid) {
+          await sql`
+            update sync_tasks set client_id = ${cid}
+             where uid = ${uid} and client_id = ''
+          `.execute(k.db);
+        }
         const rows = (
           await sql<SyncTaskRow>`
-            select * from sync_tasks where uid = ${h.uidOf(req)} order by updated_at desc limit 200
+            select * from sync_tasks
+             where uid = ${uid} and client_id = ${cid}
+             order by updated_at desc limit 200
           `.execute(k.db)
         ).rows;
         return { items: rows.map(toTask) };
@@ -379,11 +391,12 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
             ? await sql`
                 select r.* from sync_runs r join sync_tasks t on t.id = r.task_id
                  where r.task_id = ${q.taskId} and t.uid = ${h.uidOf(req)}
+                   and t.client_id = ${h.clientIdOf(req)}
                  order by r.finished_at desc limit ${limit}
               `.execute(k.db)
             : await sql`
                 select r.* from sync_runs r join sync_tasks t on t.id = r.task_id
-                 where t.uid = ${h.uidOf(req)}
+                 where t.uid = ${h.uidOf(req)} and t.client_id = ${h.clientIdOf(req)}
                  order by r.finished_at desc limit ${limit}
               `.execute(k.db)
         ).rows as Array<Record<string, any>>;
@@ -548,7 +561,8 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
             last_run_at: number | null;
           }>`
             select status, device_id, device_name, last_run_at
-              from sync_tasks where uid = ${h.uidOf(req)}
+              from sync_tasks
+             where uid = ${h.uidOf(req)} and client_id = ${h.clientIdOf(req)}
           `.execute(k.db)
         ).rows;
         const byStatus: Record<string, number> = {};
@@ -597,6 +611,7 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
         await sql`
           update sync_tasks set status = ${status}, updated_at = ${h.now()}
            where id = ${task.id} and uid = ${h.uidOf(req)}
+             and client_id = ${h.clientIdOf(req)}
         `.execute(k.db);
         return { ok: true };
       },
@@ -616,7 +631,8 @@ export async function registerSyncTasks(app: FastifyInstance, k: KernelApi, h: S
       async (req: FastifyRequest) => {
         const body = (req.body || {}) as { deviceId?: string };
         const res = await sql`
-          update sync_tasks set uid = ${h.uidOf(req)}, updated_at = ${h.now()}
+          update sync_tasks
+             set uid = ${h.uidOf(req)}, client_id = ${h.clientIdOf(req)}, updated_at = ${h.now()}
            where device_id = ${body.deviceId || ''} and (uid = '' or uid is null)
         `.execute(k.db);
         return { claimed: Number(res.numAffectedRows ?? 0) };

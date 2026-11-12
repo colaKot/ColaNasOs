@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
@@ -11,6 +12,7 @@ import '../core/audio_background.dart';
 import '../core/client_log.dart';
 import '../core/i18n_setup.dart';
 import '../core/session.dart';
+import '../core/settings_store.dart';
 import '../core/tv_mode.dart';
 import '../features/login/login_page.dart';
 import '../features/music/music_page.dart';
@@ -29,11 +31,33 @@ import 'desktop_tray.dart';
 /// 改主客户端，各端同步生效。
 enum AppLaunchMode { full, photo, music, sync }
 
+/// 客户端机器标识：桌面端用机器名（同机所有客户端算出同一个值），
+/// 移动端 / Web 机器名没有意义，改用本地持久化的随机 id。
+///
+/// 同步任务按「用户 + 机器」隔离，这个 id 决定看得到哪一组任务；
+/// 独立同步客户端与主客户端共用这份代码，因而在同一台机器上得到同一个值。
+Future<void> _ensureClientId() async {
+  // 桌面端已经由 nas_core 按机器名算出来了，不用覆盖
+  if (ColanasClientId.value.isNotEmpty) return;
+  final saved = SettingsStore.instance.getString('client.id');
+  if (saved != null && saved.isNotEmpty) {
+    ColanasClientId.override = saved;
+    return;
+  }
+  final rand = Random();
+  final id =
+      'app:${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}'
+      '${rand.nextInt(1 << 30).toRadixString(36)}';
+  await SettingsStore.instance.setString('client.id', id);
+  ColanasClientId.override = id;
+}
+
 /// 统一入口：初始化设置、恢复会话、初始化播放内核，然后启动应用
 Future<void> runColanasApp({AppLaunchMode mode = AppLaunchMode.full}) async {
   WidgetsFlutterBinding.ensureInitialized();
   // 先加载设置与会话：避免启动时先用默认主题闪一下、再跳到用户主题
   await AppSettings.instance.load();
+  await _ensureClientId();
   await initI18n();
   await ApiSession.instance.restore();
   // 前端异常也进服务端日志：日志页只有一份，排查时不用两头找。

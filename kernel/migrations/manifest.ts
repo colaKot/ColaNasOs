@@ -111,6 +111,7 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '095_sync_task_name',
   // 同步任务的结构化过滤与策略（冲突/删除传播/间隔）
   '096_sync_task_config',
+  '097_sync_task_client',
   // 账号资料（手机 / 备注 / 最近登录）
   '098_auth_user_profile',
   // 登录记录与用户管理审计

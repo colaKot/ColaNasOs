@@ -433,6 +433,8 @@ export function toTask(r: SyncTaskRow) {
 export interface SyncTaskRow {
   id: string;
   uid: string;
+  /** 发起任务的客户端机器（`x-colanas-client`）；同一台机器上的各客户端共用一个值 */
+  client_id: string;
   name: string;
   device_id: string;
   device_name: string;

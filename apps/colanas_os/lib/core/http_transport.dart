@@ -24,6 +24,12 @@ class HttpTransport implements Transport {
   }) async {
     final request = http.Request(method, url);
     if (headers != null) request.headers.addAll(headers);
+    // 每个请求都带上「客户端机器标识」：同步任务按「用户 + 机器」隔离，
+    // 同一台机器上的主客户端与独立同步客户端算出同一个值，共享任务列表。
+    final clientId = ColanasClientId.value;
+    if (clientId.isNotEmpty && !request.headers.containsKey('x-colanas-client')) {
+      request.headers['x-colanas-client'] = clientId;
+    }
     if (body != null && body.isNotEmpty) request.bodyBytes = body;
 
     final response = await _client.send(request).timeout(timeout);

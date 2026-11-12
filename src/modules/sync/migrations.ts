@@ -110,4 +110,22 @@ export const SYNC_MIGRATIONS: Migration[] = [
         `.execute(db);
       },
     },
+    {
+      id: '097_sync_task_client',
+      async up(db) {
+        // 任务按「用户 + 客户端机器」隔离：同一个账号在两台电脑上各看各的；
+        // 同一台机器上的主客户端与独立的同步客户端共用同一个 client_id（见
+        // nas_core 的 clientIdOf：桌面端取机器名，其它端取本地持久化随机 id）。
+        const cols = await sql<{ name: string }>`pragma table_info(sync_tasks)`.execute(db);
+        if (!cols.rows.some((c) => c.name === 'client_id')) {
+          await sql`
+            alter table sync_tasks add column client_id text not null default ''
+          `.execute(db);
+        }
+        await sql`
+          create index if not exists idx_sync_tasks_client
+            on sync_tasks (uid, client_id, updated_at desc)
+        `.execute(db);
+      },
+    },
 ];
