@@ -304,6 +304,26 @@ const MAX_JOBS = Math.max(1, Math.min(Number(process.env.COLANAS_PLAYER_JOBS) ||
 const jobs = new Set<string>();
 let claiming = false;
 
+/**
+ * 播放器最近的轮询位置（会话 id → 最后一次带 pos 的查询）。
+ *
+ * 续转原来只靠 `pos + 半个 leadMs >= 已转出末尾` 一个条件：播放器一旦因为缺片
+ * 卡住，pos 就不再前进，于是永远等不到续转 —— 实测「播 3 分钟就死、重开会话
+ * 又死一次、13 个会话全卡在 paused」。这里记下真实播放位置，转完一段就能自己
+ * 判断要不要接着预取，不必等下一次轮询把条件凑满。
+ */
+const lastPoll = new Map<string, { at: number; pos: number }>();
+/** 超过这个时间没轮询就当没人看了（关页 / 换片），不再预取 */
+const POLL_ACTIVE_MS = 120_000;
+/** 已转出末尾领先播放位置多少算「够用」。1.5 段留给转码 ~40s 的余量 */
+const AHEAD_FACTOR = 1.5;
+
+/** 只领先播放位置有限几段：既不断流，也不会没人看时一路把整片烧完 */
+function shouldKeepAhead(pos: number, transcodedMs: number, leadMs: number): boolean {
+  if (leadMs <= 0) return false;
+  return transcodedMs - pos <= Math.round(leadMs * AHEAD_FACTOR);
+}
+
 async function claimJob(k: KernelApi): Promise<SessionRow | null> {
   const rows = (
     await sql<SessionRow>`
@@ -419,10 +439,19 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
     // 已转出的是「片源里的绝对位置」：起点偏移 + 各段时长之和。
     const doneMs = startMs + transcodedMsOf(doneParts);
     const more = leadMs > 0 && totalMs > 0 && doneMs < totalMs - 1000; 
+    // 播放器还在轮询、且播放位置离已转出末尾不远 → 直接接着转下一段。
+    // 这是「播 3 分钟必死」的解药：以前要等 pos 追到末尾前 90s 才续，而播放器
+    // 缺片卡住时 pos 根本不动，两边互等 —— 现在由转码侧主动往前铺一段。
+    const poll = lastPoll.get(job.id);
+    const keepGoing =
+      more &&
+      !!poll &&
+      Date.now() - poll.at < POLL_ACTIVE_MS &&
+      shouldKeepAhead(poll.pos, doneMs, leadMs);
     const segments = leadMs > 0 ? segmentCountOf(doneParts) : res.segments;
     await sql`
       update player_sessions
-      set status = ${more ? 'paused' : 'done'}, segments = ${segments},
+      set status = ${more ? (keepGoing ? 'pending' : 'paused') : 'done'}, segments = ${segments},
           codec = ${res.codec ?? job.codec ?? 'h264'},
           container = ${res.container ?? 'mpegts'},
           updated_at = ${now()}
@@ -857,19 +886,31 @@ export const videoPlayer: ServerModule = {
         if (!rows[0])
           return reply.code(404).send({ error: Err.notFound, message: 'session not found' });
         const row = rows[0];
+        // 记下真实播放位置：转码侧据此判断要不要提前铺下一段
+        lastPoll.set(row.id, { at: Date.now(), pos });
+        if (lastPoll.size > 64) {
+          for (const [id, v] of lastPoll) {
+            if (Date.now() - v.at > 30 * 60_000) lastPoll.delete(id);
+          }
+        }
         const leadMs = Math.max(0, Number(row.lead_ms) || 0);
         const startMs = Math.max(0, Number(row.start_ms) || 0);
         const parts = leadMs > 0 ? partsOf(k, row.id) : [];
         // 对内对外都按「片源绝对位置」算：起转偏移 + 各段时长之和。
         const doneMs = transcodedMsOf(parts);
         const transcodedMs = startMs + doneMs;
-        // 分段续转的「续」：播放位置离已转出末尾不足半个提前量时，
-        // 把 paused 会话放回队列再转一段。没人轮询就一直 paused，
-        // ffmpeg 不会在后台空转 —— 这正是省 CPU 的关键。
+        // 分段续转的「续」：满足下面任意一条就把 paused 会话放回队列再转一段。
+        //   a) 播放位置快追到已转出末尾（老行为，省 CPU）
+        //   b) 播放位置还在预取窗口内（shouldKeepAhead）
+        // 只留 (a) 就是本次线上事故的死锁点：播放器缺片卡住后 pos 不再前进，
+        // (a) 永远不成立，p1 永远不产出。没人轮询时两条都不成立，仍不会空转。
         if (leadMs > 0 && row.status === 'paused' && doneMs > 0) {
           const total = await sourceDurationMsOf(k, row.item_id);
           const threshold = Math.max(30_000, Math.round(leadMs / 2));
-          if (transcodedMs < total - 1000 && pos + threshold >= transcodedMs) {
+          if (
+            transcodedMs < total - 1000 &&
+            (pos + threshold >= transcodedMs || shouldKeepAhead(pos, transcodedMs, leadMs))
+          ) {
             await sql`
               update player_sessions set status = 'pending', updated_at = ${now()}
                where id = ${row.id} and status = 'paused'
@@ -926,6 +967,8 @@ export const videoPlayer: ServerModule = {
           return reply.code(404).send({ error: Err.notFound, message: 'session not ready' });
         }
         const sessionStatus = rows[0].status;
+        // 分片路由可能把会话推回 pending，需要可写
+        let liveStatus = sessionStatus;
 
         const query = (req.query || {}) as { part?: string };
         // 分段续转：URI 里带 `?part=pN`，分片从对应子目录取。
@@ -985,10 +1028,25 @@ export const videoPlayer: ServerModule = {
         // 空 EVENT 列表是合法的「还没内容、请按 targetduration 轮询」，
         // hls.js 与 mpv 都会自己再拉，分片一出现就起播。
         if (body === null) {
-          // 播放列表（兜底路径）最多等 2s；**分片可以等 30s**：播放器此时已经
-          // 解析完点播列表、处于缓冲状态，对单个分片请求的容忍度远高于 open 阶段。
-          // 等待期间客户端的会话轮询会上报播放位置，pump 按需续转下一段。
-          const deadline = Date.now() + (isPlaylist ? 2_000 : 30_000);
+          // 播放器要的是「下一段」的分片（pN，N = 已转出段数）→ 缓冲见底了。
+          // 只等客户端 poll 上报 pos 会死锁：播放器此刻正卡在缺片上、pos 不前进，
+          // 续转条件永远凑不满（实测 `seg00016.ts?part=p1` 连等两次 30s）。
+          // 这里由服务端直接把它推回队列。
+          if (!isPlaylist && part && liveStatus === 'paused') {
+            const have = partsOf(k, session);
+            if (part === `p${have.length}`) {
+              await sql`
+                update player_sessions set status = 'pending', updated_at = ${now()}
+                 where id = ${session} and status = 'paused'
+              `.execute(k.db);
+              liveStatus = 'pending';
+              pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
+            }
+          }
+          // 播放列表（兜底路径）最多等 2s；**分片等 10s**：播放器此时已经解析完
+          // 点播列表、处于缓冲状态。等太久反而有害 —— 以前 30s 的等待会把播放器
+          // 的缓冲彻底耗干，一场播放就此报废（改成 10s 后超时会由 hls.js 重试）。
+          const deadline = Date.now() + (isPlaylist ? 2_000 : 10_000);
           for (;;) {
             try {
               body = await fsp.readFile(abs);
@@ -999,12 +1057,12 @@ export const videoPlayer: ServerModule = {
               ? body !== null && body.toString('utf8').includes('#EXTINF')
               : body !== null && body.length > 0;
             if (ready) break;
-            const stillWorking =
-              sessionStatus === 'pending' || sessionStatus === 'running';
+            const stillWorking = liveStatus === 'pending' || liveStatus === 'running';
             if ((isPlaylist && !stillWorking) || Date.now() >= deadline) break;
             // 会话可能在这期间失败 / 被取消，别死等
             const st = await statusOf(k, session);
             if (st === 'failed' || st === 'canceled') break;
+            if (st === 'pending' || st === 'running') liveStatus = st;
             await new Promise((resolve) => setTimeout(resolve, 200));
           }
         }
@@ -1022,7 +1080,7 @@ export const videoPlayer: ServerModule = {
           // hls.js 会按 live 语义定时刷新，分片一出现就能播；
           // 直接 404 会让它判定 fatal，整页变成播放错误。
           if (isPlaylist &&
-              (sessionStatus === 'pending' || sessionStatus === 'running')) {
+              (liveStatus === 'pending' || liveStatus === 'running')) {
             reply
               .header('cache-control', 'no-store')
               .type('application/vnd.apple.mpegurl');

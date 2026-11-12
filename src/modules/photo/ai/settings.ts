@@ -56,6 +56,33 @@ export const MCP_TOOLS = [
   'photo_stats',
 ];
 
+/** `photo/ai/config` 的统计结果（12 个 count 的合并查询，一条语句跑 100ms+） */
+type AiStatsRow = {
+  total: number;
+  base: number;
+  activity: number;
+  ocr: number;
+  faces: number;
+  clustered: number;
+  face_photos: number;
+  vecs: number;
+  scene_rows: number;
+  act_rows: number;
+  ocr_rows: number;
+  phash: number;
+};
+
+/**
+ * 统计缓存（按用户）。
+ *
+ * 这条 SQL 是 12 个 `count(*)` 的标量子查询，2 万张照片实测 105ms；上涨到 10 万张
+ * 就是秒级。better-sqlite3 是**同步**驱动，这段时间 Node 事件循环完全停摆 ——
+ * 面板每轮询一次，全站所有请求（含播放分片）一起卡。进度条不需要秒级实时，
+ * 30s TTL 足够，命中时零 SQL。
+ */
+const STATS_TTL_MS = 30_000;
+const statsCache = new Map<string, { at: number; row: AiStatsRow }>();
+
 export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi): Promise<void> {
   // ---------------------------------------------------------------- 配置读写
 
@@ -79,37 +106,51 @@ export async function registerPhotoAiSettings(app: FastifyInstance, k: KernelApi
       // 但队列其实已经没有待办任务了（2026-11-06 反馈「一直显示空闲」）。
       // 分母排除「已记账失败」的坏图：它们永远产不出结果，算进总数会让
       // 进度条永远差几张、看起来又像没跑完（可用「重新识别」force 重试）。
-      const row = (
-        await sql<{
-          total: number;
-          base: number;
-          activity: number;
-          ocr: number;
-          faces: number;
-          clustered: number;
-          face_photos: number;
-          vecs: number;
-          scene_rows: number;
-          act_rows: number;
-          ocr_rows: number;
-          phash: number;
-        }>`
-          select
-            (select count(*) from photo_items i where ${owner} and i.ai_skip_at = 0) as total,
-            (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_BASE}) <> 0) as base,
-            (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_ACTIVITY}) <> 0) as activity,
-            (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_OCR}) <> 0) as ocr,
-            (select count(*) from photo_faces f join photo_items i on i.id = f.photo_id where ${owner}) as faces,
-            (select count(*) from photo_faces f join photo_items i on i.id = f.photo_id
-              where ${owner} and f.cluster_id is not null and f.cluster_id <> '') as clustered,
-            (select count(distinct f.photo_id) from photo_faces f join photo_items i on i.id = f.photo_id where ${owner}) as face_photos,
-            (select count(*) from photo_embeddings e join photo_items i on i.id = e.photo_id where ${owner}) as vecs,
-            (select count(*) from photo_scenes s join photo_items i on i.id = s.photo_id where ${owner}) as scene_rows,
-            (select count(*) from photo_activities a join photo_items i on i.id = a.photo_id where ${owner}) as act_rows,
-            (select count(*) from photo_ocr o join photo_items i on i.id = o.photo_id where ${owner}) as ocr_rows,
-            (select count(*) from photo_items i where ${owner} and i.phash is not null and i.phash <> '') as phash
-        `.execute(k.db)
-      ).rows[0];
+      const cached = statsCache.get(uid);
+      let row: AiStatsRow | undefined;
+      if (cached && Date.now() - cached.at < STATS_TTL_MS) {
+        // 命中缓存：不再跑那 12 个 count，事件循环不被占住
+        row = cached.row;
+      } else {
+        row = (
+          await sql<{
+            total: number;
+            base: number;
+            activity: number;
+            ocr: number;
+            faces: number;
+            clustered: number;
+            face_photos: number;
+            vecs: number;
+            scene_rows: number;
+            act_rows: number;
+            ocr_rows: number;
+            phash: number;
+          }>`
+            select
+              (select count(*) from photo_items i where ${owner} and i.ai_skip_at = 0) as total,
+              (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_BASE}) <> 0) as base,
+              (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_ACTIVITY}) <> 0) as activity,
+              (select count(*) from photo_items i where ${owner} and (i.ai_done_mask & ${AI_DONE_OCR}) <> 0) as ocr,
+              (select count(*) from photo_faces f join photo_items i on i.id = f.photo_id where ${owner}) as faces,
+              (select count(*) from photo_faces f join photo_items i on i.id = f.photo_id
+                where ${owner} and f.cluster_id is not null and f.cluster_id <> '') as clustered,
+              (select count(distinct f.photo_id) from photo_faces f join photo_items i on i.id = f.photo_id where ${owner}) as face_photos,
+              (select count(*) from photo_embeddings e join photo_items i on i.id = e.photo_id where ${owner}) as vecs,
+              (select count(*) from photo_scenes s join photo_items i on i.id = s.photo_id where ${owner}) as scene_rows,
+              (select count(*) from photo_activities a join photo_items i on i.id = a.photo_id where ${owner}) as act_rows,
+              (select count(*) from photo_ocr o join photo_items i on i.id = o.photo_id where ${owner}) as ocr_rows,
+              (select count(*) from photo_items i where ${owner} and i.phash is not null and i.phash <> '') as phash
+            `.execute(k.db)
+        ).rows[0];
+        if (row) statsCache.set(uid, { at: Date.now(), row });
+        // 多用户 / 多账号切换时别让缓存无限长
+        if (statsCache.size > 32) {
+          for (const [id, v] of statsCache) {
+            if (Date.now() - v.at > 10 * 60_000) statsCache.delete(id);
+          }
+        }
+      }
       const total = Number(row?.total) || 0;
       const pct = (done: number) =>
         total <= 0 ? 0 : Math.min(100, Math.round((done / total) * 100));

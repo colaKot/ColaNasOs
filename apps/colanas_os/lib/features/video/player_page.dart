@@ -610,9 +610,9 @@ class _PlayerPageState extends State<PlayerPage> {
     // 请求的编码在本机解不出来时回落 H.264（桌面端一律解得出来，浏览器由
     // `MediaSource.isTypeSupported` 说了算 —— 真 Chrome 上 AV1 / HEVC 都是支持的）。
     final outCodec = codecPlayable(codec) ? codec : 'h264';
-      final sw = Stopwatch()..start();
-      final created = await ApiSession.instance.client.playerSessionCreate(
-        body: PlayerSessionCreateBody(
+    final sw = Stopwatch()..start();
+    final created = await ApiSession.instance.client.playerSessionCreate(
+      body: PlayerSessionCreateBody(
         id: id,
         preset: preset,
         codec: outCodec,
@@ -660,6 +660,11 @@ class _PlayerPageState extends State<PlayerPage> {
   /// 要不要接着转下一段），以及拿回「已转出时长」画进度条刻度。所以**不能
   /// 只轮询 10 分钟就停**，也不能一看到 paused 就收手。
   Future<void> _watchSession(String id) async {
+    // 必须在碰 context 之前判 mounted：这个方法是 `_ensureTranscode` 在
+    // `await playerSessionCreate` **之后**调起来的，用户点完播放就退出时
+    // State 已经 deactivate，`ScaffoldMessenger.maybeOf(context)` 会直接抛
+    // 「Null check operator used on a null value」（实测 player_page.dart 崩溃）。
+    if (!mounted) return;
     final messenger = ScaffoldMessenger.maybeOf(context);
     for (;;) {
       await Future<void>.delayed(const Duration(seconds: 3));

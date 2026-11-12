@@ -182,6 +182,56 @@ async function gpuInfo(): Promise<GpuValue | null> {
   return value;
 }
 
+/**
+ * 监控快照：**后台每 3s 采一次，请求只读内存**。
+ *
+ * 以前 `/system/monitor` 在请求路径上跑 `cpuUsage()`，里面固定 `setTimeout(200)`
+ * 做两次采样 —— 每个请求至少占 200ms，客户端每 5s 轮询一次，多端叠加就把
+ * 事件循环分片切碎。实测线上 1662 次调用均值 266ms，一旦别处卡 6s，这些
+ * 200ms 定时器全部被推迟到 6.8s，监控接口自己变成了卡顿的重灾区。
+ * 采样频率与请求解耦后，接口恒定亚毫秒级。
+ */
+type MonitorSnapshot = {
+  usage: { total: number; perCore: number[] };
+  disks: { mount: string; total: number; free: number; used: number }[];
+  at: number;
+};
+
+const MONITOR_SAMPLE_MS = 3_000;
+let monitorSnap: MonitorSnapshot | null = null;
+let monitorTimer: NodeJS.Timeout | null = null;
+let monitorSampling = false;
+
+async function sampleMonitor(): Promise<void> {
+  if (monitorSampling) return;
+  monitorSampling = true;
+  try {
+    const usage = await cpuUsage(200);
+    monitorSnap = { usage, disks: diskList(), at: Date.now() };
+  } catch {
+    /* 采样失败保留上一份快照 */
+  } finally {
+    monitorSampling = false;
+  }
+}
+
+function ensureMonitorSampler(): void {
+  if (monitorTimer) return;
+  void sampleMonitor();
+  monitorTimer = setInterval(() => void sampleMonitor(), MONITOR_SAMPLE_MS);
+  // 别让这个定时器拦住进程退出（打包版关窗口 / 内核重启）
+  monitorTimer.unref?.();
+}
+
+async function monitorSnapshot(): Promise<MonitorSnapshot> {
+  ensureMonitorSampler();
+  if (monitorSnap) return monitorSnap;
+  // 进程刚起来的极短窗口：请求先到、采样还没完成，就地算一次
+  const usage = await cpuUsage(200);
+  monitorSnap = { usage, disks: diskList(), at: Date.now() };
+  return monitorSnap;
+}
+
 async function listProcesses(): Promise<{ pid: number; name: string; memKB: number }[]> {
   if (process.platform === 'win32') {
     const { stdout } = await run('tasklist', ['/FO', 'CSV', '/NH'], { maxBuffer: 16 * 1024 * 1024 });
@@ -254,8 +304,10 @@ export const system: ServerModule = {
         },
       }),
       async () => {
-        const usage = await cpuUsage();
-        const disks = diskList();
+        // 全部来自后台快照，请求路径上不做任何采样
+        const snap = await monitorSnapshot();
+        const usage = snap.usage;
+        const disks = snap.disks;
         const gpu = await gpuInfo();
         const mem = { total: os.totalmem(), free: os.freemem() };
         let disk = { total: 0, free: 0, used: 0 };

@@ -55,6 +55,39 @@ import {
  * - 「已拥有」判定由调用方用 TMDB/番号精确匹配，不靠标题相似。
  */
 const TAG = ['pt'];
+
+/**
+ * Transmission RPC 结果缓存（3s）+ 在途请求合并。
+ *
+ * 线上实测 `/pt/torrents` 峰值 12.3s、`peers` 12.1s：RPC 默认 10s 超时，一旦
+ * 下载器忙或半死，两个接口就各挂 10 秒。这段时间它们持有连接、放大并发，
+ * 而同一个页面还会反复轮询 —— 多端叠加直接把事件循环挤干。
+ * 缓存 + 合并后，3 秒内所有客户端共用一次 RPC；超时压到 4s，坏了就快速失败。
+ */
+const PT_RPC_TTL_MS = 3_000;
+const PT_RPC_TIMEOUT_MS = 4_000;
+const ptRpcCache = new Map<string, { at: number; value: unknown }>();
+const ptRpcInflight = new Map<string, Promise<unknown>>();
+
+async function cachedPtRpc<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const hit = ptRpcCache.get(key);
+  if (hit && Date.now() - hit.at < PT_RPC_TTL_MS) return hit.value as T;
+  const running = ptRpcInflight.get(key);
+  if (running) return running as Promise<T>;
+  const p = fn()
+    .then((value) => {
+      ptRpcCache.set(key, { at: Date.now(), value });
+      if (ptRpcCache.size > 16) {
+        for (const [id, v] of ptRpcCache) {
+          if (Date.now() - v.at > 60_000) ptRpcCache.delete(id);
+        }
+      }
+      return value;
+    })
+    .finally(() => ptRpcInflight.delete(key));
+  ptRpcInflight.set(key, p);
+  return p;
+}
 const COOKIE_SALT = 'colanas-pt-cookie-v1';
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -1720,7 +1753,10 @@ export const pt: ServerModule = {
             webReady,
             items: [] as any[],
           };
-        const res = await torrentList(cfg);
+        // 3s 缓存 + 在途合并：多端同时轮询只打一次 RPC，下载器卡住也不叠加
+        const res = await cachedPtRpc(`list:${cfg.url}`, () =>
+          torrentList(cfg, { timeoutMs: PT_RPC_TIMEOUT_MS }),
+        );
         // 自动发现的地址连不上（下载器被关了）：清掉探测缓存，下次重新找，
         // 别让用户一直看到 "fetch failed"。
         if (!res.ok && !configured) {
@@ -1801,7 +1837,9 @@ export const pt: ServerModule = {
       async () => {
         const cfg = await resolveTransmission();
         if (!cfg) return { ok: false, items: [] as any[] };
-        const res = await torrentPeers(cfg);
+        const res = await cachedPtRpc(`peers:${cfg.url}`, () =>
+          torrentPeers(cfg, { timeoutMs: PT_RPC_TIMEOUT_MS }),
+        );
         return {
           ok: res.ok,
           items: res.items.map((p) => ({
@@ -1894,7 +1932,7 @@ export const pt: ServerModule = {
         // 这类「幽灵记录」在「下载器」页面看不到（那页读的是 transmission 实时任务），
         // 却在发现页「任务」里删不掉，用户会以为界面坏了（2026-11-10 反馈）。
         if (action === 'remove') {
-          const list = await torrentList(cfg);
+          const list = await torrentList(cfg, { timeoutMs: PT_RPC_TIMEOUT_MS });
           const alive =
             list.ok &&
             list.items.some((t) => String(t.hashString).toLowerCase() === hash.toLowerCase());
@@ -1973,7 +2011,7 @@ export const pt: ServerModule = {
         }
         const action = b.action === 'pause' ? 'stop' : b.action === 'resume' ? 'start' : 'remove';
         // hashString 不能直接用于批量动作（返回 success 但不生效），先换成数字 id。
-        const list = await torrentList(cfg);
+        const list = await torrentList(cfg, { timeoutMs: PT_RPC_TIMEOUT_MS });
         const idByHash = new Map(list.items.map((t) => [t.hashString, t.id]));
         const ids = hashes
           .map((h) => idByHash.get(h))
@@ -3091,6 +3129,12 @@ export const pt: ServerModule = {
         k.log.warn({ err: String(err) }, 'pt scheduler tick failed');
       }
     };
+    if (!k.background.enabled) {
+      // 重叠模式：不建定时器，并且**不能注册**会 stopDaemonGracefully 的 onClose ——
+      // daemon 是按共享 dataDir 里的 daemon.json 认领的，开发实例退出会杀掉正式版正在做种的进程。
+      k.log.info('[dev] 重叠模式：跳过 PT 订阅 / 收藏 / 进度同步定时器（不接管 transmission）');
+      return;
+    }
     const timer = setInterval(() => {
       void tick();
     }, 60_000);
