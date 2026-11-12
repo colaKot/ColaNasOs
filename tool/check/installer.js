@@ -45,7 +45,11 @@ try {
 }
 if (cfg.appId) {
   check('app_id', cfg.appId === 'com.colanas.os', `appId=${cfg.appId}`);
-  check('product_name', cfg.productName === 'ColaNasOs', `productName=${cfg.productName}`);
+  check(
+    'product_name',
+    cfg.productName === 'ColaNasOs 服务端',
+    `productName=${cfg.productName}（安装包只是服务端，必须与客户端区分）`,
+  );
   check(
     'output_dir',
     (cfg.directories || {}).output === 'dist_installer',
@@ -63,6 +67,11 @@ check(
   files.join(','),
 );
 check('files_skip_maps', files.includes('!dist/**/*.map'), '源码映射不应进安装包');
+check(
+  'files_skip_artifacts',
+  ['!dist/*.exe', '!dist/*.zip', '!dist/*.apk'].every((p) => files.includes(p)),
+  'dist/ 下的历史安装包 / apk / zip 不能被塞进 app.asar（会把安装包体积翻倍）',
+);
 
 const extra = cfg.extraResources || [];
 const findEntry = (list, to) => (list || []).find((e) => e && e.to === to);
@@ -151,10 +160,24 @@ check(
   main.includes('COLANAS_WEB_DIR') && main.includes('app.isPackaged'),
   '主进程未在打包形态设置 COLANAS_WEB_DIR',
 );
+// 2026-11-10 起服务端外壳是「纯托盘 + 内核守护」：不再内嵌 BrowserWindow，
+// 界面一律交给系统浏览器打开。这里校验的正是这个约定。
 check(
-  'window_load_packaged',
-  main.includes("path.join(process.resourcesPath, 'web', 'index.html')"),
-  '窗口在打包形态没有指向 resources/web（会退回 /health）',
+  'tray_shell_no_window',
+  main.includes('new Tray(') && !main.includes('new BrowserWindow('),
+  '服务端应为纯托盘（new Tray）且不创建 BrowserWindow',
+);
+check(
+  'tray_icon_packaged',
+  main.includes("'tray16.png'") && main.includes("'tray.png'"),
+  '托盘图标应使用与安装包同一套品牌图（tray16.png / tray.png）',
+);
+check(
+  'tray_icon_shipped',
+  (cfg.extraResources || []).some(
+    (e) => e && e.to === '.' && (e.filter || []).includes('tray16.png'),
+  ),
+  'extraResources 未把 tray16.png / tray.png 送到安装目录',
 );
 check(
   'contracts_dir_env',
@@ -188,6 +211,39 @@ check(
   'version_scripts',
   Boolean(scripts['version:sync']) && Boolean(scripts['version:check']),
   `version:check=${Boolean(scripts['version:check'])}`,
+);
+
+/**
+ * 5.1 产物命名必须标清「服务端 / 客户端」
+ *
+ * 用户装完分不清装的是哪一个，是实打实踩过的坑（服务端和客户端都叫 ColaNasOs）。
+ * 这里把命名钉在门禁上：服务端带 `Server`、PC 客户端带 `Client`、安卓也带 `Client`，
+ * 且都落在 `dist_installer/`，找产物只有一个目录。
+ */
+check(
+  'server_artifact_name',
+  String((cfg.win || {}).artifactName || '').startsWith('ColaNasOs-Server-'),
+  `win.artifactName=${(cfg.win || {}).artifactName}（服务端文件名必须带 Server）`,
+);
+const clientScript = read('tool/build-client-installer.js');
+check(
+  'client_artifact_name',
+  clientScript.includes("'dist_installer'") &&
+    clientScript.includes('ColaNasOs-Client-${version}-Setup.exe'),
+  '客户端安装包应输出到 dist_installer/ 且文件名带 Client',
+);
+check(
+  'client_installer_name',
+  clientScript.includes("'ColaNasOs 客户端'"),
+  '客户端安装包的显示名必须是「ColaNasOs 客户端」',
+);
+const androidScript = fs.existsSync(path.join(root, 'build-android.bat'))
+  ? read('build-android.bat')
+  : '';
+check(
+  'android_artifact_name',
+  androidScript.includes('ColaNasOs-Client-%VER%-android-arm64.apk'),
+  '安卓包应输出到 dist_installer/ 且文件名带 Client（安卓包是客户端）',
 );
 
 /** 6. 产物（可选） */

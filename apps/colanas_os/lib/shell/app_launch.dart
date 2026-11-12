@@ -92,7 +92,7 @@ class ColaNasApp extends StatelessWidget {
         // （`Get.context` 在 MaterialApp 下恒为 null，见 core/app_navigator.dart）
         navigatorKey: kAppNavigatorKey,
         title: switch (launchMode) {
-          AppLaunchMode.full => 'ColaNasOs',
+          AppLaunchMode.full => 'ColaNasOs 客户端',
           AppLaunchMode.photo => tr('ui.shell.h2aea9e'),
           AppLaunchMode.music => tr('ui.shell.h8d6e63'),
           AppLaunchMode.sync => tr('ui.shell.hsync'),

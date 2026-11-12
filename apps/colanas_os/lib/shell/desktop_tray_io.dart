@@ -8,6 +8,8 @@ import 'package:nas_ui/nas_ui.dart';
 import 'package:tray_manager/legacy.dart';
 import 'package:window_manager/legacy.dart';
 
+import '../core/app_settings.dart';
+import '../core/autostart.dart';
 import 'desktop_tray.dart';
 
 class _DesktopTray with TrayListener, WindowListener implements DesktopTray {
@@ -24,11 +26,19 @@ class _DesktopTray with TrayListener, WindowListener implements DesktopTray {
       await windowManager.ensureInitialized();
       windowManager.addListener(this);
       await trayManager.setIcon('assets/icons/tray.png');
-      await trayManager.setToolTip('ColaNasOs');
+      await trayManager.setToolTip('ColaNasOs 客户端');
       await trayManager.setContextMenu(
         Menu(
           items: [
             MenuItem(key: 'show', label: tr('tray.show')),
+            // 开机自启勾选态跟着本地设置走；点一下当场写系统启动项
+            MenuItem.checkbox(
+              key: 'autostart',
+              label: tr('tray.autostart'),
+              checked: AppSettings.instance.startAtBoot.value,
+              disabled: !autostartSupported,
+              onClick: _toggleAutostart,
+            ),
             MenuItem.separator(),
             MenuItem(key: 'quit', label: tr('tray.quit')),
           ],
@@ -42,6 +52,13 @@ class _DesktopTray with TrayListener, WindowListener implements DesktopTray {
       windowManager.removeListener(this);
       _ready = false;
     }
+  }
+
+  Future<void> _toggleAutostart(MenuItem item) async {
+    // 库里点完会按 menuItem.checked 回写原生勾选态，所以这里必须自己翻一次
+    final next = !(item.checked ?? false);
+    item.checked = next;
+    await AppSettings.instance.setStartAtBoot(next);
   }
 
   @override

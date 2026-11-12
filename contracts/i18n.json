@@ -158,6 +158,7 @@
     "app.accounts": {},
     "app.ai": {},
     "app.blog": {},
+    "app.clientName": {},
     "app.discover": {},
     "app.files": {},
     "app.monitor": {},
@@ -487,6 +488,10 @@
     "common.size": {},
     "common.test": {},
     "common.unknown": {},
+    "dev.overlap.hint": {
+      "port": {}
+    },
+    "dev.overlap.title": {},
     "discover.board.info": {
       "name": {}
     },
@@ -2181,6 +2186,9 @@
       "name": {}
     },
     "settings.appearance": {},
+    "settings.autostart": {},
+    "settings.autostartHint": {},
+    "settings.autostartUnsupported": {},
     "settings.cache": {},
     "settings.cacheClear": {},
     "settings.cacheCleared": {
@@ -2549,6 +2557,7 @@
     "transfer.uploading": {
       "percent": {}
     },
+    "tray.autostart": {},
     "tray.quit": {},
     "tray.show": {},
     "ui.accounts.001": {},

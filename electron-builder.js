@@ -63,7 +63,7 @@ const extraResources = [
   {
     from: 'resources',
     to: '.',
-    filter: ['tray.png', 'icon.png', 'icon.ico'],
+    filter: ['tray.png', 'tray16.png', 'icon.png', 'icon.ico'],
   },
 ];
 
@@ -90,12 +90,18 @@ if (!LITE) {
 
 module.exports = {
   appId: 'com.colanas.os',
-  productName: 'ColaNasOs',
+  // 这个包只是**服务端**（托盘 + 内核 + Web 界面），不含 Flutter 桌面客户端。
+  // 客户端安装包由 tool/build-client-installer.js 单独产出，两者产品名刻意不同，
+  // 免得用户装完分不清自己装的是哪一个。
+  productName: 'ColaNasOs 服务端',
   copyright: 'Copyright © 2026 ColaNasOs',
   directories: {
     output: 'dist_installer',
     buildResources: 'resources',
   },
+  // 可执行文件名保持 ASCII：脚本 / 防火墙规则 / 任务管理器里看到的是稳定的 ColaNasOs.exe，
+  // 只有安装目录、快捷方式、卸载项带「服务端」。
+  executableName: 'ColaNasOs',
   // 不相信 electron-builder 的全量 rebuild：
   //   - node-pty 1.1 是 N-API（node-addon-api），系统 Node 与 Electron ABI 都能加载，
   //     而它的源码编译在本机需要 VS 的 Spectre 缓解库（缺失即 MSB8040，整包失败）；
@@ -104,6 +110,15 @@ module.exports = {
   npmRebuild: false,
   files: [
     'dist/**/*',
+    // `dist/` 里除了编译产物，还经常躺着打好的安装包 / apk / 便携 zip（发布流程会拷一份过去）。
+    // 不排除的话它们会被塞进 app.asar —— 实测一次 1.28GB 的安装包（里面套着旧安装包），
+    // 体积翻倍且毫无意义。
+    '!dist/*.exe',
+    '!dist/*.zip',
+    '!dist/*.apk',
+    '!dist/*.7z',
+    '!dist/*.blockmap',
+    '!dist/*.log',
     'package.json',
     '!dist/tool/**',
     '!dist/**/*.map',
@@ -120,8 +135,8 @@ module.exports = {
     icon: 'resources/icon.ico',
     target: ['nsis'],
     artifactName: LITE
-      ? 'ColaNasOs-${version}-${arch}-lite-setup.${ext}'
-      : 'ColaNasOs-Setup-${version}.${ext}',
+      ? 'ColaNasOs-Server-${version}-${arch}-lite-setup.${ext}'
+      : 'ColaNasOs-Server-${version}-Setup.${ext}',
   },
   nsis: {
     oneClick: false,
@@ -129,20 +144,24 @@ module.exports = {
     perMachine: false,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
-    shortcutName: 'ColaNasOs',
-    uninstallDisplayName: 'ColaNasOs ${version}',
+    shortcutName: 'ColaNasOs 服务端',
+    uninstallDisplayName: 'ColaNasOs 服务端 ${version}',
     deleteAppDataOnUninstall: false,
   },
   mac: {
     icon: 'resources/icon.png',
     category: 'public.app-category.utilities',
     target: ['dmg'],
-    artifactName: LITE ? 'ColaNasOs-${version}-${arch}-lite.${ext}' : 'ColaNasOs-${version}.${ext}',
+    artifactName: LITE
+      ? 'ColaNasOs-Server-${version}-${arch}-lite.${ext}'
+      : 'ColaNasOs-Server-${version}.${ext}',
   },
   linux: {
     icon: 'resources/icon.png',
     category: 'Utility',
     target: ['AppImage'],
-    artifactName: LITE ? 'ColaNasOs-${version}-${arch}-lite.${ext}' : 'ColaNasOs-${version}.${ext}',
+    artifactName: LITE
+      ? 'ColaNasOs-Server-${version}-${arch}-lite.${ext}'
+      : 'ColaNasOs-Server-${version}.${ext}',
   },
 };

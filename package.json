@@ -21,6 +21,8 @@
     "caps.check": "node tool/check/capability-matrix.js",
     "dev": "tsx electron/kernel-host.ts",
     "dist": "npm run build && node tool/build-pack.js",
+    "dist:all": "npm run dist && npm run dist:client",
+    "dist:client": "node tool/build-client-installer.js",
     "dist:lite": "npm run build && node tool/build-pack.js --lite",
     "errors.check": "node tool/check/errors.js",
     "ffmpeg:check": "node tool/fetch-ffmpeg.js --check",

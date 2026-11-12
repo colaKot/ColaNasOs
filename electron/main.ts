@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { WatchdogSupervisor } from '../kernel/watchdog-supervisor';
 import type { WatchdogMetrics } from '../kernel/watchdog';
+import { isAutostartEnabled, setAutostart, syncAutostart } from './autostart';
 
 /**
  * 「服务端」外壳：**纯托盘 + 内核守护**，不创建任何窗口。
@@ -51,6 +52,17 @@ let quitting = false;
 let crashes = 0;
 /** 内核是否已经回传监听端口：没就绪时点「打开 Web 页面」只提示，不打开空白页 */
 let kernelReady = false;
+
+// userData 固定成历史路径：产品名从 `ColaNasOs` 改成 `ColaNasOs 服务端` 后，
+// Electron 默认会跟着换目录 —— 数据（SQLite）在 APPDATA\colanas_os_server 不受影响，
+// 但单实例锁与 Chromium 缓存按 userData 区分，换了就会和已装的旧实例同时跑。
+const baseUserData = path.join(app.getPath('appData'), 'colanas_os_server');
+try {
+  fs.mkdirSync(baseUserData, { recursive: true });
+  app.setPath('userData', baseUserData);
+} catch (err) {
+  trace(`userData pin failed: ${String(err)}`);
+}
 
 // 开发实例与日常实例隔离：锁绑定在 userData 路径上，开发实例用独立 userData，
 // 两个实例可以同时在线（不再「必须关掉日常实例才能调试」）。
@@ -212,8 +224,32 @@ function openWeb(): void {
 }
 
 function createTray(): void {
-  const icon = nativeImage.createFromPath(path.join(resourcesDir(), 'tray.png'));
-  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
+  // 托盘图标 = 品牌图单独渲染的 16/32 两档，按 DPI 交给系统挑：
+  // 100% 缩放用 16×16 原始像素，150%/200% 用 32×32，不会把大图缩放糊掉。
+  // 以前这里是脚本画的「紫底白圈」，跟安装包图标完全不是一套。
+  const dir = resourcesDir();
+  const trayIcon = ((): ReturnType<typeof nativeImage.createEmpty> => {
+    const img = nativeImage.createEmpty();
+    for (const [scaleFactor, name] of [
+      [1, 'tray16.png'],
+      [2, 'tray.png'],
+    ] as const) {
+      try {
+        const file = path.join(dir, name);
+        if (fs.existsSync(file)) {
+          img.addRepresentation({ scaleFactor, buffer: fs.readFileSync(file) });
+        }
+      } catch (err) {
+        trace(`tray icon ${name} failed: ${String(err)}`);
+      }
+    }
+    if (img.isEmpty() || img.getScaleFactors().length === 0) {
+      const fallback = nativeImage.createFromPath(path.join(dir, 'tray.png'));
+      return fallback.isEmpty() ? nativeImage.createEmpty() : fallback;
+    }
+    return img;
+  })();
+  tray = new Tray(trayIcon);
   tray.setToolTip('ColaNasOs 服务端 — 启动中');
   rebuildTrayMenu();
   // 左键单击 = 打开 Web 页面（托盘程序的习惯动作）
@@ -224,12 +260,7 @@ function createTray(): void {
 
 function rebuildTrayMenu(): void {
   if (!tray) return;
-  let startOnBoot: boolean;
-  try {
-    startOnBoot = app.getLoginItemSettings().openAtLogin;
-  } catch {
-    startOnBoot = false;
-  }
+  const startOnBoot = isAutostartEnabled();
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '打开 Web 页面', click: () => openWeb() },
@@ -238,13 +269,10 @@ function rebuildTrayMenu(): void {
         type: 'checkbox',
         checked: startOnBoot,
         click: (item) => {
-          try {
-            // Windows 写 HKCU\...\Run，macOS 写 LaunchAgent，Linux 写 autostart。
-            // 开发模式（electron .）会登记成 electron.exe —— 测完记得取消勾选。
-            app.setLoginItemSettings({ openAtLogin: item.checked });
-          } catch (err) {
-            trace(`setLoginItemSettings failed: ${String(err)}`);
-          }
+          // 落盘到数据目录 config.json（默认 false），再按当前 exe 写系统启动项。
+          // 开发态只记状态、不动注册表，免得把安装版的启动项改成 electron.exe。
+          setAutostart(item.checked);
+          trace(`autostart=${item.checked}`);
           rebuildTrayMenu();
         },
       },
@@ -263,6 +291,9 @@ function rebuildTrayMenu(): void {
 
 app.whenReady().then(() => {
   trace('app ready');
+  // 托盘勾选状态来源是数据目录里的设置；顺带按当前 exe 路径对账系统启动项
+  const autostart = syncAutostart();
+  console.log(`[shell] ColaNasOs 服务端 ${app.getVersion()} 启动（开机自启=${autostart ? '开' : '关'}）`);
   startKernel();
   createTray();
 

@@ -1,89 +1,56 @@
 #!/usr/bin/env node
 /**
- * 生成外壳托盘图标（无第三方依赖，手写 PNG 编码）。
- * 输出：resources/tray.png（32x32 RGBA）
+ * 生成托盘图标（与安装包 / 应用图标同一套视觉）。
  *
- * 用法：node tool/gen-tray.js
+ * 输入：`resources/icon-source.png`（1024×1024 原始品牌图）
+ * 输出：
+ *   - `resources/tray16.png` 16×16（100% DPI 的托盘实际像素）
+ *   - `resources/tray.png`   32×32（150% / 200% DPI）
+ *
+ * 为什么不直接给一张 32 或 1024：Windows 托盘在 100% 缩放下只用 16×16，
+ * 拿大图让系统缩会糊。这里两档都从品牌图**单独渲染**，外壳再用
+ * `nativeImage.addRepresentation({scaleFactor:1|2})` 交给系统按 DPI 挑。
+ *
+ * 以前托盘是脚本画的「紫底白圈」，和安装包图标完全不是一套；现在直接用品牌图。
+ *
+ * 用法：node tool/gen-tray.js（`npm run assets`）
  */
 'use strict';
 
 const fs = require('node:fs');
 const path = require('node:path');
-const zlib = require('node:zlib');
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 
-const W = 32;
-const H = 32;
-const R = 7; // 圆角半径
-const BRAND = [109, 91, 208, 255]; // #6D5BD0
-const WHITE = [255, 255, 255, 255];
+const resources = path.join(__dirname, '..', 'resources');
+const source = path.join(resources, 'icon-source.png');
 
-const crcTable = (() => {
-  const t = new Int32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c;
+function render(img, size) {
+  const canvas = createCanvas(size, size);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.clearRect(0, 0, size, size);
+  ctx.drawImage(img, 0, 0, size, size);
+  return canvas;
+}
+
+async function main() {
+  if (!fs.existsSync(source)) {
+    throw new Error(`缺少图标源文件：${source}`);
   }
-  return t;
-})();
+  const img = await loadImage(source);
 
-function crc32(buf) {
-  let c = -1;
-  for (let i = 0; i < buf.length; i++) c = crcTable[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ -1) >>> 0;
+  const small = render(img, 16);
+  const large = render(img, 32);
+  const png16 = await small.encode('png');
+  const png32 = await large.encode('png');
+  fs.writeFileSync(path.join(resources, 'tray16.png'), png16);
+  fs.writeFileSync(path.join(resources, 'tray.png'), png32);
+
+  console.log(`[assets] tray16.png ${png16.length}B (16x16) / tray.png ${png32.length}B (32x32)`);
 }
 
-function chunk(type, data) {
-  const len = Buffer.alloc(4);
-  len.writeUInt32BE(data.length);
-  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(body));
-  return Buffer.concat([len, body, crc]);
-}
-
-function insideRoundRect(x, y) {
-  const inX = x >= R && x < W - R;
-  const inY = y >= R && y < H - R;
-  if (inX || inY) return x >= 0 && x < W && y >= 0 && y < H;
-  const dx = x < R ? R - 0.5 - x : x - (W - R - 0.5);
-  const dy = y < R ? R - 0.5 - y : y - (H - R - 0.5);
-  return dx * dx + dy * dy <= R * R;
-}
-
-const raw = Buffer.alloc((W * 4 + 1) * H);
-for (let y = 0; y < H; y++) {
-  raw[y * (W * 4 + 1)] = 0; // filter: none
-  for (let x = 0; x < W; x++) {
-    const o = y * (W * 4 + 1) + 1 + x * 4;
-    const d = Math.hypot(x + 0.5 - W / 2, y + 0.5 - H / 2);
-    let px = [0, 0, 0, 0];
-    if (d >= 7 && d <= 10) px = WHITE;
-    else if (insideRoundRect(x, y)) px = BRAND;
-    raw[o] = px[0];
-    raw[o + 1] = px[1];
-    raw[o + 2] = px[2];
-    raw[o + 3] = px[3];
-  }
-}
-
-const ihdr = Buffer.alloc(13);
-ihdr.writeUInt32BE(W, 0);
-ihdr.writeUInt32BE(H, 4);
-ihdr[8] = 8; // bit depth
-ihdr[9] = 6; // RGBA
-ihdr[10] = 0;
-ihdr[11] = 0;
-ihdr[12] = 0;
-
-const png = Buffer.concat([
-  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-  chunk('IHDR', ihdr),
-  chunk('IDAT', zlib.deflateSync(raw, { level: 9 })),
-  chunk('IEND', Buffer.alloc(0)),
-]);
-
-const out = path.join(__dirname, '..', 'resources', 'tray.png');
-fs.mkdirSync(path.dirname(out), { recursive: true });
-fs.writeFileSync(out, png);
-console.log(`[assets] wrote ${out} (${png.length} bytes, ${W}x${H})`);
+main().catch((err) => {
+  console.error('[assets] 生成托盘图标失败：', err.message);
+  process.exit(1);
+});

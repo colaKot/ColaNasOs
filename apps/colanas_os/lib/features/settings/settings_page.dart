@@ -11,6 +11,7 @@ import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/app_settings.dart';
 import '../../core/app_version.dart';
+import '../../core/autostart.dart';
 import '../../core/display_labels.dart';
 import '../../core/i18n_setup.dart';
 import '../../core/session.dart';
@@ -842,6 +843,28 @@ class _SettingsPageState extends State<SettingsPage> {
           onChanged: AppSettings.instance.setCapabilityNotice,
         ),
       ),
+      // 开机自动启动：托盘菜单里也有一份，两处读同一个设置
+      ValueListenableBuilder<bool>(
+        valueListenable: AppSettings.instance.startAtBoot,
+        builder: (context, on, _) => SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.power_settings_new_rounded),
+          title: Text(tr('settings.autostart')),
+          subtitle: Text(
+            autostartSupported
+                ? tr('settings.autostartHint')
+                : tr('settings.autostartUnsupported'),
+            style: TextStyle(
+              fontSize: NasTokens.fontCaption,
+              color: context.nasTextSecondary,
+            ),
+          ),
+          value: on,
+          onChanged: autostartSupported
+              ? AppSettings.instance.setStartAtBoot
+              : null,
+        ),
+      ),
       const SizedBox(height: NasTokens.spaceSm),
       Align(
         alignment: Alignment.centerLeft,
@@ -1319,6 +1342,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _about() {
     return _section(tr('settings.about'), [
+      // 客户端/服务端共用这套界面，但它是客户端；标题栏之外再在关于页点明身份
+      Text(tr('app.clientName'), style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: NasTokens.spaceXs),
       Text(
         tr('settings.version', {'version': kAppVersion}),
         style: Theme.of(context).textTheme.bodyLarge,

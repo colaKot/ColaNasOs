@@ -47,8 +47,14 @@ curl -s -X POST "http://127.0.0.1:5174/hot-reload?token=colanas-dev-ctl"    # �
 | `start.bat`     | `npm start` → Electron 外壳 + 内核；窗口直接加载 `http://127.0.0.1:7788/`（不再是 `/health`）；缺 `dist/kernel/index.js` 会先自动 `npm run build` | 只在需要验证「桌面形态 / 生产配置（无 dev-token、无 CORS）」时用                       |
 | `build-web.bat` | `flutter build web --release --no-wasm-dry-run` → `apps/colanas_os/build/web`                                                                     | **只在交付 / 打包 / 验收**需要刷新 7788 的正式产物时用；`dev.bat` 在跑时**不要**跑它（全量 30s，开发循环靠 5173 热重载） |
 | `pack.bat`      | `npm run pack` → `dist_installer/win-unpacked`，随后跑 `installer.check`                                                                          | 只需验证打包形态、做安装前自检时用                                                     |
-| `dist.bat`      | `npm run dist` → `dist_installer/ColaNasOs-Setup-<版本>.exe`（NSIS，含本地模型），随后跑 `installer.check`                                       | 交付完整安装器时用；出包前先跑 `build-web.bat`                                        |
-| （精简包）      | `npm run dist:lite` → `dist_installer/ColaNasOs-<版本>-<arch>-lite-setup.exe`（不含 `vendor/models`，约 206 MB）                                  | 不需要本地 AI / 体积敏感时用                                                           |
+| `dist.bat`      | `npm run dist` → `dist_installer/ColaNasOs-Server-<版本>-Setup.exe`（**服务端**：托盘 + 内核 + Web，含本地模型），随后跑 `installer.check` | 交付服务端安装器时用；出包前先跑 `build-web.bat`                                        |
+| （精简包）      | `npm run dist:lite` → `dist_installer/ColaNasOs-Server-<版本>-<arch>-lite-setup.exe`（不含 `vendor/models`，约 206 MB）                            | 不需要本地 AI / 体积敏感时用                                                           |
+| （PC 客户端）   | `build-pc.bat`（= `npm run dist:client`）→ `dist_installer/ColaNasOs-Client-<版本>-Setup.exe` + 同名便携 zip（Flutter Windows 桌面端）          | 客户端与服务端分开安装；客户端也能连局域网里的服务端                                   |
+| （安卓客户端）  | `build-android.bat` → `dist_installer/ColaNasOs-Client-<版本>-android-arm64.apk`（Flutter Android 客户端）                                        | 出手机包时用；**安卓包是客户端**，连服务端                                              |
+
+**产物一律落在 `dist_installer/`，文件名带 `Server` / `Client` 前缀**：装完分不清装的是哪个是踩过的坑。
+客户端另有「开机自动启动」开关（托盘右键 + 设置 → 外观），落地为
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`（值名 `ColaNasOs 客户端`）。
 
 打包冒烟：`npm run smoke:packaged`（独立端口 7799 + 隔离数据目录，校验 health / Web 首页 / 未登录 401 / 首启数据初始化）。
 **排查"安装包点了没反应"先看 `ELECTRON_RUN_AS_NODE`**：该变量为 `1` 时 Electron 会退化成 Node，无脚本参数直接 exit 0。

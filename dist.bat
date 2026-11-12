@@ -4,10 +4,12 @@ setlocal
 cd /d "%~dp0"
 
 echo ==========================================================
-echo  ColaNasOs 交付打包（平台安装器）
-echo    Windows → dist_installer\ColaNasOs-Setup-<版本>.exe（NSIS）
-echo    macOS   → .dmg（需在 macOS 上执行）
-echo    Linux   → .AppImage / .deb（需在 Linux 上执行）
+echo  ColaNasOs packaging - SERVER only (this script)
+echo    server : dist_installer\ColaNasOs-Server-^<ver^>-Setup.exe (tray + kernel + web)
+echo    client : build-pc.bat      -^> dist_installer\ColaNasOs-Client-^<ver^>-Setup.exe
+echo    android: build-android.bat -^> dist_installer\ColaNasOs-Client-^<ver^>-android-arm64.apk
+echo    macOS  : .dmg (run on macOS)
+echo    Linux  : .AppImage / .deb (run on Linux)
 echo ==========================================================
 echo.
 
@@ -36,7 +38,7 @@ call npm run dist || (echo [x] 打包失败 & pause & exit /b 1)
 echo [3/3] 校验安装器产物...
 call node tool\check\installer.js || (echo [x] 产物校验失败 & pause & exit /b 1)
 echo.
-echo [ok] 安装器已生成到 dist_installer\
-echo      注意：未配置代码签名证书时 electron-builder 会跳过签名（日志 signing is skipped）
-echo      干净机器安装验收请另行执行（当前门禁不含真实安装/卸载）
+echo [ok] server installer: dist_installer\ColaNasOs-Server-^<ver^>-Setup.exe
+echo      client: build-pc.bat   android: build-android.bat
+echo      unsigned build: electron-builder skips signing (see "signing is skipped")
 endlocal

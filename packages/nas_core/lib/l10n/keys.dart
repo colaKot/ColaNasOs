@@ -135,6 +135,7 @@ class I18nKeys {
   static const appAccounts = 'app.accounts';
   static const appAi = 'app.ai';
   static const appBlog = 'app.blog';
+  static const appClientName = 'app.clientName';
   static const appDiscover = 'app.discover';
   static const appFiles = 'app.files';
   static const appMonitor = 'app.monitor';
@@ -383,6 +384,9 @@ class I18nKeys {
   static const commonSize = 'common.size';
   static const commonTest = 'common.test';
   static const commonUnknown = 'common.unknown';
+  // ---- dev ----
+  static const devOverlapHint = 'dev.overlap.hint';
+  static const devOverlapTitle = 'dev.overlap.title';
   // ---- discover ----
   static const discoverBoardInfo = 'discover.board.info';
   static const discoverCountryCN = 'discover.country.CN';
@@ -1624,6 +1628,9 @@ class I18nKeys {
   static const settingsAbout = 'settings.about';
   static const settingsAccount = 'settings.account';
   static const settingsAppearance = 'settings.appearance';
+  static const settingsAutostart = 'settings.autostart';
+  static const settingsAutostartHint = 'settings.autostartHint';
+  static const settingsAutostartUnsupported = 'settings.autostartUnsupported';
   static const settingsCache = 'settings.cache';
   static const settingsCacheClear = 'settings.cacheClear';
   static const settingsCacheCleared = 'settings.cacheCleared';
@@ -1900,6 +1907,7 @@ class I18nKeys {
   static const transferUploadDir = 'transfer.uploadDir';
   static const transferUploading = 'transfer.uploading';
   // ---- tray ----
+  static const trayAutostart = 'tray.autostart';
   static const trayQuit = 'tray.quit';
   static const trayShow = 'tray.show';
   // ---- ui ----
@@ -2753,4 +2761,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2708;
+const int i18nKeyCount = 2715;

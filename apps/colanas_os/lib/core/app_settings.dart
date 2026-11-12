@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import 'autostart.dart';
 import 'settings_store.dart';
 import 'tv_mode.dart';
 
@@ -35,8 +38,23 @@ class AppSettings {
   /// 能力矩阵数据仍然保留（导航 / 文档 / 测试在用），只是不再默认打扰用户。
   final ValueNotifier<bool> capabilityNotice = ValueNotifier<bool>(false);
 
+  /// 开机自动启动（仅桌面端；Windows 写 HKCU 登录启动项）
+  ///
+  /// 状态存本地设置，系统启动项由 `core/autostart.dart` 落地。
+  /// 默认关：装完不吭声就往系统启动项里塞东西，用户会觉得是流氓软件。
+  final ValueNotifier<bool> startAtBoot = ValueNotifier<bool>(false);
+
   Listenable get listenable => Listenable.merge(
-        [themeMode, schemeId, skinId, styleId, fontId, tvMode, capabilityNotice],
+        [
+          themeMode,
+          schemeId,
+          skinId,
+          styleId,
+          fontId,
+          tvMode,
+          capabilityNotice,
+          startAtBoot,
+        ],
       );
 
   Future<void> load() async {
@@ -65,6 +83,17 @@ class AppSettings {
     // 未保存过 = 关（默认不打扰）
     capabilityNotice.value =
         SettingsStore.instance.getString('ui.capabilityNotice') == '1';
+
+    startAtBoot.value = SettingsStore.instance.getString('boot.autostart') == '1';
+    // 按当前 exe 路径对账一次：便携版挪目录 / 安装位置变了也能开机起来
+    if (startAtBoot.value) unawaited(syncAutostartEntry(true));
+  }
+
+  /// 开关 + 落地系统启动项（写注册表失败也不回滚 UI：状态仍记着，下次启动重试）
+  Future<void> setStartAtBoot(bool on) async {
+    startAtBoot.value = on;
+    await SettingsStore.instance.setString('boot.autostart', on ? '1' : '0');
+    await setAutostartEnabled(on);
   }
 
   Future<void> setCapabilityNotice(bool on) async {
