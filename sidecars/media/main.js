@@ -736,7 +736,16 @@ async function hls(params) {
     PLAY_QUALITY.presets.find((p) => p.key === params.preset) ||
     PLAY_QUALITY.presets.find((p) => p.key === PLAY_QUALITY.defaultPreset) ||
     PLAY_QUALITY.presets[0];
-  const height = Number(presetRow.height) || 0;
+  // 目标高度：片源比档位矮就跟着片源走。
+  // 720P 档 + 480P 片源不该放大成 720P（更大更糊还多占带宽），540P 片源
+  // 也不该被塞进 480P 档；编码器要求偶数高度，奇数向下取偶。
+  const srcHeight = Number(params.height) || 0;
+  const presetHeight = Number(presetRow.height) || 0;
+  const wantedHeight =
+    srcHeight > 0 && presetHeight > 0
+      ? Math.min(srcHeight, presetHeight)
+      : presetHeight || srcHeight;
+  const height = wantedHeight > 0 ? wantedHeight - (wantedHeight % 2) : 0;
   // 片源真实能力：比库里的 hdr 标记可信。
   //
   // 库里的 dolby_vision / hdr10 是扫描期写进去的，老库可能整批是 0（早期解析把

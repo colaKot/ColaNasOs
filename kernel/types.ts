@@ -11,6 +11,7 @@ import type { ContractRegistry } from './contract';
 import type { Migration } from './migrator';
 import type { TokenPayload } from './auth';
 import type { PathAction } from './access-policy';
+import type { BackgroundMode } from './dev-instance';
 
 /** 缓存命中快照（`GET /api/v1/system/cache/stats` 的条目） */
 export interface CacheSnapshotItem {
@@ -49,6 +50,12 @@ export interface KernelApi {
   contract: ContractRegistry;
   /** 内核路径约定（数据目录等），供模块存放临时文件 */
   paths: { dataDir: string };
+  /**
+   * 开发版重叠实例守卫：`enabled=false` 表示检测到另一个 ColaNasOs 正在运行，
+   * 模块必须跳过自动后台任务（定时器 / 监控订阅 / 启动入队 / sidecar）。
+   * 正式版恒为 `enabled=true`。
+   */
+  background: BackgroundMode;
   /**
    * 缓存命中计数（**只测量，不定策略**）：handler 判断缓存文件在不在时调用 `record(name, hit)`，
    * `snapshot()` 供 `GET /api/v1/system/cache/stats` 读；进程内累加，重启清零。
@@ -99,6 +106,8 @@ export interface KernelApi {
         seekMs?: number;
         limitMs?: number;
         timeoutMs?: number;
+        /** 片源高度（像素）：比所选档位矮时按它转，不做放大 */
+        height?: number;
       },
     ): Promise<{
       segments: number;

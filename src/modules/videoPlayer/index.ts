@@ -435,6 +435,8 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
       srcVideoCodec: media?.video_codec ?? undefined,
       seekMs: leadMs > 0 || startMs > 0 ? transcodedMs : undefined,
       limitMs: leadMs > 0 ? leadMs : undefined,
+      // 片源高度：sidecar 会取 min(片源, 档位)，矮片源不放大
+      height: Number((media as { height?: number } | undefined)?.height) || 0,
     });
     k.log.info(
       {
