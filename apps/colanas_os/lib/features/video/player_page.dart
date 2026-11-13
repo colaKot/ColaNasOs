@@ -660,7 +660,32 @@ class _PlayerPageState extends State<PlayerPage> {
     _actualCodec = null;
     // 后台只盯失败：转码挂了要明确说出来，别让用户对着无限缓冲猜。
     _watchSession(created.id);
+    // 首片落盘之前不要把地址交给播放器（见 _waitForFirstSegment）
+    await _waitForFirstSegment(created.id);
     return u;
+  }
+
+  /// 新建会话后等首片落盘，再把播放地址交给播放器。
+  ///
+  /// 静态 VOD 列表是秒回的（按整片时长预列全部片名），但此刻 ffmpeg 可能连
+  /// `init.mp4` 都还没写出来。直接 `player.open` 的话 libmpv 拿不到 fMP4
+  /// 初始化段，约 7 秒就报 `Failed to recognize file format` —— 之后分片
+  /// 陆续产出（日志里 43 个全 200）也救不回来，因为播放已经 fatal 了。
+  /// 跳转时尤其容易踩：每次都是全新会话。复用旧会话时 transcodedMs 立刻 > 0，
+  /// 这里零延迟返回，不影响秒开。
+  Future<void> _waitForFirstSegment(String id) async {
+    for (var i = 0; i < 40; i += 1) {
+      if (!mounted) return;
+      try {
+        final job = await ApiSession.instance.client.playerSessionGet(id: id, pos: 0);
+        if ((job.transcodedMs ?? 0) > 0) return;
+        final st = '${job.status}';
+        if (st == 'failed' || st == 'canceled' || st == 'done') return;
+      } catch (_) {
+        // 单次查询失败继续等，别把跳转打断
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
   }
 
   /// 后台盯会话状态：失败要明确说出来，成功就静默结束。
