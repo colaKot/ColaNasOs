@@ -138,9 +138,16 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
     }
   }
 
-  Future<void> _loadStages({required bool reset}) async {
+  /// [preserveScroll] 用于「原地刷新」：换完封面 / 从阶段页回来时**保住滚动位置**。
+  ///
+  /// 之前这里无条件 `jumpTo(0)`，用户翻了十几段点开一张图再返回，列表被重置回
+  /// 第一张（2026-11-13 反馈）。保位置时会把 limit 放大到「已加载条数」，
+  /// 这样列表长度不变，旧偏移才有意义；纯切人 / 换粒度 / 换排序仍然回顶部。
+  Future<void> _loadStages({required bool reset, bool preserveScroll = false}) async {
     final person = _personId;
     if (person == null || _loadingMore) return;
+    final offset = preserveScroll && _scroll.hasClients ? _scroll.offset : 0.0;
+    final limit = preserveScroll ? _stages.length.clamp(_pageSize, 100).toInt() : _pageSize;
     setState(() => _loadingMore = true);
     try {
       final res = await _client.photoGrowthItems(
@@ -148,7 +155,7 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
         order: _asc ? 'asc' : 'desc',
         granularity: _granularity,
         cursor: reset ? null : _cursor,
-        limit: _pageSize,
+        limit: limit,
       );
       if (!mounted) return;
       setState(() {
@@ -158,7 +165,17 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
         _summary = res.summary;
         _loadingMore = false;
       });
-      if (reset && _scroll.hasClients) _scroll.jumpTo(0);
+      if (reset && _scroll.hasClients) {
+        if (!preserveScroll) {
+          _scroll.jumpTo(0);
+        } else {
+          // 新列表要等一帧才布局完，maxScrollExtent 才是新的值
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || !_scroll.hasClients) return;
+            _scroll.jumpTo(offset.clamp(0.0, _scroll.position.maxScrollExtent));
+          });
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingMore = false);
@@ -218,17 +235,24 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
       context: context,
       builder: (_) => GrowthRepinDialog(stage: stage),
     );
-    if (updated != null && mounted) await _loadStages(reset: true);
+    // 原地刷新：保住滚动位置，别因为换了个封面把人送回第一段
+    if (updated != null && mounted) await _loadStages(reset: true, preserveScroll: true);
   }
 
   Future<void> _openStage(PhotoGrowthStage stage) async {
+    var coverChanged = false;
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => PhotoGrowthStagePage(stage: stage),
+        builder: (_) => PhotoGrowthStagePage(
+          stage: stage,
+          onCoverChanged: () => coverChanged = true,
+        ),
       ),
     );
-    // 二级页里可能换过封面，回来统一刷一次，避免两页状态不一致
-    if (mounted) await _loadStages(reset: true);
+    if (!mounted || !coverChanged) return;
+    // 只是点开看了几张图就回来 —— 不动列表、不重排、不跳顶部；
+    // 真在二级页里换过封面才刷一次，而且刷完要停在原来那一段。
+    await _loadStages(reset: true, preserveScroll: true);
   }
 
   /// 「+」：多选要显示在人物条上的人（默认前 5 个之外的，勾上才出现）。
@@ -785,9 +809,15 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
 
 /// 阶段二级页：这个时期的全部照片（真分页）+ 换封面。
 class PhotoGrowthStagePage extends StatefulWidget {
-  const PhotoGrowthStagePage({super.key, required this.stage});
+  const PhotoGrowthStagePage({super.key, required this.stage, this.onCoverChanged});
 
   final PhotoGrowthStage stage;
+
+  /// 换过封面就通知列表页「回来要刷一次」。
+  ///
+  /// 只在真换过时通知：用户只是点开看几张图就返回的话，列表页连请求都不用发，
+  /// 更不会因为重排把滚动位置冲掉。
+  final VoidCallback? onCoverChanged;
 
   @override
   State<PhotoGrowthStagePage> createState() => _PhotoGrowthStagePageState();
@@ -869,6 +899,7 @@ class _PhotoGrowthStagePageState extends State<PhotoGrowthStagePage> {
     );
     if (updated == null || !mounted) return;
     setState(() => _stage = updated);
+    widget.onCoverChanged?.call();
     NasSnack.show(context, tr('photo.growth.repinDone'));
   }
 
