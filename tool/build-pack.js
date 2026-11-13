@@ -63,6 +63,18 @@ if (!betterSqliteAbiOk()) {
   console.log('[build-pack] better-sqlite3 ABI 已匹配，跳过 rebuild');
 }
 
+// 随包地名库转成 DELETE journal 模式：WAL 库只读打开时首次查询会 SQLITE_CANTOPEN，
+// 装机版的「相册回忆」整页 500（详见 tool/geo-journal.js）。转换失败不阻断打包，
+// 内核侧已降级为空地名。
+const geoFix = spawnSync(electron, [path.join(__dirname, 'geo-journal.js')], {
+  cwd: root,
+  stdio: 'inherit',
+  env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+});
+if (geoFix.status !== 0) {
+  console.warn('[build-pack] [!] 地名库 journal 模式转换失败：装机版相册回忆会没有地名（不会 500）');
+}
+
 // 便携 python 运行时（AI 新闻播客的本地语音合成）：缺了就现做一份。
 // 失败不阻断打包：只影响语音合成，其余功能照常。
 if (!lite) {

@@ -84,6 +84,24 @@ export interface NearestPlace {
 
 const statements = new Map<string, Database.Statement>();
 
+/**
+ * 连接不可用（典型：安装目录只读 + 随包的 geonames 是 WAL 模式，readonly 打开能成功、
+ * 首次 prepare 才报 `SQLITE_CANTOPEN: unable to open database file`）。
+ * 这类失败必须在这里吞掉：地名只是锦上添花，不该把「相册回忆」整页打成 500。
+ * 同时标记失败，后续调用不再反复尝试。
+ */
+function fail(): null {
+  dbFailed = true;
+  statements.clear();
+  try {
+    db?.close();
+  } catch {
+    /* 已经关掉 / 从未打开 */
+  }
+  db = null;
+  return null;
+}
+
 function statement(column: string): Database.Statement | null {
   const conn = open();
   if (!conn) return null;
@@ -104,9 +122,14 @@ function statement(column: string): Database.Statement | null {
      ORDER BY (g.latitude - ?) * (g.latitude - ?)
             + (g.longitude - ?) * (g.longitude - ?) * ?
      LIMIT 5`;
-  const stmt = conn.prepare(sql);
-  statements.set(key, stmt);
-  return stmt;
+  try {
+    const stmt = conn.prepare(sql);
+    statements.set(key, stmt);
+    return stmt;
+  } catch {
+    // 只读连接上首次读就可能失败（见 fail() 的说明），这里降级为「无地名」
+    return fail();
+  }
 }
 
 /**
