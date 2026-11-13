@@ -292,7 +292,9 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
 
   Widget _personBar() {
     return SizedBox(
-      height: 92,
+      // 头像(56+4) + 间距 + 名字 + 张数实测约 88~93px，给到 104 免得
+      // 不同字体下顶部人脸条反复报 "RenderFlex overflowed by 1 pixel"
+      height: 104,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: _persons.length + 1,
@@ -326,6 +328,7 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
               width: 74,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(2),
