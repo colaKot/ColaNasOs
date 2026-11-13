@@ -279,6 +279,15 @@ class _PlayerPageState extends State<PlayerPage> {
     _url = widget.url;
     _directUrl = widget.url;
     _player = Player();
+    // 开硬件解码：media_kit 默认不设 hwdec，libmpv 会走软解。H.264 720p 软解
+    // 还撑得住，但 AV1 走 dav1d 软解、同时服务端在做 4K tonemap + AV1 编码，
+    // 客户端会掉到 0.5fps（实测 30s 只有 12~16 帧，而 raster 仅 2.3ms ——
+    // 卡在解码而不是渲染）。auto-safe 在 GPU 解不了该编码时自动回落软解，
+    // 不会变成「播不了」。
+    final plat = _player.platform;
+    if (plat is NativePlayer) {
+      plat.setProperty('hwdec', 'auto-safe').ignore();
+    }
     _controller = VideoController(_player);
     _logSubs.add(_player.stream.playing.listen((playing) {
       ClientLogger.instance.info(
