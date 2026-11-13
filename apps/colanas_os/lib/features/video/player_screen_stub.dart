@@ -1,4 +1,12 @@
+// window_manager 0.6.x 的新式 nativeapi 接口尚未定稿，桌面端沿用稳定的
+// legacy 兼容层（与 shell/desktop_tray_io.dart 保持一致）。
+// ignore_for_file: deprecated_member_use
+
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:window_manager/legacy.dart';
 
 /// 进入播放器「全屏」：隐藏系统栏 + 按视频朝向锁屏幕方向。
 ///
@@ -12,6 +20,16 @@ Future<void> enterPlayerFullscreen({
   required int videoWidth,
   required int videoHeight,
 }) async {
+  // 桌面端必须走 window_manager：下面是 SystemChrome（移动端系统 UI / 朝向），
+  // 对 Windows 的窗口尺寸完全无效 —— 以前点「全屏」纹丝不动就是这个原因。
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    try {
+      await windowManager.setFullScreen(true);
+      return;
+    } catch (_) {
+      // 拿不到窗口管理器（权限 / 初始化未完成）就退回下面的通用路径
+    }
+  }
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   if (videoWidth <= 0 || videoHeight <= 0) return;
   await SystemChrome.setPreferredOrientations(
@@ -29,6 +47,13 @@ Future<void> enterPlayerFullscreen({
 ///     会**保持上一次的横屏不动**，用户看到的就是「退出影片以后一直横着」。
 ///   - 横着进来（TV / 平板横放）→ 放开朝向，别把 TV 的界面掰成竖的。
 Future<void> exitPlayerFullscreen({bool portrait = true}) async {
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    try {
+      await windowManager.setFullScreen(false);
+    } catch (_) {
+      // 同上：拿不到窗口管理器就只做下面的通用还原
+    }
+  }
   await SystemChrome.setPreferredOrientations(
     portrait
         ? const [DeviceOrientation.portraitUp]

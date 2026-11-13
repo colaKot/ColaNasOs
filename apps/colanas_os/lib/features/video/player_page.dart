@@ -167,8 +167,6 @@ class _PlayerPageState extends State<PlayerPage> {
   /// 相对起点的偏移（毫秒），拖动过程中实时变
   double _dragDeltaMs = 0;
   bool _dragSeeking = false;
-  /// 双击落点：用来区分左 / 中 / 右
-  Offset? _lastDoubleTapPos;
   /// 快进快退的短暂提示（800ms 后自动消失）
   String? _seekHint;
   Timer? _seekHintTimer;
@@ -839,11 +837,16 @@ class _PlayerPageState extends State<PlayerPage> {
       // 起播是毫秒级。以前这里无条件建转码会话，把「原画」偏好架空了。
       final toDirect =
           _preset == 'original' && widget.compat != null && (!kIsWeb || !_needTranscode);
-      final u = toDirect ? _directUrl : await _ensureTranscode(_preset, _codec);
+      // 档位按片源高度收敛：偏好 1080P 但片源只有 720P 时，按 720P 转，
+      // 不做放大转码（放大只会更大更糊，还多占 GPU）。菜单同样只列 ≤720P 的档。
+      final effective =
+          toDirect ? 'original' : clampPresetForSource(_preset, _srcHeight, codec: _codec);
+      final u = toDirect ? _directUrl : await _ensureTranscode(effective, _codec);
       if (!mounted) return;
       setState(() {
         _preparing = false;
         _isTranscode = !toDirect;
+        _preset = effective;
       });
       // retries: 首片还没落盘时内核会「打不开」，不是转码失败，给五次重试
       await _openUrl(u, retries: toDirect ? 0 : 5);
@@ -1230,6 +1233,11 @@ class _PlayerPageState extends State<PlayerPage> {
   Future<void> _seekBy(int seconds) async {
     final p = _absPosition(_player.state.position);
     await _seekTo(p + Duration(seconds: seconds));
+    _flashSeek(
+      seconds > 0
+          ? tr('player.seekForward', {'n': '$seconds'})
+          : tr('player.seekBack', {'n': '${-seconds}'}),
+    );
   }
 
   // ------------------------------------------------------------ 进度手势
@@ -1239,42 +1247,12 @@ class _PlayerPageState extends State<PlayerPage> {
   // 以前只有底部那条细滑块能拖，手机上一根手指很难抓准；画面区域
   // 那么大一块却只认「单击唤出控件」和「长按 2 倍速」，等于浪费。
 
-  /// 双击快进 / 快退的步长（秒）
-  static const _tapSeekStep = 10;
-
-  void _onDoubleTapDown(TapDownDetails d) {
-    _lastDoubleTapPos = d.localPosition;
-  }
-
   Future<void> _onDoubleTap() async {
     if (_locked) return;
-    final pos = _lastDoubleTapPos;
-    final w = MediaQuery.sizeOf(context).width;
-    // 拿不到落点就退回老行为（播放/暂停），别让双击直接失效
-    if (pos == null || w <= 0) {
-      await _player.playOrPause();
-      _poke();
-      return;
-    }
-    final ratio = pos.dx / w;
-    if (ratio >= 0.6) {
-      await _seekByHinted(_tapSeekStep);
-    } else if (ratio <= 0.4) {
-      await _seekByHinted(-_tapSeekStep);
-    } else {
-      await _player.playOrPause();
-      _poke();
-    }
-  }
-
-  Future<void> _seekByHinted(int seconds) async {
-    await _seekBy(seconds);
+    // 双击 = 进 / 出全屏。以前这里绑的是「左退 10s / 右进 10s / 中间暂停」，
+    // 而用户对播放器的默认预期是双击全屏（全屏按钮坏了以后更是唯一的出路）。
+    await _toggleImmersive();
     _poke();
-    _flashSeek(
-      seconds > 0
-          ? tr('player.seekForward', {'n': '$seconds'})
-          : tr('player.seekBack', {'n': '${-seconds}'}),
-    );
   }
 
   /// 竖向滑动的累计位移：手机上「上滑 / 下滑」切上一条 / 下一条，
@@ -2746,8 +2724,7 @@ class _PlayerPageState extends State<PlayerPage> {
                   behavior: HitTestBehavior.opaque,
                   // 单击 = 切换控件显隐（也是进 / 出沉浸的唯一手势）
                   onTap: _toggleControls,
-                  // 双击左 40% = 退 10s，右 40% = 进 10s，中间 20% = 播放/暂停
-                  onDoubleTapDown: _onDoubleTapDown,
+                  // 双击 = 全屏（见 _onDoubleTap）
                   onDoubleTap: _onDoubleTap,
                   // 横向拖动整块画面 = 快进快退（松手才真跳，见 _onSeekDragEnd）
                   onHorizontalDragStart: _onSeekDragStart,
