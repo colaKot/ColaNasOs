@@ -1039,6 +1039,16 @@ export const videoPlayer: ServerModule = {
         // 必定失败、关掉重开就好」（第二次会话已有分片，秒回）。
         // 空 EVENT 列表是合法的「还没内容、请按 targetduration 轮询」，
         // hls.js 与 mpv 都会自己再拉，分片一出现就起播。
+        // 诊断日志：init.mp4 是能否起播的分水岭，把「等了多久 / 有没有拿到 /
+        // 会话当时什么状态」记全，排障完可删。
+        const isInit = file === 'init.mp4';
+        const waitStart = Date.now();
+        if (body === null && isInit) {
+          k.log.info(
+            { session, part, status: liveStatus },
+            '[player] init 缺片，开始等待',
+          );
+        }
         if (body === null) {
           // 播放器要的是「下一段」的分片（pN，N = 已转出段数）→ 缓冲见底了。
           // 只等客户端 poll 上报 pos 会死锁：播放器此刻正卡在缺片上、pos 不前进，
@@ -1079,6 +1089,19 @@ export const videoPlayer: ServerModule = {
             if (st === 'pending' || st === 'running') liveStatus = st;
             await new Promise((resolve) => setTimeout(resolve, 200));
           }
+        }
+
+        if (isInit) {
+          k.log.info(
+            {
+              session, part,
+              waitedMs: Date.now() - waitStart,
+              ok: body !== null,
+              bytes: body?.length ?? 0,
+              status: liveStatus,
+            },
+            '[player] init 交付',
+          );
         }
 
         if (body === null) {

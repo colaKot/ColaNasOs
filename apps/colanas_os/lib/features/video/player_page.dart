@@ -674,18 +674,41 @@ class _PlayerPageState extends State<PlayerPage> {
   /// 跳转时尤其容易踩：每次都是全新会话。复用旧会话时 transcodedMs 立刻 > 0，
   /// 这里零延迟返回，不影响秒开。
   Future<void> _waitForFirstSegment(String id) async {
+    final sw = Stopwatch()..start();
+    var polls = 0;
+    var last = '';
+    void log(String why) {
+      ClientLogger.instance.info(
+        '首片等待 $why ${sw.elapsedMilliseconds}ms polls=$polls $last',
+        route: 'player.waitFirstSegment/$id',
+      );
+    }
     for (var i = 0; i < 40; i += 1) {
       if (!mounted) return;
       try {
         final job = await ApiSession.instance.client.playerSessionGet(id: id, pos: 0);
-        if ((job.transcodedMs ?? 0) > 0) return;
+        polls += 1;
+        // transcodedMs 是**片源绝对位置** = startedMs + 已转出时长。
+        // 跳转会话的 startedMs 本身就有几十万毫秒，直接判断 > 0 会立刻放行，
+        // 等于没等首片 —— 必须减掉起点。
+        final started = job.startedMs ?? 0;
+        final done = (job.transcodedMs ?? 0) - started;
         final st = '${job.status}';
-        if (st == 'failed' || st == 'canceled' || st == 'done') return;
-      } catch (_) {
-        // 单次查询失败继续等，别把跳转打断
+        last = 'status=$st transcoded=${job.transcodedMs} started=$started done=$done segments=${job.segments}';
+        if (done > 0) {
+          log('ready');
+          return;
+        }
+        if (st == 'failed' || st == 'canceled' || st == 'done') {
+          log('terminal');
+          return;
+        }
+      } catch (e) {
+        last = 'err=$e';
       }
       await Future<void>.delayed(const Duration(milliseconds: 500));
     }
+    log('timeout');
   }
 
   /// 后台盯会话状态：失败要明确说出来，成功就静默结束。
