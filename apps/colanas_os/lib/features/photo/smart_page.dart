@@ -57,6 +57,11 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
   /// 当前打开的是哪个人脸簇。只有它非空时，照片网格才挂「设封面 / 移出 / 移动」菜单。
   PhotoFaceClusterItem? _activeCluster;
 
+  /// 簇详情多选：选中项存 faceId（批量接口按 face id 操作）。
+  /// 右键 / 长按菜单里的「多选」进入，单击切换勾选。
+  bool _clusterSelecting = false;
+  final Set<String> _clusterSelected = <String>{};
+
   bool _loading = true;
   bool _analyzing = false;
   String? _error;
@@ -180,6 +185,9 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
           tr('photo.faceCluster.unnamed', {'id': cluster.id.substring(0, 6)});
       _activeCluster = cluster;
       _photos = const [];
+      // 换人 / 重新进入时清掉上一轮的多选状态
+      _clusterSelecting = false;
+      _clusterSelected.clear();
     });
     try {
       final faces = await ApiSession.instance.client.photoFacesAll(cluster.id);
@@ -1413,6 +1421,11 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
     _PhotoRef ref,
   ) => [
     NasMenuEntry(
+      label: tr('photo.face.batchSelect'),
+      icon: Icons.checklist,
+      onSelected: () => _enterClusterSelect(ref),
+    ),
+    NasMenuEntry(
       label: tr('photo.face.setCover'),
       icon: Icons.image_outlined,
       onSelected: () => _setClusterCover(cluster, ref),
@@ -1442,6 +1455,11 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: const Icon(Icons.checklist),
+              title: Text(tr('photo.face.batchSelect')),
+              onTap: () => Navigator.pop(ctx, 'select'),
+            ),
+            ListTile(
               leading: const Icon(Icons.image_outlined),
               title: Text(tr('photo.face.setCover')),
               onTap: () => Navigator.pop(ctx, 'cover'),
@@ -1462,6 +1480,8 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
     );
     if (action == null || !mounted) return;
     switch (action) {
+      case 'select':
+        _enterClusterSelect(ref);
       case 'cover':
         await _setClusterCover(cluster, ref);
       case 'out':
@@ -1469,6 +1489,43 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
       case 'to':
         await _moveClusterPhoto(cluster, ref, moveOut: false);
     }
+  }
+
+  /// 右键 / 长按菜单里的「多选」：进入选择模式并选中当前这张。
+  void _enterClusterSelect(_PhotoRef ref) {
+    final faceId = ref.faceId;
+    if (faceId == null) return;
+    setState(() {
+      _clusterSelecting = true;
+      _clusterSelected.add(faceId);
+    });
+  }
+
+  /// 簇详情多选的批量动作：复用 _batchFaces（out / to / delete），
+  /// 完成后重拉当前簇照片；簇被删空则退回人物墙。
+  Future<void> _batchClusterAction(String action) async {
+    final cluster = _activeCluster;
+    if (cluster == null) return;
+    if (_clusterSelected.isEmpty) {
+      _toast(tr('photo.face.batchNoneSelected'));
+      return;
+    }
+    final ok = await _batchFaces(_clusterSelected.toList(), action, cluster);
+    if (!ok || !mounted) return;
+    setState(() {
+      _clusterSelecting = false;
+      _clusterSelected.clear();
+    });
+    final fresh = _clusters.where((c) => c.id == cluster.id).toList();
+    if (fresh.isEmpty) {
+      setState(() {
+        _activeCluster = null;
+        _photos = const [];
+        _title = tr('ui.photo.038');
+      });
+      return;
+    }
+    await _openCluster(fresh.first);
   }
 
   Future<void> _setClusterCover(
@@ -1780,8 +1837,45 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
         ? _photos.where((p) => _sceneGateOf[p.id] == 'confident').toList()
         : _photos;
     if (visible.isEmpty) return Center(child: Text(tr('ui.photo.066')));
+    final selectable = [for (final p in visible) if (p.faceId != null) p.faceId!];
     return Column(
       children: [
+        // 簇详情多选条：右键 / 长按菜单里的「多选」进入
+        if (_clusterSelecting && _activeCluster != null)
+          NasSelectionBar(
+            title: tr('photo.face.batchSelected', {'count': '${_clusterSelected.length}'}),
+            allSelected: selectable.isNotEmpty && _clusterSelected.length >= selectable.length,
+            onToggleAll: () => setState(() {
+              if (_clusterSelected.length >= selectable.length) {
+                _clusterSelected.clear();
+              } else {
+                _clusterSelected.addAll(selectable);
+              }
+            }),
+            onClose: () => setState(() {
+              _clusterSelecting = false;
+              _clusterSelected.clear();
+            }),
+            actions: [
+              NasSelectionAction(
+                label: tr('photo.face.batchMoveOut'),
+                icon: Icons.person_off_outlined,
+                danger: true,
+                onPressed: () => _batchClusterAction('out'),
+              ),
+              NasSelectionAction(
+                label: tr('photo.face.batchMoveTo'),
+                icon: Icons.person_add_outlined,
+                onPressed: () => _batchClusterAction('to'),
+              ),
+              NasSelectionAction(
+                label: tr('photo.face.batchDelete'),
+                icon: Icons.delete_outline,
+                danger: true,
+                onPressed: () => _batchClusterAction('delete'),
+              ),
+            ],
+          ),
         if (sceneMode)
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -1875,16 +1969,34 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
                 initialIndex: i,
                 title: _title,
               );
+              final faceId = ref.faceId;
+              final picked = faceId != null && _clusterSelected.contains(faceId);
+              final cover = NasCoverImage(
+                url: _media.thumbnail(ref.path, size: 320),
+                headers: ApiSession.instance.authHeaders,
+                icon: Icons.image_outlined,
+              );
               final tile = GestureDetector(
-                onTap: openViewer,
+                onTap: () {
+                  // 选择模式下单击是勾选 / 取消，不再打开大图
+                  if (canMenu && _clusterSelecting && faceId != null) {
+                    setState(() {
+                      if (picked) {
+                        _clusterSelected.remove(faceId);
+                      } else {
+                        _clusterSelected.add(faceId);
+                      }
+                    });
+                    return;
+                  }
+                  openViewer();
+                },
                 onLongPress: canMenu
                     ? () => _clusterPhotoActions(cluster, ref)
                     : null,
-                child: NasCoverImage(
-                  url: _media.thumbnail(ref.path, size: 320),
-                  headers: ApiSession.instance.authHeaders,
-                  icon: Icons.image_outlined,
-                ),
+                child: canMenu && _clusterSelecting
+                    ? NasSelectionCover(selected: picked, child: cover)
+                    : cover,
               );
               if (!canMenu) return tile;
               // Web / PC 右键；移动端由上面的 onLongPress 出底部弹窗。
