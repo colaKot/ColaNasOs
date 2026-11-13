@@ -282,11 +282,18 @@ class _PlayerPageState extends State<PlayerPage> {
     // 开硬件解码：media_kit 默认不设 hwdec，libmpv 会走软解。H.264 720p 软解
     // 还撑得住，但 AV1 走 dav1d 软解、同时服务端在做 4K tonemap + AV1 编码，
     // 客户端会掉到 0.5fps（实测 30s 只有 12~16 帧，而 raster 仅 2.3ms ——
-    // 卡在解码而不是渲染）。auto-safe 在 GPU 解不了该编码时自动回落软解，
-    // 不会变成「播不了」。
-    final plat = _player.platform;
-    if (plat is NativePlayer) {
-      plat.setProperty('hwdec', 'auto-safe').ignore();
+    // 卡在解码而不是渲染）。auto-safe 在 GPU 解不了该编码时自动回落软解。
+    //
+    // Web 上没有 NativePlayer（且解码交给浏览器），而且 Web 版那个空壳类
+    // 不含 setProperty，静态调用会让 flutter build web 直接编译失败 ——
+    // 所以这里用运行时动态调用 + kIsWeb 短路。
+    if (!kIsWeb) {
+      try {
+        // ignore: avoid_dynamic_calls
+        (_player.platform as dynamic).setProperty('hwdec', 'auto-safe');
+      } catch (_) {
+        // 拿不到就算了，退回软解
+      }
     }
     _controller = VideoController(_player);
     _logSubs.add(_player.stream.playing.listen((playing) {
