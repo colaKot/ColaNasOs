@@ -523,9 +523,12 @@ async function supersedeOlder(k: KernelApi, itemId: string): Promise<void> {
     `.execute(k.db)
   ).rows;
   for (const row of rows) {
-    // paused 也算：分段续转的预取会把 paused 标回 pending 再排队，用户跳走后
-    // 它还会占着 MAX_JOBS 槽位、每段烧 20s。不把它一并取消，新会话就得等。
+    // 所有旧会话都停止预取（lastPoll 会让 runJob 末尾把它标回 pending 抢槽位）
     lastPoll.delete(row.id);
+    // paused 没有 ffmpeg 在跑、不占 MAX_JOBS，保留它还能被 dupe 复用
+    // （同参数重新打开 / 跳回已转过的位置时秒开）。把它标 canceled 会让
+    // dupe 查不到，每次都得重新起转码 —— 实测「连启动都变慢了」。
+    if (row.status === 'paused') continue;
     await sql`
       update player_sessions
       set status = 'canceled', error = 'superseded', updated_at = ${now()}

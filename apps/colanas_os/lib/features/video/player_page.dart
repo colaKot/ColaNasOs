@@ -1323,11 +1323,31 @@ class _PlayerPageState extends State<PlayerPage> {
       loadedEnd: _loadedEnd,
     )) {
       if (!allowJump) return;
+      // 只比已转出末尾多一点点（键盘 ±10s、拖个几十秒）：不重建会话。
+      // 新会话要重新起一次 AMF/AV1 ffmpeg，实测首片 ~10s；这里只差几秒，
+      // 直接让播放器在 VOD 列表里 seek，服务端分片路由会等并按需续转，
+      // 当前画面和已有缓冲都保留。
+      final over = t - _loadedEnd;
+      if (over > Duration.zero && over <= const Duration(seconds: 30)) {
+        await _player.seek(t - _startOffset);
+        _poke();
+        _nudgeTranscode(t);
+        return;
+      }
       await _jumpTo(t);
       return;
     }
     await _player.seek(t - _startOffset);
     _poke();
+  }
+
+  /// 小幅跳转后立刻上报目标位置，让服务端马上续转，不用等 3s 轮询。
+  void _nudgeTranscode(Duration target) {
+    final id = _sessionId;
+    if (id == null || !_isTranscode) return;
+    ApiSession.instance.client
+        .playerSessionGet(id: id, pos: target.inMilliseconds.toDouble())
+        .ignore();
   }
 
   /// 跳到还没转出来的位置：另建一条从 [target] 起转的会话。
