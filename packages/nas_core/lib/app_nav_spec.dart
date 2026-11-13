@@ -137,6 +137,7 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
           NavItemSpec(id: 'year', labelKey: 'photo.nav.year', icon: 'bar_chart'),
           NavItemSpec(id: 'timeContrast', labelKey: 'photo.nav.timeContrast', icon: 'history'),
           NavItemSpec(id: 'journey', labelKey: 'photo.nav.journey', icon: 'travel_explore_outlined'),
+          NavItemSpec(id: 'growth', labelKey: 'photo.nav.growth', icon: 'timeline_outlined'),
         ],
       ),
       NavSectionSpec(

@@ -21,6 +21,7 @@ import 'photo_face_relations_page.dart';
 import 'photo_models_page.dart';
 import 'photo_preview_settings_page.dart';
 import 'photo_geo_page.dart';
+import 'photo_growth_page.dart';
 
 import 'photo_source_page.dart';
 import 'photo_timeline_tab.dart';
@@ -85,6 +86,8 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
         return const PhotoTimeContrastPage();
       case 'journey':
         return const PhotoJourneyPage();
+      case 'growth':
+        return const PhotoGrowthTrackPage();
       case 'duplicateInsight':
         // 合并后的兼容别名：统一走「相似清理」页
         return const PhotoCleanupPage(embedded: true);

@@ -949,4 +949,76 @@ export const PHOTO_MIGRATIONS: Migration[] = [
         }
       },
     },
+    {
+      // 成长轨迹：服务端预计算出「阶段」（Stage）并落库，前端只做展示。
+      //
+      // 层级 Asset → Event → Stage → Track 里，Event 只在分段过程中隐式存在
+      // （同一天/相邻 burst 的照片），不单独建表；Track = 某 person 的全部
+      // Stage 有序序列，用 (owner_id, person_id, granularity) 索引表示。
+      // stage_assets 只存每段的候选封面池（Top 12），不是阶段全量照片 ——
+      // 全量照片由二级页按 (person, 时间窗) 现查，20 万张库不能全量冗余。
+      id: '176_photo_growth',
+      async up(db) {
+        await sql`
+          create table if not exists photo_growth_stages (
+            id text primary key,
+            owner_id text not null,
+            person_id text not null,
+            granularity text not null,
+            seq integer not null,
+            start_at integer not null,
+            end_at integer not null,
+            place_key text not null default '',
+            place_name text not null default '',
+            span_kind text not null default 'auto',
+            title text not null default '',
+            subtitle text not null default '',
+            cover_asset_id text,
+            cover_path text not null default '',
+            secondary_path text not null default '',
+            cover_score real not null default 0,
+            reason_json text not null default '{}',
+            photo_count integer not null default 0,
+            milestone text not null default '',
+            hint text not null default '',
+            locked integer not null default 0,
+            hidden integer not null default 0,
+            version integer not null default 1,
+            created_at integer not null,
+            updated_at integer not null
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_photo_growth_stages_track
+            on photo_growth_stages(owner_id, person_id, granularity, start_at, seq)
+        `.execute(db);
+        await sql`
+          create table if not exists photo_growth_stage_assets (
+            stage_id text not null,
+            asset_id text not null,
+            rank integer not null,
+            score real not null default 0,
+            reason_json text not null default '{}',
+            primary key (stage_id, asset_id)
+          )
+        `.execute(db);
+        await sql`
+          create index if not exists idx_photo_growth_stage_assets_rank
+            on photo_growth_stage_assets(stage_id, rank)
+        `.execute(db);
+        // 增量凭据：该 person 的照片数 / 最新拍摄时间没变就不重算。
+        await sql`
+          create table if not exists photo_growth_track_state (
+            owner_id text not null,
+            person_id text not null,
+            granularity text not null,
+            asset_count integer not null default 0,
+            last_asset_at integer not null default 0,
+            version integer not null default 0,
+            built_at integer not null default 0,
+            primary key (owner_id, person_id, granularity)
+          )
+        `.execute(db);
+      },
+    },
 ];

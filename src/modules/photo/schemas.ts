@@ -1123,6 +1123,174 @@ export const ScanTask = Type.Object(
   { $id: 'PhotoScanTask' },
 );
 
+/**
+ * 成长轨迹（Growth Track）。
+ *
+ * 设计文档的 Asset → Event → Stage → Track 四层里，接口只暴露 Stage 与 Track：
+ * Event 是分段过程里的隐式 burst，Track 是某个人名下 Stage 的有序序列。
+ * 文案一律由前端按 i18n 拼装（服务端只给结构化数据：地点、时间、枚举），
+ * UI 不硬编码文案；title/subtitle 两列是给后续 VLM 阶段文案预留的缓存位。
+ */
+
+/** 顶部人脸条的一项；coverFaceId 直接拼 /photo/face/image 得到圆形头像 */
+export const GrowthPerson = Type.Object(
+  {
+    id: Type.String({ description: 'photo_face_clusters.id' }),
+    name: Type.Union([Type.String(), Type.Null()]),
+    size: Type.Integer({ description: '该人脸簇的照片数' }),
+    coverFaceId: Type.Union([Type.String(), Type.Null()]),
+    stageCount: Type.Integer({ description: '已生成的阶段数' }),
+    lastAt: Type.Integer({ description: '最近一张照片的拍摄时间（epoch 秒）' }),
+  },
+  { $id: 'PhotoGrowthPerson' },
+);
+
+export const GrowthPersonQuery = Type.Object(
+  { limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })) },
+  { $id: 'PhotoGrowthPersonQuery' },
+);
+
+export const GrowthPersonList = Type.Object(
+  { items: Type.Array(Type.Ref(GrowthPerson)) },
+  { $id: 'PhotoGrowthPersonList' },
+);
+
+/** 顶部一句话看板：从 X 记录到 Y · 走过 N 个地方 · M 个阶段 */
+export const GrowthSummary = Type.Object(
+  {
+    personId: Type.String(),
+    personName: Type.Union([Type.String(), Type.Null()]),
+    stageCount: Type.Integer(),
+    cityCount: Type.Integer(),
+    photoCount: Type.Integer(),
+    firstAt: Type.Integer(),
+    lastAt: Type.Integer(),
+    granularity: Type.String(),
+    rebuilt: Type.Boolean({ description: '本次请求是否触发了重算' }),
+  },
+  { $id: 'PhotoGrowthSummary' },
+);
+
+/** UI 上的一条记录 = 一个阶段 = 一张图（次图为可选） */
+export const GrowthStage = Type.Object(
+  {
+    id: Type.String(),
+    seq: Type.Integer(),
+    startAt: Type.Integer(),
+    endAt: Type.Integer(),
+    placeKey: Type.String({ description: '地点归并键（城市/网格/未知）' }),
+    placeName: Type.String({ description: '离线逆地理得到的中文地名，无 GPS 时为空' }),
+    spanKind: Type.String({ description: '实际采用的时间粒度：month/quarter/year/auto' }),
+    coverAssetId: Type.Union([Type.String(), Type.Null()]),
+    coverPath: Type.String({ description: '封面相对路径，客户端拼 files/thumb' }),
+    secondaryPath: Type.Union([Type.String(), Type.Null()], {
+      description: '同阶段次图（去重后第二高分），没有则 null',
+    }),
+    photoCount: Type.Integer(),
+    coverScore: Type.Number(),
+    milestone: Type.String({ description: '里程碑枚举：firstPlace / firstScene / anniversary / 空' }),
+    hint: Type.String({ description: '降级提示枚举：noScenePortrait / 空' }),
+    locked: Type.Boolean({ description: '封面是否由人工指定（重算不再覆盖）' }),
+    hidden: Type.Boolean(),
+    version: Type.Integer(),
+  },
+  { $id: 'PhotoGrowthStage' },
+);
+
+export const GrowthItemsQuery = Type.Object(
+  {
+    person: Type.String({ minLength: 1 }),
+    /** asc / desc，缺省 desc；不写 default，避免 ajv 填值影响兼容别名 */
+    order: Type.Optional(Type.String()),
+    /** auto / month / quarter / year，缺省 auto */
+    granularity: Type.Optional(Type.String()),
+    cursor: Type.Optional(Type.String()),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+  },
+  { $id: 'PhotoGrowthItemsQuery' },
+);
+
+export const GrowthStageList = Type.Object(
+  {
+    items: Type.Array(Type.Ref(GrowthStage)),
+    nextCursor: Type.Union([Type.String(), Type.Null()]),
+    summary: Type.Ref(GrowthSummary),
+  },
+  { $id: 'PhotoGrowthStageList' },
+);
+
+export const GrowthStagePhotosQuery = Type.Object(
+  {
+    stageId: Type.String({ minLength: 1 }),
+    cursor: Type.Optional(Type.String()),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
+  },
+  { $id: 'PhotoGrowthStagePhotosQuery' },
+);
+
+/** 二级页：阶段全量照片（真分页）+ 阶段摘要 */
+export const GrowthStagePhotos = Type.Object(
+  {
+    items: Type.Array(Type.Ref(Item)),
+    nextCursor: Type.Union([Type.String(), Type.Null()]),
+    total: Type.Integer(),
+    stage: Type.Ref(GrowthStage),
+  },
+  { $id: 'PhotoGrowthStagePhotos' },
+);
+
+/** 长按封面 → 「换一张」的三个候选 */
+export const GrowthCandidate = Type.Object(
+  {
+    assetId: Type.String(),
+    path: Type.String(),
+    score: Type.Number(),
+    reason: Type.String({ description: '可解释的选中原因（调试/展示用）' }),
+  },
+  { $id: 'PhotoGrowthCandidate' },
+);
+
+export const GrowthCandidatesQuery = Type.Object(
+  { stageId: Type.String({ minLength: 1 }) },
+  { $id: 'PhotoGrowthCandidatesQuery' },
+);
+
+export const GrowthCandidateList = Type.Object(
+  { items: Type.Array(Type.Ref(GrowthCandidate)) },
+  { $id: 'PhotoGrowthCandidateList' },
+);
+
+export const GrowthRepinBody = Type.Object(
+  {
+    stageId: Type.String({ minLength: 1 }),
+    assetId: Type.String({ minLength: 1 }),
+  },
+  { $id: 'PhotoGrowthRepinBody' },
+);
+
+export const GrowthRepinResponse = Type.Object(
+  { stage: Type.Ref(GrowthStage) },
+  { $id: 'PhotoGrowthRepinResponse' },
+);
+
+/** 手动重建（新增照片、改粒度、AI 补识别之后） */
+export const GrowthRebuildBody = Type.Object(
+  {
+    person: Type.String({ minLength: 1 }),
+    granularity: Type.Optional(Type.String()),
+  },
+  { $id: 'PhotoGrowthRebuildBody' },
+);
+
+export const GrowthRebuildResponse = Type.Object(
+  {
+    stages: Type.Integer(),
+    photos: Type.Integer(),
+    version: Type.Integer(),
+  },
+  { $id: 'PhotoGrowthRebuildResponse' },
+);
+
 export const PHOTO_SCHEMAS = [
   OnThisDayQuery,
   OnThisDayYear,
@@ -1230,4 +1398,20 @@ export const PHOTO_SCHEMAS = [
   MemorySaveBody,
   MemoryTargetBody,
   ScanTask,
+  GrowthPerson,
+  GrowthPersonQuery,
+  GrowthPersonList,
+  GrowthSummary,
+  GrowthStage,
+  GrowthItemsQuery,
+  GrowthStageList,
+  GrowthStagePhotosQuery,
+  GrowthStagePhotos,
+  GrowthCandidate,
+  GrowthCandidatesQuery,
+  GrowthCandidateList,
+  GrowthRepinBody,
+  GrowthRepinResponse,
+  GrowthRebuildBody,
+  GrowthRebuildResponse,
 ];

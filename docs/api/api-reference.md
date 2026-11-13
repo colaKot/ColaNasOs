@@ -1,7 +1,7 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**403 个路径 / 429 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**409 个路径 / 435 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
@@ -14,7 +14,7 @@
 - **开放集成（Webhook / deliveries）**（`integration`）· 6 个操作 · [跳转](#integration)
 - **音乐**（`music`）· 35 个操作 · [跳转](#music)
 - **其他**（`other`）· 2 个操作 · [跳转](#other)
-- **相册**（`photo`）· 132 个操作 · [跳转](#photo)
+- **相册**（`photo`）· 138 个操作 · [跳转](#photo)
 - **player**（`player`）· 2 个操作 · [跳转](#player)
 - **pt**（`pt`）· 26 个操作 · [跳转](#pt)
 - **RSS 订阅**（`rss`）· 15 个操作 · [跳转](#rss)
@@ -1438,6 +1438,48 @@ GPS 视觉候选（相似照片的坐标作为锚点） · `photoGeoVisionCandid
 GPS 视觉候选生成进度 · `photoGeoVisionStatus`
 
 - 响应：200 `PhotoGeoVisionStatus`
+
+#### `GET /api/v1/photo/growth/items`
+
+成长轨迹：阶段列表（服务端预计算，排序键游标分页） · `photoGrowthItems`
+
+- 参数：`person` · 查询 · string · **必填**<br>`order` · 查询 · string · 可选<br>`granularity` · 查询 · string · 可选<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
+- 响应：200 `PhotoGrowthStageList` · 错误 400
+
+#### `GET /api/v1/photo/growth/persons`
+
+成长轨迹：可选的人脸条（已命名优先，其次照片数最多） · `photoGrowthPersons`
+
+- 参数：`limit` · 查询 · integer · 可选
+- 响应：200 `PhotoGrowthPersonList`
+
+#### `POST /api/v1/photo/growth/rebuild`
+
+成长轨迹：手动重算某人的阶段（AI 补识别 / 导入照片之后） · `photoGrowthRebuild`
+
+- 请求体：（空对象）
+- 响应：200 `PhotoGrowthRebuildResponse` · 错误 400
+
+#### `GET /api/v1/photo/growth/stage/candidates`
+
+成长轨迹：换封面的候选照片（可解释分数） · `photoGrowthStageCandidates`
+
+- 参数：`stageId` · 查询 · string · **必填**
+- 响应：200 `PhotoGrowthCandidateList` · 错误 400
+
+#### `GET /api/v1/photo/growth/stage/photos`
+
+成长轨迹：某阶段的全量照片（真分页） · `photoGrowthStagePhotos`
+
+- 参数：`stageId` · 查询 · string · **必填**<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
+- 响应：200 `PhotoGrowthStagePhotos` · 错误 400
+
+#### `POST /api/v1/photo/growth/stage/repin`
+
+成长轨迹：人工指定阶段封面（写 locked，重算不再覆盖） · `photoGrowthStageRepin`
+
+- 请求体：（空对象）
+- 响应：200 `PhotoGrowthRepinResponse` · 错误 400
 
 #### `GET /api/v1/photo/home/summary`
 

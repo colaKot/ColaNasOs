@@ -1945,6 +1945,60 @@ class ApiClient {
     return PhotoGeoSetResponse.fromJson(_asMap(_decode(res)));
   }
 
+  /// 成长轨迹：可选的人脸条（已命名优先，其次照片数最多）
+  Future<PhotoGrowthPersonList> photoGrowthPersons({int? limit}) async {
+    final query = <String, String>{
+      if (limit != null) 'limit': '$limit',
+    };
+    final res = await transport.send('GET', _uri('/api/v1/photo/growth/persons', query), headers: await _headers());
+    return PhotoGrowthPersonList.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 成长轨迹：阶段列表（服务端预计算，排序键游标分页）
+  Future<PhotoGrowthStageList> photoGrowthItems({required String person, String? order, String? granularity, String? cursor, int? limit}) async {
+    final query = <String, String>{
+      'person': person,
+      if (order != null) 'order': order,
+      if (granularity != null) 'granularity': granularity,
+      if (cursor != null) 'cursor': cursor,
+      if (limit != null) 'limit': '$limit',
+    };
+    final res = await transport.send('GET', _uri('/api/v1/photo/growth/items', query), headers: await _headers());
+    return PhotoGrowthStageList.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 成长轨迹：某阶段的全量照片（真分页）
+  Future<PhotoGrowthStagePhotos> photoGrowthStagePhotos({required String stageId, String? cursor, int? limit}) async {
+    final query = <String, String>{
+      'stageId': stageId,
+      if (cursor != null) 'cursor': cursor,
+      if (limit != null) 'limit': '$limit',
+    };
+    final res = await transport.send('GET', _uri('/api/v1/photo/growth/stage/photos', query), headers: await _headers());
+    return PhotoGrowthStagePhotos.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 成长轨迹：换封面的候选照片（可解释分数）
+  Future<PhotoGrowthCandidateList> photoGrowthStageCandidates({required String stageId}) async {
+    final query = <String, String>{
+      'stageId': stageId,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/photo/growth/stage/candidates', query), headers: await _headers());
+    return PhotoGrowthCandidateList.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 成长轨迹：人工指定阶段封面（写 locked，重算不再覆盖）
+  Future<PhotoGrowthRepinResponse> photoGrowthStageRepin({required PhotoGrowthRepinBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/photo/growth/stage/repin'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return PhotoGrowthRepinResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 成长轨迹：手动重算某人的阶段（AI 补识别 / 导入照片之后）
+  Future<PhotoGrowthRebuildResponse> photoGrowthRebuild({required PhotoGrowthRebuildBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/photo/growth/rebuild'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return PhotoGrowthRebuildResponse.fromJson(_asMap(_decode(res)));
+  }
+
   /// 相册首页看板（统计 / 足迹 / 人物 / 那年今日）
   Future<PhotoHomeSummary> photoHomeSummary() async {
     final res = await transport.send('GET', _uri('/api/v1/photo/home/summary'), headers: await _headers());

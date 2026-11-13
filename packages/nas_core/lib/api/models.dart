@@ -5710,6 +5710,362 @@ class PhotoScanTask {
       };
 }
 
+class PhotoGrowthPerson {
+  final String id;
+  final String? name;
+  final int size;
+  final String? coverFaceId;
+  final int stageCount;
+  final int lastAt;
+
+  const PhotoGrowthPerson({
+    required this.id,
+    required this.name,
+    required this.size,
+    required this.coverFaceId,
+    required this.stageCount,
+    required this.lastAt,
+  });
+
+  factory PhotoGrowthPerson.fromJson(Map<String, dynamic> json) => PhotoGrowthPerson(
+        id: json['id'] as String,
+        name: json['name'] as String?,
+        size: json['size'] as int,
+        coverFaceId: json['coverFaceId'] as String?,
+        stageCount: json['stageCount'] as int,
+        lastAt: json['lastAt'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'size': size,
+        'coverFaceId': coverFaceId,
+        'stageCount': stageCount,
+        'lastAt': lastAt,
+      };
+}
+
+class PhotoGrowthPersonList {
+  final List<PhotoGrowthPerson> items;
+
+  const PhotoGrowthPersonList({
+    required this.items,
+  });
+
+  factory PhotoGrowthPersonList.fromJson(Map<String, dynamic> json) => PhotoGrowthPersonList(
+        items: (json['items'] as List<dynamic>).map((e) => PhotoGrowthPerson.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class PhotoGrowthSummary {
+  final String personId;
+  final String? personName;
+  final int stageCount;
+  final int cityCount;
+  final int photoCount;
+  final int firstAt;
+  final int lastAt;
+  final String granularity;
+  final bool rebuilt;
+
+  const PhotoGrowthSummary({
+    required this.personId,
+    required this.personName,
+    required this.stageCount,
+    required this.cityCount,
+    required this.photoCount,
+    required this.firstAt,
+    required this.lastAt,
+    required this.granularity,
+    required this.rebuilt,
+  });
+
+  factory PhotoGrowthSummary.fromJson(Map<String, dynamic> json) => PhotoGrowthSummary(
+        personId: json['personId'] as String,
+        personName: json['personName'] as String?,
+        stageCount: json['stageCount'] as int,
+        cityCount: json['cityCount'] as int,
+        photoCount: json['photoCount'] as int,
+        firstAt: json['firstAt'] as int,
+        lastAt: json['lastAt'] as int,
+        granularity: json['granularity'] as String,
+        rebuilt: json['rebuilt'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'personId': personId,
+        'personName': personName,
+        'stageCount': stageCount,
+        'cityCount': cityCount,
+        'photoCount': photoCount,
+        'firstAt': firstAt,
+        'lastAt': lastAt,
+        'granularity': granularity,
+        'rebuilt': rebuilt,
+      };
+}
+
+class PhotoGrowthStage {
+  final String id;
+  final int seq;
+  final int startAt;
+  final int endAt;
+  final String placeKey;
+  final String placeName;
+  final String spanKind;
+  final String? coverAssetId;
+  final String coverPath;
+  final String? secondaryPath;
+  final int photoCount;
+  final double coverScore;
+  final String milestone;
+  final String hint;
+  final bool locked;
+  final bool hidden;
+  final int version;
+
+  const PhotoGrowthStage({
+    required this.id,
+    required this.seq,
+    required this.startAt,
+    required this.endAt,
+    required this.placeKey,
+    required this.placeName,
+    required this.spanKind,
+    required this.coverAssetId,
+    required this.coverPath,
+    required this.secondaryPath,
+    required this.photoCount,
+    required this.coverScore,
+    required this.milestone,
+    required this.hint,
+    required this.locked,
+    required this.hidden,
+    required this.version,
+  });
+
+  factory PhotoGrowthStage.fromJson(Map<String, dynamic> json) => PhotoGrowthStage(
+        id: json['id'] as String,
+        seq: json['seq'] as int,
+        startAt: json['startAt'] as int,
+        endAt: json['endAt'] as int,
+        placeKey: json['placeKey'] as String,
+        placeName: json['placeName'] as String,
+        spanKind: json['spanKind'] as String,
+        coverAssetId: json['coverAssetId'] as String?,
+        coverPath: json['coverPath'] as String,
+        secondaryPath: json['secondaryPath'] as String?,
+        photoCount: json['photoCount'] as int,
+        coverScore: (json['coverScore'] as num).toDouble(),
+        milestone: json['milestone'] as String,
+        hint: json['hint'] as String,
+        locked: json['locked'] as bool,
+        hidden: json['hidden'] as bool,
+        version: json['version'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'seq': seq,
+        'startAt': startAt,
+        'endAt': endAt,
+        'placeKey': placeKey,
+        'placeName': placeName,
+        'spanKind': spanKind,
+        'coverAssetId': coverAssetId,
+        'coverPath': coverPath,
+        'secondaryPath': secondaryPath,
+        'photoCount': photoCount,
+        'coverScore': coverScore,
+        'milestone': milestone,
+        'hint': hint,
+        'locked': locked,
+        'hidden': hidden,
+        'version': version,
+      };
+}
+
+class PhotoGrowthStageList {
+  final List<PhotoGrowthStage> items;
+  final String? nextCursor;
+  final PhotoGrowthSummary summary;
+
+  const PhotoGrowthStageList({
+    required this.items,
+    required this.nextCursor,
+    required this.summary,
+  });
+
+  factory PhotoGrowthStageList.fromJson(Map<String, dynamic> json) => PhotoGrowthStageList(
+        items: (json['items'] as List<dynamic>).map((e) => PhotoGrowthStage.fromJson(e as Map<String, dynamic>)).toList(),
+        nextCursor: json['nextCursor'] as String?,
+        summary: PhotoGrowthSummary.fromJson(json['summary'] as Map<String, dynamic>),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+        'nextCursor': nextCursor,
+        'summary': summary.toJson(),
+      };
+}
+
+class PhotoGrowthStagePhotos {
+  final List<PhotoItem> items;
+  final String? nextCursor;
+  final int total;
+  final PhotoGrowthStage stage;
+
+  const PhotoGrowthStagePhotos({
+    required this.items,
+    required this.nextCursor,
+    required this.total,
+    required this.stage,
+  });
+
+  factory PhotoGrowthStagePhotos.fromJson(Map<String, dynamic> json) => PhotoGrowthStagePhotos(
+        items: (json['items'] as List<dynamic>).map((e) => PhotoItem.fromJson(e as Map<String, dynamic>)).toList(),
+        nextCursor: json['nextCursor'] as String?,
+        total: json['total'] as int,
+        stage: PhotoGrowthStage.fromJson(json['stage'] as Map<String, dynamic>),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+        'nextCursor': nextCursor,
+        'total': total,
+        'stage': stage.toJson(),
+      };
+}
+
+class PhotoGrowthCandidate {
+  final String assetId;
+  final String path;
+  final double score;
+  final String reason;
+
+  const PhotoGrowthCandidate({
+    required this.assetId,
+    required this.path,
+    required this.score,
+    required this.reason,
+  });
+
+  factory PhotoGrowthCandidate.fromJson(Map<String, dynamic> json) => PhotoGrowthCandidate(
+        assetId: json['assetId'] as String,
+        path: json['path'] as String,
+        score: (json['score'] as num).toDouble(),
+        reason: json['reason'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'assetId': assetId,
+        'path': path,
+        'score': score,
+        'reason': reason,
+      };
+}
+
+class PhotoGrowthCandidateList {
+  final List<PhotoGrowthCandidate> items;
+
+  const PhotoGrowthCandidateList({
+    required this.items,
+  });
+
+  factory PhotoGrowthCandidateList.fromJson(Map<String, dynamic> json) => PhotoGrowthCandidateList(
+        items: (json['items'] as List<dynamic>).map((e) => PhotoGrowthCandidate.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class PhotoGrowthRepinBody {
+  final String stageId;
+  final String assetId;
+
+  const PhotoGrowthRepinBody({
+    required this.stageId,
+    required this.assetId,
+  });
+
+  factory PhotoGrowthRepinBody.fromJson(Map<String, dynamic> json) => PhotoGrowthRepinBody(
+        stageId: json['stageId'] as String,
+        assetId: json['assetId'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'stageId': stageId,
+        'assetId': assetId,
+      };
+}
+
+class PhotoGrowthRepinResponse {
+  final PhotoGrowthStage stage;
+
+  const PhotoGrowthRepinResponse({
+    required this.stage,
+  });
+
+  factory PhotoGrowthRepinResponse.fromJson(Map<String, dynamic> json) => PhotoGrowthRepinResponse(
+        stage: PhotoGrowthStage.fromJson(json['stage'] as Map<String, dynamic>),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'stage': stage.toJson(),
+      };
+}
+
+class PhotoGrowthRebuildBody {
+  final String person;
+  final String? granularity;
+
+  const PhotoGrowthRebuildBody({
+    required this.person,
+    this.granularity,
+  });
+
+  factory PhotoGrowthRebuildBody.fromJson(Map<String, dynamic> json) => PhotoGrowthRebuildBody(
+        person: json['person'] as String,
+        granularity: json['granularity'] == null ? null : json['granularity'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'person': person,
+        if (granularity != null) 'granularity': granularity!,
+      };
+}
+
+class PhotoGrowthRebuildResponse {
+  final int stages;
+  final int photos;
+  final int version;
+
+  const PhotoGrowthRebuildResponse({
+    required this.stages,
+    required this.photos,
+    required this.version,
+  });
+
+  factory PhotoGrowthRebuildResponse.fromJson(Map<String, dynamic> json) => PhotoGrowthRebuildResponse(
+        stages: json['stages'] as int,
+        photos: json['photos'] as int,
+        version: json['version'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'stages': stages,
+        'photos': photos,
+        'version': version,
+      };
+}
+
 class PhotoModelApi {
   final bool enabled;
   final String provider;

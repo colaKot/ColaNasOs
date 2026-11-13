@@ -771,6 +771,30 @@ class ColanasClient:
         """GPS 视觉候选生成进度"""
         return self._request("GET", "/api/v1/photo/geo/vision/status", params, "query")
 
+    def photo_growth_items(self, **params):
+        """成长轨迹：阶段列表（服务端预计算，排序键游标分页）"""
+        return self._request("GET", "/api/v1/photo/growth/items", params, "query")
+
+    def photo_growth_persons(self, **params):
+        """成长轨迹：可选的人脸条（已命名优先，其次照片数最多）"""
+        return self._request("GET", "/api/v1/photo/growth/persons", params, "query")
+
+    def photo_growth_rebuild(self, **params):
+        """成长轨迹：手动重算某人的阶段（AI 补识别 / 导入照片之后）"""
+        return self._request("POST", "/api/v1/photo/growth/rebuild", params, "body")
+
+    def photo_growth_stage_candidates(self, **params):
+        """成长轨迹：换封面的候选照片（可解释分数）"""
+        return self._request("GET", "/api/v1/photo/growth/stage/candidates", params, "query")
+
+    def photo_growth_stage_photos(self, **params):
+        """成长轨迹：某阶段的全量照片（真分页）"""
+        return self._request("GET", "/api/v1/photo/growth/stage/photos", params, "query")
+
+    def photo_growth_stage_repin(self, **params):
+        """成长轨迹：人工指定阶段封面（写 locked，重算不再覆盖）"""
+        return self._request("POST", "/api/v1/photo/growth/stage/repin", params, "body")
+
     def photo_home_summary(self, **params):
         """相册首页看板（统计 / 足迹 / 人物 / 那年今日）"""
         return self._request("GET", "/api/v1/photo/home/summary", params, "query")

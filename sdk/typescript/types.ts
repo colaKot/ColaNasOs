@@ -1693,6 +1693,117 @@ export type PhotoScanTask = {
   "reused": boolean;
 };
 
+export type PhotoGrowthPerson = {
+  "id": string;
+  "name": string;
+  "size": number;
+  "coverFaceId": string;
+  "stageCount": number;
+  "lastAt": number;
+};
+
+export type PhotoGrowthPersonQuery = {
+  "limit"?: number;
+};
+
+export type PhotoGrowthPersonList = {
+  "items": PhotoGrowthPerson[];
+};
+
+export type PhotoGrowthSummary = {
+  "personId": string;
+  "personName": string;
+  "stageCount": number;
+  "cityCount": number;
+  "photoCount": number;
+  "firstAt": number;
+  "lastAt": number;
+  "granularity": string;
+  "rebuilt": boolean;
+};
+
+export type PhotoGrowthStage = {
+  "id": string;
+  "seq": number;
+  "startAt": number;
+  "endAt": number;
+  "placeKey": string;
+  "placeName": string;
+  "spanKind": string;
+  "coverAssetId": string;
+  "coverPath": string;
+  "secondaryPath": string;
+  "photoCount": number;
+  "coverScore": number;
+  "milestone": string;
+  "hint": string;
+  "locked": boolean;
+  "hidden": boolean;
+  "version": number;
+};
+
+export type PhotoGrowthItemsQuery = {
+  "person": string;
+  "order"?: string;
+  "granularity"?: string;
+  "cursor"?: string;
+  "limit"?: number;
+};
+
+export type PhotoGrowthStageList = {
+  "items": PhotoGrowthStage[];
+  "nextCursor": string;
+  "summary": PhotoGrowthSummary;
+};
+
+export type PhotoGrowthStagePhotosQuery = {
+  "stageId": string;
+  "cursor"?: string;
+  "limit"?: number;
+};
+
+export type PhotoGrowthStagePhotos = {
+  "items": PhotoItem[];
+  "nextCursor": string;
+  "total": number;
+  "stage": PhotoGrowthStage;
+};
+
+export type PhotoGrowthCandidate = {
+  "assetId": string;
+  "path": string;
+  "score": number;
+  "reason": string;
+};
+
+export type PhotoGrowthCandidatesQuery = {
+  "stageId": string;
+};
+
+export type PhotoGrowthCandidateList = {
+  "items": PhotoGrowthCandidate[];
+};
+
+export type PhotoGrowthRepinBody = {
+  "stageId": string;
+  "assetId": string;
+};
+
+export type PhotoGrowthRepinResponse = {
+  "stage": PhotoGrowthStage;
+};
+
+export type PhotoGrowthRebuildBody = {
+  "person": string;
+  "granularity"?: string;
+};
+
+export type PhotoGrowthRebuildResponse = {
+  "stages": number;
+  "photos": number;
+  "version": number;
+};
+
 export type PhotoModelApi = {
   "enabled": boolean;
   "provider": string;

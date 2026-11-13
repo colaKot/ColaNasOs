@@ -24,6 +24,7 @@ import { registerPhotoDelete } from './routes/delete';
 import { registerPhotoLive } from './routes/live';
 import { purgeExpiredTrash } from './delete';
 import { registerPhotoGeo } from './routes/geo';
+import { registerPhotoGrowth } from './routes/growth';
 import { registerPhotoHome } from './routes/home';
 import { registerPhotoMcp } from './mcp';
 import { registerPhotoPhash } from './phash';
@@ -94,6 +95,7 @@ export const photo: ServerModule = {
     await registerPhotoAlbums(app, k, h);
     await registerPhotoSmartRules(app, k, h);
     await registerPhotoGeo(app, k, h);
+    await registerPhotoGrowth(app, k, h);
     await registerPhotoHome(app, k, h);
     await registerPhotoMcp(app, k);
     await registerPhotoPhash(app, k);

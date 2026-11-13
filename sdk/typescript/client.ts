@@ -952,6 +952,36 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/photo/geo/vision/status', params, 'query');
   }
 
+  /** 成长轨迹：阶段列表（服务端预计算，排序键游标分页） */
+  async photoGrowthItems(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/photo/growth/items', params, 'query');
+  }
+
+  /** 成长轨迹：可选的人脸条（已命名优先，其次照片数最多） */
+  async photoGrowthPersons(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/photo/growth/persons', params, 'query');
+  }
+
+  /** 成长轨迹：手动重算某人的阶段（AI 补识别 / 导入照片之后） */
+  async photoGrowthRebuild(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/photo/growth/rebuild', params, 'body');
+  }
+
+  /** 成长轨迹：换封面的候选照片（可解释分数） */
+  async photoGrowthStageCandidates(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/photo/growth/stage/candidates', params, 'query');
+  }
+
+  /** 成长轨迹：某阶段的全量照片（真分页） */
+  async photoGrowthStagePhotos(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/photo/growth/stage/photos', params, 'query');
+  }
+
+  /** 成长轨迹：人工指定阶段封面（写 locked，重算不再覆盖） */
+  async photoGrowthStageRepin(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/photo/growth/stage/repin', params, 'body');
+  }
+
   /** 相册首页看板（统计 / 足迹 / 人物 / 那年今日） */
   async photoHomeSummary(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/photo/home/summary', params, 'query');

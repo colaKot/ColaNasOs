@@ -97,6 +97,11 @@
             "id": "journey",
             "labelKey": "photo.nav.journey",
             "icon": "travel_explore_outlined"
+          },
+          {
+            "id": "growth",
+            "labelKey": "photo.nav.growth",
+            "icon": "timeline_outlined"
           }
         ]
       },

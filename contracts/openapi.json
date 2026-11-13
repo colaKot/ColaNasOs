@@ -6412,6 +6412,405 @@
           }
         }
       },
+      "PhotoGrowthPerson": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "size",
+          "coverFaceId",
+          "stageCount",
+          "lastAt"
+        ],
+        "properties": {
+          "id": {
+            "description": "photo_face_clusters.id",
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "size": {
+            "description": "该人脸簇的照片数",
+            "type": "integer"
+          },
+          "coverFaceId": {
+            "type": "string",
+            "nullable": true
+          },
+          "stageCount": {
+            "description": "已生成的阶段数",
+            "type": "integer"
+          },
+          "lastAt": {
+            "description": "最近一张照片的拍摄时间（epoch 秒）",
+            "type": "integer"
+          }
+        }
+      },
+      "PhotoGrowthPersonQuery": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "minimum": 1,
+            "maximum": 50,
+            "type": "integer"
+          }
+        }
+      },
+      "PhotoGrowthPersonList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhotoGrowthPerson"
+            }
+          }
+        }
+      },
+      "PhotoGrowthSummary": {
+        "type": "object",
+        "required": [
+          "personId",
+          "personName",
+          "stageCount",
+          "cityCount",
+          "photoCount",
+          "firstAt",
+          "lastAt",
+          "granularity",
+          "rebuilt"
+        ],
+        "properties": {
+          "personId": {
+            "type": "string"
+          },
+          "personName": {
+            "type": "string",
+            "nullable": true
+          },
+          "stageCount": {
+            "type": "integer"
+          },
+          "cityCount": {
+            "type": "integer"
+          },
+          "photoCount": {
+            "type": "integer"
+          },
+          "firstAt": {
+            "type": "integer"
+          },
+          "lastAt": {
+            "type": "integer"
+          },
+          "granularity": {
+            "type": "string"
+          },
+          "rebuilt": {
+            "description": "本次请求是否触发了重算",
+            "type": "boolean"
+          }
+        }
+      },
+      "PhotoGrowthStage": {
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "startAt",
+          "endAt",
+          "placeKey",
+          "placeName",
+          "spanKind",
+          "coverAssetId",
+          "coverPath",
+          "secondaryPath",
+          "photoCount",
+          "coverScore",
+          "milestone",
+          "hint",
+          "locked",
+          "hidden",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "startAt": {
+            "type": "integer"
+          },
+          "endAt": {
+            "type": "integer"
+          },
+          "placeKey": {
+            "description": "地点归并键（城市/网格/未知）",
+            "type": "string"
+          },
+          "placeName": {
+            "description": "离线逆地理得到的中文地名，无 GPS 时为空",
+            "type": "string"
+          },
+          "spanKind": {
+            "description": "实际采用的时间粒度：month/quarter/year/auto",
+            "type": "string"
+          },
+          "coverAssetId": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverPath": {
+            "description": "封面相对路径，客户端拼 files/thumb",
+            "type": "string"
+          },
+          "secondaryPath": {
+            "description": "同阶段次图（去重后第二高分），没有则 null",
+            "type": "string",
+            "nullable": true
+          },
+          "photoCount": {
+            "type": "integer"
+          },
+          "coverScore": {
+            "type": "number"
+          },
+          "milestone": {
+            "description": "里程碑枚举：firstPlace / firstScene / anniversary / 空",
+            "type": "string"
+          },
+          "hint": {
+            "description": "降级提示枚举：noScenePortrait / 空",
+            "type": "string"
+          },
+          "locked": {
+            "description": "封面是否由人工指定（重算不再覆盖）",
+            "type": "boolean"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
+      "PhotoGrowthItemsQuery": {
+        "type": "object",
+        "required": [
+          "person"
+        ],
+        "properties": {
+          "person": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "order": {
+            "type": "string"
+          },
+          "granularity": {
+            "type": "string"
+          },
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "minimum": 1,
+            "maximum": 100,
+            "type": "integer"
+          }
+        }
+      },
+      "PhotoGrowthStageList": {
+        "type": "object",
+        "required": [
+          "items",
+          "nextCursor",
+          "summary"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhotoGrowthStage"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "summary": {
+            "$ref": "#/components/schemas/PhotoGrowthSummary"
+          }
+        }
+      },
+      "PhotoGrowthStagePhotosQuery": {
+        "type": "object",
+        "required": [
+          "stageId"
+        ],
+        "properties": {
+          "stageId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "cursor": {
+            "type": "string"
+          },
+          "limit": {
+            "minimum": 1,
+            "maximum": 200,
+            "type": "integer"
+          }
+        }
+      },
+      "PhotoGrowthStagePhotos": {
+        "type": "object",
+        "required": [
+          "items",
+          "nextCursor",
+          "total",
+          "stage"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhotoItem"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          },
+          "total": {
+            "type": "integer"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/PhotoGrowthStage"
+          }
+        }
+      },
+      "PhotoGrowthCandidate": {
+        "type": "object",
+        "required": [
+          "assetId",
+          "path",
+          "score",
+          "reason"
+        ],
+        "properties": {
+          "assetId": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "reason": {
+            "description": "可解释的选中原因（调试/展示用）",
+            "type": "string"
+          }
+        }
+      },
+      "PhotoGrowthCandidatesQuery": {
+        "type": "object",
+        "required": [
+          "stageId"
+        ],
+        "properties": {
+          "stageId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "PhotoGrowthCandidateList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhotoGrowthCandidate"
+            }
+          }
+        }
+      },
+      "PhotoGrowthRepinBody": {
+        "type": "object",
+        "required": [
+          "stageId",
+          "assetId"
+        ],
+        "properties": {
+          "stageId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "assetId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "PhotoGrowthRepinResponse": {
+        "type": "object",
+        "required": [
+          "stage"
+        ],
+        "properties": {
+          "stage": {
+            "$ref": "#/components/schemas/PhotoGrowthStage"
+          }
+        }
+      },
+      "PhotoGrowthRebuildBody": {
+        "type": "object",
+        "required": [
+          "person"
+        ],
+        "properties": {
+          "person": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "granularity": {
+            "type": "string"
+          }
+        }
+      },
+      "PhotoGrowthRebuildResponse": {
+        "type": "object",
+        "required": [
+          "stages",
+          "photos",
+          "version"
+        ],
+        "properties": {
+          "stages": {
+            "type": "integer"
+          },
+          "photos": {
+            "type": "integer"
+          },
+          "version": {
+            "type": "integer"
+          }
+        }
+      },
       "PhotoModelApi": {
         "type": "object",
         "required": [
@@ -28098,6 +28497,329 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PhotoGeoSetResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/growth/persons": {
+      "get": {
+        "operationId": "photoGrowthPersons",
+        "summary": "成长轨迹：可选的人脸条（已命名优先，其次照片数最多）",
+        "tags": [
+          "photo"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoGrowthPersonList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/growth/items": {
+      "get": {
+        "operationId": "photoGrowthItems",
+        "summary": "成长轨迹：阶段列表（服务端预计算，排序键游标分页）",
+        "tags": [
+          "photo"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "person",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "order",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "granularity",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoGrowthStageList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/growth/stage/photos": {
+      "get": {
+        "operationId": "photoGrowthStagePhotos",
+        "summary": "成长轨迹：某阶段的全量照片（真分页）",
+        "tags": [
+          "photo"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "stageId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoGrowthStagePhotos"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/growth/stage/candidates": {
+      "get": {
+        "operationId": "photoGrowthStageCandidates",
+        "summary": "成长轨迹：换封面的候选照片（可解释分数）",
+        "tags": [
+          "photo"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "stageId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoGrowthCandidateList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/growth/stage/repin": {
+      "post": {
+        "operationId": "photoGrowthStageRepin",
+        "summary": "成长轨迹：人工指定阶段封面（写 locked，重算不再覆盖）",
+        "tags": [
+          "photo"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoGrowthRepinBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoGrowthRepinResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/growth/rebuild": {
+      "post": {
+        "operationId": "photoGrowthRebuild",
+        "summary": "成长轨迹：手动重算某人的阶段（AI 补识别 / 导入照片之后）",
+        "tags": [
+          "photo"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoGrowthRebuildBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoGrowthRebuildResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoErrorResponse"
                 }
               }
             }

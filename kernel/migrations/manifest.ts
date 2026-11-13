@@ -210,6 +210,8 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '174_video_dir_path',
   // 权限域合并：player→video / security→user / integration→system（只改存量值）
   '175_scope_domain_merge',
+  // 成长轨迹：阶段预计算表 + 封面候选池 + 增量凭据
+  '176_photo_growth',
 ]);
 
 export interface OrderCheck {

@@ -1361,6 +1361,42 @@ class I18nKeys {
   static const photoNavFiles = 'photo.nav.files';
   static const photoNavGps = 'photo.nav.gps';
   static const photoNavHome = 'photo.nav.home';
+  static const photoGrowthAsc = 'photo.growth.asc';
+  static const photoGrowthAuto = 'photo.growth.auto';
+  static const photoGrowthDesc = 'photo.growth.desc';
+  static const photoGrowthGranularity = 'photo.growth.granularity';
+  static const photoGrowthHintNoScenePortrait = 'photo.growth.hintNoScenePortrait';
+  static const photoGrowthMilestoneFirstPlace = 'photo.growth.milestoneFirstPlace';
+  static const photoGrowthMilestoneFirstScene = 'photo.growth.milestoneFirstScene';
+  static const photoGrowthMonth = 'photo.growth.month';
+  static const photoGrowthNamedHint = 'photo.growth.namedHint';
+  static const photoGrowthNoCandidates = 'photo.growth.noCandidates';
+  static const photoGrowthNoPerson = 'photo.growth.noPerson';
+  static const photoGrowthNoPersonHint = 'photo.growth.noPersonHint';
+  static const photoGrowthNoStages = 'photo.growth.noStages';
+  static const photoGrowthNoStagesHint = 'photo.growth.noStagesHint';
+  static const photoGrowthPersonPicker = 'photo.growth.personPicker';
+  static const photoGrowthPhotoCount = 'photo.growth.photoCount';
+  static const photoGrowthPinned = 'photo.growth.pinned';
+  static const photoGrowthQuarter = 'photo.growth.quarter';
+  static const photoGrowthRebuild = 'photo.growth.rebuild';
+  static const photoGrowthRebuilt = 'photo.growth.rebuilt';
+  static const photoGrowthRepin = 'photo.growth.repin';
+  static const photoGrowthRepinDone = 'photo.growth.repinDone';
+  static const photoGrowthRepinTitle = 'photo.growth.repinTitle';
+  static const photoGrowthSpanHalfYear = 'photo.growth.spanHalfYear';
+  static const photoGrowthSpanMonth = 'photo.growth.spanMonth';
+  static const photoGrowthSpanQuarter = 'photo.growth.spanQuarter';
+  static const photoGrowthSpanYear = 'photo.growth.spanYear';
+  static const photoGrowthStageIndex = 'photo.growth.stageIndex';
+  static const photoGrowthStagePhotos = 'photo.growth.stagePhotos';
+  static const photoGrowthSubtitle = 'photo.growth.subtitle';
+  static const photoGrowthSummary = 'photo.growth.summary';
+  static const photoGrowthTitle = 'photo.growth.title';
+  static const photoGrowthUnnamed = 'photo.growth.unnamed';
+  static const photoGrowthUnknownPlace = 'photo.growth.unknownPlace';
+  static const photoGrowthYear = 'photo.growth.year';
+  static const photoNavGrowth = 'photo.nav.growth';
   static const photoNavJourney = 'photo.nav.journey';
   static const photoNavMemory = 'photo.nav.memory';
   static const photoNavModels = 'photo.nav.models';
@@ -2768,4 +2804,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2722;
+const int i18nKeyCount = 2758;
