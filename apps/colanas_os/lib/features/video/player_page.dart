@@ -1760,6 +1760,30 @@ class _PlayerPageState extends State<PlayerPage> {
     });
   }
 
+  /// 源编码的可读名：库里存的是 ffprobe 原值（hevc / h264 / av1 ...）。
+  /// 10-bit / DV 是这次转码的主要动因，跟着源编码一起标出来。
+  String _sourceCodecLabel(dynamic raw) {
+    final s = raw == null ? '' : '$raw'.toLowerCase();
+    final base = s.contains('hevc') || s.contains('h265')
+        ? 'H.265 / HEVC'
+        : s.contains('avc') || s.contains('h264')
+            ? 'H.264 / AVC'
+            : s.contains('av1')
+                ? 'AV1'
+                : s.contains('vp9')
+                    ? 'VP9'
+                    : s.isEmpty
+                        ? '—'
+                        : '$raw';
+    final tags = <String>[];
+    if (_reasons.contains('dolbyVision')) {
+      tags.add('DV');
+    } else if (_reasons.contains('10bit') || _reasons.contains('hdr10')) {
+      tags.add('10bit');
+    }
+    return tags.isEmpty ? base : '$base · ${tags.join(' · ')}';
+  }
+
   Future<void> _showInfo() async {
     final c = widget.compat ?? const <String, dynamic>{};
     String? v(dynamic x) => x == null || '$x'.isEmpty ? '—' : '$x';
@@ -1801,8 +1825,17 @@ class _PlayerPageState extends State<PlayerPage> {
             ),
             _infoRow(tr('player.quality'),
                 playQualityPresetOf(_preset)?.labelFor(_actualCodec ?? _codec) ?? _preset),
-            _infoRow(tr('player.videoCodec'), v(c['videoCodec']) ?? '—'),
-            if (_isTranscode) _infoRow(tr('player.outputCodec'), _outputCodecText),
+            // 转码时把「源编码 → 实际输出编码」写在同一行，别只给分辨率/码率。
+            // 编码回落（如 DV 片源 AV1 → H.264）也会在这里直接看到原因。
+            _infoRow(
+              tr('player.videoCodec'),
+              _isTranscode
+                  ? tr('player.rateTo', {
+                      'from': _sourceCodecLabel(c['videoCodec']),
+                      'to': _outputCodecText,
+                    })
+                  : v(c['videoCodec']) ?? '—',
+            ),
             _infoRow(tr('player.audioCodec'), v(c['audioCodec']) ?? '—'),
             _infoRow(
               tr('player.resolution'),
@@ -2490,6 +2523,21 @@ class _PlayerPageState extends State<PlayerPage> {
     );
   }
 
+  /// 错误页上的恢复入口：重新打开当前地址。
+  Future<void> _retryPlay() async {
+    if (_url.isEmpty) return;
+    setState(() => _error = null);
+    await _openUrl(_url, retries: 3);
+  }
+
+  /// 换到 H.264 重新建会话。DV / 10-bit 片源在 AV1(fMP4) 下跨段会解不出分片，
+  /// H.264 走 mpegts 最稳，用户不必退出播放页就能自救。
+  Future<void> _retryWithH264() async {
+    if (widget.itemId == null) return;
+    setState(() => _error = null);
+    await _switchQuality(_preset, codec: 'h264');
+  }
+
   Widget _errorLayer() => Center(
         child: Padding(
           padding: const EdgeInsets.all(NasTokens.spaceLg),
@@ -2513,9 +2561,27 @@ class _PlayerPageState extends State<PlayerPage> {
                 ),
               ),
               const SizedBox(height: NasTokens.spaceMd),
-              OutlinedButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                child: Text(tr('common.back')),
+              // 播放失败后错误层会盖住控制栏，用户点不到画质菜单 —— 这就是
+              // 「切换分辨率 / 编码方式不生效」的实际表现。这里把恢复入口直接
+              // 放到错误页上：重试当前地址，或一键换到最稳的 H.264 重新建会话。
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: NasTokens.spaceSm,
+                children: [
+                  if (_isTranscode && _codec != 'h264')
+                    OutlinedButton(
+                      onPressed: _retryWithH264,
+                      child: Text(tr('player.retryWithH264')),
+                    ),
+                  OutlinedButton(
+                    onPressed: _retryPlay,
+                    child: Text(tr('player.retry')),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    child: Text(tr('common.back')),
+                  ),
+                ],
               ),
               const SizedBox(height: NasTokens.spaceSm),
               Text(

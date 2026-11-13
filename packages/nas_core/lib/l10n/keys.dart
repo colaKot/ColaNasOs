@@ -258,6 +258,12 @@ class I18nKeys {
   static const blogLoadFailed = 'blog.loadFailed';
   static const blogLoading = 'blog.loading';
   static const blogMtModelCancel = 'blog.mt.model.cancel';
+  static const blogModelManualDir = 'blog.model.manual.dir';
+  static const blogModelManualFiles = 'blog.model.manual.files';
+  static const blogModelManualHint = 'blog.model.manual.hint';
+  static const blogModelManualMirror = 'blog.model.manual.mirror';
+  static const blogModelManualTitle = 'blog.model.manual.title';
+  static const blogModelManualUrl = 'blog.model.manual.url';
   static const blogMtModelCancelled = 'blog.mt.model.cancelled';
   static const blogMtModelDir = 'blog.mt.model.dir';
   static const blogMtModelDownload = 'blog.mt.model.download';
@@ -1597,6 +1603,7 @@ class I18nKeys {
   static const playerReasonTruehd = 'player.reason.truehd';
   static const playerResolution = 'player.resolution';
   static const playerRetry = 'player.retry';
+  static const playerRetryWithH264 = 'player.retryWithH264';
   static const playerRewind10 = 'player.rewind10';
   static const playerSeekBack = 'player.seekBack';
   static const playerSeekFailed = 'player.seekFailed';
@@ -2761,4 +2768,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2715;
+const int i18nKeyCount = 2722;

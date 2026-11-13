@@ -386,6 +386,25 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
       Number(job.force_sdr) === 1 ||
       on(media?.dolby_vision) || on(media?.hdr10) ||
       on(media?.hdr10plus) || on(media?.hlg);
+    // DV / HDR 片源 + AV1 必须回落到 H.264（mpegts）。
+    //
+    // AV1 只能进 fMP4，而分段续转每段各自生成 init.mp4；实测 libmpv 跨段时
+    // 不会重新拉 p1 的 init，拿 p0 的 AV1 sequence header 去解 p1 分片 →
+    // `Failed to recognize file format` / `Failed to open seg00000.m4s?part=p1`
+    // （分片全部 200、文件也都在）。H.264 走 mpegts 不需要 init，跨段无此问题。
+    // 回落会经 `_actualCodec` 回显成「AV1 不可用，已回落到 H.264」。
+    const hdrSource =
+      on(media?.dolby_vision) || on(media?.hdr10) ||
+      on(media?.hdr10plus) || on(media?.hlg);
+    const requestedCodec = job.codec ?? 'h264';
+    const effectiveCodec = hdrSource && requestedCodec === 'av1' ? 'h264' : requestedCodec;
+    if (effectiveCodec !== requestedCodec) {
+      k.log.warn(
+        { session: job.id, from: requestedCodec, to: effectiveCodec,
+          dv: media?.dolby_vision, hdr10: media?.hdr10 },
+        '[player] DV/HDR 片源 AV1 回落 H.264（fMP4 跨段 init 不兼容）',
+      );
+    }
     const audioIndex = Number(job.audio_index ?? 0);
     await sql`update player_sessions set hdr_to_sdr = ${hdrToSdr ? 1 : 0} where id = ${job.id}`.execute(
       k.db,
@@ -407,7 +426,7 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
     const outDir = leadMs > 0 ? path.join(dir, `p${parts.length}`) : dir;
     const res = await k.media.hls(src, outDir, {
       preset: job.preset,
-      codec: job.codec ?? undefined,
+      codec: effectiveCodec,
       subtitle: job.subtitle ?? undefined,
       audioFilter: filters.length ? filters.join(',') : undefined,
       hwaccel: String(tconf.hwaccel || 'auto'),
@@ -452,7 +471,7 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
     await sql`
       update player_sessions
       set status = ${more ? (keepGoing ? 'pending' : 'paused') : 'done'}, segments = ${segments},
-          codec = ${res.codec ?? job.codec ?? 'h264'},
+          codec = ${res.codec ?? effectiveCodec},
           container = ${res.container ?? 'mpegts'},
           updated_at = ${now()}
       where id = ${job.id}

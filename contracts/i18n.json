@@ -310,6 +310,12 @@
     },
     "blog.loading": {},
     "blog.mt.model.cancel": {},
+    "blog.model.manual.dir": {},
+    "blog.model.manual.files": {},
+    "blog.model.manual.hint": {},
+    "blog.model.manual.mirror": {},
+    "blog.model.manual.title": {},
+    "blog.model.manual.url": {},
     "blog.mt.model.cancelled": {},
     "blog.mt.model.dir": {
       "dir": {}
@@ -2146,6 +2152,7 @@
     "player.reason.truehd": {},
     "player.resolution": {},
     "player.retry": {},
+    "player.retryWithH264": {},
     "player.rewind10": {},
     "player.seekBack": {
       "n": {}
