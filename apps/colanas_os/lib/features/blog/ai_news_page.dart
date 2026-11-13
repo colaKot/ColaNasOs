@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
@@ -26,6 +27,25 @@ const List<({String key, String labelKey})> _kCategories = [
   (key: 'domesticFinance', labelKey: 'blog.cat.domesticFinance'),
   (key: 'worldFinance', labelKey: 'blog.cat.worldFinance'),
 ];
+
+/// 两个模型的「手动下载」信息。名称/文件名与 `tool/tts-model.js`、`tool/mt-model.js`
+/// 里下载器使用的完全一致，用户自己下载后放进去就能被识别（状态是实时探测磁盘的）。
+/// 官方仓库在 HuggingFace；国内直连用 ModelScope 镜像（下载器也是优先它）。
+const String _kTtsMainUrl =
+    'https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/main/'
+    'Qwen3-TTS-12Hz-1.7B-Base-Q4_K_M.gguf';
+const String _kTtsMmprojUrl =
+    'https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/main/'
+    'mmproj-Qwen3-TTS-12Hz-1.7B-Base-Q8_0.gguf';
+const String _kTtsMirror = 'https://modelscope.cn/models/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF';
+const List<String> _kTtsFiles = [
+  'Qwen3-TTS-12Hz-1.7B-Base-Q4_K_M.gguf',
+  'mmproj-Qwen3-TTS-12Hz-1.7B-Base-Q8_0.gguf',
+];
+const String _kMtUrl =
+    'https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf';
+const String _kMtMirror = 'https://modelscope.cn/models/unsloth/Qwen3-1.7B-GGUF';
+const List<String> _kMtFiles = ['Qwen3-1.7B-Q4_K_M.gguf'];
 
 /// 内置音色 id → 文案键。音色来自参考音频，用户上传的音色直接用文件名做标签。
 const Map<String, String> _kBuiltinVoiceKeys = {
@@ -990,6 +1010,89 @@ class _AiNewsPageState extends State<AiNewsPage> {
     );
   }
 
+  /// 手动下载信息：官方直链 / 国内镜像 / 目标目录 / 文件名，全部可选中、可复制。
+  /// 目录来自服务端 status 的 `modelDir`（与运行时探测同一份路径），不是前端拼的。
+  Widget _manualBlock(
+    BuildContext context, {
+    required String? dir,
+    required List<String> urls,
+    required String mirror,
+    required List<String> files,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: NasTokens.spaceSm),
+        const Divider(height: 1),
+        const SizedBox(height: NasTokens.spaceSm),
+        Text(
+          tr('blog.model.manual.title'),
+          style: const TextStyle(
+            fontSize: NasTokens.fontCaption,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          tr('blog.model.manual.hint'),
+          style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+        ),
+        for (final url in urls)
+          _manualRow(context, tr('blog.model.manual.url'), url, link: true),
+        _manualRow(context, tr('blog.model.manual.mirror'), mirror, link: true),
+        if (dir != null && dir.isNotEmpty) _manualRow(context, tr('blog.model.manual.dir'), dir),
+        _manualRow(context, tr('blog.model.manual.files'), files.join('\n')),
+      ],
+    );
+  }
+
+  Widget _manualRow(BuildContext context, String label, String value, {bool link = false}) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: NasTokens.spaceXs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: NasTokens.fontCaption,
+                    color: context.nasTextSecondary,
+                  ),
+                ),
+                SelectableText(value, style: const TextStyle(fontSize: NasTokens.fontCaption)),
+              ],
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+            padding: EdgeInsets.zero,
+            tooltip: tr('common.copy'),
+            icon: const Icon(Icons.copy, size: 14),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: value));
+              messenger?.showSnackBar(SnackBar(content: Text(tr('common.copied'))));
+            },
+          ),
+          if (link && canOpenExternalLinks)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              padding: EdgeInsets.zero,
+              tooltip: tr('common.open'),
+              icon: const Icon(Icons.open_in_new, size: 14),
+              onPressed: () => openExternalLink(value),
+            ),
+        ],
+      ),
+    );
+  }
+
   /// 语音模型下载卡片：未下载给按钮、下载中给进度条、下完显示「已下载」。
   /// 进度条复用 `_ThinBar`（自绘）而不是 `LinearProgressIndicator`——后者在
   /// CanvasKit 上高频重建时出过 `memory access out of bounds`。
@@ -1033,18 +1136,6 @@ class _AiNewsPageState extends State<AiNewsPage> {
                 ),
               ],
             ),
-            if (dir != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                tr('blog.tts.model.dir', {'dir': dir}),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: NasTokens.fontCaption,
-                  color: context.nasTextSecondary,
-                ),
-              ),
-            ],
           ] else if (downloading) ...[
             Text(
               phaseKey.isEmpty ? percentLabel : '$percentLabel · ${tr(phaseKey)}',
@@ -1113,6 +1204,13 @@ class _AiNewsPageState extends State<AiNewsPage> {
               label: Text(tr(failed ? 'blog.tts.model.retry' : 'blog.tts.model.download')),
             ),
           ],
+          _manualBlock(
+            context,
+            dir: dir,
+            urls: const [_kTtsMainUrl, _kTtsMmprojUrl],
+            mirror: _kTtsMirror,
+            files: _kTtsFiles,
+          ),
         ],
       ),
     );
@@ -1155,18 +1253,6 @@ class _AiNewsPageState extends State<AiNewsPage> {
                 ),
               ],
             ),
-            if (dir != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                tr('blog.mt.model.dir', {'dir': dir}),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: NasTokens.fontCaption,
-                  color: context.nasTextSecondary,
-                ),
-              ),
-            ],
           ] else if (downloading) ...[
             Text(percentLabel),
             const SizedBox(height: NasTokens.spaceSm),
@@ -1222,6 +1308,13 @@ class _AiNewsPageState extends State<AiNewsPage> {
               label: Text(tr(failed ? 'blog.mt.model.retry' : 'blog.mt.model.download')),
             ),
           ],
+          _manualBlock(
+            context,
+            dir: dir,
+            urls: const [_kMtUrl],
+            mirror: _kMtMirror,
+            files: _kMtFiles,
+          ),
         ],
       ),
     );

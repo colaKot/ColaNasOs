@@ -58,7 +58,18 @@ function resolveScript(): string | null {
   return candidates.find((p) => fs.existsSync(p)) ?? null;
 }
 
-function probe(): { installed: boolean; binReady: boolean; modelReady: boolean; modelDir: string | null } {
+/** 一键下载的落点（即使还没下，也要能告诉用户「该放哪」） */
+function expectedModelDir(home: string | null): string {
+  const base = home || path.join(process.cwd(), '.devdata', 'tts');
+  return path.join(base, 'models', 'qwen3-tts');
+}
+
+function probe(downloadHome: string | null): {
+  installed: boolean;
+  binReady: boolean;
+  modelReady: boolean;
+  modelDir: string | null;
+} {
   const p = resolveTtsPaths();
   const binReady = Boolean(p.bin && fs.existsSync(p.bin));
   const modelReady = Boolean(
@@ -68,7 +79,8 @@ function probe(): { installed: boolean; binReady: boolean; modelReady: boolean; 
     installed: binReady && modelReady,
     binReady,
     modelReady,
-    modelDir: p.modelDir,
+    // 未下载时也回传期望目录：页面要显示「手动下载放这里」，不能让人猜路径
+    modelDir: p.modelDir ?? expectedModelDir(downloadHome),
   };
 }
 
@@ -88,7 +100,7 @@ class TtsModelManager {
     if (this.state.downloading && !this.child) {
       this.state = state({ error: '下载进程已退出，请重试', task: 'error' });
     }
-    const p = probe();
+    const p = probe(this.home);
     if (p.installed && this.state.downloading) {
       // 文件已经齐了（比如用户手工放进去），即使下载进程还在跑也直接收尾
       this.child = null;
@@ -154,7 +166,7 @@ class TtsModelManager {
       this.child = null;
       if (wasMine && this.state.downloading) {
         // 进程走了但没发 done/error：多半是被取消或被系统杀掉
-        const p = probe();
+        const p = probe(this.home);
         if (!p.installed) this.finish('下载中断（网络或进程被关闭），可重试，已下载部分会自动续传');
         else this.state = state({ percent: 100, phase: '语音模型已下载', task: 'done' });
       }

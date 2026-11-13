@@ -70,7 +70,8 @@ class MtModelManager {
 
   private probe(): { installed: boolean; modelDir: string | null } {
     const dir = llmModelDir(this.dataDir ?? undefined);
-    return { installed: Boolean(dir && pickGguf(dir)), modelDir: dir };
+    // 未下载时也回传期望目录：页面要显示「手动下载放这里」
+    return { installed: Boolean(dir && pickGguf(dir)), modelDir: dir ?? this.targetDir() };
   }
 
   private targetDir(): string {
