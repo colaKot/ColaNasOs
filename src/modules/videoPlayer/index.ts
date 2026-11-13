@@ -323,6 +323,9 @@ let claiming = false;
  * 判断要不要接着预取，不必等下一次轮询把条件凑满。
  */
 const lastPoll = new Map<string, { at: number; pos: number }>();
+/** 正在跑的 ffmpeg 真实输出目录（会话 id → outDir）。
+ *  supersede 必须精确 kill 它：最后一段已完成目录 ≠ 正在写的目录。 */
+const activeOutDir = new Map<string, string>();
 /** 超过这个时间没轮询就当没人看了（关页 / 换片），不再预取 */
 const POLL_ACTIVE_MS = 120_000;
 /** 已转出末尾领先播放位置多少算「够用」。1.5 段留给转码 ~40s 的余量 */
@@ -337,7 +340,8 @@ function shouldKeepAhead(pos: number, transcodedMs: number, leadMs: number): boo
 async function claimJob(k: KernelApi): Promise<SessionRow | null> {
   const rows = (
     await sql<SessionRow>`
-      select * from player_sessions where status = 'pending' order by created_at asc limit 1
+      select * from player_sessions where status = 'pending'
+       order by created_at desc, updated_at desc, rowid desc limit 1
     `.execute(k.db)
   ).rows;
   const job = rows[0];
@@ -417,6 +421,8 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
     const transcodedMs = startMs + alreadyMs;
     const totalMs = leadMs > 0 ? await sourceDurationMsOf(k, job.item_id) : 0;
     const outDir = leadMs > 0 ? path.join(dir, `p${parts.length}`) : dir;
+    // 记下真实输出目录，supersede 时才能精确 kill 这个 ffmpeg
+    activeOutDir.set(job.id, outDir);
     const res = await k.media.hls(src, outDir, {
       preset: job.preset,
       codec: effectiveCodec,
@@ -467,7 +473,7 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
           codec = ${res.codec ?? effectiveCodec},
           container = ${res.container ?? 'mpegts'},
           updated_at = ${now()}
-      where id = ${job.id}
+      where id = ${job.id} and status <> 'canceled'
     `.execute(k.db);
   } catch (err) {
     const message = String((err as Error)?.message || err);
@@ -479,6 +485,8 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
       set status = ${canceled ? 'canceled' : 'failed'}, error = ${canceled ? 'superseded' : message.slice(0, 500)}, updated_at = ${now()}
       where id = ${job.id}
     `.execute(k.db);
+  } finally {
+    activeOutDir.delete(job.id);
   }
 }
 
@@ -511,22 +519,33 @@ async function supersedeOlder(k: KernelApi, itemId: string): Promise<void> {
   const rows = (
     await sql<{ id: string; status: string }>`
       select id, status from player_sessions
-       where item_id = ${itemId} and status in ('pending', 'running')
+       where item_id = ${itemId} and status in ('pending', 'running', 'paused')
     `.execute(k.db)
   ).rows;
   for (const row of rows) {
+    // paused 也算：分段续转的预取会把 paused 标回 pending 再排队，用户跳走后
+    // 它还会占着 MAX_JOBS 槽位、每段烧 20s。不把它一并取消，新会话就得等。
+    lastPoll.delete(row.id);
     await sql`
       update player_sessions
       set status = 'canceled', error = 'superseded', updated_at = ${now()}
       where id = ${row.id}
     `.execute(k.db);
     if (row.status === 'running') {
-      // 分段会话的 ffmpeg 写在 pN 子目录里，取消要精确指向那一段
+      // 必须指向**正在写**的那一段：partsOf 只返回已完成段，正在跑的 ffmpeg
+      // 写的是 p{parts.length}。以前用最后一个已完成目录 cancel，activeHls
+      // 里查不到 child，旧 ffmpeg 照样跑满 20s，新会话只能排队等。
+      const remembered = activeOutDir.get(row.id);
       const parts = partsOf(k, row.id);
-      const dir = parts.length
-        ? path.join(sessionDirOf(k, row.id), parts[parts.length - 1].name)
-        : sessionDirOf(k, row.id);
+      const base = sessionDirOf(k, row.id);
+      const dir =
+        remembered ??
+        (parts.length ? path.join(base, `p${parts.length}`) : base);
       await k.media.cancel(dir);
+      k.log.info(
+        { session: row.id, dir, exact: Boolean(remembered), parts: parts.length },
+        '[player] 取消旧转码',
+      );
     }
   }
 }
