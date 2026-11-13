@@ -7976,6 +7976,68 @@
           }
         }
       },
+      "PhotoFaceBatchMoveBody": {
+        "type": "object",
+        "required": [
+          "faceIds"
+        ],
+        "properties": {
+          "faceIds": {
+            "minItems": 1,
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "toClusterId": {
+            "description": "目标人脸簇；null = 移出成未分组",
+            "minLength": 1,
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "PhotoFaceBatchRemoveBody": {
+        "type": "object",
+        "required": [
+          "faceIds"
+        ],
+        "properties": {
+          "faceIds": {
+            "minItems": 1,
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PhotoFaceBatchResult": {
+        "type": "object",
+        "required": [
+          "affected",
+          "skipped",
+          "clusters"
+        ],
+        "properties": {
+          "affected": {
+            "description": "实际处理的张数",
+            "type": "integer"
+          },
+          "skipped": {
+            "description": "已在目标状态 / 不存在的张数",
+            "type": "integer"
+          },
+          "clusters": {
+            "description": "受影响的人脸簇数",
+            "type": "integer"
+          }
+        }
+      },
       "PhotoFaceCoverBody": {
         "type": "object",
         "required": [
@@ -23605,6 +23667,98 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PhotoFaceMoveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoAiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/faces/batch-move": {
+      "post": {
+        "operationId": "photoFaceBatchMove",
+        "summary": "批量移动人脸（toClusterId=null 表示移出成未分组）",
+        "tags": [
+          "photo"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoFaceBatchMoveBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoFaceBatchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoAiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/faces/batch-remove": {
+      "post": {
+        "operationId": "photoFaceBatchRemove",
+        "summary": "批量移除人脸（硬删人脸记录）",
+        "tags": [
+          "photo"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhotoFaceBatchRemoveBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoFaceBatchResult"
                 }
               }
             }

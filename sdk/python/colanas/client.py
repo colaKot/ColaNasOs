@@ -643,6 +643,14 @@ class ColanasClient:
         """只补人脸框（不重算场景/嵌入，保留簇归属）"""
         return self._request("POST", "/api/v1/photo/faces/backfill", params, "body")
 
+    def photo_face_batch_move(self, **params):
+        """批量移动人脸（toClusterId=null 表示移出成未分组）"""
+        return self._request("POST", "/api/v1/photo/faces/batch-move", params, "body")
+
+    def photo_face_batch_remove(self, **params):
+        """批量移除人脸（硬删人脸记录）"""
+        return self._request("POST", "/api/v1/photo/faces/batch-remove", params, "body")
+
     def photo_face_clusters(self, **params):
         """人脸聚类列表（按人数倒序，分页；少于 minCount 的碎片组不显示，具名组豁免）"""
         return self._request("GET", "/api/v1/photo/faces/clusters", params, "query")

@@ -7166,6 +7166,66 @@ class PhotoFaceMoveResponse {
       };
 }
 
+class PhotoFaceBatchMoveBody {
+  final List<String> faceIds;
+  final String? toClusterId;
+
+  const PhotoFaceBatchMoveBody({
+    required this.faceIds,
+    this.toClusterId,
+  });
+
+  factory PhotoFaceBatchMoveBody.fromJson(Map<String, dynamic> json) => PhotoFaceBatchMoveBody(
+        faceIds: (json['faceIds'] as List<dynamic>).cast<String>(),
+        toClusterId: json['toClusterId'] == null ? null : json['toClusterId'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'faceIds': faceIds,
+        if (toClusterId != null) 'toClusterId': toClusterId!,
+      };
+}
+
+class PhotoFaceBatchRemoveBody {
+  final List<String> faceIds;
+
+  const PhotoFaceBatchRemoveBody({
+    required this.faceIds,
+  });
+
+  factory PhotoFaceBatchRemoveBody.fromJson(Map<String, dynamic> json) => PhotoFaceBatchRemoveBody(
+        faceIds: (json['faceIds'] as List<dynamic>).cast<String>(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'faceIds': faceIds,
+      };
+}
+
+class PhotoFaceBatchResult {
+  final int affected;
+  final int skipped;
+  final int clusters;
+
+  const PhotoFaceBatchResult({
+    required this.affected,
+    required this.skipped,
+    required this.clusters,
+  });
+
+  factory PhotoFaceBatchResult.fromJson(Map<String, dynamic> json) => PhotoFaceBatchResult(
+        affected: json['affected'] as int,
+        skipped: json['skipped'] as int,
+        clusters: json['clusters'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'affected': affected,
+        'skipped': skipped,
+        'clusters': clusters,
+      };
+}
+
 class PhotoFaceCoverBody {
   final String clusterId;
   final String photoId;

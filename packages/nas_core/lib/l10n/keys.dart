@@ -1107,6 +1107,17 @@ class I18nKeys {
   static const photoDuplicateTopWasted = 'photo.duplicate.topWasted';
   static const photoDuplicateWasted = 'photo.duplicate.wasted';
   static const photoFaceCandidateMeta = 'photo.face.candidateMeta';
+  static const photoFaceBatchAll = 'photo.face.batchAll';
+  static const photoFaceBatchDelete = 'photo.face.batchDelete';
+  static const photoFaceBatchDeleteConfirm = 'photo.face.batchDeleteConfirm';
+  static const photoFaceBatchDone = 'photo.face.batchDone';
+  static const photoFaceBatchExit = 'photo.face.batchExit';
+  static const photoFaceBatchMoveOut = 'photo.face.batchMoveOut';
+  static const photoFaceBatchMoveTo = 'photo.face.batchMoveTo';
+  static const photoFaceBatchNone = 'photo.face.batchNone';
+  static const photoFaceBatchNoneSelected = 'photo.face.batchNoneSelected';
+  static const photoFaceBatchSelect = 'photo.face.batchSelect';
+  static const photoFaceBatchSelected = 'photo.face.batchSelected';
   static const photoFaceCandidates = 'photo.face.candidates';
   static const photoFaceCandidatesTitle = 'photo.face.candidatesTitle';
   static const photoFaceClusterCount = 'photo.face.clusterCount';
@@ -2804,4 +2815,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2758;
+const int i18nKeyCount = 2769;

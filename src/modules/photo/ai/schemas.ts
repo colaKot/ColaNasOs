@@ -426,6 +426,36 @@ export const FaceMoveResponse = Type.Object(
   { $id: 'PhotoFaceMoveResponse' },
 );
 
+/** 多选批量移动：toClusterId 为 null 表示「移出成未分组」 */
+export const FaceBatchMoveBody = Type.Object(
+  {
+    faceIds: Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 500 }),
+    toClusterId: Type.Optional(
+      Type.Union([Type.String({ minLength: 1 }), Type.Null()], {
+        description: '目标人脸簇；null = 移出成未分组',
+      }),
+    ),
+  },
+  { $id: 'PhotoFaceBatchMoveBody' },
+);
+
+/** 多选批量移除：硬删人脸行（不会自动重新识别出来） */
+export const FaceBatchRemoveBody = Type.Object(
+  {
+    faceIds: Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 500 }),
+  },
+  { $id: 'PhotoFaceBatchRemoveBody' },
+);
+
+export const FaceBatchResult = Type.Object(
+  {
+    affected: Type.Integer({ description: '实际处理的张数' }),
+    skipped: Type.Integer({ description: '已在目标状态 / 不存在的张数' }),
+    clusters: Type.Integer({ description: '受影响的人脸簇数' }),
+  },
+  { $id: 'PhotoFaceBatchResult' },
+);
+
 /** 把簇内某张照片手动设为该人脸的封面 */
 export const FaceCoverBody = Type.Object(
   {
@@ -654,6 +684,9 @@ export const PHOTO_AI_SCHEMAS = [
   FaceMergeResponse,
   FaceMoveBody,
   FaceMoveResponse,
+  FaceBatchMoveBody,
+  FaceBatchRemoveBody,
+  FaceBatchResult,
   FaceCoverBody,
   FaceCoverResponse,
   FaceMergeCandidateBody,

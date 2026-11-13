@@ -2128,6 +2128,21 @@ export type PhotoFaceMoveResponse = {
   "clusterId": string;
 };
 
+export type PhotoFaceBatchMoveBody = {
+  "faceIds": string[];
+  "toClusterId"?: string;
+};
+
+export type PhotoFaceBatchRemoveBody = {
+  "faceIds": string[];
+};
+
+export type PhotoFaceBatchResult = {
+  "affected": number;
+  "skipped": number;
+  "clusters": number;
+};
+
 export type PhotoFaceCoverBody = {
   "clusterId": string;
   "photoId": string;

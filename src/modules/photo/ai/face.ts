@@ -61,6 +61,63 @@ export const FACE_MIN_SHOW_COUNT = Number(process.env.COLANAS_FACE_MIN_SHOW_COUN
 export const FACES_PAGE_DEFAULT = 500;
 export const FACES_PAGE_MAX = 5000;
 
+/**
+ * 人脸裁剪图的生成闸门。
+ *
+ * 缓存未命中时要 spawn 一次 ffmpeg 从原图裁出头像；快速滚动人脸墙会同时打进
+ * 几百个不同 faceId，原来没有任何并发控制 → 几百个 ffmpeg 一起跑，内核被拖到
+ * 无响应（2026-11-13 用户反馈「滚动太快，后台崩溃」）。这里做两层收敛：
+ *   · 同一个缓存 key 只生成一次（并发请求复用同一个 Promise）；
+ *   · 全局最多 FACE_IMAGE_CONCURRENCY 个裁剪进程，其余请求排队等槽位。
+ */
+const FACE_IMAGE_CONCURRENCY = Math.max(1, Number(process.env.COLANAS_FACE_IMAGE_CONCURRENCY) || 4);
+let faceImageRunning = 0;
+const faceImageQueue: Array<() => void> = [];
+const faceImageInflight = new Map<string, Promise<boolean>>();
+
+async function acquireFaceImageSlot(): Promise<void> {
+  if (faceImageRunning < FACE_IMAGE_CONCURRENCY) {
+    faceImageRunning += 1;
+    return;
+  }
+  // 被 release 唤醒时槽位直接「转交」，running 保持原值
+  await new Promise<void>((resolve) => faceImageQueue.push(resolve));
+}
+
+function releaseFaceImageSlot(): void {
+  const next = faceImageQueue.shift();
+  if (next) next();
+  else faceImageRunning = Math.max(0, faceImageRunning - 1);
+}
+
+async function ensureFaceCrop(key: string, out: string, abs: string, vf: string): Promise<boolean> {
+  const pending = faceImageInflight.get(key);
+  if (pending) return pending;
+  const job = (async () => {
+    await acquireFaceImageSlot();
+    try {
+      if (fs.existsSync(out)) return true;
+      const ff = ffmpegPath();
+      if (!ff) return false;
+      fs.mkdirSync(path.dirname(out), { recursive: true });
+      return await new Promise<boolean>((resolve) => {
+        const child = spawn(
+          ff,
+          ['-hide_banner', '-loglevel', 'error', '-y', '-i', abs, '-vf', vf, '-frames:v', '1', out],
+          { windowsHide: true },
+        );
+        child.on('error', () => resolve(false));
+        child.on('close', (code) => resolve(code === 0 && fs.existsSync(out)));
+      });
+    } finally {
+      releaseFaceImageSlot();
+      faceImageInflight.delete(key);
+    }
+  })();
+  faceImageInflight.set(key, job);
+  return job;
+}
+
 export const toBuffer = (vec: number[]): Buffer => Buffer.from(new Float32Array(vec).buffer);
 export const fromBuffer = (buf: Buffer): Float32Array =>
   new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 4));
@@ -838,6 +895,24 @@ async function refreshClusterStats(db: any, clusterId: string | null): Promise<v
   `.execute(db);
 }
 
+/**
+ * 封面脸被移走 / 删除后，cover_face_id 会指向一张已不属于该簇（甚至已不存在）的脸。
+ * 列表 SQL 只在它为 NULL 时才会 coalesce 重挑，所以这里显式置空。
+ */
+async function fixCoverFace(db: any, clusterId: string): Promise<void> {
+  await sql`
+    update photo_face_clusters
+       set cover_face_id = null, cover_photo_id = null, updated_at = ${now()}
+     where id = ${clusterId}
+       and cover_face_id is not null
+       and not exists (
+         select 1 from photo_faces f
+          where f.id = photo_face_clusters.cover_face_id
+            and f.cluster_id = ${clusterId}
+       )
+  `.execute(db);
+}
+
 export interface SweepOptions {
   /** 碎片簇上限：成员数 ≤ n 且未命名的簇先解绑再重认（0 = 不动碎片簇） */
   fragmentMax?: number;
@@ -1227,14 +1302,8 @@ export async function registerPhotoFaces(app: any, k: KernelApi): Promise<void> 
           `crop=${cropSize}:${cropSize}:${left}:${top},` +
           `scale=${size}:${size}:force_original_aspect_ratio=increase,crop=${size}:${size}`;
         try {
-          fs.mkdirSync(path.dirname(out), { recursive: true });
-          const ok = await new Promise<boolean>((resolve) => {
-            const child = spawn(ff, ['-hide_banner', '-loglevel', 'error', '-y', '-i', abs, '-vf', vf, '-frames:v', '1', out], {
-              windowsHide: true,
-            });
-            child.on('error', () => resolve(false));
-            child.on('close', (code) => resolve(code === 0 && fs.existsSync(out)));
-          });
+          // 走全局闸门：同一个头像只裁一次，其余并发请求排队复用结果
+          const ok = await ensureFaceCrop(hash, out, abs, vf);
           if (!ok) {
             return reply.redirect(
               `/api/v1/files/thumb?path=${encodeURIComponent(row.rel_path)}&size=${size}`,
@@ -1559,6 +1628,126 @@ export async function registerPhotoFaces(app: any, k: KernelApi): Promise<void> 
       faceIndex.invalidate();
       await faceIndex.load(k.db);
       return { ok: true, clusterId: toClusterId };
+    },
+  );
+
+  // 多选批量操作：把「一张一张搬」扩成一次最多 500 张。
+  // 移动与移除都要同步簇 size、失效封面、空簇与内存索引，不能只改 cluster_id。
+  app.post(
+    '/api/v1/photo/faces/batch-move',
+    secured('photo:write', {
+      schema: {
+        operationId: 'photoFaceBatchMove',
+        tags: ['photo'],
+        summary: '批量移动人脸（toClusterId=null 表示移出成未分组）',
+        body: ref('PhotoFaceBatchMoveBody'),
+        response: { 200: ref('PhotoFaceBatchResult'), 400: ref('PhotoAiError') },
+      },
+    }),
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const body = (req.body || {}) as { faceIds?: string[]; toClusterId?: string | null };
+      const ids = [...new Set((body.faceIds || []).filter((x) => typeof x === 'string' && x).slice(0, 500))];
+      if (ids.length === 0) {
+        return reply.code(400).send({ error: Err.badRequest, message: 'faceIds required' });
+      }
+      const toClusterId = body.toClusterId == null || body.toClusterId === '' ? null : String(body.toClusterId);
+      if (toClusterId) {
+        const exists = (
+          await sql<{ n: number }>`select count(*) as n from photo_face_clusters where id = ${toClusterId}`.execute(k.db)
+        ).rows[0];
+        if (Number(exists?.n) === 0) {
+          return reply.code(400).send({ error: Err.badRequest, message: 'target cluster not found' });
+        }
+      }
+      const rows = (
+        await sql<{ id: string; cluster_id: string | null }>`
+          select id, cluster_id from photo_faces
+           where id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+        `.execute(k.db)
+      ).rows;
+      const changed = rows.filter((r) => (r.cluster_id ?? null) !== toClusterId).map((r) => r.id);
+      const affected = new Set<string>();
+      for (const r of rows) if (r.cluster_id) affected.add(String(r.cluster_id));
+      if (toClusterId) affected.add(toClusterId);
+
+      await db_transaction(k, async (trx) => {
+        if (changed.length > 0) {
+          await sql`
+            update photo_faces set cluster_id = ${toClusterId}
+             where id in (${sql.join(changed.map((id) => sql`${id}`), sql`, `)})
+          `.execute(trx);
+        }
+        for (const cid of affected) {
+          await refreshClusterStats(trx, cid);
+          await fixCoverFace(trx, cid);
+        }
+      });
+      faceIndex.invalidate();
+      await faceIndex.load(k.db);
+      return {
+        affected: changed.length,
+        skipped: ids.length - changed.length,
+        clusters: affected.size,
+      };
+    },
+  );
+
+  // 「移除人脸」是硬删人脸行：cluster_id=NULL 只是挂起，sweep 会把它捞回来，
+  // 不能表达「这张脸认错了，别再出现」。删完不会自动重新检测（ai_done_mask 不清）。
+  app.post(
+    '/api/v1/photo/faces/batch-remove',
+    secured('photo:write', {
+      schema: {
+        operationId: 'photoFaceBatchRemove',
+        tags: ['photo'],
+        summary: '批量移除人脸（硬删人脸记录）',
+        body: ref('PhotoFaceBatchRemoveBody'),
+        response: { 200: ref('PhotoFaceBatchResult'), 400: ref('PhotoAiError') },
+      },
+    }),
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const body = (req.body || {}) as { faceIds?: string[] };
+      const ids = [...new Set((body.faceIds || []).filter((x) => typeof x === 'string' && x).slice(0, 500))];
+      if (ids.length === 0) {
+        return reply.code(400).send({ error: Err.badRequest, message: 'faceIds required' });
+      }
+      const rows = (
+        await sql<{ id: string; cluster_id: string | null }>`
+          select id, cluster_id from photo_faces
+           where id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+        `.execute(k.db)
+      ).rows;
+      if (rows.length === 0) {
+        return reply.code(400).send({ error: Err.badRequest, message: 'face not found' });
+      }
+      const realIds = rows.map((r) => r.id);
+      const affected = new Set<string>();
+      for (const r of rows) if (r.cluster_id) affected.add(String(r.cluster_id));
+
+      await db_transaction(k, async (trx) => {
+        await sql`
+          delete from photo_faces
+           where id in (${sql.join(realIds.map((id) => sql`${id}`), sql`, `)})
+        `.execute(trx);
+        // 一个人脸都没剩的簇直接清掉（与 photoFacePurge 同款口径）
+        await sql`
+          delete from photo_face_clusters
+           where not exists (
+             select 1 from photo_faces f where f.cluster_id = photo_face_clusters.id
+           )
+        `.execute(trx);
+        for (const cid of affected) {
+          await refreshClusterStats(trx, cid);
+          await fixCoverFace(trx, cid);
+        }
+      });
+      faceIndex.invalidate();
+      await faceIndex.load(k.db);
+      return {
+        affected: realIds.length,
+        skipped: ids.length - realIds.length,
+        clusters: affected.size,
+      };
     },
   );
 

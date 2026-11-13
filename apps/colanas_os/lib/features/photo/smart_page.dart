@@ -955,6 +955,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
                           '${ApiSession.instance.baseUrl}/api/v1/photo/face/image'
                           '?id=${Uri.encodeComponent(c.coverFaceId!)}&size=200',
                           headers: ApiSession.instance.authHeaders,
+                          cacheWidth: 200,
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) => Icon(
                             Icons.face_outlined,
@@ -1083,14 +1084,14 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
     }
   }
 
-  /// 簇成员管理：单张脸移出 / 移到别簇。
+  /// 簇成员管理：单击仍是单张操作，**长按进入多选**后可批量移出 / 移动 / 删除。
   ///
-  /// 整簇合并解决不了「这一张认错了」——那是单张归属问题。
+  /// 整簇合并解决不了「这一张认错了」——那是单张归属问题；多选是为了
+  /// 一次清掉一批误识别的脸，不用一张一张点。
   Future<void> _manageFaces(PhotoFaceClusterItem cluster) async {
     List<PhotoFaceItem> faces;
     try {
-      final res = await ApiSession.instance.client.photoFacesAll(cluster.id);
-      faces = res;
+      faces = await ApiSession.instance.client.photoFacesAll(cluster.id);
     } catch (e) {
       _toast(tr('common.loadFailed', {'error': '$e'}));
       return;
@@ -1100,54 +1101,243 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
       _toast(tr('photo.face.noFaces'));
       return;
     }
+    final selected = <String>{};
+    var selecting = false;
+
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          tr('photo.face.manageTitle', {
-            'name': cluster.name ??
-                tr('photo.faceCluster.unnamed', {'id': cluster.id.substring(0, 6)}),
-          }),
-        ),
-        content: SizedBox(
-          width: 520,
-          height: 420,
-          child: GridView.builder(
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 96,
-              mainAxisSpacing: NasTokens.spaceSm,
-              crossAxisSpacing: NasTokens.spaceSm,
-            ),
-            itemCount: faces.length,
-            itemBuilder: (c, i) {
-              final face = faces[i];
-              return InkWell(
-                onLongPress: () async {
-                  Navigator.pop(ctx);
-                  await _faceMemberActions(face, cluster);
-                },
-                child: ClipOval(
-                  child: Image.network(
-                    '${ApiSession.instance.baseUrl}/api/v1/photo/face/image'
-                    '?id=${Uri.encodeComponent(face.id)}&size=160',
-                    headers: ApiSession.instance.authHeaders,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => Icon(
-                      Icons.face_outlined,
-                      color: context.nasTextSecondary,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          Widget tile(PhotoFaceItem face) {
+            final picked = selected.contains(face.id);
+            return GestureDetector(
+              onTap: () async {
+                if (selecting) {
+                  setDialogState(() {
+                    if (picked) {
+                      selected.remove(face.id);
+                    } else {
+                      selected.add(face.id);
+                    }
+                  });
+                  return;
+                }
+                Navigator.pop(ctx);
+                await _faceMemberActions(face, cluster);
+              },
+              onLongPress: () {
+                if (selecting) return;
+                setDialogState(() {
+                  selecting = true;
+                  selected.add(face.id);
+                });
+              },
+              child: Stack(
+                children: [
+                  ClipOval(
+                    child: Image.network(
+                      '${ApiSession.instance.baseUrl}/api/v1/photo/face/image'
+                      '?id=${Uri.encodeComponent(face.id)}&size=160',
+                      headers: ApiSession.instance.authHeaders,
+                      cacheWidth: 160,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) => Icon(
+                        Icons.face_outlined,
+                        color: context.nasTextSecondary,
+                      ),
                     ),
                   ),
+                  if (selecting) ...[
+                    const Positioned.fill(
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.black26,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 2,
+                      right: 2,
+                      child: Icon(
+                        picked ? Icons.check_circle : Icons.radio_button_unchecked,
+                        size: 20,
+                        color: picked ? Theme.of(context).colorScheme.primary : Colors.white,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }
+
+          Future<void> runBatch(String action) async {
+            if (selected.isEmpty) {
+              _toast(tr('photo.face.batchNoneSelected'));
+              return;
+            }
+            final ok = await _batchFaces(selected.toList(), action, cluster);
+            // 跨了 async gap，先确认弹窗还在栈上再 pop
+            if (ok && ctx.mounted) Navigator.pop(ctx);
+          }
+
+          return AlertDialog(
+            title: Text(
+              tr('photo.face.manageTitle', {
+                'name': cluster.name ??
+                    tr('photo.faceCluster.unnamed', {'id': cluster.id.substring(0, 6)}),
+              }),
+            ),
+            content: SizedBox(
+              width: 520,
+              height: 440,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => setDialogState(() {
+                          selecting = !selecting;
+                          if (!selecting) selected.clear();
+                        }),
+                        icon: Icon(selecting ? Icons.close : Icons.checklist, size: 16),
+                        label: Text(
+                          selecting ? tr('photo.face.batchExit') : tr('photo.face.batchSelect'),
+                        ),
+                      ),
+                      if (selecting) ...[
+                        Text(tr('photo.face.batchSelected', {'count': '${selected.length}'})),
+                        TextButton(
+                          onPressed: () => setDialogState(
+                            () => selected.addAll(faces.map((f) => f.id)),
+                          ),
+                          child: Text(tr('photo.face.batchAll')),
+                        ),
+                        TextButton(
+                          onPressed: () => setDialogState(() => selected.clear()),
+                          child: Text(tr('photo.face.batchNone')),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: GridView.builder(
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 96,
+                        mainAxisSpacing: NasTokens.spaceSm,
+                        crossAxisSpacing: NasTokens.spaceSm,
+                      ),
+                      itemCount: faces.length,
+                      itemBuilder: (c, i) => tile(faces[i]),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              if (selecting) ...[
+                TextButton(
+                  onPressed: () => runBatch('out'),
+                  child: Text(tr('photo.face.batchMoveOut')),
                 ),
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('common.close'))),
-        ],
+                TextButton(
+                  onPressed: () => runBatch('to'),
+                  child: Text(tr('photo.face.batchMoveTo')),
+                ),
+                TextButton(
+                  onPressed: () => runBatch('delete'),
+                  child: Text(tr('photo.face.batchDelete')),
+                ),
+              ],
+              TextButton(onPressed: () => Navigator.pop(ctx), child: Text(tr('common.close'))),
+            ],
+          );
+        },
       ),
     );
     await _load();
+  }
+
+  /// 多选后的批量动作：out=移出成未分组 / to=移动到别簇 / delete=硬删人脸行。
+  Future<bool> _batchFaces(
+    List<String> ids,
+    String action,
+    PhotoFaceClusterItem cluster,
+  ) async {
+    String? target;
+    if (action == 'to') {
+      final others = _clusters.where((x) => x.id != cluster.id).toList();
+      if (others.isEmpty) {
+        _toast(tr('photo.face.noOtherCluster'));
+        return false;
+      }
+      final picked = await showDialog<PhotoFaceClusterItem>(
+        context: context,
+        builder: (ctx) => SimpleDialog(
+          title: Text(tr('photo.face.moveTo')),
+          children: [
+            for (final t in others.take(40))
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, t),
+                child: Text(
+                  '${t.name ?? tr('photo.faceCluster.unnamed', {'id': t.id.substring(0, 6)})}'
+                  ' · ${tr('photo.count', {'count': '${t.size}'})}',
+                ),
+              ),
+          ],
+        ),
+      );
+      if (picked == null || !mounted) return false;
+      target = picked.id;
+    }
+    if (action == 'delete') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(tr('photo.face.batchDelete')),
+          content: Text(tr('photo.face.batchDeleteConfirm', {'count': '${ids.length}'})),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(tr('common.cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tr('common.delete')),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return false;
+    }
+
+    try {
+      final client = ApiSession.instance.client;
+      final PhotoFaceBatchResult res;
+      if (action == 'delete') {
+        res = await client.photoFaceBatchRemove(
+          body: PhotoFaceBatchRemoveBody(faceIds: ids),
+        );
+      } else {
+        res = await client.photoFaceBatchMove(
+          body: PhotoFaceBatchMoveBody(faceIds: ids, toClusterId: target),
+        );
+      }
+      if (!mounted) return false;
+      _toast(tr('photo.face.batchDone', {'count': '${res.affected}'}));
+      await _load();
+      return true;
+    } catch (e) {
+      if (mounted) _toast('$e');
+      return false;
+    }
   }
 
   Future<void> _faceMemberActions(PhotoFaceItem face, PhotoFaceClusterItem cluster) async {

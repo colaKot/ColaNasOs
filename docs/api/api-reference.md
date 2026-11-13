@@ -1,7 +1,7 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**409 个路径 / 435 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**411 个路径 / 437 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
@@ -14,7 +14,7 @@
 - **开放集成（Webhook / deliveries）**（`integration`）· 6 个操作 · [跳转](#integration)
 - **音乐**（`music`）· 35 个操作 · [跳转](#music)
 - **其他**（`other`）· 2 个操作 · [跳转](#other)
-- **相册**（`photo`）· 138 个操作 · [跳转](#photo)
+- **相册**（`photo`）· 140 个操作 · [跳转](#photo)
 - **player**（`player`）· 2 个操作 · [跳转](#player)
 - **pt**（`pt`）· 26 个操作 · [跳转](#pt)
 - **RSS 订阅**（`rss`）· 15 个操作 · [跳转](#rss)
@@ -1235,6 +1235,20 @@ MCP 开放平台状态 · `photoMcpStatus`
 
 - 请求体：（空对象）
 - 响应：200 `PhotoFaceBackfillResponse`
+
+#### `POST /api/v1/photo/faces/batch-move`
+
+批量移动人脸（toClusterId=null 表示移出成未分组） · `photoFaceBatchMove`
+
+- 请求体：（空对象）
+- 响应：200 `PhotoFaceBatchResult` · 错误 400
+
+#### `POST /api/v1/photo/faces/batch-remove`
+
+批量移除人脸（硬删人脸记录） · `photoFaceBatchRemove`
+
+- 请求体：（空对象）
+- 响应：200 `PhotoFaceBatchResult` · 错误 400
 
 #### `GET /api/v1/photo/faces/clusters`
 

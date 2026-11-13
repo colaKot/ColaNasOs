@@ -1218,6 +1218,18 @@ class ApiClient {
     return PhotoFaceMoveResponse.fromJson(_asMap(_decode(res)));
   }
 
+  /// 批量移动人脸（toClusterId=null 表示移出成未分组）
+  Future<PhotoFaceBatchResult> photoFaceBatchMove({required PhotoFaceBatchMoveBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/photo/faces/batch-move'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return PhotoFaceBatchResult.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 批量移除人脸（硬删人脸记录）
+  Future<PhotoFaceBatchResult> photoFaceBatchRemove({required PhotoFaceBatchRemoveBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/photo/faces/batch-remove'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return PhotoFaceBatchResult.fromJson(_asMap(_decode(res)));
+  }
+
   /// 把簇内某张照片设为人脸封面
   Future<PhotoFaceCoverResponse> photoFaceCover({required PhotoFaceCoverBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/photo/faces/cover'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));

@@ -792,6 +792,16 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/photo/faces/backfill', params, 'body');
   }
 
+  /** 批量移动人脸（toClusterId=null 表示移出成未分组） */
+  async photoFaceBatchMove(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/photo/faces/batch-move', params, 'body');
+  }
+
+  /** 批量移除人脸（硬删人脸记录） */
+  async photoFaceBatchRemove(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/photo/faces/batch-remove', params, 'body');
+  }
+
   /** 人脸聚类列表（按人数倒序，分页；少于 minCount 的碎片组不显示，具名组豁免） */
   async photoFaceClusters(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/photo/faces/clusters', params, 'query');

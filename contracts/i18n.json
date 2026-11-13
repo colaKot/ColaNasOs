@@ -1441,6 +1441,17 @@
       "a": {},
       "b": {}
     },
+    "photo.face.batchAll": {},
+    "photo.face.batchDelete": {},
+    "photo.face.batchDeleteConfirm": { "count": {} },
+    "photo.face.batchDone": { "count": {} },
+    "photo.face.batchExit": {},
+    "photo.face.batchMoveOut": {},
+    "photo.face.batchMoveTo": {},
+    "photo.face.batchNone": {},
+    "photo.face.batchNoneSelected": {},
+    "photo.face.batchSelect": {},
+    "photo.face.batchSelected": { "count": {} },
     "photo.face.candidates": {},
     "photo.face.candidatesTitle": {},
     "photo.face.clusterCount": {
