@@ -225,7 +225,8 @@ const transcodedMsOf = (parts: PlaylistPart[]) =>
  * 负责等待（见下），播放器不会碰到「空的 m3u8」。
  *
  * 分片名与 pump 的分段续转对齐：每段 leadMs/6s 片、各自独立编号，
- * 用 `?part=pN` 指到对应子目录；跨段插 DISCONTINUITY，fMP4 每段重新声明 MAP。
+ * 用 `?part=pN` 指到对应子目录；跨段插 DISCONTINUITY。
+ * fMP4 只在开头声明一次 MAP（指向 p0 的 init.mp4，各段内容相同）。
  */
 async function buildStaticVodPlaylist(
   k: KernelApi,
@@ -261,7 +262,17 @@ async function buildStaticVodPlaylist(
     '#EXT-X-PLAYLIST-TYPE:VOD',
     '#EXT-X-START:TIME-OFFSET=0',
   ];
-  // null 初值保证**第一段也写 MAP**：fMP4 没有 init.mp4 播放器解不出任何分片。
+  // fMP4 只声明**一次** MAP，指向 p0 的 init.mp4。
+  //
+  // 分段续转每段各跑一次 ffmpeg，但编码参数固定，实测同一会话 20+ 段的
+  // init.mp4 MD5 完全相同 —— 本来就是同一份初始化信息。以前每段重新声明
+  // MAP，libmpv 跨段却不会重新拉 p1 的 init（日志里 p1 请求从 seg00001 起，
+  // 完全没有 init.mp4 请求），按新 MAP 重置 demuxer 后拿不到初始化段，
+  // 直接报 Failed to recognize file format。只写一次就没有这个歧义。
+  if (fmp4) {
+    lines.push(`#EXT-X-MAP:URI="init.mp4${segPerPart > 0 ? '?part=p0&' : '?'}t=${t}"`);
+  }
+  // DISCONTINUITY 仍按段插入：各段 PTS 从 0 重新开始，播放器需要它。
   let lastPart: string | null = null;
   for (let i = 0; i < totalSegs; i += 1) {
     const part = segPerPart > 0 ? `p${Math.floor(i / segPerPart)}` : '';
@@ -269,7 +280,6 @@ async function buildStaticVodPlaylist(
     const q = part ? `?part=${part}&t=${t}` : `?t=${t}`;
     if (part !== lastPart) {
       if (lastPart !== null) lines.push('#EXT-X-DISCONTINUITY');
-      if (fmp4) lines.push(`#EXT-X-MAP:URI="init.mp4${q}"`);
       lastPart = part;
     }
     const dur = i === totalSegs - 1 ? Math.max(0.1, (remainMs - i * 6000) / 1000) : 6;
@@ -386,25 +396,8 @@ async function runJob(k: KernelApi, job: SessionRow): Promise<void> {
       Number(job.force_sdr) === 1 ||
       on(media?.dolby_vision) || on(media?.hdr10) ||
       on(media?.hdr10plus) || on(media?.hlg);
-    // DV / HDR 片源 + AV1 必须回落到 H.264（mpegts）。
-    //
-    // AV1 只能进 fMP4，而分段续转每段各自生成 init.mp4；实测 libmpv 跨段时
-    // 不会重新拉 p1 的 init，拿 p0 的 AV1 sequence header 去解 p1 分片 →
-    // `Failed to recognize file format` / `Failed to open seg00000.m4s?part=p1`
-    // （分片全部 200、文件也都在）。H.264 走 mpegts 不需要 init，跨段无此问题。
-    // 回落会经 `_actualCodec` 回显成「AV1 不可用，已回落到 H.264」。
-    const hdrSource =
-      on(media?.dolby_vision) || on(media?.hdr10) ||
-      on(media?.hdr10plus) || on(media?.hlg);
     const requestedCodec = job.codec ?? 'h264';
-    const effectiveCodec = hdrSource && requestedCodec === 'av1' ? 'h264' : requestedCodec;
-    if (effectiveCodec !== requestedCodec) {
-      k.log.warn(
-        { session: job.id, from: requestedCodec, to: effectiveCodec,
-          dv: media?.dolby_vision, hdr10: media?.hdr10 },
-        '[player] DV/HDR 片源 AV1 回落 H.264（fMP4 跨段 init 不兼容）',
-      );
-    }
+    const effectiveCodec = requestedCodec;
     const audioIndex = Number(job.audio_index ?? 0);
     await sql`update player_sessions set hdr_to_sdr = ${hdrToSdr ? 1 : 0} where id = ${job.id}`.execute(
       k.db,

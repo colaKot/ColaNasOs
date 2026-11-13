@@ -4,7 +4,7 @@ import { mergePlaylists, playlistDurationMs } from '../src/modules/videoPlayer/p
 
 /**
  * 分段续转的播放列表拼接：真 Chrome + hls.js 1.4.10 验证过的格式，
- * 这里把「头只写一次 / 每段自己的 EXT-X-MAP / 接缝 DISCONTINUITY /
+ * 这里把「头只写一次 / init MAP 只声明一次并指向 p0 / 接缝 DISCONTINUITY /
  * 末尾不写 ENDLIST / URI 带 part 参数」钉死。
  */
 const part = (n: number, segs = 2) =>
@@ -36,20 +36,25 @@ test('单段：头只留一份，各段自己的头/ENDLIST 被丢掉', () => {
   assert.ok(text.includes('seg00000.m4s?part=p0'));
 });
 
-test('两段：接缝插 DISCONTINUITY，每段重新声明自己的 init', () => {
+test('两段：接缝插 DISCONTINUITY，MAP 只声明一次并指向 p0', () => {
   const text = mergePlaylists([
     { name: 'p0', text: part(0) },
     { name: 'p1', text: part(1) },
   ]);
   assert.equal((text.match(/#EXT-X-DISCONTINUITY/g) || []).length, 1);
-  assert.equal((text.match(/#EXT-X-MAP/g) || []).length, 2);
-  assert.ok(text.includes('#EXT-X-MAP:URI="init.mp4?part=p1"'));
+  // 各段 init.mp4 逐字节相同（同一套编码参数，实测 20+ 段 MD5 一致），
+  // 只写一次 MAP。每段重复声明会让 libmpv 跨段重置 demuxer 却不重新拉
+  // init，直接 Failed to recognize file format（4K DV + AV1 实测）。
+  assert.equal((text.match(/#EXT-X-MAP/g) || []).length, 1);
+  assert.ok(text.includes('#EXT-X-MAP:URI="init.mp4?part=p0"'));
+  assert.ok(!text.includes('init.mp4?part=p1'));
   assert.equal((text.match(/#EXTINF/g) || []).length, 4);
   assert.equal(playlistDurationMs(text), 24000);
-  // 顺序：p0 的两片 → DISCONTINUITY → p1 的 MAP → p1 分片
+  // 顺序：p0 的两片 → DISCONTINUITY → p1 分片（中间不再有 p1 的 MAP）
   const disc = text.indexOf('#EXT-X-DISCONTINUITY');
   assert.ok(disc > text.indexOf('seg00001.m4s?part=p0'));
   assert.ok(disc < text.indexOf('seg00001.m4s?part=p1'));
+  assert.ok(text.indexOf('#EXT-X-MAP') < disc, 'MAP 必须在第一个接缝之前');
 });
 
 test('绝对路径的 init / 分片 URI 只留文件名，防止把服务器路径泄漏给播放器', () => {

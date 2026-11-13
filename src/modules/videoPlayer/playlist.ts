@@ -2,8 +2,9 @@
  * 分段续转的播放列表拼接（纯函数，无 IO）。
  *
  * 每段是一次独立 ffmpeg 产物（自己的 init.mp4 + 分片，PTS 从 0 开始），
- * 所以段与段之间必须插 `#EXT-X-DISCONTINUITY`，并且每段前面重新声明
- * `#EXT-X-MAP` 指向自己的 init。真 Chrome + hls.js 1.4.10 实测：
+ * 所以段与段之间必须插 `#EXT-X-DISCONTINUITY`。各段的 init.mp4 内容相同，
+ * 只写第一段的 `#EXT-X-MAP`（每段重复声明会让 libmpv 跨段解不出分片）。
+ * 真 Chrome + hls.js 1.4.10 实测：
  * 接缝处会出现第二次 `FRAG_BUFFERED sn=initSegment`，播放能顺到 24s、
  * seek 到第二段也能起播，无 fatal。
  *
@@ -51,6 +52,10 @@ export function mergePlaylists(parts: PlaylistPart[]): string {
     '#EXT-X-START:TIME-OFFSET=0',
   ];
   const body: string[] = [];
+  // 各段 init.mp4 逐字节相同（同一套编码参数），只在第一段写一次 MAP。
+  // 跨段重新声明会让 libmpv 重置 demuxer 却不重新拉 init，随后解不出分片
+  // （Failed to recognize file format）。与 buildStaticVodPlaylist 保持一致。
+  let mapWritten = false;
   parts.forEach(({ name, text }, i) => {
     if (i > 0) body.push('#EXT-X-DISCONTINUITY');
     for (const raw of text.replace(/\r/g, '').split('\n')) {
@@ -59,6 +64,8 @@ export function mergePlaylists(parts: PlaylistPart[]): string {
       if (/^#EXT-X-(VERSION|TARGETDURATION|MEDIA-SEQUENCE|PLAYLIST-TYPE|ENDLIST)/.test(line))
         continue;
       if (line.startsWith('#EXT-X-MAP')) {
+        if (mapWritten) continue;
+        mapWritten = true;
         const uri = /URI="([^"]+)"/.exec(line)?.[1] || 'init.mp4';
         body.push(`#EXT-X-MAP:URI="${withPart(basename(uri), name)}"`);
         continue;
