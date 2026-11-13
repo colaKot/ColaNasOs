@@ -7,9 +7,14 @@ import '../../core/session.dart';
 /// 完整显示一张照片：按原始宽高比自适应容器高度，`BoxFit.contain` 不裁切不拉伸。
 ///
 /// 以前时间轴 / 对照卡都写死高度 + `BoxFit.cover`，竖图会被裁成一条横条、
-/// 宽图被压扁，看着比例很怪。现在服务端给宽高时按比例算高度（并夹在
-/// [minHeight]..[maxHeight] 之间，避免一张竖图把整页撑爆）；宽高缺失的老照片
-/// 退到 4:3，但依旧 `contain` 完整显示。
+/// 宽图被压扁，看着比例很怪。现在用 `AspectRatio` 按原始宽高比撑开，
+/// 再用 [minHeight]..[maxHeight] 夹一下（竖图不会撑爆页面、横图不会太扁）；
+/// 宽高缺失的老照片退到 4:3，依旧 `contain` 完整显示。
+///
+/// ⚠️ 这里**不能用 LayoutBuilder**：时间轴外层有 IntrinsicHeight 一类的
+/// 固有尺寸测量时，Flutter 会调 `computeMaxIntrinsicHeight`，LayoutBuilder
+/// 直接抛 `_debugThrowIfNotCheckingIntrinsics`，整条 sliver 布局链崩掉
+/// （2026-11-13 实测：点成长轨迹浏览器直接卡死）。AspectRatio 支持固有尺寸。
 class PhotoAdaptiveImage extends StatelessWidget {
   const PhotoAdaptiveImage({
     super.key,
@@ -38,43 +43,36 @@ class PhotoAdaptiveImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final w = constraints.maxWidth.isFinite && constraints.maxWidth > 0
-            ? constraints.maxWidth
-            : 320.0;
-        final ratio = (width != null && height != null && width! > 0 && height! > 0)
-            ? width! / height!
-            : 4.0 / 3.0;
-        final lo = minHeight > maxHeight ? maxHeight : minHeight;
-        final h = (w / ratio).clamp(lo, maxHeight).toDouble();
-
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(borderRadius),
-          child: SizedBox(
-            width: double.infinity,
-            height: h,
-            child: GestureDetector(
-              onTap: onTap,
-              onLongPress: onLongPress,
-              child: Container(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: path.isEmpty
-                    ? const Center(child: Icon(Icons.image_not_supported_outlined))
-                    : NasCoverImage(
-                        url: MediaUrls(ApiSession.instance.baseUrl)
-                            .thumbnail(path, size: thumbSize),
-                        headers: ApiSession.instance.authHeaders,
-                        cacheWidth: thumbSize,
-                        fit: BoxFit.contain,
-                        borderRadius: borderRadius,
-                        icon: Icons.broken_image_outlined,
-                      ),
-              ),
+    final ratio = (width != null && height != null && width! > 0 && height! > 0)
+        ? width! / height!
+        : 4.0 / 3.0;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: ConstrainedBox(
+        // 夹住极端比例；真被夹住时 contain 留白，不裁切也不拉伸
+        constraints: BoxConstraints(minHeight: minHeight, maxHeight: maxHeight),
+        child: AspectRatio(
+          aspectRatio: ratio,
+          child: GestureDetector(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            child: ColoredBox(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: path.isEmpty
+                  ? const Center(child: Icon(Icons.image_not_supported_outlined))
+                  : NasCoverImage(
+                      url: MediaUrls(ApiSession.instance.baseUrl)
+                          .thumbnail(path, size: thumbSize),
+                      headers: ApiSession.instance.authHeaders,
+                      cacheWidth: thumbSize,
+                      fit: BoxFit.contain,
+                      borderRadius: borderRadius,
+                      icon: Icons.broken_image_outlined,
+                    ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

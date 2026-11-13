@@ -432,31 +432,43 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
 
   Widget _timelineRow(PhotoGrowthStage s) {
     final scheme = Theme.of(context).colorScheme;
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            width: 26,
-            child: Column(
-              children: [
-                const SizedBox(height: 10),
-                Container(
-                  width: 11,
-                  height: 11,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: s.milestone.isNotEmpty ? scheme.primary : scheme.outlineVariant,
-                    border: Border.all(color: scheme.surface, width: 2),
-                  ),
+    // 不再用 IntrinsicHeight：固有高度测量会和竖线的 Expanded 形成循环，
+    // 遇到 LayoutBuilder 更会直接抛 computeMaxIntrinsicHeight 异常，
+    // 连锁把 sliver 布局链打断（2026-11-13 点成长轨迹浏览器卡死）。
+    // 改成 Stack + Positioned：高度由卡片一次布局决定，竖线自动填满。
+    return Stack(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 26),
+          child: _stageCard(s),
+        ),
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 26,
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 11,
+                height: 11,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: s.milestone.isNotEmpty ? scheme.primary : scheme.outlineVariant,
+                  border: Border.all(color: scheme.surface, width: 2),
                 ),
-                Expanded(child: Container(width: 2, color: scheme.outlineVariant.withValues(alpha: 0.5))),
-              ],
-            ),
+              ),
+              Expanded(
+                child: Container(
+                  width: 2,
+                  color: scheme.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
           ),
-          Expanded(child: _stageCard(s)),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
