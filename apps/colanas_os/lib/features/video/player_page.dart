@@ -548,6 +548,9 @@ class _PlayerPageState extends State<PlayerPage> {
       // 永远走不到 _benignRetries >= 2，黑屏且不显示任何错误。
       if (resetBenignRetries) _benignRetries = 0;
       if (mounted) setState(() => _error = null);
+      // 直连保底：libmpv 解不了的容器/编码（典型 MKV + HEVC 10bit / DV）不会报错，
+      // 而是「有声音、画面停在首帧」。8 秒还拿不到视频尺寸就自动切回转码。
+      if (!_isTranscode) unawaited(_guardDirectPlayback());
     } catch (e) {
       ClientLogger.instance.warn(
         'open 失败 ${openSw.elapsedMilliseconds}ms: $e',
@@ -613,6 +616,37 @@ class _PlayerPageState extends State<PlayerPage> {
       if (!mounted || _player.state.playing) return;
       _openUrl(target, resetBenignRetries: false);
     });
+  }
+
+  /// 直连播不出画面时的保底：自动切回转码并说明原因。
+  ///
+  /// 「原画」按用户要求是绝对不转码，但 libmpv 并不什么都能解 —— 实测 MKV +
+  /// HEVC 10bit / 杜比视界的片源直连时音频正常出、`state.width` 一直是 0，
+  /// 画面就停在首帧。这种情况不能静默让人对着封面干等，也不能偷偷转码
+  /// （用户明确要原片），所以：明确提示 + 切成一个转码档位。
+  Future<void> _guardDirectPlayback() async {
+    await Future<void>.delayed(const Duration(seconds: 8));
+    if (!mounted || _isTranscode || _error != null) return;
+    if ((_player.state.width ?? 0) > 0) return; // 有画面，直连正常
+    final fallback = clampPresetForSource(
+      defaultPlayPreset,
+      _srcHeight,
+      codec: _codec,
+    );
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    await _switchQuality(fallback, codec: _codec);
+    if (messenger != null && mounted) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            tr('player.codecFallback', {
+              'want': playQualityPresetOf('original')?.label ?? 'Original',
+              'actual': playQualityPresetOf(fallback)?.label ?? fallback,
+            }),
+          ),
+        ),
+      );
+    }
   }
 
   /// 拿到的某个 preset/codec 的 HLS 地址。
