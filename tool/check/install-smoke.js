@@ -52,10 +52,11 @@ function findInstaller() {
   if (!fs.existsSync(outDir)) return null;
   const setups = fs
     .readdirSync(outDir)
-    .filter((f) => /setup[-.].*\.exe$/i.test(f) && !/uninstall/i.test(f))
+    // 只测服务端安装包：客户端安装包（ColaNasOs-Client-*）不装内核，测它没有意义
+    .filter((f) => /setup[-.].*\.exe$/i.test(f) && !/uninstall/i.test(f) && !/^ColaNasOs-Client-/i.test(f))
     .sort((a, b) => {
-      // 优先完整包（ColaNasOs-Setup-*），其次精简包（*-lite-setup.exe）
-      const rank = (n) => (/^ColaNasOs-Setup-/.test(n) ? 0 : 1);
+      // 优先完整包（ColaNasOs-Server-*），其次精简包（*-lite-setup.exe）
+      const rank = (n) => (/-lite-/.test(n) ? 1 : 0);
       return (
         rank(a) - rank(b) ||
         fs.statSync(path.join(outDir, b)).mtimeMs - fs.statSync(path.join(outDir, a)).mtimeMs
@@ -109,6 +110,7 @@ async function waitFor(predicate, timeoutMs, stepMs = 500) {
   const web = path.join(targetDir, 'resources', 'web', 'index.html');
   const locales = path.join(targetDir, 'resources', 'contracts', 'locales.json');
   const models = path.join(targetDir, 'resources', 'models');
+  // 卸载器文件名跟 executableName（ColaNasOs）走，不是 productName
   const uninstaller = path.join(targetDir, 'Uninstall ColaNasOs.exe');
   check('installed_asar', fs.existsSync(asar), `resources/app.asar ${fs.existsSync(asar) ? '存在' : '缺失'}`);
   check('installed_web', fs.existsSync(web), `resources/web/index.html ${fs.existsSync(web) ? '存在' : '缺失'}`);
