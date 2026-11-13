@@ -146,6 +146,24 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
   void _play(ViewerPhoto item) {
     if (!item.isVideo && !item.isLive) return;
     final url = item.isVideo ? _media.file(item.path) : _media.livePhoto(item.id);
+    // 播放列表：同批次的视频（图片跳过）。混合库里左右翻到视频时，
+    // 播放器里就能直接上下切，不用退出来再点下一张。
+    final videos = <PhotoVideoEntry>[
+      for (final e in _items)
+        if (e.isVideo)
+          PhotoVideoEntry(
+            url: _media.file(e.path),
+            title: e.path.split('/').last,
+            durationMs: e.durationMs,
+            width: e.width,
+            height: e.height,
+          ),
+    ];
+    var startIndex = 0;
+    if (item.isVideo) {
+      final i = videos.indexWhere((v) => v.url == url);
+      if (i >= 0) startIndex = i;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PhotoVideoPage(
@@ -154,6 +172,8 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
           subtitle: item.isVideo
               ? '${formatDurationMs(item.durationMs ?? 0)}  ·  ${item.width ?? '?'}×${item.height ?? '?'}'
               : tr('photo.media.live'),
+          entries: videos.length > 1 ? videos : null,
+          initialIndex: startIndex,
         ),
       ),
     );
