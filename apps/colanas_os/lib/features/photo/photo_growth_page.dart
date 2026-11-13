@@ -655,12 +655,18 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
 
   Widget _stageImages(PhotoGrowthStage s) {
     final secondary = s.secondaryPath;
-    final extras = s.extraPaths
-        .where((p) => p.isNotEmpty && p != s.coverPath && p != secondary)
-        .take(2)
-        .toList();
     // 服务端选片已保证：有横屏就只出一张横图（跨整行、完整显示）；
     // 实在没有横屏时凑两张竖图并排，避免单张竖图把卡片撑得又高又空。
+    final pair = secondary != null;
+    // 竖屏段（两张竖图并排）不再补小图：两张大图占满一行以后，底下再塞一张
+    // 扁扁的小图很难看，而且小图自己不管是横是竖都跟这一行对不齐 —— 用户明确
+    // 说这种「两张大图 + 中间/底下小图」的组合很奇怪，索性竖屏段只留两张大图。
+    final extras = pair
+        ? const <String>[]
+        : s.extraPaths
+            .where((p) => p.isNotEmpty && p != s.coverPath)
+            .take(2)
+            .toList();
     final main = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
