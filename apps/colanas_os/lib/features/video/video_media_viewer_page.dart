@@ -17,6 +17,39 @@ import 'video_card.dart';
 /// 一没有进度条 / 倍速 / 全屏（这里从来没做控件），
 /// 二直连遇到 libmpv 解不了的容器（MKV + HEVC 10bit）只有声音没有画面。
 /// 播放能力统一交给完整播放器，这个页面只负责浏览。
+/// 打开**完整播放器**（转码 / 进度条 / 倍速 / 音量 / 全屏 / 字幕）。
+///
+/// 混合库点视频、查看器里点播放按钮都走这一个入口 —— 播放逻辑只有一份，
+/// 不再让每个页面各自 new 一个 Player。
+Future<void> openVideoPlayer(
+  BuildContext context,
+  VideoItem item, {
+  List<VideoItem>? playlist,
+}) async {
+  try {
+    final res = await ApiSession.instance.client.videoStreamUrl(id: item.id);
+    if (!context.mounted) return;
+    final url = '${ApiSession.instance.baseUrl}${res.url}';
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlayerPage(
+          url: url,
+          title: item.title,
+          itemId: item.id,
+          compat: res.compat,
+          sourceHeight: item.height,
+          sourceBytes: item.size,
+          durationMs: item.durationMs,
+          // 播放器里上下拖动切上一条 / 下一条
+          playlist: playlist,
+        ),
+      ),
+    );
+  } catch (e) {
+    if (context.mounted) NasSnack.show(context, '$e');
+  }
+}
+
 Future<void> openMediaViewer(
   BuildContext context, {
   required List<VideoItem> items,
@@ -100,30 +133,13 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
 
   VideoItem get _current => widget.items[_index];
 
-  /// 打开完整播放器。转码 / 进度条 / 倍速 / 全屏 / 字幕全在那边，
-  /// 这里只把地址和片源信息递过去 —— 不再自己维护第二个播放器。
-  Future<void> _openPlayer(VideoItem item) async {
-    try {
-      final res = await ApiSession.instance.client.videoStreamUrl(id: item.id);
-      if (!mounted) return;
-      final url = '${ApiSession.instance.baseUrl}${res.url}';
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => PlayerPage(
-            url: url,
-            title: item.title,
-            itemId: item.id,
-            compat: res.compat,
-            sourceHeight: item.height,
-            sourceBytes: item.size,
-            durationMs: item.durationMs,
-          ),
-        ),
+  /// 打开完整播放器（逻辑统一在顶层 openVideoPlayer）。
+  /// 把同批次的视频一起带过去，播放器里上下拖动就能切下一条。
+  Future<void> _openPlayer(VideoItem item) => openVideoPlayer(
+        context,
+        item,
+        playlist: widget.items.where((e) => e.mediaType != 'image').toList(),
       );
-    } catch (e) {
-      if (mounted) NasSnack.show(context, '$e');
-    }
-  }
 
   Future<void> _download(VideoItem item) async {
     final url =

@@ -312,8 +312,14 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
   }
 
   Future<void> _openItem(VideoItem item, int index) async {
-    // 混合库 / 图片库统一进全屏浏览：图片直接看、视频直接起播，不再绕详情页。
-    // 上下滑动 / ↑↓ 在同一个浏览页里换上一条下一条。
+    // 混合库里点视频直接进播放器，不再先过一层封面页再点播放。
+    // 图片仍进全屏浏览（上下滑动 / ↑↓ 换图）。
+    if (item.mediaType != 'image') {
+      // 同库里的其它视频作为播放列表：播放器里上下拖动即可切换
+      final videos = _items.where((e) => e.mediaType != 'image').toList();
+      await openVideoPlayer(context, item, playlist: videos);
+      return;
+    }
     await openMediaViewer(context, items: _items, initialIndex: index);
   }
 
