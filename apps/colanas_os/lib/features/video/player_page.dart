@@ -785,14 +785,18 @@ class _PlayerPageState extends State<PlayerPage> {
   Future<void> _prepareCompatible() async {
     setState(() => _preparing = true);
     try {
-      final u = await _ensureTranscode(_preset, _codec);
+      // 偏好设成「原画」且桌面端能解时直接放原片：零转码、可随意 seek、
+      // 起播是毫秒级。以前这里无条件建转码会话，把「原画」偏好架空了。
+      final toDirect =
+          _preset == 'original' && widget.compat != null && (!kIsWeb || !_needTranscode);
+      final u = toDirect ? _directUrl : await _ensureTranscode(_preset, _codec);
       if (!mounted) return;
       setState(() {
         _preparing = false;
-        _isTranscode = true;
+        _isTranscode = !toDirect;
       });
       // retries: 首片还没落盘时内核会「打不开」，不是转码失败，给五次重试
-      await _openUrl(u, retries: 5);
+      await _openUrl(u, retries: toDirect ? 0 : 5);
     } catch (e) {
       if (!mounted) return;
       // 不能退回直链：走到这里就说明片源直链本来解不了（HEVC / MKV / HDR），
@@ -809,7 +813,12 @@ class _PlayerPageState extends State<PlayerPage> {
     final targetCodec = codec ?? _codec;
     // 直链要求：调用方给的是真直链（compat 存在）且片源本身能直链。
     // 详情页「转码」入口拿的是 HLS 地址（compat=null），那里不存在直链可退。
-    final toDirect = preset == 'original' && widget.compat != null && !_needTranscode;
+    // 桌面端（libmpv）能解 HEVC / AV1 / 10bit / DV，不该被服务端那套「按浏览器
+    // 最保守能力」的判定绑住。以前这里要求 !_needTranscode，而 HEVC 一律被判
+    // 需要转码 → 「原画」永远回落到转码，4K DV 每段起播要等 10s+。
+    // Web 端保持原判定（Chromium 确实解不了 MKV/HEVC）。
+    final toDirect =
+        preset == 'original' && widget.compat != null && (!kIsWeb || !_needTranscode);
     if (!toDirect && widget.itemId == null) return;
     // 必须转码时「原画」没法真原样播，实际跑默认档；界面也跟着显示实际档位，
     // 不要出现「显示原画、跑的是 1080p」。同样按片源高度收敛。
