@@ -1388,10 +1388,8 @@ class _PlayerPageState extends State<PlayerPage> {
         _preset,
         _codec,
         startMs: target.inMilliseconds,
-        // 跳转会话用 1 分钟的段：4K 源一段 3 分钟要转 25s 才铺满，用户点完进度条
-        // 对着黑屏等半分钟就会认定「跳不了」。1 分钟一段首片 8s 内落地，代价只是
-        // ffmpeg 启动次数变多（总帧数不变）。
-        leadOverride: 1,
+        // 跳转会话也用整片（leadOverride 默认跟随偏好 = 0）：分段会产生
+        // DISCONTINUITY，libmpv 每到接缝重置解码器，画面就黑一下。
       );
       // 新播放列表的时间轴 0 就是 target，不能再 seekTo（否则会跳过 target 那一段）
       await _openUrl(u, retries: 3);
@@ -1503,20 +1501,20 @@ class _PlayerPageState extends State<PlayerPage> {
 
   /// 已加载（已转出）到的**片源绝对位置**：进度条粗的那一段画到这里。
   ///
-  /// 取「服务端回报的已转出长度」和「起点 + 播放器报的时长」中大的那个：
-  /// 整片一次转完（`leadMinutes = 0`）时服务端不回报 `transcodedMs`。
-  ///
-  /// 但**分段会话不能信 `player.duration`**：它的播放列表是按整片时长预列的
-  /// （521 片全列 + ENDLIST），libmpv 报的就是整片长度。用它会得到「整片都已加载」，
-  /// `seekNeedsJump` 永远 false，用户拖到没转的位置也只做原地 seek，然后卡在
-  /// 不存在的分片上（等 10 秒超时）—— 体感就是「无法跳转」。
-  Duration get _loadedEnd => Duration(
-        milliseconds: loadedEndMs(
-          startMs: _startMs,
-          playerMs: _leadMs > 0 ? 0 : _player.state.duration.inMilliseconds,
-          serverMs: _transcodedMs,
-        ),
-      );
+  /// 静态 VOD 列表永远按整片时长预列（整片模式 / 分段模式都一样），libmpv 报的
+  /// `duration` 恒等于片长 —— 拿它当「已加载末尾」会让 seek 永远判「不用重建
+  /// 会话」，于是拖到没转出来的位置也只做原地 seek，卡在不存在的分片上。
+  /// 只有会话真的 `done`（整片转完）时才敢信它。
+  Duration get _loadedEnd {
+    final done = _jobStatus == 'done';
+    return Duration(
+      milliseconds: loadedEndMs(
+        startMs: _startMs,
+        playerMs: done ? _player.state.duration.inMilliseconds : 0,
+        serverMs: _transcodedMs,
+      ),
+    );
+  }
 
   // -------------------------------------------------------------------- 控件
 
