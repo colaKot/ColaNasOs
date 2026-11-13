@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
 import '../photo/photo_download.dart';
+import 'player_page.dart';
 import 'video_card.dart';
 
 /// 图片库 / 混合库的全屏浏览。
 ///
 /// 图片：上下滑动 / ↑↓ 翻页，首尾循环，双指缩放。
-/// 视频：进这一页就**自动起播**（混合库点条目不再绕详情页），翻到图片时自动暂停。
-/// 一个 Player 复用给所有视频页，避免每翻一页都新建一个平台视图。
+/// 视频：这里**只显示海报 + 播放按钮**，点开进完整播放器（`PlayerPage`）。
+///
+/// 以前是「进这一页就自动直连起播」，结果是两件事都做不好：
+/// 一没有进度条 / 倍速 / 全屏（这里从来没做控件），
+/// 二直连遇到 libmpv 解不了的容器（MKV + HEVC 10bit）只有声音没有画面。
+/// 播放能力统一交给完整播放器，这个页面只负责浏览。
 Future<void> openMediaViewer(
   BuildContext context, {
   required List<VideoItem> items,
@@ -45,30 +48,17 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
   late final PageController _pageController;
   late int _index;
 
-  Player? _player;
-  VideoController? _videoController;
-  String? _loadedId;
-  bool _playReady = false;
-  String? _playError;
-
   @override
   void initState() {
     super.initState();
     _index = widget.initialIndex.clamp(0, widget.items.isEmpty ? 0 : widget.items.length - 1);
     _pageController = PageController(initialPage: _base + _index);
     HardwareKeyboard.instance.addHandler(_onKey);
-    if (widget.items.isNotEmpty) {
-      _player = Player();
-      _videoController = VideoController(_player!);
-      // initState 里不能取 InheritedWidget，首帧之后再起播
-      WidgetsBinding.instance.addPostFrameCallback((_) => _ensurePlayback());
-    }
   }
 
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
-    _player?.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -87,7 +77,8 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
       return true;
     }
     if (key == LogicalKeyboardKey.space) {
-      _player?.playOrPause();
+      final cur = _current;
+      if (cur.mediaType != 'image') _openPlayer(cur);
       return true;
     }
     if (key == LogicalKeyboardKey.escape) {
@@ -109,38 +100,28 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
 
   VideoItem get _current => widget.items[_index];
 
-  /// 当前页是视频就起播，是图片就暂停。翻页时复用同一个 Player，只换片源。
-  Future<void> _ensurePlayback() async {
-    if (!mounted || widget.items.isEmpty || _player == null) return;
-    final item = _current;
-    if (item.mediaType == 'image') {
-      await _player!.pause();
-      if (!mounted) return;
-      setState(() {
-        _playReady = false;
-        _loadedId = null;
-        _playError = null;
-      });
-      return;
-    }
-    if (_loadedId == item.id && _playReady) return;
-    _loadedId = item.id;
-    _playReady = false;
-    _playError = null;
-    if (mounted) setState(() {});
+  /// 打开完整播放器。转码 / 进度条 / 倍速 / 全屏 / 字幕全在那边，
+  /// 这里只把地址和片源信息递过去 —— 不再自己维护第二个播放器。
+  Future<void> _openPlayer(VideoItem item) async {
     try {
       final res = await ApiSession.instance.client.videoStreamUrl(id: item.id);
       if (!mounted) return;
       final url = '${ApiSession.instance.baseUrl}${res.url}';
-      await _player!.open(Media(url), play: true);
-      if (!mounted) return;
-      setState(() => _playReady = true);
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => PlayerPage(
+            url: url,
+            title: item.title,
+            itemId: item.id,
+            compat: res.compat,
+            sourceHeight: item.height,
+            sourceBytes: item.size,
+            durationMs: item.durationMs,
+          ),
+        ),
+      );
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _playReady = false;
-        _playError = '$e';
-      });
+      if (mounted) NasSnack.show(context, '$e');
     }
   }
 
@@ -203,7 +184,6 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
               scrollDirection: Axis.vertical,
               onPageChanged: (page) {
                 setState(() => _index = page % widget.items.length);
-                _ensurePlayback();
               },
               itemBuilder: (ctx, page) {
                 final i = page % widget.items.length;
@@ -258,23 +238,6 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
   }
 
   Widget _videoPage(VideoItem item, bool active) {
-    if (active && _playReady && _videoController != null) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => _player?.playOrPause(),
-        child: Center(
-          child: AspectRatio(
-            aspectRatio: _aspectOf(item),
-            child: Video(
-              controller: _videoController!,
-              controls: null,
-              fit: BoxFit.contain,
-              fill: Colors.black,
-            ),
-          ),
-        ),
-      );
-    }
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -289,33 +252,25 @@ class _VideoMediaViewerPageState extends State<VideoMediaViewerPage> {
             ),
           ),
         ),
-        Center(
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: const BoxDecoration(
-              color: Colors.black54,
-              shape: BoxShape.circle,
-            ),
-            child: _playError == null
-                ? const SizedBox(
-                    width: 42,
-                    height: 42,
-                    child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
-                  )
-                : const Icon(Icons.error_outline, size: 42, color: Colors.white70),
-          ),
-        ),
-        if (_playError != null)
-          Positioned(
-            left: 24,
-            right: 24,
-            bottom: 80,
-            child: Text(
-              _playError!,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+        // 当前页给一个明确的播放入口：点开进完整播放器
+        // （进度条 / 倍速 / 音量 / 全屏 / 转码兜底都在那边）。
+        if (active)
+          Center(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => _openPlayer(item),
+                child: Container(
+                  width: 68,
+                  height: 68,
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.play_arrow, color: Colors.white, size: 36),
+                ),
+              ),
             ),
           ),
       ],

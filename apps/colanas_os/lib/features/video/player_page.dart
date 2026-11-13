@@ -623,9 +623,20 @@ class _PlayerPageState extends State<PlayerPage> {
   /// 画面就停在首帧。这种情况不能静默让人对着封面干等，也不能偷偷转码
   /// （用户明确要原片），所以：明确提示 + 切成一个转码档位。
   Future<void> _guardDirectPlayback() async {
+    final startPos = _player.state.position;
     await Future<void>.delayed(const Duration(seconds: 8));
     if (!mounted || _isTranscode || _error != null) return;
-    if ((_player.state.width ?? 0) > 0) return; // 有画面，直连正常
+    final w = _player.state.width ?? 0;
+    final advanced = _player.state.position - startPos;
+    ClientLogger.instance.info(
+      '直连检测 width=$w advanced=${advanced.inMilliseconds}ms '
+      'playing=${_player.state.playing} buffering=${_player.state.buffering}',
+      route: 'player.directGuard',
+    );
+    // 只看 width 不够：libmpv 对某些 HEVC 10bit / DV 片源能报出视频尺寸，
+    // 但画面帧出不来（用户看到的就是「有声音、画面停住」）。
+    // 所以再要求「播放位置真的往前走了」，否则一律按播不了处理。
+    if (w > 0 && advanced > const Duration(seconds: 2)) return;
     final fallback = clampPresetForSource(
       defaultPlayPreset,
       _srcHeight,
