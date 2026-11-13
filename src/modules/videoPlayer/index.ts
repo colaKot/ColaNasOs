@@ -1055,10 +1055,12 @@ export const videoPlayer: ServerModule = {
               pump(k).catch((err) => k.log.warn({ err: String(err) }, 'player pump stopped'));
             }
           }
-          // 播放列表（兜底路径）最多等 2s；**分片等 10s**：播放器此时已经解析完
-          // 点播列表、处于缓冲状态。等太久反而有害 —— 以前 30s 的等待会把播放器
-          // 的缓冲彻底耗干，一场播放就此报废（改成 10s 后超时会由 hls.js 重试）。
-          const deadline = Date.now() + (isPlaylist ? 2_000 : 10_000);
+          // 播放列表（兜底路径）最多等 2s；普通分片等 10s。
+          // **init.mp4 例外，等 30s**：fMP4 初始化段是解码器的前置条件，拿不到它
+          // 不是「缓冲一下」，而是整场播放直接 fatal。4K DV 源首段实测 20~29s
+          // 才产出，10s 就把 init 判超时了（Failed to recognize file format）。
+          const waitMs = isPlaylist ? 2_000 : file === 'init.mp4' ? 30_000 : 10_000;
+          const deadline = Date.now() + waitMs;
           for (;;) {
             try {
               body = await fsp.readFile(abs);

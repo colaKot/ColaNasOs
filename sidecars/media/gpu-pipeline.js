@@ -180,7 +180,13 @@ function hardwareDecodeAllowed(ctx) {
 function canUseGpuZeroCopy(ctx) {
   if (ctx.prefer === 'cpu' || ctx.copyVideo || !hardwareDecodeAllowed(ctx)) return false;
   const v = vendorOf(ctx.encoder);
+  const isDv = Boolean((ctx.source || EMPTY_SOURCE).dvProfile);
   if (v === 'amd') {
+    // DV 的 RPU 只有 tonemap_cuda / libplacebo 认，tonemap_d3d11 处理不了，
+    // 实测 `Error reinitializing filters: -40`。以前只挡了 intel，780M 上每段
+    // 都先试零拷贝、失败再 fallback，首片被拖到 20s+，播放器等 init 只 10s
+    // 就判定 Failed to recognize file format。NVIDIA 的 apply_dovi 不受影响。
+    if (isDv) return false;
     return ctx.platform === 'win32' &&
       hasCap(ctx.hwaccels, 'd3d11va') && hasCap(ctx.filters, 'scale_d3d11');
   }
@@ -188,9 +194,8 @@ function canUseGpuZeroCopy(ctx) {
     return hasCap(ctx.hwaccels, 'cuda') && hasCap(ctx.filters, 'scale_cuda');
   }
   if (v === 'intel') {
-    // DV 的 RPU 只有 libplacebo / tonemap_cuda 认，vpp_qsv 认不出来 → 不让它上零拷贝，
-    // 退到「qsv 硬解 + libplacebo 软件 tonemap」，慢一点但颜色是对的。
-    if ((ctx.source || EMPTY_SOURCE).dvProfile) return false;
+    // vpp_qsv 的 tonemap=1 只认 HDR10 元数据，不吃 DV RPU → 不上零拷贝。
+    if (isDv) return false;
     return hasCap(ctx.hwaccels, 'qsv') && hasCap(ctx.filters, 'scale_qsv');
   }
   return false;

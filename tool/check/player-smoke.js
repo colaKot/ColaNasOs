@@ -215,9 +215,14 @@ process.chdir(root);
     gpu.decodePlans(gpuCtx({ source: hiSrc }))[0].pipeline === 'cpu',
     'Hi10P has no hardware decoder',
   );
+  // AMD 的 tonemap_d3d11 认不出 DV 的 RPU：真机实测
+  // `Error reinitializing filters: -40`，先试零拷贝再 fallback 会把首片拖到 20s+。
+  const amdDv = gpu.decodePlans(gpuCtx({ source: dvSrc }))[0];
+  check('gpu_amd_dv_no_zero_copy', amdDv.pipeline !== 'gpu-zero-copy', amdDv.pipeline);
   check(
-    'gpu_dv5_still_zero_copy',
-    gpu.decodePlans(gpuCtx({ source: dvSrc }))[0].pipeline === 'gpu-zero-copy',
+    'gpu_nvidia_dv_still_zero_copy',
+    gpu.decodePlans(gpuCtx({ encoder: 'h264_nvenc', source: dvSrc }))[0].pipeline ===
+      'gpu-zero-copy',
     'apply_dovi handles DV P5',
   );
   // Intel 是例外：`vpp_qsv=tonemap=1` 只认 HDR10 元数据，**不吃 DV RPU**，
