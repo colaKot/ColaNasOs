@@ -85,6 +85,16 @@ const FRAME_RATE = 12;
 const GAP_SEC = 0.18;
 const CHUNK_TIMEOUT_MS = 10 * 60 * 1000;
 
+/**
+ * 落 mp3 时统一提响度：TTS 原始 PCM 实测 -22.4 LUFS / 真峰值 -3.1 dBFS，
+ * 比播客通行的 -16 LUFS 低 6 dB 多，用户反馈「声音太小」。
+ * volume=2.0 = +6 dB；峰值余量只有 3 dB，靠 alimiter 压在 -2 dBFS 防削波
+ * （level=false 不做自动补增益；留 1 dB 给 mp3 编码 overshoot，实测 TP ≈ -1.2 dBFS）。
+ * 增益放在编码这一步而不是 wav 拼接那步：mp3 仍只编码一次，音质与原来一致；
+ * 后处理已生成的 mp3 会多一次有损编码，不做。TTS 语音 LRA 仅 3 LU，限幅无听感副作用。
+ */
+const MP3_LOUDNESS_FILTER = 'volume=2.0,alimiter=limit=0.79:level=false';
+
 const HAN = /[\u4e00-\u9fff]/g;
 
 /**
@@ -475,6 +485,8 @@ export class TtsEngine {
           'error',
           '-i',
           p.wav,
+          '-af',
+          MP3_LOUDNESS_FILTER,
           ...enc,
           p.mp3,
         ]);
