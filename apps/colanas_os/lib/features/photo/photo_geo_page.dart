@@ -42,6 +42,15 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
   final MapController _map = MapController();
   Timer? _poll;
 
+  /// flutter_map 8.x 的 MapController 只有在 FlutterMap **首帧渲染完成**
+  /// （MapOptions.onMapReady）之后才绑定相机；此前调用 move() 会抛
+  /// "You need to have the FlutterMap widget rendered at least once..."。
+  /// 本页是先取数据、后建地图（loading 时整页是 NasLoading），所以所有
+  /// 居中请求统一走排队，不直接碰控制器。
+  bool _mapReady = false;
+  LatLng? _pendingMapCenter;
+  double _pendingMapZoom = 9;
+
   MediaUrls get _media => MediaUrls(ApiSession.instance.baseUrl);
 
   String _thumb(String path, {int size = 320}) => _media.thumbnail(path, size: size);
@@ -55,13 +64,40 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
   @override
   void dispose() {
     _poll?.cancel();
+    _map.dispose();
     super.dispose();
+  }
+
+  void _moveMap(LatLng center, double zoom) {
+    _pendingMapCenter = center;
+    _pendingMapZoom = zoom;
+    if (_mapReady) _flushMapMove();
+  }
+
+  void _flushMapMove() {
+    final center = _pendingMapCenter;
+    if (center == null) return;
+    _pendingMapCenter = null;
+    try {
+      _map.move(center, _pendingMapZoom);
+    } catch (_) {
+      // 地图刚被卸载（刷新 / 切页）时控制器临时解绑：留到下次 onMapReady
+      _pendingMapCenter = center;
+    }
+  }
+
+  void _onMapReady() {
+    _mapReady = true;
+    _flushMapMove();
   }
 
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
+      // 这一帧起地图会被 NasLoading 换掉，旧的控制器绑定失效
+      _mapReady = false;
+      _pendingMapCenter = null;
     });
     try {
       final results = await Future.wait([
@@ -86,7 +122,7 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
         _lng ??= ref?.longitude;
       });
       if (_references.isNotEmpty && _lat != null && _lng != null) {
-        _map.move(LatLng(_lat!, _lng!), 9);
+        _moveMap(LatLng(_lat!, _lng!), 9);
       }
     } catch (e) {
       if (!mounted) return;
@@ -142,7 +178,7 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
       _lat = ref.latitude;
       _lng = ref.longitude;
     });
-    _map.move(LatLng(ref.latitude, ref.longitude), 10);
+    _moveMap(LatLng(ref.latitude, ref.longitude), 10);
   }
 
   Future<void> _scanVision() async {
@@ -487,6 +523,10 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
                   initialZoom: 9,
                   minZoom: 2,
                   maxZoom: 18,
+                  // 地图挂在 ListView 里：keepAlive 避免往下滚看视觉候选时
+                  // 被回收重建（会丢视野 + 控制器解绑），onMapReady 之后才补居中。
+                  keepAlive: true,
+                  onMapReady: _onMapReady,
                   interactionOptions: const InteractionOptions(
                     flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                   ),
@@ -695,6 +735,13 @@ class _GpsPickerDialogState extends State<_GpsPickerDialog> {
   void initState() {
     super.initState();
     _point = widget.initial;
+  }
+
+  @override
+  void dispose() {
+    // 外部传入的控制器 FlutterMap 不会替我们释放
+    _map.dispose();
+    super.dispose();
   }
 
   @override
