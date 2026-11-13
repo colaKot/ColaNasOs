@@ -1386,7 +1386,9 @@ class I18nKeys {
   static const photoGrowthNoPersonHint = 'photo.growth.noPersonHint';
   static const photoGrowthNoStages = 'photo.growth.noStages';
   static const photoGrowthNoStagesHint = 'photo.growth.noStagesHint';
+  static const photoGrowthPersonMore = 'photo.growth.personMore';
   static const photoGrowthPersonPicker = 'photo.growth.personPicker';
+  static const photoGrowthPersonPickerHint = 'photo.growth.personPickerHint';
   static const photoGrowthPhotoCount = 'photo.growth.photoCount';
   static const photoGrowthPinned = 'photo.growth.pinned';
   static const photoGrowthPoem1 = 'photo.growth.poem1';
@@ -2822,4 +2824,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 2776;
+const int i18nKeyCount = 2778;

@@ -24,7 +24,11 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
   static const _personKey = 'photo.growth.person';
   static const _orderKey = 'photo.growth.order';
   static const _granularityKey = 'photo.growth.granularity';
+  static const _barKey = 'photo.growth.personBar';
   static const _pageSize = 20;
+
+  /// 顶部人物条不参与滚动的那一屏最多放几个（其余靠「+」自己挑）。
+  static const _barLimit = 5;
 
   bool _loading = true;
   String? _error;
@@ -39,7 +43,36 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
   String _granularity = 'auto';
   final ScrollController _scroll = ScrollController();
 
+  /// 用户亲手挑过的人物条名单；null = 没挑过，默认放前 [_barLimit] 个。
+  ///
+  /// 之前是「把所有聚类都铺在条子上」，库里有几十个聚类时条子长得离谱，
+  /// 而且想选的那个人要横向翻很久。现在默认只放 5 个，其余点「+」勾选后追加，
+  /// 选择写进 SettingsStore，下次进页面还是这套人。
+  List<String>? _barIds;
+
   ApiClient get _client => ApiSession.instance.client;
+
+  /// 条上实际显示的人：手挑名单（或默认前 5 个）+ 当前选中的人兜底。
+  List<PhotoGrowthPerson> get _visiblePersons {
+    final byId = {for (final p in _persons) p.id: p};
+    final out = <PhotoGrowthPerson>[];
+    final ids = _barIds;
+    if (ids == null) {
+      out.addAll(_persons.take(_barLimit));
+    } else {
+      for (final id in ids) {
+        final p = byId[id];
+        if (p != null) out.add(p);
+      }
+    }
+    // 当前选中的人必须出现在条上（比如上次退出前选的是第 8 个）
+    final cur = _personId;
+    if (cur != null && !out.any((p) => p.id == cur)) {
+      final p = byId[cur];
+      if (p != null) out.add(p);
+    }
+    return out;
+  }
 
   String _faceUrl(String id, {int size = 96}) =>
       '${ApiSession.instance.baseUrl}/api/v1/photo/face/image'
@@ -51,6 +84,10 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
     _asc = SettingsStore.instance.getString(_orderKey) == 'asc';
     final g = SettingsStore.instance.getString(_granularityKey);
     _granularity = (g == 'month' || g == 'quarter' || g == 'year') ? g! : 'auto';
+    final bar = SettingsStore.instance.getString(_barKey);
+    if (bar != null && bar.trim().isNotEmpty) {
+      _barIds = bar.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    }
     _scroll.addListener(_onScroll);
     _bootstrap();
   }
@@ -194,12 +231,22 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
     if (mounted) await _loadStages(reset: true);
   }
 
+  /// 「+」：多选要显示在人物条上的人（默认前 5 个之外的，勾上才出现）。
   Future<void> _showPersonPicker() async {
-    final picked = await showDialog<String>(
+    final picked = await showDialog<Set<String>>(
       context: context,
-      builder: (_) => _PersonPickerDialog(persons: _persons),
+      builder: (_) => _PersonPickerDialog(
+        persons: _persons,
+        selected: {for (final p in _visiblePersons) p.id},
+      ),
     );
-    if (picked != null) await _selectPerson(picked);
+    if (picked == null || !mounted) return;
+    // 按 _persons 的原顺序落盘：点开又关上不会让条子里的顺序跳来跳去
+    final ids = [for (final p in _persons) if (picked.contains(p.id)) p.id];
+    if (ids.isEmpty) return;
+    await SettingsStore.instance.setString(_barKey, ids.join(','));
+    if (!mounted) return;
+    setState(() => _barIds = ids);
   }
 
   String _date(int sec, {bool short = false}) {
@@ -235,77 +282,107 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
     if (_loading) return const NasLoading();
     if (_error != null) return NasErrorState(message: _error!, onRetry: _bootstrap);
     final scheme = Theme.of(context).colorScheme;
-    return ListView(
-      controller: _scroll,
-      // 右边不留 padding：卡片自己留 16，让滚动条/内容更贴窗口右边
-      padding: const EdgeInsets.fromLTRB(16, 12, 0, 28),
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(tr('photo.growth.title'), style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: 3),
-                  Text(
-                    tr('photo.growth.subtitle'),
-                    style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              onPressed: _bootstrap,
-              icon: const Icon(Icons.refresh),
-            ),
-          ],
+    final body = <Widget>[
+      _summaryLine(),
+      const SizedBox(height: 10),
+      _controls(scheme),
+      const SizedBox(height: 16),
+    ];
+    if (_personId == null || _persons.isEmpty) {
+      body.add(
+        NasEmptyState(
+          title: tr('photo.growth.noPerson'),
+          message: tr('photo.growth.noPersonHint'),
+          icon: Icons.face_retouching_natural_outlined,
         ),
-        const SizedBox(height: 12),
-        _personBar(),
-        const SizedBox(height: 10),
-        _summaryLine(),
-        const SizedBox(height: 10),
-        _controls(scheme),
-        const SizedBox(height: 16),
-        if (_personId == null || _persons.isEmpty)
-          NasEmptyState(
-            title: tr('photo.growth.noPerson'),
-            message: tr('photo.growth.noPersonHint'),
-            icon: Icons.face_retouching_natural_outlined,
-          )
-        else if (_stages.isEmpty && !_loadingMore)
-          NasEmptyState(
-            title: tr('photo.growth.noStages'),
-            message: tr('photo.growth.noStagesHint'),
-            icon: Icons.timeline_outlined,
-          )
-        else
-          for (var i = 0; i < _stages.length; i++) _timelineRow(_stages[i]),
-        if (_loadingMore)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 18),
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    } else if (_stages.isEmpty && !_loadingMore) {
+      body.add(
+        NasEmptyState(
+          title: tr('photo.growth.noStages'),
+          message: tr('photo.growth.noStagesHint'),
+          icon: Icons.timeline_outlined,
+        ),
+      );
+    } else {
+      body.addAll(_stages.map(_timelineRow));
+    }
+    if (_loadingMore) {
+      body.add(
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 18),
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      );
+    }
+    return CustomScrollView(
+      controller: _scroll,
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          sliver: SliverToBoxAdapter(child: _headerRow()),
+        ),
+        // 人物条吸顶：时间轴往下翻的时候头像一直贴在顶部，随时能切人。
+        if (_persons.isNotEmpty)
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _PinnedPersonBar(extent: _personBarHeight, child: _personBar()),
           ),
+        SliverPadding(
+          // 右边不留 padding：卡片自己留 16，让滚动条/内容更贴窗口右边
+          padding: const EdgeInsets.fromLTRB(16, 0, 0, 28),
+          sliver: SliverList(delegate: SliverChildListDelegate(body)),
+        ),
       ],
     );
   }
 
+  Widget _headerRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(tr('photo.growth.title'), style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 3),
+              Text(
+                tr('photo.growth.subtitle'),
+                style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          onPressed: _bootstrap,
+          icon: const Icon(Icons.refresh),
+        ),
+      ],
+    );
+  }
+
+  /// 头像(56+4) + 间距 + 名字 + 张数实测约 88~93px，给到 104 免得
+  /// 不同字体下顶部人脸条反复报 "RenderFlex overflowed by 1 pixel"。
+  static const double _personBarHeight = 104;
+
   Widget _personBar() {
+    final persons = _visiblePersons;
+    // 人少的时候「+」没意义（本来就不止 5 个才需要挑）
+    final showAdd = _persons.length > _barLimit;
     return SizedBox(
-      // 头像(56+4) + 间距 + 名字 + 张数实测约 88~93px，给到 104 免得
-      // 不同字体下顶部人脸条反复报 "RenderFlex overflowed by 1 pixel"
-      height: 104,
+      height: _personBarHeight,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: _persons.length + 1,
+        padding: const EdgeInsets.only(left: 16, right: 8),
+        itemCount: persons.length + (showAdd ? 1 : 0),
         separatorBuilder: (_, _) => const SizedBox(width: 10),
         itemBuilder: (_, i) {
-          if (i == _persons.length) {
+          if (showAdd && i == persons.length) {
             return GestureDetector(
               onTap: _showPersonPicker,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   CircleAvatar(
                     radius: 28,
@@ -314,14 +391,14 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    tr('photo.growth.personPicker'),
+                    tr('photo.growth.personMore'),
                     style: TextStyle(fontSize: 10, color: context.nasTextSecondary),
                   ),
                 ],
               ),
             );
           }
-          final p = _persons[i];
+          final p = persons[i];
           final active = p.id == _personId;
           return GestureDetector(
             onTap: () => _selectPerson(p.id),
@@ -1000,11 +1077,15 @@ class _GrowthRepinDialogState extends State<GrowthRepinDialog> {
   }
 }
 
-/// 人脸选择器：列出全部已命名 / 未命名聚类，支持按名字搜索。
+/// 人物条「+」的选择器：勾选要摆在顶部条子上的人。
+///
+/// 库里聚类可能有几十个，全铺在条子上既挤又难找，所以默认只放前 5 个，
+/// 其余的在这里勾选后才出现（选择由调用方写入 SettingsStore）。
 class _PersonPickerDialog extends StatefulWidget {
-  const _PersonPickerDialog({required this.persons});
+  const _PersonPickerDialog({required this.persons, required this.selected});
 
   final List<PhotoGrowthPerson> persons;
+  final Set<String> selected;
 
   @override
   State<_PersonPickerDialog> createState() => _PersonPickerDialogState();
@@ -1012,6 +1093,7 @@ class _PersonPickerDialog extends StatefulWidget {
 
 class _PersonPickerDialogState extends State<_PersonPickerDialog> {
   String _query = '';
+  late final Set<String> _picked = {...widget.selected};
 
   @override
   Widget build(BuildContext context) {
@@ -1023,7 +1105,7 @@ class _PersonPickerDialogState extends State<_PersonPickerDialog> {
       title: Text(tr('photo.growth.personPicker')),
       content: SizedBox(
         width: 420,
-        height: 380,
+        height: 420,
         child: Column(
           children: [
             TextField(
@@ -1035,22 +1117,38 @@ class _PersonPickerDialogState extends State<_PersonPickerDialog> {
               ),
             ),
             const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                tr('photo.growth.personPickerHint'),
+                style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+              ),
+            ),
+            const SizedBox(height: 4),
             Expanded(
               child: ListView.builder(
                 itemCount: items.length,
                 itemBuilder: (_, i) {
                   final p = items[i];
                   final named = (p.name ?? '').isNotEmpty;
-                  return ListTile(
+                  final on = _picked.contains(p.id);
+                  return CheckboxListTile(
                     dense: true,
-                    leading: const Icon(Icons.person_outline),
+                    value: on,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    onChanged: (v) => setState(() {
+                      if (v == true) {
+                        _picked.add(p.id);
+                      } else {
+                        _picked.remove(p.id);
+                      }
+                    }),
                     title: Text(named ? p.name! : tr('photo.growth.unnamed')),
                     subtitle: Text(
                       named
                           ? tr('photo.growth.photoCount', {'count': '${p.size}'})
                           : tr('photo.growth.namedHint'),
                     ),
-                    onTap: () => Navigator.of(context).pop(p.id),
                   );
                 },
               ),
@@ -1063,7 +1161,57 @@ class _PersonPickerDialogState extends State<_PersonPickerDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(tr('common.cancel')),
         ),
+        FilledButton(
+          // 至少留一个人，否则条子空了没得切
+          onPressed: _picked.isEmpty ? null : () => Navigator.of(context).pop(_picked),
+          child: Text(tr('common.confirm')),
+        ),
       ],
     );
   }
+}
+
+/// 吸顶的人物条代理。
+///
+/// 这个项目的 `scaffoldBackgroundColor` 是透明的（背景由 NasStyle 铺在 MaterialApp
+/// 底层），所以吸顶条必须自己合成一层**不透明**底色，否则时间轴卡片滚过去会从
+/// 头像和名字的缝里透出来。
+class _PinnedPersonBar extends SliverPersistentHeaderDelegate {
+  const _PinnedPersonBar({required this.extent, required this.child});
+
+  final double extent;
+  final Widget child;
+
+  @override
+  double get minExtent => extent;
+
+  @override
+  double get maxExtent => extent;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final spec = context.nasStyle;
+    final solid = Color.alphaBlend(spec.panelColor, spec.baseColor);
+    return Container(
+      height: extent,
+      decoration: BoxDecoration(
+        color: solid,
+        border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor)),
+        boxShadow: overlapsContent
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.10),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
+      ),
+      child: child,
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _PinnedPersonBar old) =>
+      old.extent != extent || old.child != child;
 }
