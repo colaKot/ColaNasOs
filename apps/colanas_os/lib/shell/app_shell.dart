@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../core/dev_overlap.dart';
 import '../core/endpoint_host.dart';
 import '../core/app_settings.dart';
 import '../core/app_visibility.dart';
@@ -102,6 +103,72 @@ class _AppShellState extends State<AppShell> {
     unawaited(syncTrayBridge.refresh());
     // 首启引导只出现一次（SettingsStore：桌面写 settings.json，Web 写 localStorage）
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowGuide());
+    // 开发版重叠守卫：内核若检测到另一个实例在跑，后台任务会被跳过，界面要明确告知
+    unawaited(DevOverlapStatus.refresh());
+  }
+
+  /// 重叠模式横幅（仅开发态出现；正式版 `/ready` 恒为 enabled=true，永不渲染）
+  Widget _withDevOverlapNotice(Widget body, double gap) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: DevOverlapStatus.skipped,
+      builder: (context, skipped, _) {
+        if (!skipped) return body;
+        final peer = DevOverlapStatus.peerPort.value;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            NasPanel(
+              padding: const EdgeInsets.symmetric(
+                horizontal: NasTokens.spaceMd,
+                vertical: NasTokens.spaceSm,
+              ),
+              border: Border.all(
+                color: Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.55),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.developer_mode_rounded,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.tertiary,
+                  ),
+                  const SizedBox(width: NasTokens.spaceSm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          tr('dev.overlap.title'),
+                          style: TextStyle(
+                            fontSize: NasTokens.fontBody,
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            tr('dev.overlap.hint', {
+                              'port': '${peer ?? 7788}',
+                            }),
+                            style: TextStyle(
+                              fontSize: NasTokens.fontCaption,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: gap),
+            Expanded(child: body),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _maybeShowGuide() async {
@@ -287,9 +354,8 @@ class _AppShellState extends State<AppShell> {
                 // App 页的顶栏要把底色铺到状态栏下面，所以 top: false。
                 top: currentId == 'home',
                 bottom: false,
-                child: _withCapabilityNotice(
-                  currentId,
-                  body,
+                child: _withDevOverlapNotice(
+                  _withCapabilityNotice(currentId, body, NasTokens.spaceSm),
                   NasTokens.spaceSm,
                 ),
               ),
@@ -360,7 +426,10 @@ class _AppShellState extends State<AppShell> {
                         ),
                         SizedBox(height: gap),
                         Expanded(
-                          child: _withCapabilityNotice(currentId, body, gap),
+                          child: _withDevOverlapNotice(
+                            _withCapabilityNotice(currentId, body, gap),
+                            gap,
+                          ),
                         ),
                         // 常驻播放条：宽屏放在内容区下方（不遮挡侧栏）
                         const MiniPlayerBar(),

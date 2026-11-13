@@ -99,7 +99,11 @@ export const music: ServerModule = {
     await registerMusicLibrary(app, k, h);
     // 「启动时扫描」：这个开关以前是假的（表里没列，列表接口硬编码 1）。
     // 现在按库配置在内核起来后**异步**入队一次，不挡启动；已在扫描的直接复用任务。
-    void enqueueStartupScan(k);
+    if (k.background.enabled) {
+      void enqueueStartupScan(k);
+    } else {
+      k.log.info('[dev] 重叠模式：跳过音乐启动扫描');
+    }
     await registerMusicItems(app, k, h);
     await registerMusicPlayback(app, k, h);
     await registerMusicPlaylists(app, k, h);

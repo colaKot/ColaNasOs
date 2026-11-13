@@ -43,6 +43,14 @@ import { WatchService, DEFAULT_DEBOUNCE_MS } from './fs-watch';
 import { PollService, DEFAULT_POLL_INTERVAL_MS } from './poll';
 import { Err } from './errors';
 import { registerDevCors, registerWebUi, resolveWebDir } from './static-web';
+import {
+  devInstanceEnabled,
+  probePeerInstance,
+  writeOverlapMarker,
+  SKIPPED_BACKGROUND_TASKS,
+  type BackgroundMode,
+  type PeerInstance,
+} from './dev-instance';
 
 export interface KernelOptions {
   dataDir: string;
@@ -109,6 +117,16 @@ function rotateLog(file: string, maxBytes: number, keep: number): void {
 const DETAIL_KEYS = ['need', 'rule', 'path', 'required', 'scopes', 'reason', 'limit'];
 
 export async function startKernel(opts: KernelOptions) {
+  // 开发版重叠实例守卫（仅 `COLANAS_DEV_INSTANCE=1`）：与启动流程并行探活，
+  // 最多 800ms；正式版 / 冒烟（listen:false）不会发起这个请求。
+  const peerProbe: Promise<PeerInstance | null> =
+    devInstanceEnabled() && opts.listen !== false
+      ? probePeerInstance({
+          ownPort: Number(process.env.PORT) || opts.port,
+          timeoutMs: 800,
+        })
+      : Promise.resolve(null);
+
   // stream 直链用 `?token=` 认证，日志里必须脱敏，避免令牌落盘
   const redactUrl = (url: string) => url.replace(/([?&]token=)[^&]*/gi, '$1***');
 
@@ -229,12 +247,36 @@ export async function startKernel(opts: KernelOptions) {
   const locales = JSON.parse(fs.readFileSync(localesPath, 'utf-8'));
   const i18n = I18nRegistry.fromJSON(locales);
 
+  // 探活结果（与启动并行）：命中即进入「只保留界面与接口」的重叠模式
+  const peer = await peerProbe;
+  const background: BackgroundMode = peer
+    ? {
+        enabled: false,
+        reason: 'peer-instance',
+        peer,
+        skipped: [...SKIPPED_BACKGROUND_TASKS],
+      }
+    : { enabled: true, reason: 'normal', skipped: [] };
+  writeOverlapMarker(opts.dataDir, peer);
+  if (peer) {
+    app.log.warn(
+      { peer },
+      '[dev] 已检测到另一个 ColaNasOs 实例在运行：后台任务已跳过（界面与接口照常，正式版不受影响）',
+    );
+  }
+
   const queue = await TaskQueue.create(db, raw, (level, message, meta) => {
     if (level === 'warn') app.log.warn({ meta }, message);
     else app.log.info({ meta }, message);
   });
-  const recovered = await queue.recover();
-  if (recovered > 0) app.log.warn({ recovered }, 'recovered running tasks back to pending');
+  let recovered = 0;
+  if (background.enabled) {
+    recovered = await queue.recover();
+    if (recovered > 0) app.log.warn({ recovered }, 'recovered running tasks back to pending');
+  } else {
+    // 任务表是共享的：接管 running 会把正式版正在跑的任务重置成 pending
+    app.log.info('[dev] 重叠模式：跳过任务队列恢复（不接管另一个实例的任务）');
+  }
 
   const secret = await resolveSecret(opts.dataDir);
   // 开发令牌（`/auth/dev-token`）与开发期 CORS：**必须显式开启**，production 下永不启用。
@@ -287,17 +329,39 @@ export async function startKernel(opts: KernelOptions) {
 
   const cacheStats = new CacheStats();
 
+  /**
+   * 重叠模式下被跳过的任务：只在**进程内存**里登记，不写共享任务表，
+   * 免得正式版的 worker 把开发实例的入队当成自己的任务领走。
+   * `GET /tasks/:id` 会据此返回一条 canceled 记录，前端轮询不会 404。
+   */
+  const skippedTasks = new Map<string, { type: string; payload: string; at: number }>();
+  const skippedLogged = new Set<string>();
+  const skipTask = (type: string, payload: unknown): string => {
+    if (!skippedLogged.has(type)) {
+      skippedLogged.add(type);
+      app.log.warn({ type }, '[dev] 后台任务已跳过：忽略入队');
+    }
+    const id = `dev-skipped-${type}-${crypto.randomUUID()}`;
+    skippedTasks.set(id, { type, payload: JSON.stringify(payload ?? null), at: Date.now() });
+    return id;
+  };
+
   const k: KernelApi = {
     db,
     log: app.log,
     events: new EventBus(),
     tasks: {
-      enqueue: (type, payload, o) => queue.enqueue(type, payload, o),
-      enqueueIfIdle: (type, payload, o) => queue.enqueueIfIdle(type, payload, o),
+      enqueue: (type, payload, o) =>
+        background.enabled ? queue.enqueue(type, payload, o) : Promise.resolve(skipTask(type, payload)),
+      enqueueIfIdle: (type, payload, o) =>
+        background.enabled
+          ? queue.enqueueIfIdle(type, payload, o)
+          : Promise.resolve({ id: skipTask(type, payload), reused: true }),
       register: (type, handler) => queue.register(type, handler),
       registered: () => queue.registered(),
       stats: () => queue.stats(),
     },
+    background,
     config,
     i18n,
     contract: new ContractRegistry(app),
@@ -330,13 +394,14 @@ export async function startKernel(opts: KernelOptions) {
     },
     watch: {
       subscribe: (root, handler, opts) =>
-        watchEnabled
+        background.enabled && watchEnabled
           ? watch.subscribe(root, handler, { ...opts, debounceMs: opts?.debounceMs ?? watchDebounceMs })
           : () => {},
       stats: () => watch.stats(),
     },
     poll: {
-      subscribe: (root, handler, opts) => (pollEnabled ? poll.subscribe(root, handler, opts) : () => {}),
+      subscribe: (root, handler, opts) =>
+        background.enabled && pollEnabled ? poll.subscribe(root, handler, opts) : () => {},
       stats: () => poll.stats(),
     },
   };
@@ -506,6 +571,8 @@ export async function startKernel(opts: KernelOptions) {
       locales: i18n.enabledCodes().length,
       watch: watch.stats(),
       poll: poll.stats(),
+      // 开发版重叠实例守卫：正式版恒为 { enabled: true, reason: 'normal' }
+      background,
     }),
   );
 
@@ -588,6 +655,27 @@ export async function startKernel(opts: KernelOptions) {
     }),
     async (req, reply) => {
       const id = String((req.params as { id?: string }).id || '');
+      // 重叠模式：入队被跳过时只在内存登记，这里合成一条终态记录，避免前端轮询 404
+      const skipped = skippedTasks.get(id);
+      if (skipped) {
+        return {
+          id,
+          type: skipped.type,
+          payload: skipped.payload,
+          state: 'canceled',
+          priority: 1,
+          attempts: 0,
+          max_attempts: 1,
+          progress: 0,
+          done_count: 0,
+          total_count: 0,
+          error: '开发实例已跳过该后台任务（检测到另一个实例）',
+          next_run_at: null,
+          created_at: skipped.at,
+          started_at: null,
+          finished_at: skipped.at,
+        };
+      }
       const task = await queue.get(id);
       if (!task) return reply.code(404).send({ error: Err.notFound, message: 'task not found' });
       return task;
@@ -676,22 +764,33 @@ export async function startKernel(opts: KernelOptions) {
   if (baseApplied.length > 0 || (mounted.applied?.length ?? 0) > 0) {
     analyzeTables(raw);
     app.log.info('sqlite statistics refreshed (ANALYZE)');
+    if (!background.enabled) {
+      app.log.warn(
+        { baseApplied, applied: mounted.applied },
+        '[dev] 重叠模式：本实例仍在共享库上执行了迁移，注意与正式版的表结构兼容',
+      );
+    }
   }
 
   app.log.info({ baseApplied, ...mounted }, 'kernel ready');
 
   // 任务 worker：必须在模块注册完毕后再启动（handler 已就绪）；`COLANAS_TASK_CONCURRENCY` 默认 1
-  const taskConcurrency = Math.max(
-    1,
-    Math.min(
-      Number(process.env.COLANAS_TASK_CONCURRENCY) || systemSettings.apiConcurrency || 1,
-      8,
-    ),
-  );
-  queue.start({
-    concurrency: taskConcurrency,
-    pollMs: Math.max(50, Number(process.env.COLANAS_TASK_POLL_MS) || 500),
-  });
+  if (background.enabled) {
+    const taskConcurrency = Math.max(
+      1,
+      Math.min(
+        Number(process.env.COLANAS_TASK_CONCURRENCY) || systemSettings.apiConcurrency || 1,
+        8,
+      ),
+    );
+    queue.start({
+      concurrency: taskConcurrency,
+      pollMs: Math.max(50, Number(process.env.COLANAS_TASK_POLL_MS) || 500),
+    });
+  } else {
+    // 任务表与正式版共用：启动 worker 会把对方的 pending 任务领走执行
+    app.log.info('[dev] 重叠模式：任务 worker 未启动，手动触发的任务只会返回已取消状态');
+  }
 
   // 优雅关闭：关闭 media sidecar → 关闭 Fastify → 释放 DB
   app.addHook('onClose', async () => {
@@ -771,6 +870,8 @@ export async function startKernel(opts: KernelOptions) {
     integrity,
     baseApplied,
     recovered,
+    /** 开发版重叠实例守卫状态（正式版恒为 enabled=true） */
+    background,
     /** media sidecar 句柄（状态 / pid，供冒烟与监控用） */
     media: mediaBridge,
     /** 进程内看门狗（指标快照 / 阶段） */

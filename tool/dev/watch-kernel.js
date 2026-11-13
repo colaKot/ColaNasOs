@@ -131,6 +131,8 @@ function startKernel(attempt = 1) {
       NODE_ENV: process.env.NODE_ENV || 'development',
       // 开发工具默认开 dev-token + CORS；生产（start.bat）不设，二者都不启用
       COLANAS_DEV_TOKEN: process.env.COLANAS_DEV_TOKEN || '1',
+      // 开发实例标记：内核会探活正式版（7788），命中后跳过后台任务
+      COLANAS_DEV_INSTANCE: process.env.COLANAS_DEV_INSTANCE || '1',
     },
   });
   kernel.on('exit', (code) => {

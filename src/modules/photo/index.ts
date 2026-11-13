@@ -107,19 +107,23 @@ export const photo: ServerModule = {
     // 开关关着 / 已暂停 / 已经全部识别完 都直接跳过（判断在 enqueueScanOnce 里）。
     // 结果要落日志：以前 .catch(() => null) 把「为什么没启动」全吞了，
     // 用户只看到任务栏空闲、排查无从下手（2026-11-06）。
-    void enqueueScanOnce(k)
-      .then((r) => k.log.info({ ...r }, 'photo.ai autostart'))
-      .catch((err) => k.log.warn({ err: String(err) }, 'photo.ai autostart failed'));
+    if (k.background.enabled) {
+      void enqueueScanOnce(k)
+        .then((r) => k.log.info({ ...r }, 'photo.ai autostart'))
+        .catch((err) => k.log.warn({ err: String(err) }, 'photo.ai autostart failed'));
 
-    // 全库内容指纹回填：老库 content_md5 基本都是 NULL，不补的话手机备份
-    // 会把已经备份过的照片全部重新传一遍。启动即跑、限速分批、重启自动续跑。
-    startContentMd5Backfill(k);
+      // 全库内容指纹回填：老库 content_md5 基本都是 NULL，不补的话手机备份
+      // 会把已经备份过的照片全部重新传一遍。启动即跑、限速分批、重启自动续跑。
+      startContentMd5Backfill(k);
 
-    // 回收站保留 30 天：启动先清一次，之后每小时一次（unref 不阻止进程退出）
-    void purgeExpiredTrash(k).catch(() => null);
-    const purgeTimer = setInterval(() => {
+      // 回收站保留 30 天：启动先清一次，之后每小时一次（unref 不阻止进程退出）
       void purgeExpiredTrash(k).catch(() => null);
-    }, 3600_000);
-    purgeTimer.unref?.();
+      const purgeTimer = setInterval(() => {
+        void purgeExpiredTrash(k).catch(() => null);
+      }, 3600_000);
+      purgeTimer.unref?.();
+    } else {
+      k.log.info('[dev] 重叠模式：跳过相册 AI 续跑 / 指纹回填 / 回收站清理');
+    }
   },
 };

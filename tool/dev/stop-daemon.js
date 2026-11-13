@@ -19,6 +19,13 @@ const dataDir =
   path.join(process.env.APPDATA || process.env.HOME || '.', 'colanas_os_server');
 const infoFile = path.join(dataDir, 'transmission', 'daemon.json');
 
+// 开发版重叠实例守卫：开发内核检测到正式版在跑时会在 dataDir 写这个标记。
+// 此时 transmission 是正式版在管，开发环境退出不能停它（会丢 tracker session）。
+if (fs.existsSync(path.join(dataDir, 'dev-overlap.marker'))) {
+  console.log('[dev] 检测到重叠实例标记：跳过 stop-daemon（不碰正式版的 transmission）');
+  process.exit(0);
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function readInfo() {

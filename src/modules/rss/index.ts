@@ -1315,6 +1315,10 @@ export const rss: ServerModule = {
     );
 
     // 每 15 分钟扫一遍启用规则（改规则/重启用后最迟 15 分钟生效）
+    if (!k.background.enabled) {
+      k.log.info('[dev] 重叠模式：跳过 RSS 规则定时扫描');
+      return;
+    }
     const ruleTimer = setInterval(() => {
       void (async () => {
         const cutoff = now() - 15 * 60;

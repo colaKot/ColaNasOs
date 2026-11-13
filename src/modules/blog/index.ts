@@ -97,13 +97,18 @@ export const blog: ServerModule = {
     // 换 Qwen3-TTS 后音色来自磁盘扫描，老库的 Kokoro 固定 id 会让前端下拉框崩溃
     await migrateLegacyVoice(k);
 
-    // 上次进程退出时还在跑的那期永远不会有结果了：标成 failed，别让 UI 一直转圈
-    const cleaned = await sql`
-      update blog_episodes
-         set status = 'failed', error = '服务重启，生成中断', finished_at = ${Math.floor(Date.now() / 1000)}
-       where status in ('pending', 'running')
-    `.execute(k.db);
-    k.log.info(`[blog] 启动清理中断任务：${cleaned.numAffectedRows ?? 0} 条`);
+    // 上次进程退出时还在跑的那期永远不会有结果了：标成 failed，别让 UI 一直转圈。
+    // 重叠模式下不能做：这会误伤正式版正在生成的那一期。
+    if (k.background.enabled) {
+      const cleaned = await sql`
+        update blog_episodes
+           set status = 'failed', error = '服务重启，生成中断', finished_at = ${Math.floor(Date.now() / 1000)}
+         where status in ('pending', 'running')
+      `.execute(k.db);
+      k.log.info(`[blog] 启动清理中断任务：${cleaned.numAffectedRows ?? 0} 条`);
+    } else {
+      k.log.info('[dev] 重叠模式：跳过博客中断任务清理与定时生成');
+    }
 
     const settingsResponse = async () => {
       const s = await readSettings(k);
@@ -759,7 +764,9 @@ export const blog: ServerModule = {
       },
     );
 
-    startBlogSchedule(app, k);
+    if (k.background.enabled) {
+      startBlogSchedule(app, k);
+    }
 
     app.addHook('onClose', async () => {
       await resetLocalLlm();

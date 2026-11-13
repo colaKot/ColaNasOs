@@ -206,12 +206,16 @@ export const video: ServerModule = {
     // 启动就先探一轮：否则「刚打开客户端」的 20s 内，SMB 库用的是上次关机前的旧状态，
     // 断网时会去碰不存在的网络盘（请求超时、列表空白却不说明原因）。
     // 不 await：探测失败也不能拖慢内核启动。
-    void probeTick();
-    const probeTimer = setInterval(() => void probeTick(), 20_000);
-    probeTimer.unref?.();
-    app.addHook('onClose', async () => {
-      clearInterval(probeTimer);
-    });
+    if (k.background.enabled) {
+      void probeTick();
+      const probeTimer = setInterval(() => void probeTick(), 20_000);
+      probeTimer.unref?.();
+      app.addHook('onClose', async () => {
+        clearInterval(probeTimer);
+      });
+    } else {
+      k.log.info('[dev] 重叠模式：跳过影视 SMB 在线探测');
+    }
 
     const absLibs = await sql<{ root_path: string }>`
       select distinct root_path from video_libraries

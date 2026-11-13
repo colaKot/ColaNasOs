@@ -511,7 +511,12 @@ export async function registerDiscoverApi(app: any, k: KernelApi): Promise<void>
   };
 
   // 启动时清一次过期快照：只靠"写入时顺带清"的话，用户不再打开发现页就永远不清理
-  void pruneSnapshots(k.db, { retainSec: RETAIN_SEC }).catch(() => 0);
+  // 重叠模式（开发实例 + 另一个实例在跑）下跳过：这是写共享库的启动任务
+  if (k.background.enabled) {
+    void pruneSnapshots(k.db, { retainSec: RETAIN_SEC }).catch(() => 0);
+  } else {
+    k.log.info('[dev] 重叠模式：跳过发现页榜单快照清理');
+  }
 
   interface CatalogHit<T> {
     value: T;

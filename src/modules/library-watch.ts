@@ -83,6 +83,11 @@ function verifyIntervalFromEnv(): number | null {
 }
 
 export function bindLibraryWatch<T extends WatchableLibrary>(spec: LibraryWatchSpec<T>): LibraryWatch {
+  // 开发版重叠实例守卫：另一个实例在跑时，监控 / 周期校验 / 间隔扫描全部跳过
+  if (!spec.k.background.enabled) {
+    spec.k.log.info({ domain: spec.domain }, '[dev] 重叠模式：文件监控与周期扫描已跳过');
+    return { refresh: async () => {}, stop: () => {} };
+  }
   const root = filesRoot();
   const maxSubDirs = spec.maxSubDirs ?? 4;
   const defaultVerifyIntervalMs =

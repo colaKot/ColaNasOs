@@ -46,6 +46,10 @@ REM 被误判成"功能坏了"）。仅用于开发，生产部署**不要**设�
 set "COLANAS_JWT_SECRET=colanas-dev-only-secret-change-me"
 REM Flutter 控制口令牌：这口能热重启/退出开发进程，只绑 127.0.0.1 + 校验 token
 set "COLANAS_CTL_TOKEN=colanas-dev-ctl"
+REM 开发实例标记：内核启动时据此探活正式版（7788）。一旦发现另一个实例在跑，
+REM 内核只保留界面与接口，跳过后台任务（扫描 / 刮削 / AI / 定时任务 / sidecar）。
+REM 正式版（start.bat / 安装版）不设这个变量，行为完全不变。
+set "COLANAS_DEV_INSTANCE=1"
 
 REM 数据目录：默认**和正式服务端共用**同一个（%APPDATA%\colanas_os_server），
 REM 所以开发时看到的相册 / 人物 / 场景识别结果 / 影片库 / AI 数据都是真实的，
@@ -54,6 +58,9 @@ REM 补 MD5、AI 识别）会各跑一遍，SQLite 偶尔要等锁。
 REM 想完全隔离（比如要跑会改数据的迁移）就带参数启动：  dev.bat isolated
 if /i "%~1"=="isolated" (
   set "COLANAS_DATA_DIR=%~dp0.devdata\db"
+  REM 隔离目录下不存在「和正式版抢同一份数据」的问题：关掉重叠探活，
+  REM 让这套隔离实例照常跑后台任务（试迁移 / 试扫描时行为完整）。
+  set "COLANAS_DEV_PEER_CHECK=0"
   echo [i] 使用隔离数据目录 .devdata\db（看不到正式数据，适合试破坏性改动）
 ) else (
   echo [i] 数据目录与正式服务端共用（相册 AI / 影片库都是真实数据）

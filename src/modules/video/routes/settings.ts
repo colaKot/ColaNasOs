@@ -396,6 +396,11 @@ export async function registerVideoSettings(
 
   // 每日自动补全：每小时看一次，只在「配置的整点」且当天还没跑过时入队。
   // 用 config 记 lastRunDay，避免重启后重复触发。
+  // 重叠模式（开发实例 + 另一个实例在跑）：不建定时器，跳过字幕补全与刮削统计。
+  if (!k.background.enabled) {
+    k.log.info('[dev] 重叠模式：跳过影视每日字幕补全与刮削统计定时器');
+    return;
+  }
   const timer = setInterval(() => {
     void (async () => {
       try {
