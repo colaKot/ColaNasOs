@@ -237,6 +237,96 @@ async function loadAssets(k: KernelApi, owner: string, personId: string): Promis
   return [...byId.values()].sort((a, b) => a.takenAt - b.takenAt || a.id.localeCompare(b.id));
 }
 
+/**
+ * 无 GPS 照片补坐标：优先继承时间最近的有 GPS 邻居（前后 12 小时内）。
+ *
+ * 实测库里旅游照片的典型形态是「相机拍风景带 GPS、手机拍人像没 GPS」，
+ * 结果带人脸的那批照片全被归成「未定位」，几年自驾游只出一个 unknown 大段
+ * （2026-11-13 用户反馈「23/24/25 年 6-7 月自驾游怎么都没发现」）。
+ * 这里按设计文档的口径做邻居插值：先看同 burst，再看时间最近的邻居。
+ * 12 小时窗口是刻意的 —— 再远就可能跨城，宁可不猜。
+ */
+interface GpsPoint {
+  takenAt: number;
+  lat: number;
+  lng: number;
+  geohash4: string;
+  geohash5: string;
+}
+
+/**
+ * 用**同库所有带 GPS 的照片**（不只是这个人的人脸照片）做时间轴插值。
+ *
+ * 关键：旅游时人像照片往往没 GPS，而有 GPS 的风景照里没有正脸、不在 assets 里。
+ * 只在 assets 内找邻居会漏掉，所以这里把整个时间段的其他照片也拿来当锚点。
+ */
+function fillGpsByNeighbor(assets: GrowthAsset[], timeline: GpsPoint[]): void {
+  if (timeline.length === 0) return;
+  // 24 小时：同一天白天拍风景、晚上拍人像，跨一天也能兜住
+  const WIN = 24 * 3600;
+  for (let i = 0; i < assets.length; i += 1) {
+    const a = assets[i];
+    if (a.lat != null && a.lng != null) continue;
+
+    // 二分找时间上最近的锚点（前后各取一个比一比）
+    let l = 0;
+    let r = timeline.length;
+    while (l < r) {
+      const m = (l + r) >> 1;
+      if (timeline[m].takenAt < a.takenAt) l = m + 1;
+      else r = m;
+    }
+    const before = l > 0 ? timeline[l - 1] : null;
+    const after = l < timeline.length ? timeline[l] : null;
+    const pick = !before
+      ? after
+      : !after
+        ? before
+        : a.takenAt - before.takenAt <= after.takenAt - a.takenAt
+          ? before
+          : after;
+    if (!pick || Math.abs(pick.takenAt - a.takenAt) > WIN) continue;
+    a.lat = pick.lat;
+    a.lng = pick.lng;
+    a.geohash4 = pick.geohash4;
+    a.geohash5 = pick.geohash5;
+  }
+}
+
+/** 该 owner 在时间范围内的所有带 GPS 图片（人像插值的锚点） */
+async function loadGpsTimeline(
+  k: KernelApi,
+  owner: string,
+  from: number,
+  to: number,
+): Promise<GpsPoint[]> {
+  const rows = (
+    await sql<{
+      taken_at: number;
+      latitude: number | null;
+      longitude: number | null;
+      geohash4: string | null;
+      geohash5: string | null;
+    }>`
+      select taken_at, latitude, longitude, geohash4, geohash5
+        from photo_items
+       where in_trash = 0
+         and latitude is not null and longitude is not null
+         and coalesce(media_kind, 'image') <> 'video'
+         and library_id in (select id from photo_libraries where owner_id = ${owner})
+         and taken_at between ${from} and ${to}
+       order by taken_at asc
+    `.execute(k.db)
+  ).rows;
+  return rows.map((r) => ({
+    takenAt: num(r.taken_at),
+    lat: Number(r.latitude),
+    lng: Number(r.longitude),
+    geohash4: String(r.geohash4 || ''),
+    geohash5: String(r.geohash5 || ''),
+  }));
+}
+
 /** 规则分段：地点变化 / 相邻间隔 > 30 天 / 本段跨度超过粒度阈值，三者任一成立就切。
  *  无 GPS 的照片只并入当前段（同一天内），不新建城市；一天跨城按城市级归并，
  *  不按「到家/到幼儿园」这种点位跳变切段。 */
@@ -249,7 +339,9 @@ function buildStages(assets: GrowthAsset[], g: GrowthGranularity): StageDraft[] 
     const place = resolvePlace(a);
     const noGps = place.key === 'unknown';
     const ageMonths = (a.takenAt - firstAt) / (30 * DAY);
-    const spanDays = spanDaysFor(g, ageMonths);
+    // 未定位段没有城市信息，跨度再按年拉就成了一坨；压到 30 天，
+    // 至少让每次出行在时间轴上露出来（有 GPS 的段仍按年龄自适应）。
+    const spanDays: number = cur?.placeKey === 'unknown' ? 30 : spanDaysFor(g, ageMonths);
     const sameDay = cur ? Math.floor(a.takenAt / DAY) === Math.floor(cur.endAt / DAY) : false;
     const split = !cur
       || (!noGps && cur.placeKey !== 'unknown' && place.key !== cur.placeKey)
@@ -566,10 +658,15 @@ async function loadStageExtras(k: KernelApi, stageIds: string[]): Promise<Map<st
       select a.stage_id, i.rel_path
         from photo_growth_stage_assets a
         join photo_items i on i.id = a.asset_id
+        join photo_growth_stages s on s.id = a.stage_id
+        left join photo_items c on c.id = s.cover_asset_id
        where a.stage_id in (${sql.join(stageIds.map((id) => sql`${id}`), sql`, `)})
          and a.rank between 2 and 6
          and i.in_trash = 0
          and coalesce(i.media_kind, 'image') <> 'video'
+         -- 补充图和封面保持同一方向：竖屏段里混一张横图会非常割裂
+         and (coalesce(c.width, 0) > coalesce(c.height, 0))
+             = (coalesce(i.width, 0) > coalesce(i.height, 0))
        order by a.stage_id, a.rank
     `.execute(k.db)
   ).rows;
@@ -613,6 +710,13 @@ export async function rebuildTrack(
 
   const run = (async () => {
     const assets = await loadAssets(k, owner, personId);
+    // 旅游照片常见「风景带 GPS、人像没 GPS」：用全库 GPS 照片做时间轴插值，
+    // 否则几年自驾游会全部并成一个「未定位」大段。
+    if (assets.length > 0) {
+      const from = assets[0].takenAt - 86400;
+      const to = assets[assets.length - 1].takenAt + 86400;
+      fillGpsByNeighbor(assets, await loadGpsTimeline(k, owner, from, to));
+    }
     const fingerprint = await trackFingerprint(k, owner, personId);
     const drafts = buildStages(assets, granularity);
     const sceneLabels = await loadSceneLabels(k, personId);

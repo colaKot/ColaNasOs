@@ -123,9 +123,11 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
   @override
   void initState() {
     super.initState();
-    _items =
-        widget.photos ??
-        [for (final item in widget.items) ViewerPhoto.ofItem(item)];
+    // 拷贝一份：查看器里删除后要就地移除，不能改到调用方传进来的列表
+    _items = List<ViewerPhoto>.of(
+      widget.photos ??
+          [for (final item in widget.items) ViewerPhoto.ofItem(item)],
+    );
     _index = widget.initialIndex.clamp(0, _items.length - 1);
     _controller = PageController(initialPage: _index);
     WidgetsBinding.instance.addPostFrameCallback((_) => _precacheNeighbors());
@@ -195,6 +197,55 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
     );
+  }
+
+  /// 大图里直接删当前这张（放回收站，30 天后自动清理）。
+  Future<void> _delete(ViewerPhoto item) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('photo.delete.title')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(tr('photo.delete.confirm', {'count': '1'})),
+            const SizedBox(height: 6),
+            Text(tr('photo.delete.toTrash'), style: const TextStyle(fontSize: 12)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('common.delete')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ApiSession.instance.client.photoDelete(
+        body: PhotoDeleteBody(ids: [item.id], toTrash: true),
+      );
+      if (!mounted) return;
+      setState(() {
+        _items.removeAt(_index);
+        if (_index >= _items.length) _index = _items.length - 1;
+      });
+      if (_items.isEmpty) {
+        _close();
+        return;
+      }
+      _controller.jumpToPage(_index);
+      NasSnack.showOn(messenger, tr('photo.delete.done', {'count': '1'}));
+    } catch (e) {
+      NasSnack.showOn(messenger, tr('photo.delete.failed', {'error': '$e'}));
+    }
   }
 
   void _close() => Navigator.of(context).maybePop();
@@ -434,6 +485,11 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                 ),
               );
             },
+          ),
+          IconButton(
+            tooltip: tr('photo.delete.title'),
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () => _delete(_items[_index]),
           ),
           IconButton(
             tooltip: tr('common.close'),
