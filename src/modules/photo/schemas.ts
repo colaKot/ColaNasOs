@@ -1191,6 +1191,8 @@ export const GrowthStage = Type.Object(
     coverHeight: Type.Union([Type.Integer(), Type.Null()]),
     secondaryWidth: Type.Union([Type.Integer(), Type.Null()]),
     secondaryHeight: Type.Union([Type.Integer(), Type.Null()]),
+    /** 同段补充照片（最多 2 张，已排除封面/次图），前端拼缩略图 */
+    extraPaths: Type.Array(Type.String()),
     photoCount: Type.Integer(),
     coverScore: Type.Number(),
     milestone: Type.String({ description: '里程碑枚举：firstPlace / firstScene / anniversary / 空' }),

@@ -1,6 +1,7 @@
 import { sql } from 'kysely';
 import type { KernelApi } from '../../../kernel/types';
 import { chinaPlacePath } from './geo/china';
+import { haversineKm } from './geo/geohash';
 import { describePlace } from './geo/place-label';
 import { decodeCursor, encodeCursor, newId, toItem, type PhotoItemRow } from './util';
 
@@ -34,8 +35,11 @@ export type GrowthGranularity = 'auto' | 'month' | 'quarter' | 'year';
 
 /** 场景标签是 AI 侧 zero-shot 词表，这里只做「风景 / 室内 / 不能用」三类粗判。
  *  命中不了时退化为标签数量，绝不因为词表差异把整段照片全判成废片。 */
-const OUTDOOR_LABEL = /海|沙滩|山|雪|湖|河|森林|草原|公园|街|户外|风景|广场|地标|天空|field|beach|sea|mountain|snow|lake|river|forest|park|street|outdoor|landscape|sky|city/i;
-const INDOOR_LABEL = /室内|客厅|卧室|厨房|餐厅|办公室|白墙|indoor|living|bedroom|kitchen|office|wall/i;
+// 场景标签是 AI 侧的具体词（实测库里是「露天舞台 / 索桥 / 海滩 / 屋顶花园 /
+// 教室 / 自助餐厅 / 机舱 / 病房」这类 POI 名），所以不能只认「风景 / outdoor」。
+// 这里按「有环境语义」收词：户外景观 + 能看见背景的公共空间都算景。
+const OUTDOOR_LABEL = /海|沙滩|沙坑|山|雪|湖|河|森林|草原|公园|花园|菜园|果园|葡萄园|街|户外|风景|景区|景点|广场|地标|天空|云|日落|日出|田野|农田|露天|舞台|索桥|桥|塔|寺庙|教堂|古镇|码头|港口|机场|车站|地铁|球场|操场|停车场|游泳池|泳池|游乐|动物|植物|博物|美术|城市|建筑|屋顶|阳台|露台|教室|校园|field|beach|sea|mountain|snow|lake|river|forest|park|street|outdoor|landscape|sky|city|garden|zoo|museum/i;
+const INDOOR_LABEL = /室内|客厅|卧室|厨房|卫生间|白墙|病房|美容院|家庭影院|机舱|车厢|办公室|屏幕|文档|截图|indoor|living|bedroom|kitchen|office|wall|screen|document/i;
 const BAD_LABEL = /截图|文档|屏幕|表情包|二维码|screenshot|document|screen|meme|qrcode/i;
 
 interface GrowthAsset {
@@ -196,6 +200,7 @@ async function loadAssets(k: KernelApi, owner: string, personId: string): Promis
         from photo_items i
         join photo_faces f on f.photo_id = i.id and f.cluster_id = ${personId}
        where i.in_trash = 0
+         and coalesce(i.media_kind, 'image') <> 'video'
          and i.library_id in (select id from photo_libraries where owner_id = ${owner})
        order by i.taken_at asc, i.id asc
     `.execute(k.db)
@@ -296,8 +301,21 @@ async function loadSceneLabels(k: KernelApi, personId: string): Promise<Map<stri
   return out;
 }
 
-/** 可解释的降级打分。每项都写进 reason_json，长按「换一张」时能看出为什么。 */
-function scoreAsset(a: GrowthAsset, labels: Set<string>): Scored {
+/**
+ * 可解释的降级打分。每项都写进 reason_json，长按「换一张」时能看出为什么。
+ *
+ * 2026-11-13 用户口径修正：**别选大头照**，要能看见景。
+ *   · 人脸占画面 10%~30% 才是「人 + 景」的舒服区间（原来 0.18 最佳、
+ *     45% 还算合格，结果挑出来全是特写）；
+ *   · >50% 重罚、>60% 在 pickCover 直接出局；
+ *   · 风景标签权重提高，纯室内 / 无标签的降到后面；
+ *   · 地点相关用「距段内 GPS 质心 10km 内满分」，不是 50km（设计文档口径）。
+ */
+function scoreAsset(
+  a: GrowthAsset,
+  labels: Set<string>,
+  center?: { lat: number; lng: number } | null,
+): Scored {
   const area = a.imgWidth > 0 && a.imgHeight > 0
     ? (a.boxWidth * a.boxHeight) / (a.imgWidth * a.imgHeight)
     : 0;
@@ -306,31 +324,47 @@ function scoreAsset(a: GrowthAsset, labels: Set<string>): Scored {
   const centerX = a.imgWidth > 0 ? (a.boxLeft + a.boxWidth / 2) / a.imgWidth : 0.5;
   const centerY = a.imgHeight > 0 ? (a.boxTop + a.boxHeight / 2) / a.imgHeight : 0.5;
   const centerBonus = clamp01(1 - Math.hypot(centerX - 0.5, centerY - 0.5) * 1.4);
-  const composition = clamp01(1 - Math.abs(ratio - 0.18) / 0.35) * 0.75 + centerBonus * 0.25;
+  const composition = clamp01(1 - Math.abs(ratio - 0.20) / 0.30) * 0.6 + centerBonus * 0.4;
+  // 人景平衡：0.10~0.30 满分，越接近大头照越低
+  const balance = clamp01(1 - Math.abs(ratio - 0.20) / 0.20);
   const richness = clamp01(labels.size / 4);
-  const landscape = [...labels].some((l) => OUTDOOR_LABEL.test(l));
+  const labelText = [...labels].join(' ');
+  const landscape = OUTDOOR_LABEL.test(labelText);
   // photo_items 的宽高老库可能没探测到；人脸检测时的原图尺寸是可靠后备，
   // 否则这批照片会被一律当成竖图，横屏优先就失效了。
   const w = a.width > 0 ? a.width : a.imgWidth;
   const h = a.height > 0 ? a.height : a.imgHeight;
   const wide = w > 0 && h > 0 && w > h;
-  const indoor = [...labels].some((l) => INDOOR_LABEL.test(l));
-  const background = landscape ? 1 : indoor ? 0.35 : labels.size >= 2 ? 0.6 : 0.2;
-  const penalty = (ratio < 0.03 ? 0.15 : 0) + (ratio > 0.45 ? 0.1 : 0) + (faceQuality < 0.4 ? 0.1 : 0);
-  const score = 0.35 * faceQuality
-    + 0.25 * composition
-    + 0.20 * richness
-    + 0.10 * background
-    + 0.05
+  // 只有「所有标签都是纯室内」才算没景；「教室 / 自助餐厅 / 美食广场」
+  // 这种有环境的公共空间给 0.7，别因为没命中「户外」两个字就被埋掉。
+  const indoorOnly = labels.size > 0 && [...labels].every((l) => INDOOR_LABEL.test(l));
+  const background = landscape ? 1 : indoorOnly ? 0.2 : labels.size >= 2 ? 0.7 : labels.size === 1 ? 0.45 : 0.1;
+  // 地点相关：段内质心 10km 内满分，30km 外基本没分
+  let location = 0.5;
+  if (center && a.lat != null && a.lng != null) {
+    const dKm = haversineKm(center.lat, center.lng, Number(a.lat), Number(a.lng));
+    location = dKm <= 10 ? 1 : dKm <= 30 ? 0.6 : 0.2;
+  }
+  const penalty =
+    (ratio < 0.03 ? 0.2 : 0)
+    + (ratio > 0.35 ? 0.08 : 0)
+    + (ratio > 0.5 ? 0.25 : 0)
+    + (faceQuality < 0.4 ? 0.1 : 0);
+  const score = 0.30 * faceQuality
+    + 0.20 * balance
+    + 0.15 * background
+    + 0.10 * composition
+    + 0.10 * location
+    + 0.10 * richness
     + 0.05 * (a.favorite ? 1 : 0)
     - penalty;
 
   // 人 + 景 > 人（含室内）> 纯风景 > 兜底；没有合格人景照时不静默省略，给 hint。
-  const grade = ratio >= 0.08 && ratio <= 0.45 && background >= 0.6 && faceQuality >= 0.5
+  const grade = ratio >= 0.10 && ratio <= 0.30 && background >= 0.6 && faceQuality >= 0.5
     ? 4
-    : ratio >= 0.03 && ratio <= 0.45 && faceQuality >= 0.4
+    : ratio >= 0.06 && ratio <= 0.45 && faceQuality >= 0.4
       ? 3
-      : landscape && ratio < 0.08
+      : landscape && ratio < 0.10
         ? 2
         : 1;
 
@@ -341,9 +375,11 @@ function scoreAsset(a: GrowthAsset, labels: Set<string>): Scored {
     wide,
     reason: {
       faceQuality: Number(faceQuality.toFixed(3)),
+      balance: Number(balance.toFixed(3)),
       composition: Number(composition.toFixed(3)),
       sceneRichness: Number(richness.toFixed(3)),
       background: Number(background.toFixed(3)),
+      location: Number(location.toFixed(3)),
       faceAreaRatio: Number(ratio.toFixed(3)),
       orientation: wide ? 'landscape' : 'portrait',
       labels: [...labels].slice(0, 8),
@@ -355,11 +391,39 @@ function scoreAsset(a: GrowthAsset, labels: Set<string>): Scored {
 }
 
 function pickCover(assets: GrowthAsset[], labelsOf: (a: GrowthAsset) => Set<string>): PickResult {
+  // 段内 GPS 质心：地点相关分用它，免得把顺路几十公里外的照片当成代表照
+  let latSum = 0;
+  let lngSum = 0;
+  let gpsN = 0;
+  for (const a of assets) {
+    const lat = Number(a.lat);
+    const lng = Number(a.lng);
+    if (
+      a.lat != null && a.lng != null
+      && Number.isFinite(lat) && Number.isFinite(lng)
+      && !(lat === 0 && lng === 0)
+    ) {
+      latSum += lat;
+      lngSum += lng;
+      gpsN += 1;
+    }
+  }
+  const center = gpsN > 0 ? { lat: latSum / gpsN, lng: lngSum / gpsN } : null;
+
   const scored: Scored[] = [];
   for (const a of assets) {
     const labels = labelsOf(a);
     if ([...labels].some((l) => BAD_LABEL.test(l))) continue; // 截图 / 文档 / 表情包
-    scored.push(scoreAsset(a, labels));
+    // 大头照直接出局：脸占画面 60% 以上，背景等于没有
+    const area = a.imgWidth > 0 && a.imgHeight > 0
+      ? (a.boxWidth * a.boxHeight) / (a.imgWidth * a.imgHeight)
+      : 0;
+    if (area > 0.6) continue;
+    scored.push(scoreAsset(a, labels, center));
+  }
+  // 整段只有大头照时兜底：宁可出特写，也别让卡片空着
+  if (scored.length === 0) {
+    for (const a of assets) scored.push(scoreAsset(a, labelsOf(a), center));
   }
   // 横屏优先：时间轴一行一张横图最好看；同一方向内部仍按人+景等级、可解释分排序。
   // 宽高缺失（老库/视频）按竖图处理，绝不凭空当横屏。
@@ -410,7 +474,16 @@ interface StageSize {
   height: number | null;
 }
 
-function stageJson(r: GrowthStageRow, cover?: StageSize | null, secondary?: StageSize | null) {
+function stageJson(
+  r: GrowthStageRow,
+  cover?: StageSize | null,
+  secondary?: StageSize | null,
+  extras: string[] = [],
+) {
+  // 补充照片可能和封面/次图重合（人工 pin 后 rank 顺序会变），这里统一去重
+  const extraPaths = extras
+    .filter((p) => p && p !== String(r.cover_path || '') && p !== String(r.secondary_path || ''))
+    .slice(0, 2);
   return {
     id: r.id,
     seq: num(r.seq),
@@ -427,6 +500,7 @@ function stageJson(r: GrowthStageRow, cover?: StageSize | null, secondary?: Stag
     coverHeight: cover?.height ?? null,
     secondaryWidth: secondary?.width ?? null,
     secondaryHeight: secondary?.height ?? null,
+    extraPaths,
     photoCount: num(r.photo_count),
     coverScore: num(r.cover_score),
     milestone: String(r.milestone || ''),
@@ -483,6 +557,33 @@ async function loadStageSizes(k: KernelApi, rows: GrowthStageRow[]) {
   return { byId, byPath };
 }
 
+/** 每段补充照片：候选池 rank 2..6 里取最多 2 张（前端会再去掉与封面/次图重合的）。 */
+async function loadStageExtras(k: KernelApi, stageIds: string[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (stageIds.length === 0) return out;
+  const rows = (
+    await sql<{ stage_id: string; rel_path: string }>`
+      select a.stage_id, i.rel_path
+        from photo_growth_stage_assets a
+        join photo_items i on i.id = a.asset_id
+       where a.stage_id in (${sql.join(stageIds.map((id) => sql`${id}`), sql`, `)})
+         and a.rank between 2 and 6
+         and i.in_trash = 0
+         and coalesce(i.media_kind, 'image') <> 'video'
+       order by a.stage_id, a.rank
+    `.execute(k.db)
+  ).rows;
+  for (const r of rows) {
+    const list = out.get(r.stage_id) ?? [];
+    const path = String(r.rel_path || '');
+    if (list.length < 2 && path && !list.includes(path)) {
+      list.push(path);
+      out.set(r.stage_id, list);
+    }
+  }
+  return out;
+}
+
 async function trackFingerprint(k: KernelApi, owner: string, personId: string) {
   const row = (
     await sql<{ n: number; last_at: number }>`
@@ -490,6 +591,7 @@ async function trackFingerprint(k: KernelApi, owner: string, personId: string) {
         from photo_items i
         join photo_faces f on f.photo_id = i.id and f.cluster_id = ${personId}
        where i.in_trash = 0
+         and coalesce(i.media_kind, 'image') <> 'video'
          and i.library_id in (select id from photo_libraries where owner_id = ${owner})
     `.execute(k.db)
   ).rows[0];
@@ -725,6 +827,7 @@ export async function listStages(
   const page = rows.slice(0, limit);
   const last = page.length > 0 ? page[page.length - 1] : null;
   const sizes = await loadStageSizes(k, page);
+  const extras = await loadStageExtras(k, page.map((r) => r.id));
   const agg = (
     await sql<{
       stage_count: number;
@@ -751,6 +854,7 @@ export async function listStages(
       r,
       sizes.byId.get(r.cover_asset_id ?? ''),
       sizes.byPath.get(r.secondary_path),
+      extras.get(r.id) ?? [],
     )),
     nextCursor: rows.length > limit && last ? encodeCursor(num(last.start_at), last.id) : null,
     summary: {

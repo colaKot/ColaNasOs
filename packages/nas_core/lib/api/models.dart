@@ -5825,6 +5825,7 @@ class PhotoGrowthStage {
   final int? coverHeight;
   final int? secondaryWidth;
   final int? secondaryHeight;
+  final List<String> extraPaths;
   final int photoCount;
   final double coverScore;
   final String milestone;
@@ -5848,6 +5849,7 @@ class PhotoGrowthStage {
     required this.coverHeight,
     required this.secondaryWidth,
     required this.secondaryHeight,
+    required this.extraPaths,
     required this.photoCount,
     required this.coverScore,
     required this.milestone,
@@ -5872,6 +5874,7 @@ class PhotoGrowthStage {
         coverHeight: json['coverHeight'] as int?,
         secondaryWidth: json['secondaryWidth'] as int?,
         secondaryHeight: json['secondaryHeight'] as int?,
+        extraPaths: (json['extraPaths'] as List<dynamic>).cast<String>(),
         photoCount: json['photoCount'] as int,
         coverScore: (json['coverScore'] as num).toDouble(),
         milestone: json['milestone'] as String,
@@ -5896,6 +5899,7 @@ class PhotoGrowthStage {
         'coverHeight': coverHeight,
         'secondaryWidth': secondaryWidth,
         'secondaryHeight': secondaryHeight,
+        'extraPaths': extraPaths,
         'photoCount': photoCount,
         'coverScore': coverScore,
         'milestone': milestone,

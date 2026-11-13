@@ -1737,6 +1737,7 @@ export type PhotoGrowthStage = {
   "coverHeight": number;
   "secondaryWidth": number;
   "secondaryHeight": number;
+  "extraPaths": string[];
   "photoCount": number;
   "coverScore": number;
   "milestone": string;

@@ -6535,6 +6535,7 @@
           "coverHeight",
           "secondaryWidth",
           "secondaryHeight",
+          "extraPaths",
           "photoCount",
           "coverScore",
           "milestone",
@@ -6596,6 +6597,12 @@
           "secondaryHeight": {
             "type": "integer",
             "nullable": true
+          },
+          "extraPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "photoCount": {
             "type": "integer"

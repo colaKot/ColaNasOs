@@ -237,7 +237,8 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
     final scheme = Theme.of(context).colorScheme;
     return ListView(
       controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+      // 右边不留 padding：卡片自己留 16，让滚动条/内容更贴窗口右边
+      padding: const EdgeInsets.fromLTRB(16, 12, 0, 28),
       children: [
         Row(
           children: [
@@ -479,7 +480,8 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
     final scheme = Theme.of(context).colorScheme;
     final milestone = _milestoneLabel(s.milestone);
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      // 右侧留 16，配合列表右边 padding 0，让滚动条尽量贴窗口右边
+      margin: const EdgeInsets.only(right: 16, bottom: 14),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
@@ -518,7 +520,27 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
             ],
           ),
           const SizedBox(height: 10),
-          _stageImages(s),
+          LayoutBuilder(
+            builder: (context, c) {
+              final photos = _stageImages(s);
+              final story = _stageStory(s);
+              // 卡片够宽时把右边的空位利用起来：照片在左，一段小文案在右
+              if (c.maxWidth >= 640) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: photos),
+                    const SizedBox(width: 14),
+                    SizedBox(width: 210, child: story),
+                  ],
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [photos, const SizedBox(height: 10), story],
+              );
+            },
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -556,9 +578,13 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
 
   Widget _stageImages(PhotoGrowthStage s) {
     final secondary = s.secondaryPath;
+    final extras = s.extraPaths
+        .where((p) => p.isNotEmpty && p != s.coverPath && p != secondary)
+        .take(2)
+        .toList();
     // 服务端选片已保证：有横屏就只出一张横图（跨整行、完整显示）；
     // 实在没有横屏时凑两张竖图并排，避免单张竖图把卡片撑得又高又空。
-    return Row(
+    final main = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
@@ -587,6 +613,89 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
           ),
         ],
       ],
+    );
+    if (extras.isEmpty) return main;
+    // 同一段的另外两张：让「这个时期」不只有一张封面，也更容易看到景
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        main,
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 118,
+          child: Row(
+            children: [
+              for (var i = 0; i < extras.length; i++) ...[
+                if (i > 0) const SizedBox(width: 6),
+                Expanded(
+                  child: PhotoAdaptiveImage(
+                    path: extras[i],
+                    thumbSize: 320,
+                    minHeight: 80,
+                    maxHeight: 160,
+                    onTap: () => _openStage(s),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 照片右边那段小文案：按阶段轮换 6 句，避免同屏重复。
+  ///
+  /// 服务端没有 VLM 阶段文案，这里用 i18n 模板 + 地点/年月拼；
+  /// 诗在数据之外，UI 文案仍全部走契约。
+  Widget _stageStory(PhotoGrowthStage s) {
+    final scheme = Theme.of(context).colorScheme;
+    final d = DateTime.fromMillisecondsSinceEpoch(s.startAt * 1000);
+    final place = s.placeName.isEmpty ? tr('photo.growth.somewhere') : s.placeName;
+    final args = {
+      'place': place,
+      'year': '${d.year}',
+      'month': '${d.month}',
+    };
+    final line = switch (s.seq % 6) {
+      0 => tr('photo.growth.poem1', args),
+      1 => tr('photo.growth.poem2', args),
+      2 => tr('photo.growth.poem3', args),
+      3 => tr('photo.growth.poem4', args),
+      4 => tr('photo.growth.poem5', args),
+      _ => tr('photo.growth.poem6', args),
+    };
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.16)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${d.year}.${d.month.toString().padLeft(2, '0')}',
+            style: TextStyle(
+              fontSize: 10,
+              letterSpacing: 1.6,
+              color: scheme.primary.withValues(alpha: 0.85),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            line,
+            style: const TextStyle(fontSize: 13, height: 1.75, letterSpacing: 0.3),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            tr('photo.growth.photoCount', {'count': '${s.photoCount}'}),
+            style: TextStyle(fontSize: 10, color: context.nasTextSecondary),
+          ),
+        ],
+      ),
     );
   }
 }
