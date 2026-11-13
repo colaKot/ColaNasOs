@@ -6531,6 +6531,10 @@
           "coverAssetId",
           "coverPath",
           "secondaryPath",
+          "coverWidth",
+          "coverHeight",
+          "secondaryWidth",
+          "secondaryHeight",
           "photoCount",
           "coverScore",
           "milestone",
@@ -6575,6 +6579,22 @@
           "secondaryPath": {
             "description": "同阶段次图（去重后第二高分），没有则 null",
             "type": "string",
+            "nullable": true
+          },
+          "coverWidth": {
+            "type": "integer",
+            "nullable": true
+          },
+          "coverHeight": {
+            "type": "integer",
+            "nullable": true
+          },
+          "secondaryWidth": {
+            "type": "integer",
+            "nullable": true
+          },
+          "secondaryHeight": {
+            "type": "integer",
             "nullable": true
           },
           "photoCount": {

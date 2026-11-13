@@ -5821,6 +5821,10 @@ class PhotoGrowthStage {
   final String? coverAssetId;
   final String coverPath;
   final String? secondaryPath;
+  final int? coverWidth;
+  final int? coverHeight;
+  final int? secondaryWidth;
+  final int? secondaryHeight;
   final int photoCount;
   final double coverScore;
   final String milestone;
@@ -5840,6 +5844,10 @@ class PhotoGrowthStage {
     required this.coverAssetId,
     required this.coverPath,
     required this.secondaryPath,
+    required this.coverWidth,
+    required this.coverHeight,
+    required this.secondaryWidth,
+    required this.secondaryHeight,
     required this.photoCount,
     required this.coverScore,
     required this.milestone,
@@ -5860,6 +5868,10 @@ class PhotoGrowthStage {
         coverAssetId: json['coverAssetId'] as String?,
         coverPath: json['coverPath'] as String,
         secondaryPath: json['secondaryPath'] as String?,
+        coverWidth: json['coverWidth'] as int?,
+        coverHeight: json['coverHeight'] as int?,
+        secondaryWidth: json['secondaryWidth'] as int?,
+        secondaryHeight: json['secondaryHeight'] as int?,
         photoCount: json['photoCount'] as int,
         coverScore: (json['coverScore'] as num).toDouble(),
         milestone: json['milestone'] as String,
@@ -5880,6 +5892,10 @@ class PhotoGrowthStage {
         'coverAssetId': coverAssetId,
         'coverPath': coverPath,
         'secondaryPath': secondaryPath,
+        'coverWidth': coverWidth,
+        'coverHeight': coverHeight,
+        'secondaryWidth': secondaryWidth,
+        'secondaryHeight': secondaryHeight,
         'photoCount': photoCount,
         'coverScore': coverScore,
         'milestone': milestone,

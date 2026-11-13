@@ -1186,6 +1186,11 @@ export const GrowthStage = Type.Object(
     secondaryPath: Type.Union([Type.String(), Type.Null()], {
       description: '同阶段次图（去重后第二高分），没有则 null',
     }),
+    // 原始宽高：前端按真实比例自适应高度，避免固定高度把竖图裁成横条
+    coverWidth: Type.Union([Type.Integer(), Type.Null()]),
+    coverHeight: Type.Union([Type.Integer(), Type.Null()]),
+    secondaryWidth: Type.Union([Type.Integer(), Type.Null()]),
+    secondaryHeight: Type.Union([Type.Integer(), Type.Null()]),
     photoCount: Type.Integer(),
     coverScore: Type.Number(),
     milestone: Type.String({ description: '里程碑枚举：firstPlace / firstScene / anniversary / 空' }),

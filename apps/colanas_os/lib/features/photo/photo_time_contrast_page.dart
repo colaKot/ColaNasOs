@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
-import 'package:nas_media/nas_media.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/session.dart';
+import 'photo_adaptive_image.dart';
 import 'photo_viewer_page.dart';
 
 /// 时光对照：同一个「月-日」在不同年份的照片并排看。
@@ -26,10 +26,6 @@ class _PhotoTimeContrastPageState extends State<PhotoTimeContrastPage> {
   String? _error;
   List<PhotoOnThisDayYear> _years = const [];
   PhotoTimeContrastResponse? _contrast;
-
-  MediaUrls get _media => MediaUrls(ApiSession.instance.baseUrl);
-
-  String _thumb(String path, {int size = 320}) => _media.thumbnail(path, size: size);
 
   String _faceUrl(String id, {int size = 72}) =>
       '${ApiSession.instance.baseUrl}/api/v1/photo/face/image'
@@ -355,28 +351,25 @@ class _PhotoTimeContrastPageState extends State<PhotoTimeContrastPage> {
       children: [
         GestureDetector(
           onTap: () => _openSide(side),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  NasCoverImage(
-                    url: _thumb(side.item.path, size: 640),
-                    headers: ApiSession.instance.authHeaders,
-                    cacheWidth: 640,
-                    icon: Icons.broken_image_outlined,
-                  ),
-                  if (side.faces.isNotEmpty)
-                    Positioned(
-                      left: 6,
-                      bottom: 6,
-                      child: _faceStrip(side),
-                    ),
-                ],
+          // 不再写死 1:1 + cover：按照片原始宽高比自适应，整张完整显示。
+          child: Stack(
+            children: [
+              PhotoAdaptiveImage(
+                path: side.item.path,
+                width: side.item.width?.toDouble(),
+                height: side.item.height?.toDouble(),
+                minHeight: 180,
+                maxHeight: 420,
+                thumbSize: 640,
+                borderRadius: NasTokens.radiusSm,
               ),
-            ),
+              if (side.faces.isNotEmpty)
+                Positioned(
+                  left: 6,
+                  bottom: 6,
+                  child: _faceStrip(side),
+                ),
+            ],
           ),
         ),
         const SizedBox(height: 6),
@@ -475,29 +468,51 @@ class _PhotoTimeContrastPageState extends State<PhotoTimeContrastPage> {
           ],
         ),
         const SizedBox(height: 6),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 6,
-            crossAxisSpacing: 3,
-            mainAxisSpacing: 3,
-          ),
-          itemCount: year.items.length > 6 ? 6 : year.items.length,
-          itemBuilder: (context, i) => InkWell(
-            onTap: () => _open(year.items, i, '${year.year}'),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-              child: NasCoverImage(
-                url: _thumb(year.items[i].path),
-                headers: ApiSession.instance.authHeaders,
-                cacheWidth: 320,
-                icon: Icons.broken_image_outlined,
-              ),
-            ),
-          ),
-        ),
+        _yearThumbs(year),
       ],
+    );
+  }
+
+  /// 年份缩略图：横屏照片优先展示，每张按原始宽高比完整显示（不再统一裁成方块）。
+  Widget _yearThumbs(PhotoOnThisDayYear year) {
+    final wide = <int>[];
+    final tall = <int>[];
+    for (var i = 0; i < year.items.length; i++) {
+      final it = year.items[i];
+      final isWide = (it.width ?? 0) > 0 && (it.height ?? 0) > 0 && it.width! > it.height!;
+      (isWide ? wide : tall).add(i);
+    }
+    final shown = [...wide, ...tall].take(6).toList();
+    if (shown.isEmpty) return const SizedBox.shrink();
+
+    return LayoutBuilder(
+      builder: (context, c) {
+        const cols = 6;
+        const gap = 3.0;
+        final tileW = ((c.maxWidth - gap * (cols - 1)) / cols)
+            .clamp(40.0, 320.0)
+            .toDouble();
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final i in shown)
+              SizedBox(
+                width: tileW,
+                child: PhotoAdaptiveImage(
+                  path: year.items[i].path,
+                  width: year.items[i].width?.toDouble(),
+                  height: year.items[i].height?.toDouble(),
+                  minHeight: tileW * 0.6,
+                  maxHeight: tileW * 1.8,
+                  thumbSize: 320,
+                  borderRadius: NasTokens.radiusSm,
+                  onTap: () => _open(year.items, i, '${year.year}'),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

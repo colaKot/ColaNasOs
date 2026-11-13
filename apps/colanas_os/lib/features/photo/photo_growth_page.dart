@@ -5,6 +5,7 @@ import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/settings_store.dart';
 import '../../core/session.dart';
+import 'photo_adaptive_image.dart';
 import 'photo_viewer_page.dart';
 
 /// 成长轨迹（相册 > 记忆）。
@@ -39,9 +40,6 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
   final ScrollController _scroll = ScrollController();
 
   ApiClient get _client => ApiSession.instance.client;
-  MediaUrls get _media => MediaUrls(ApiSession.instance.baseUrl);
-
-  String _thumb(String path, {int size = 512}) => _media.thumbnail(path, size: size);
 
   String _faceUrl(String id, {int size = 96}) =>
       '${ApiSession.instance.baseUrl}/api/v1/photo/face/image'
@@ -543,44 +541,37 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
 
   Widget _stageImages(PhotoGrowthStage s) {
     final secondary = s.secondaryPath;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: SizedBox(
-        height: 210,
-        child: Row(
-          children: [
-            Expanded(
-              flex: secondary == null ? 2 : 3,
-              child: _coverTile(s.coverPath, onTap: () => _openStage(s), onLongPress: () => _repin(s)),
-            ),
-            if (secondary != null) ...[
-              const SizedBox(width: 6),
-              Expanded(
-                flex: 2,
-                child: _coverTile(secondary, onTap: () => _openStage(s)),
-              ),
-            ],
-          ],
+    // 服务端选片已保证：有横屏就只出一张横图（跨整行、完整显示）；
+    // 实在没有横屏时凑两张竖图并排，避免单张竖图把卡片撑得又高又空。
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: PhotoAdaptiveImage(
+            path: s.coverPath,
+            width: s.coverWidth?.toDouble(),
+            height: s.coverHeight?.toDouble(),
+            minHeight: 160,
+            maxHeight: 420,
+            onTap: () => _openStage(s),
+            onLongPress: () => _repin(s),
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _coverTile(String path, {required VoidCallback onTap, VoidCallback? onLongPress}) {
-    if (path.isEmpty) {
-      return Container(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: const Center(child: Icon(Icons.image_not_supported_outlined)),
-      );
-    }
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: NasCoverImage(
-        url: _thumb(path),
-        headers: ApiSession.instance.authHeaders,
-        cacheWidth: 640,
-      ),
+        if (secondary != null) ...[
+          const SizedBox(width: 6),
+          Expanded(
+            child: PhotoAdaptiveImage(
+              path: secondary,
+              width: s.secondaryWidth?.toDouble(),
+              height: s.secondaryHeight?.toDouble(),
+              minHeight: 160,
+              maxHeight: 420,
+              thumbSize: 512,
+              onTap: () => _openStage(s),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -787,8 +778,6 @@ class _GrowthRepinDialogState extends State<GrowthRepinDialog> {
   List<PhotoGrowthCandidate> _items = const [];
   bool _busy = false;
 
-  MediaUrls get _media => MediaUrls(ApiSession.instance.baseUrl);
-
   @override
   void initState() {
     super.initState();
@@ -854,25 +843,23 @@ class _GrowthRepinDialogState extends State<GrowthRepinDialog> {
                             final c = _items[i];
                             return GestureDetector(
                               onTap: () => _pick(c.assetId),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Stack(
-                                  children: [
-                                    SizedBox(
-                                      width: 130,
-                                      height: 170,
-                                      child: NasCoverImage(
-                                        url: _media.thumbnail(c.path, size: 320),
-                                        headers: ApiSession.instance.authHeaders,
-                                        cacheWidth: 260,
-                                      ),
+                              child: Stack(
+                                children: [
+                                  SizedBox(
+                                    width: 150,
+                                    child: PhotoAdaptiveImage(
+                                      path: c.path,
+                                      minHeight: 100,
+                                      maxHeight: 170,
+                                      thumbSize: 320,
+                                      borderRadius: 8,
                                     ),
-                                    if (_busy)
-                                      const Positioned.fill(
-                                        child: ColoredBox(color: Colors.black26),
-                                      ),
-                                  ],
-                                ),
+                                  ),
+                                  if (_busy)
+                                    const Positioned.fill(
+                                      child: ColoredBox(color: Colors.black26),
+                                    ),
+                                ],
                               ),
                             );
                           },

@@ -1733,6 +1733,10 @@ export type PhotoGrowthStage = {
   "coverAssetId": string;
   "coverPath": string;
   "secondaryPath": string;
+  "coverWidth": number;
+  "coverHeight": number;
+  "secondaryWidth": number;
+  "secondaryHeight": number;
   "photoCount": number;
   "coverScore": number;
   "milestone": string;

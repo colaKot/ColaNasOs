@@ -123,6 +123,8 @@ interface Scored {
   asset: GrowthAsset;
   score: number;
   grade: number;
+  /** 横屏照片（宽 > 高）：成长轨迹优先用横屏，视觉上比竖图更适合时间轴 */
+  wide: boolean;
   reason: Record<string, unknown>;
 }
 
@@ -307,6 +309,11 @@ function scoreAsset(a: GrowthAsset, labels: Set<string>): Scored {
   const composition = clamp01(1 - Math.abs(ratio - 0.18) / 0.35) * 0.75 + centerBonus * 0.25;
   const richness = clamp01(labels.size / 4);
   const landscape = [...labels].some((l) => OUTDOOR_LABEL.test(l));
+  // photo_items 的宽高老库可能没探测到；人脸检测时的原图尺寸是可靠后备，
+  // 否则这批照片会被一律当成竖图，横屏优先就失效了。
+  const w = a.width > 0 ? a.width : a.imgWidth;
+  const h = a.height > 0 ? a.height : a.imgHeight;
+  const wide = w > 0 && h > 0 && w > h;
   const indoor = [...labels].some((l) => INDOOR_LABEL.test(l));
   const background = landscape ? 1 : indoor ? 0.35 : labels.size >= 2 ? 0.6 : 0.2;
   const penalty = (ratio < 0.03 ? 0.15 : 0) + (ratio > 0.45 ? 0.1 : 0) + (faceQuality < 0.4 ? 0.1 : 0);
@@ -331,12 +338,14 @@ function scoreAsset(a: GrowthAsset, labels: Set<string>): Scored {
     asset: a,
     score: Number(score.toFixed(4)),
     grade,
+    wide,
     reason: {
       faceQuality: Number(faceQuality.toFixed(3)),
       composition: Number(composition.toFixed(3)),
       sceneRichness: Number(richness.toFixed(3)),
       background: Number(background.toFixed(3)),
       faceAreaRatio: Number(ratio.toFixed(3)),
+      orientation: wide ? 'landscape' : 'portrait',
       labels: [...labels].slice(0, 8),
       grade: grade === 4 ? 'scenePortrait' : grade === 3 ? 'portrait' : grade === 2 ? 'scenery' : 'fallback',
       // 明确标注：没有美学模型 / 人像分割 / CLIP MMR，这是规则降级版
@@ -352,9 +361,15 @@ function pickCover(assets: GrowthAsset[], labelsOf: (a: GrowthAsset) => Set<stri
     if ([...labels].some((l) => BAD_LABEL.test(l))) continue; // 截图 / 文档 / 表情包
     scored.push(scoreAsset(a, labels));
   }
-  scored.sort((x, y) => y.grade - x.grade || y.score - x.score || x.asset.id.localeCompare(y.asset.id));
+  // 横屏优先：时间轴一行一张横图最好看；同一方向内部仍按人+景等级、可解释分排序。
+  // 宽高缺失（老库/视频）按竖图处理，绝不凭空当横屏。
+  scored.sort((x, y) =>
+    Number(y.wide) - Number(x.wide)
+    || y.grade - x.grade
+    || y.score - x.score
+    || x.asset.id.localeCompare(y.asset.id));
 
-  // 连拍去重：同一 pHash 只留最高分的一张；时间差 ≤2s 且同哈希视为同组。
+  // 连拍去重：同一 pHash 只留最高分的一张。
   const seenHash = new Set<string>();
   const unique: Scored[] = [];
   for (const s of scored) {
@@ -364,14 +379,24 @@ function pickCover(assets: GrowthAsset[], labelsOf: (a: GrowthAsset) => Set<stri
     unique.push(s);
   }
   const pool = unique.length > 0 ? unique : scored;
-  const cover = pool[0] ?? null;
-  const secondary = cover
-    ? pool.find((s) =>
-        s.asset.id !== cover.asset.id
-        && s.asset.phash !== cover.asset.phash
-        && Math.abs(s.asset.takenAt - cover.asset.takenAt) > 6 * 3600,
-      )?.asset ?? null
-    : null;
+  const widePool = pool.filter((s) => s.wide);
+  const tallPool = pool.filter((s) => !s.wide);
+  const cover = widePool[0] ?? tallPool[0] ?? null;
+
+  // 排版策略（用户口径）：
+  //   · 有横屏 → 只出一张横图，跨整行完整显示，不再并排把宽图挤窄；
+  //   · 实在没有横屏 → 尽量凑两张竖图并排，避免单张竖图把卡片撑得又高又空。
+  let secondary: GrowthAsset | null = null;
+  if (cover && !cover.wide) {
+    secondary = tallPool.find((s) => {
+      if (s.asset.id === cover.asset.id) return false;
+      // 两边都没算过 pHash 时不能因为「都为空」误判成连拍，
+      // 否则明明有多张竖图也只剩一张。
+      const a = s.asset.phash;
+      const b = cover.asset.phash;
+      return !a || !b || a !== b;
+    })?.asset ?? null;
+  }
   return {
     cover,
     secondary,
@@ -380,7 +405,12 @@ function pickCover(assets: GrowthAsset[], labelsOf: (a: GrowthAsset) => Set<stri
   };
 }
 
-function stageJson(r: GrowthStageRow) {
+interface StageSize {
+  width: number | null;
+  height: number | null;
+}
+
+function stageJson(r: GrowthStageRow, cover?: StageSize | null, secondary?: StageSize | null) {
   return {
     id: r.id,
     seq: num(r.seq),
@@ -392,6 +422,11 @@ function stageJson(r: GrowthStageRow) {
     coverAssetId: r.cover_asset_id ?? null,
     coverPath: String(r.cover_path || ''),
     secondaryPath: r.secondary_path ? String(r.secondary_path) : null,
+    // 原始宽高给前端按真实比例自适应（竖图不再被固定高度裁成横条）
+    coverWidth: cover?.width ?? null,
+    coverHeight: cover?.height ?? null,
+    secondaryWidth: secondary?.width ?? null,
+    secondaryHeight: secondary?.height ?? null,
     photoCount: num(r.photo_count),
     coverScore: num(r.cover_score),
     milestone: String(r.milestone || ''),
@@ -404,6 +439,48 @@ function stageJson(r: GrowthStageRow) {
 
 export function growthStageJson(r: GrowthStageRow) {
   return stageJson(r);
+}
+
+/** 批量取本页封面的原始宽高（cover 按 id、次图按 rel_path），一页最多 100 条。 */
+async function loadStageSizes(k: KernelApi, rows: GrowthStageRow[]) {
+  const byId = new Map<string, StageSize>();
+  const byPath = new Map<string, StageSize>();
+  const ids = [...new Set(rows.map((r) => r.cover_asset_id).filter((x): x is string => !!x))];
+  const paths = [...new Set(rows.map((r) => r.secondary_path).filter((p) => !!p))];
+
+  if (ids.length > 0) {
+    const res = (
+      await sql<{ id: string; width: number | null; height: number | null }>`
+        select i.id,
+               coalesce(i.width,
+                 (select max(f.img_width) from photo_faces f where f.photo_id = i.id)) as width,
+               coalesce(i.height,
+                 (select max(f.img_height) from photo_faces f where f.photo_id = i.id)) as height
+          from photo_items i
+         where i.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+      `.execute(k.db)
+    ).rows;
+    for (const r of res) byId.set(r.id, { width: r.width ?? null, height: r.height ?? null });
+  }
+  if (paths.length > 0) {
+    const res = (
+      await sql<{ rel_path: string; width: number | null; height: number | null }>`
+        select i.rel_path,
+               coalesce(i.width,
+                 (select max(f.img_width) from photo_faces f where f.photo_id = i.id)) as width,
+               coalesce(i.height,
+                 (select max(f.img_height) from photo_faces f where f.photo_id = i.id)) as height
+          from photo_items i
+         where i.rel_path in (${sql.join(paths.map((p) => sql`${p}`), sql`, `)})
+      `.execute(k.db)
+    ).rows;
+    for (const r of res) {
+      if (!byPath.has(r.rel_path)) {
+        byPath.set(r.rel_path, { width: r.width ?? null, height: r.height ?? null });
+      }
+    }
+  }
+  return { byId, byPath };
 }
 
 async function trackFingerprint(k: KernelApi, owner: string, personId: string) {
@@ -458,10 +535,19 @@ export async function rebuildTrack(
     const prepared = drafts.map((d, i) => {
       const picked = pickCover(d.assets, labelsOf);
       let cover = picked.cover;
+      let secondary = picked.secondary;
       const pinned = d.assets.find((a) => pins.has(a.id));
       if (pinned) {
         const s = scoreAsset(pinned, labelsOf(pinned));
         cover = { ...s, reason: { ...s.reason, manualPin: true } };
+        // 人工换封面也要遵守同一套排版口径：横图单张、竖图尽量再配一张竖图。
+        secondary = s.wide
+          ? null
+          : picked.candidates.find((c) =>
+              c.asset.id !== pinned.id
+              && !c.wide
+              && (!pinned.phash || !c.asset.phash || c.asset.phash !== pinned.phash),
+            )?.asset ?? null;
       }
       const hasScenery = d.assets.some((a) => [...labelsOf(a)].some((l) => OUTDOOR_LABEL.test(l)));
       const firstPlace = d.placeKey !== 'unknown' && !seenPlaces.has(d.placeKey);
@@ -474,6 +560,7 @@ export async function rebuildTrack(
         stage: d,
         pick: picked,
         cover,
+        secondary,
         milestone,
         hidden: hiddenKeys.has(`${d.placeKey}|${Math.floor(d.startAt / (30 * DAY))}`) ? 1 : 0,
         seq: i + 1,
@@ -506,7 +593,7 @@ export async function rebuildTrack(
             (${id}, ${owner}, ${personId}, ${granularity}, ${p.seq},
              ${p.stage.startAt}, ${p.stage.endAt}, ${p.stage.placeKey}, ${p.stage.placeName},
              ${p.stage.spanKind}, ${p.stage.placeName}, ${''},
-             ${cover?.asset.id ?? null}, ${cover?.asset.path ?? ''}, ${p.pick.secondary?.path ?? ''},
+             ${cover?.asset.id ?? null}, ${cover?.asset.path ?? ''}, ${p.secondary?.path ?? ''},
              ${cover?.score ?? 0}, ${reason}, ${p.stage.assets.length},
              ${p.milestone}, ${p.pick.hint}, ${p.cover && pins.has(p.cover.asset.id) ? 1 : 0},
              ${p.hidden}, ${version}, ${ts}, ${ts})
@@ -540,13 +627,28 @@ export async function rebuildTrack(
   return run;
 }
 
-/** 列表请求前调一次：照片数 / 最新时间没变就直接读预计算结果。 */
+/**
+ * 列表请求前调一次：照片数 / 最新时间没变就直接读预计算结果。
+ *
+ * 进程启动后每条 track 的首次访问**强制重算一次**：分段 / 选片策略改了
+ * （例如改成「横屏优先」）时 fingerprint 没变，光靠增量判断用户会一直看到
+ * 旧策略选出的封面。dev.bat 的 watch-kernel 改代码就重启，正好触发重算；
+ * 正式服务端重启也只是多花一次按人重算，人工指定的封面仍会保留。
+ */
+const warmedTracks = new Set<string>();
+
 export async function ensureBuilt(
   k: KernelApi,
   owner: string,
   personId: string,
   granularity: GrowthGranularity,
 ): Promise<boolean> {
+  const key = `${owner}|${personId}|${granularity}`;
+  if (!warmedTracks.has(key)) {
+    await rebuildTrack(k, owner, personId, granularity);
+    warmedTracks.add(key);
+    return true;
+  }
   const state = (
     await sql<{ asset_count: number; last_asset_at: number; version: number }>`
       select asset_count, last_asset_at, version from photo_growth_track_state
@@ -622,6 +724,7 @@ export async function listStages(
   ).rows;
   const page = rows.slice(0, limit);
   const last = page.length > 0 ? page[page.length - 1] : null;
+  const sizes = await loadStageSizes(k, page);
   const agg = (
     await sql<{
       stage_count: number;
@@ -644,7 +747,11 @@ export async function listStages(
     await sql<{ name: string | null }>`select name from photo_face_clusters where id = ${personId}`.execute(k.db)
   ).rows[0];
   return {
-    items: page.map(stageJson),
+    items: page.map((r) => stageJson(
+      r,
+      sizes.byId.get(r.cover_asset_id ?? ''),
+      sizes.byPath.get(r.secondary_path),
+    )),
     nextCursor: rows.length > limit && last ? encodeCursor(num(last.start_at), last.id) : null,
     summary: {
       personId,
