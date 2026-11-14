@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>成长轨迹 · 视觉方案示意（A/B/C/D）</title>
+<style>
+  :root{
+    --base:#0A0E17;
+    --base-2:#0E1218;
+    --panel:rgba(255,255,255,.08);
+    --panel-2:rgba(255,255,255,.055);
+    --panel-3:rgba(255,255,255,.03);
+    --border:rgba(255,255,255,.12);
+    --border-2:rgba(255,255,255,.07);
+    --text:#F5F7FA;
+    --text-2:#9BA6B2;
+    --primary:#2F6FED;
+    --violet:#8B5CF6;
+    --cyan:#06B6D4;
+    --warning:#F59E0B;
+    --danger:#EF4444;
+    --success:#22C55E;
+    --overlay:rgba(0,0,0,.54);
+    --r4:4px; --r8:8px; --r16:16px; --r18:18px;
+    --s1:4px; --s2:8px; --s3:16px; --s4:24px; --s5:32px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--base);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+    font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  }
+  .aurora{
+    position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(1100px 820px at 0% -10%, rgba(47,111,237,.46), transparent 62%),
+      radial-gradient(900px 720px at 100% -6%, rgba(139,92,246,.32), transparent 60%),
+      radial-gradient(1100px 760px at 18% 108%, rgba(6,182,212,.22), transparent 64%);
+  }
+  .page{position:relative;z-index:1;max-width:1480px;margin:0 auto;padding:0 40px 80px}
+  @media (max-width:820px){.page{padding:0 16px 60px}}
+
+  /* ---------- 页头 ---------- */
+  .kicker{font-size:12px;letter-spacing:2px;color:var(--text-2);margin-top:48px}
+  h1{font-size:32px;line-height:1.25;margin:10px 0 12px;font-weight:650}
+  .lede{max-width:860px;color:var(--text-2);font-size:14px;line-height:1.85;margin:0}
+  .lede b{color:var(--text);font-weight:600}
+  .meta-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+  .pill{
+    font-size:12px;color:var(--text-2);padding:5px 10px;border-radius:999px;
+    border:1px solid var(--border);background:var(--panel-2)
+  }
+  .pill b{color:var(--text);font-weight:600}
+
+  /* ---------- 吸顶导航 ---------- */
+  .subnav{
+    position:sticky;top:0;z-index:20;display:flex;gap:6px;flex-wrap:wrap;
+    margin:28px 0 8px;padding:10px 0;
+    background:linear-gradient(to bottom, rgba(10,14,23,.92) 60%, rgba(10,14,23,0));
+    backdrop-filter:blur(14px);
+  }
+  .subnav a{
+    font-size:12px;color:var(--text-2);text-decoration:none;padding:6px 11px;
+    border-radius:999px;border:1px solid transparent;white-space:nowrap
+  }
+  .subnav a:hover{color:var(--text);border-color:var(--border);background:var(--panel-2)}
+  .subnav a.active{color:#fff;border-color:rgba(47,111,237,.55);background:rgba(47,111,237,.22)}
+
+  /* ---------- 通用板块 ---------- */
+  section{padding-top:46px}
+  .sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:18px}
+  .sec-head h2{font-size:24px;margin:0;font-weight:640;letter-spacing:.2px}
+  .sec-head p{margin:6px 0 0;color:var(--text-2);font-size:13px;max-width:860px}
+  .sec-no{font-size:12px;letter-spacing:2px;color:var(--text-2)}
+
+  .panel{
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--r18);
+    backdrop-filter:blur(18px);
+  }
+  .text-2{color:var(--text-2)}
+
+  /* ---------- 现状诊断 ---------- */
+  .diag-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:20px;align-items:start}
+  @media (max-width:1080px){.diag-grid{grid-template-columns:1fr}}
+  .diag-list{list-style:none;margin:0;padding:4px 0}
+  .diag-list li{display:flex;gap:12px;padding:11px 0;border-bottom:1px dashed var(--border-2)}
+  .diag-list li:last-child{border-bottom:none}
+  .diag-no{
+    flex:0 0 22px;height:22px;border-radius:50%;display:grid;place-items:center;
+    font-size:11px;color:var(--warning);border:1px solid rgba(245,158,11,.45);
+    background:rgba(245,158,11,.10);margin-top:1px
+  }
+  .diag-list b{display:block;font-size:13px;font-weight:600;margin-bottom:2px}
+  .diag-list span{font-size:12.5px;color:var(--text-2);line-height:1.7}
+
+  /* ---------- 方案骨架 ---------- */
+  .scheme{margin-top:54px;scroll-margin-top:64px}
+  .scheme-head{display:flex;align-items:flex-start;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+  .badge{
+    flex:0 0 44px;height:44px;border-radius:14px;display:grid;place-items:center;
+    font-size:20px;font-weight:700;color:#fff;
+    background:linear-gradient(145deg, rgba(47,111,237,.95), rgba(139,92,246,.85));
+    box-shadow:0 10px 26px rgba(47,111,237,.30)
+  }
+  .scheme-head h2{font-size:24px;margin:0 0 6px;font-weight:640}
+  .one-liner{margin:0;color:var(--text-2);font-size:13.5px;max-width:900px;line-height:1.7}
+  .tag{
+    margin-left:auto;font-size:11.5px;color:var(--text-2);border:1px solid var(--border);
+    background:var(--panel-2);border-radius:999px;padding:6px 12px;white-space:nowrap
+  }
+  @media (max-width:640px){.tag{margin-left:0}}
+
+  /* ---------- 示意图画框（1280 逻辑宽，自动缩放） ---------- */
+  .mock-frame{
+    position:relative;width:100%;overflow:hidden;border-radius:20px;
+    border:1px solid var(--border);background:var(--base-2);
+    box-shadow:0 26px 70px rgba(0,0,0,.45);
+  }
+  .mock{
+    width:1280px;transform-origin:top left;position:relative;overflow:hidden;
+    background:var(--base);
+  }
+  .mock .aurora{position:absolute;z-index:0}
+  .mock-shell{position:relative;z-index:1;display:flex;height:100%}
+
+  /* 左侧导航 */
+  .m-rail{
+    flex:0 0 132px;padding:18px 10px;border-right:1px solid var(--border-2);
+    background:rgba(255,255,255,.025);display:flex;flex-direction:column;gap:4px
+  }
+  .m-brand{display:flex;align-items:center;gap:8px;padding:0 8px 16px;font-size:13px;font-weight:600}
+  .m-brand i{
+    width:22px;height:22px;border-radius:7px;display:block;
+    background:linear-gradient(145deg,var(--primary),var(--violet))
+  }
+  .m-nav{
+    display:flex;align-items:center;gap:8px;height:34px;padding:0 9px;border-radius:9px;
+    font-size:12px;color:var(--text-2)
+  }
+  .m-nav i{width:13px;height:13px;border-radius:4px;background:rgba(255,255,255,.16);display:block}
+  .m-nav.active{color:#fff;background:rgba(47,111,237,.22);border:1px solid rgba(47,111,237,.38)}
+  .m-nav.active i{background:var(--primary)}
+  .m-main{flex:1;min-width:0;padding:16px 22px 0;display:flex;flex-direction:column}
+  .m-crumb{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text-2);margin-bottom:12px}
+  .m-crumb b{color:var(--text);font-weight:600}
+  .m-crumb .dot{width:3px;height:3px;border-radius:50%;background:var(--text-2);opacity:.6}
+
+  /* 人物条 */
+  .m-people{display:flex;align-items:center;gap:16px;padding:2px 0 12px;border-bottom:1px solid var(--border-2)}
+  .person{display:flex;flex-direction:column;align-items:center;gap:4px;width:62px}
+  .ava{
+    width:48px;height:48px;border-radius:50%;display:grid;place-items:center;
+    font-size:15px;font-weight:600;color:#fff;
+    background:linear-gradient(150deg,#3b5b86,#7c5a86);
+    border:2px solid transparent
+  }
+  .person.on .ava{border-color:var(--primary);box-shadow:0 0 0 3px rgba(47,111,237,.22)}
+  .person span.n{font-size:10.5px;color:var(--text);max-width:62px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .person span.c{font-size:9.5px;color:var(--text-2)}
+  .person.more .ava{background:rgba(255,255,255,.10);border:1px solid var(--border);color:var(--text-2);font-size:18px}
+
+  /* 汇总与控制 */
+  .m-summary{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:12px 0 10px}
+  .m-summary p{margin:0;font-size:12px;color:var(--text-2)}
+  .m-summary p b{color:var(--text);font-weight:600}
+  .m-controls{display:flex;align-items:center;gap:8px}
+  .m-btn{
+    display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:8px;
+    border:1px solid var(--border);font-size:11.5px;color:var(--text);
+    background:rgba(255,255,255,.04)
+  }
+  .m-btn.accent{border-color:rgba(47,111,237,.5);background:rgba(47,111,237,.18)}
+  .m-btn .cv{width:7px;height:7px;border-right:1px solid currentColor;border-bottom:1px solid currentColor;transform:rotate(45deg);opacity:.7}
+  .m-btn .spark{color:var(--cyan)}
+
+  /* 照片占位（渐变模拟，无外链） */
+  .ph{
+    position:relative;overflow:hidden;border-radius:10px;background:#18202b;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)
+  }
+  .ph::before{content:"";position:absolute;inset:0;background:var(--img)}
+  .ph::after{
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(58% 42% at 74% 24%, rgba(255,244,214,.45), transparent 72%),
+      linear-gradient(to top, rgba(0,0,0,.42), rgba(0,0,0,0) 58%);
+  }
+  .ph .subj{
+    position:absolute;left:50%;bottom:-6%;width:32%;height:60%;transform:translateX(-50%);
+    border-radius:50% 50% 44% 44%;background:rgba(12,16,22,.30)
+  }
+  .ph.p1{--img:linear-gradient(158deg,#1c4657 0%,#3f7f7a 36%,#c5a468 70%,#ecd6ac 100%)}
+  .ph.p2{--img:linear-gradient(150deg,#243a58 0%,#4d6f9c 40%,#d8b58b 78%,#f0ddc0 100%)}
+  .ph.p3{--img:linear-gradient(160deg,#2c2438 0%,#6a4a6d 38%,#c98b74 76%,#e9c7a4 100%)}
+  .ph.p4{--img:linear-gradient(152deg,#1d3a34 0%,#3f6f57 40%,#9fb46f 76%,#e2d9a8 100%)}
+  .ph.p5{--img:linear-gradient(156deg,#1b2b46 0%,#345a7c 42%,#7fa6b5 78%,#dfe6df 100%)}
+  .ph.p6{--img:linear-gradient(150deg,#3a2630 0%,#7b4a49 42%,#c08363 78%,#f0d3b0 100%)}
+  .ph.p7{--img:linear-gradient(154deg,#20283a 0%,#3d4d63 44%,#8a9a92 78%,#d9dbcc 100%)}
+  .ph.p8{--img:linear-gradient(150deg,#2a2a3e 0%,#4b4a72 44%,#a48ba6 78%,#e8d6dd 100%)}
+  .ph .cap{
+    position:absolute;left:8px;right:8px;bottom:7px;z-index:2;font-size:10px;color:rgba(255,255,255,.92);
+    text-shadow:0 1px 3px rgba(0,0,0,.55);display:flex;justify-content:space-between;gap:6px
+  }
+  .ph .badge-tl{
+    position:absolute;left:8px;top:8px;z-index:2;font-size:9.5px;color:#fff;
+    background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.22);border-radius:5px;padding:2px 5px
+  }
+
+  /* 时间轴（方案 A） */
+  .tl{position:relative;padding-left:22px;margin-top:2px}
+  .tl::before{content:"";position:absolute;left:5px;top:8px;bottom:0;width:2px;background:rgba(255,255,255,.10)}
+  .tl-band{position:relative;margin-bottom:14px}
+  .tl-band::before{
+    content:"";position:absolute;left:-22px;top:6px;width:11px;height:11px;border-radius:50%;
+    background:var(--border);border:2px solid var(--base);box-shadow:0 0 0 1px rgba(255,255,255,.06)
+  }
+  .tl-band.hero::before{background:var(--primary);box-shadow:0 0 0 3px rgba(47,111,237,.20)}
+  .band-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:7px}
+  .band-date{font-size:17px;font-weight:650;letter-spacing:.3px}
+  .band-place{font-size:13px;color:var(--text)}
+  .band-count{font-size:11px;color:var(--text-2);margin-left:auto}
+  .chip{
+    font-size:10.5px;color:var(--text-2);border:1px solid var(--border);
+    border-radius:6px;padding:1px 6px;background:rgba(255,255,255,.03)
+  }
+  .chip.accent{color:#dbe6ff;border-color:rgba(47,111,237,.5);background:rgba(47,111,237,.20)}
+  .chip.warn{color:#f6d59a;border-color:rgba(245,158,11,.42);background:rgba(245,158,11,.12)}
+  .grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .grid6 .ph{height:238px}
+  .band-foot{display:flex;justify-content:space-between;font-size:10.5px;color:var(--text-2);padding-top:6px}
+  .band-foot .link{color:#9dbcf5}
+
+  /* 紧凑降级行 */
+  .compact-row{display:flex;gap:10px;align-items:center;padding:7px;border-radius:12px;background:var(--panel-2);border:1px solid var(--border-2)}
+  .compact-row .ph{width:96px;height:64px;flex:0 0 96px;border-radius:8px}
+  .compact-meta{font-size:11px;color:var(--text-2);line-height:1.65}
+  .compact-meta b{color:var(--text);font-size:12.5px;font-weight:600;display:block;margin-bottom:2px}
+
+  /* 年份分区（方案 B） */
+  .year-head{display:flex;align-items:flex-end;gap:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+  .year-head .y-label{font-size:11.5px;letter-spacing:2px;color:var(--text-2);margin-bottom:6px}
+  .year-head .y-num{font-size:34px;line-height:1;font-weight:680;letter-spacing:-.5px}
+  .year-head .y-stats{margin-left:auto;display:flex;gap:16px;font-size:11px;color:var(--text-2);text-align:right}
+  .year-head .y-stats b{display:block;color:var(--text);font-size:14px;font-weight:600}
+  .b-hero{position:relative;margin-top:12px;height:236px;border-radius:14px;overflow:hidden}
+  .b-hero .ph{position:absolute;inset:0;height:100%;border-radius:14px}
+  .b-hero .ov{
+    position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;justify-content:flex-end;
+    padding:16px 18px;background:linear-gradient(to top, rgba(6,9,14,.80), rgba(6,9,14,.10) 62%)
+  }
+  .b-hero .ov .t{font-size:19px;font-weight:650;margin-bottom:3px}
+  .b-hero .ov .s{font-size:11.5px;color:rgba(255,255,255,.78)}
+  .b-hero .ms{position:absolute;right:14px;top:14px;z-index:4}
+  .b-duo{display:grid;grid-template-columns:1fr 1fr 1.06fr;gap:10px;margin-top:10px}
+  .b-duo .ph{height:252px}
+  .b-quote{
+    border-radius:14px;border:1px solid rgba(47,111,237,.20);background:rgba(47,111,237,.09);
+    padding:16px 15px;display:flex;flex-direction:column
+  }
+  .b-quote .qk{font-size:10px;letter-spacing:1.6px;color:rgba(157,188,245,.9)}
+  .b-quote .q{font-size:13px;line-height:1.85;margin:10px 0 0;color:var(--text)}
+  .b-quote .qf{margin-top:auto;font-size:10.5px;color:var(--text-2)}
+
+  /* 杂志拼贴（方案 C） */
+  .collage{display:grid;grid-template-columns:repeat(12,1fr);grid-auto-rows:84px;gap:10px;margin-top:4px}
+  .collage .ph{height:100%;border-radius:12px}
+  .c-tile{position:relative;overflow:hidden;border-radius:12px}
+  .c-tile .ph{position:absolute;inset:0;height:100%;border-radius:12px}
+  .c-year{
+    border-radius:12px;border:1px solid var(--border);background:var(--panel-2);
+    display:flex;flex-direction:column;justify-content:center;padding:12px 14px
+  }
+  .c-year .yy{font-size:30px;font-weight:700;line-height:1;letter-spacing:-.5px}
+  .c-year .yl{font-size:10.5px;color:var(--text-2);margin-top:5px}
+  .c-quote{
+    border-radius:12px;border:1px solid rgba(139,92,246,.22);background:rgba(139,92,246,.10);
+    padding:13px 14px;display:flex;flex-direction:column;justify-content:center
+  }
+  .c-quote .q{font-size:12.5px;line-height:1.8;margin:0}
+  .c-quote .m{font-size:10.5px;color:var(--text-2);margin-top:8px}
+  .c-label{
+    position:absolute;z-index:4;left:11px;bottom:10px;font-size:11px;color:#fff;
+    text-shadow:0 1px 4px rgba(0,0,0,.6)
+  }
+  .c-label b{display:block;font-size:14px;font-weight:650;margin-bottom:1px}
+
+  /* 横向时光轴（方案 D） */
+  .d-year{margin-bottom:16px}
+  .d-yearhead{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+  .d-yearhead .n{font-size:22px;font-weight:660}
+  .d-yearhead .l{font-size:10.5px;color:var(--text-2)}
+  .d-yearhead .r{margin-left:auto;font-size:10.5px;color:var(--text-2)}
+  .d-track{display:flex;gap:10px;overflow:hidden}
+  .d-card{flex:0 0 258px;border-radius:14px;overflow:hidden;border:1px solid var(--border-2);background:var(--panel-2)}
+  .d-card .ph{height:145px;border-radius:0}
+  .d-card .body{padding:8px 10px 10px}
+  .d-card .l1{font-size:12px;font-weight:600;display:flex;justify-content:space-between;gap:6px}
+  .d-card .l2{font-size:10.5px;color:var(--text-2);margin-top:2px}
+  .d-more{
+    flex:0 0 150px;border-radius:14px;border:1px dashed var(--border);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+    color:var(--text-2);font-size:11px;background:rgba(255,255,255,.02)
+  }
+  .d-more b{font-size:19px;color:var(--text);font-weight:650}
+  .d-poem{
+    flex:0 0 230px;border-radius:14px;border:1px solid rgba(6,182,212,.22);
+    background:rgba(6,182,212,.08);padding:13px 14px;display:flex;flex-direction:column;justify-content:center
+  }
+  .d-poem p{margin:0;font-size:12px;line-height:1.8}
+  .d-poem .f{font-size:10px;color:var(--text-2);margin-top:7px}
+  .d-hint{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--text-2);margin-top:6px}
+  .d-hint .bar{height:3px;width:74px;border-radius:2px;background:linear-gradient(to right,var(--primary),rgba(47,111,237,.15))}
+
+  /* 现状复刻 */
+  .cur-card{
+    margin-top:2px;padding:12px;border-radius:14px;background:var(--panel);
+    border:1px solid rgba(255,255,255,.09);position:relative
+  }
+  .cur-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:9px}
+  .cur-head .d{font-size:12px;font-weight:600}
+  .cur-body{display:flex;gap:14px;align-items:flex-start}
+  .letterbox{
+    flex:1;min-width:0;height:300px;border-radius:10px;background:#0c1118;
+    display:flex;justify-content:center;border:1px dashed rgba(245,158,11,.45);position:relative
+  }
+  .letterbox .ph{height:100%;width:41%;border-radius:10px}
+  .cur-story{
+    flex:0 0 210px;height:150px;border-radius:12px;background:rgba(47,111,237,.07);
+    border:1px solid rgba(47,111,237,.16);padding:14px;font-size:12px;color:var(--text-2);line-height:1.8
+  }
+  .cur-story .y{font-size:10px;letter-spacing:1.4px;color:rgba(157,188,245,.85);margin-bottom:8px}
+  .note-mark{
+    position:absolute;z-index:6;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+    font-size:10.5px;color:var(--warning);border:1px solid rgba(245,158,11,.65);
+    background:rgba(16,20,24,.92)
+  }
+  .cur-foot{display:flex;gap:10px;font-size:10px;color:var(--text-2);margin-top:8px}
+
+  /* 方案说明区 */
+  .notes{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px}
+  @media (max-width:900px){.notes{grid-template-columns:1fr}}
+  .note{
+    display:flex;gap:10px;padding:13px 14px;border-radius:14px;
+    background:var(--panel-2);border:1px solid var(--border-2)
+  }
+  .note .k{
+    flex:0 0 62px;font-size:11px;color:var(--text-2);letter-spacing:.5px;padding-top:1px
+  }
+  .note .v{font-size:12.5px;line-height:1.75;color:var(--text)}
+  .note .v em{font-style:normal;color:#9dbcf5}
+
+  .pc{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  @media (max-width:820px){.pc{grid-template-columns:1fr}}
+  .pc > div{padding:14px 16px;border-radius:14px;background:var(--panel-2);border:1px solid var(--border-2)}
+  .pc h4{margin:0 0 8px;font-size:12px;letter-spacing:1px;color:var(--text-2);font-weight:600}
+  .pc ul{margin:0;padding-left:16px}
+  .pc li{font-size:12.5px;line-height:1.8;color:var(--text);margin-bottom:2px}
+  .pros{border-left:2px solid rgba(34,197,94,.55)!important}
+  .cons{border-left:2px solid rgba(245,158,11,.55)!important}
+
+  /* 对比表 */
+  .table-wrap{overflow-x:auto;border-radius:16px;border:1px solid var(--border);background:var(--panel-2)}
+  table{width:100%;border-collapse:collapse;min-width:860px}
+  th,td{padding:12px 14px;text-align:left;font-size:12.5px;border-bottom:1px solid var(--border-2);vertical-align:top}
+  thead th{font-size:11px;letter-spacing:1px;color:var(--text-2);font-weight:600;background:rgba(255,255,255,.03)}
+  tbody tr:last-child td{border-bottom:none}
+  td b{font-weight:600}
+  .tag-mini{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:5px;border:1px solid var(--border);color:var(--text-2)}
+  .tag-mini.hi{color:#dbe6ff;border-color:rgba(47,111,237,.5);background:rgba(47,111,237,.18)}
+  .tag-mini.warn{color:#f6d59a;border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.10)}
+
+  /* Token / 数据说明 */
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media (max-width:980px){.two-col{grid-template-columns:1fr}}
+  .info-card{padding:16px 18px;border-radius:16px;background:var(--panel-2);border:1px solid var(--border-2)}
+  .info-card h3{margin:0 0 10px;font-size:13px;font-weight:600}
+  .kv{display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:7px 0;border-bottom:1px dashed var(--border-2)}
+  .kv:last-child{border-bottom:none}
+  .kv span{color:var(--text-2)}
+  .kv code{font-family:"Cascadia Code",Consolas,monospace;font-size:11px;color:#cfe0ff}
+  .swatches{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px}
+  .sw{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--text-2)}
+  .sw i{width:18px;height:18px;border-radius:6px;border:1px solid var(--border);display:block}
+  .warn-list{list-style:none;margin:0;padding:0}
+  .warn-list li{position:relative;padding:8px 0 8px 18px;font-size:12.5px;line-height:1.75;border-bottom:1px dashed var(--border-2);color:var(--text)}
+  .warn-list li:last-child{border-bottom:none}
+  .warn-list li::before{
+    content:"";position:absolute;left:0;top:15px;width:6px;height:6px;border-radius:50%;
+    background:var(--warning);box-shadow:0 0 0 3px rgba(245,158,11,.12)
+  }
+  .warn-list li b{font-weight:600}
+  .warn-list li span{color:var(--text-2)}
+
+  footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--border-2);font-size:11.5px;color:var(--text-2);line-height:1.9}
+  .anchor{scroll-margin-top:72px}
+</style>
+</head>
+<body>
+<div class="aurora"></div>
+<div class="page">
+
+  <header>
+    <div class="kicker">COLAnasOS · 相册 › 记忆 › 成长轨迹</div>
+    <h1>成长轨迹 · 四个视觉方案</h1>
+    <p class="lede">
+      本轮只做示意图，不改业务代码。四个方案都基于现有数据结构：<b>人物 → 阶段（地点 × 时间窗）→ 每段 1 张封面 + 0–2 张补充图</b>，
+      页面数据来自 <b>photoGrowthPersons / photoGrowthItems / photoGrowthStagePhotos</b>。
+      示意图里的数值为示例（结构真实、数字示意），占位图全部用渐变模拟，离线可打开。
+    </p>
+    <div class="meta-row">
+      <span class="pill">默认配色 <b>静谧蓝 #2F6FED</b></span>
+      <span class="pill">风格 <b>极光玻璃</b></span>
+      <span class="pill">底 <b>#0A0E17</b></span>
+      <span class="pill">面板 <b>rgba(255,255,255,.08)</b></span>
+      <span class="pill">圆角 <b>18</b></span>
+      <span class="pill">字号 <b>32 / 24 / 18 / 14 / 12 / 11</b></span>
+    </div>
+  </header>
+
+  <nav class="subnav" id="subnav">
+    <a href="#diagnosis" class="active">现状诊断</a>
+    <a href="#a">A · 密集网格流</a>
+    <a href="#b">B · 年度大图叙事</a>
+    <a href="#c">C · 杂志拼贴</a>
+    <a href="#d">D · 横向时光轴</a>
+    <a href="#compare">横向对比</a>
+    <a href="#data">Token 与数据前提</a>
+  </nav>
+
+  <!-- ============ 现状诊断 ============ -->
+  <section id="diagnosis" class="anchor">
+    <div class="sec-head">
+      <div>
+        <div class="sec-no">00 / 现状</div>
+        <h2>为什么现在看起来「空」</h2>
+        <p>不是照片少，而是每段只让一张图说话：图片用 contain 完整显示、右栏固定 210px、竖图段最多 2 张、整页又没有年/月分组表头。</p>
+      </div>
+    </div>
+
+    <div class="diag-grid">
+      <div class="mock-frame" style="border-radius:16px">
+        <div class="mock" style="height:452px;background:var(--base)">
+          <div class="aurora"></div>
+          <div class="mock-shell">
+            <div class="m-rail">
+              <div class="m-brand"><i></i>相册</div>
+              <div class="m-nav"><i></i>时光流</div>
+              <div class="m-nav"><i></i>相册</div>
+              <div class="m-nav"><i></i>人物</div>
+              <div class="m-nav active"><i></i>成长轨迹</div>
+            </div>
+            <div class="m-main">
+              <div class="m-crumb">记忆 <span class="dot"></span> <b>成长轨迹</b></div>
+              <div class="m-summary">
+                <p>从 <b>2019.04</b> 记录到 <b>2026.09</b> · 走过 <b>9</b> 个地方 · <b>42</b> 个阶段</p>
+                <div class="m-controls"><span class="m-btn">倒序</span><span class="m-btn">自动（按年龄自适应）</span></div>
+              </div>
+              <div class="cur-card">
+                <div class="cur-head">
+                  <span class="d">2026-09-14 — 2026-09-21</span>
+                  <span style="font-size:12px;color:var(--text-2)">杭州 · 西湖</span>
+                  <span class="chip">月度</span>
+                  <span class="chip accent">第一次到这儿</span>
+                </div>
+                <div class="cur-body">
+                  <div class="letterbox">
+                    <div class="ph p2" style="width:41%;height:100%;border-radius:10px"><div class="subj"></div></div>
+                    <div class="note-mark" style="left:26px;top:50%;transform:translateY(-50%)">1</div>
+                    <div class="note-mark" style="right:16px;top:50%;transform:translateY(-50%)">2</div>
+                  </div>
+                  <div class="cur-story">
+                    <div class="y">2026.09</div>
+                    <div>西湖，9 月。阳光落在你脸上，像一封没写完的信。</div>
+                    <div style="margin-top:12px;font-size:10px">86 张照片</div>
+                  </div>
+                </div>
+                <div class="cur-foot">
+                  <span>第 42 段</span><span>86 张照片</span>
+                  <span class="note-mark" style="position:static;width:18px;height:18px">3</span>
+                  <span>无分组表头，相邻卡片只隔 14px</span>
+                  <span class="note-mark" style="position:static;width:18px;height:18px">4</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <ol class="diag-list">
+        <li>
+          <span class="diag-no">1</span>
+          <div>
+            <b>contain 完整显示 + 高度上限 420</b>
+            <span>竖图被压成 420 高、宽度只占可用宽度的一小半，左右两侧全是底色；横图不裁切但高度很矮。卡片越大，空得越多。</span>
+          </div>
+        </li>
+        <li>
+          <span class="diag-no">2</span>
+          <div>
+            <b>右栏固定 210px 只放 3 行诗</b>
+            <span>宽屏时永远留出 210px，诗和计数加起来不到 150px 高，下方近一半区域是纯面板。</span>
+          </div>
+        </li>
+        <li>
+          <span class="diag-no">3</span>
+          <div>
+            <b>补充图上限 2 张，竖图段直接不补</b>
+            <span>有横屏时最多 3 张；竖屏段只并排 2 张。一屏通常只看到 2–3 张照片，密度远低于相册其他页面。</span>
+          </div>
+        </li>
+        <li>
+          <span class="diag-no">4</span>
+          <div>
+            <b>42 个阶段是一条等宽卡片长列</b>
+            <span>没有「年 / 月」分组表头和区块节奏，时间和地点全部挤在卡片顶部的小字里，视觉上没有锚点。</span>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ 方案 A ============ -->
+  <section id="a" class="scheme anchor">
+    <div class="scheme-head">
+      <div class="badge">A</div>
+      <div>
+        <h2>时间轴密集网格流</h2>
+        <p class="one-liner">一句话：把每段从「一张大图 + 一段诗」改成「段头 + 3×2 等高网格」，让照片本身把时间轴填满。</p>
+      </div>
+      <div class="tag">密度优先 · 改动最小</div>
+    </div>
+
+    <div class="mock-frame">
+      <div class="mock" style="height:700px">
+        <div class="aurora"></div>
+        <div class="mock-shell">
+          <div class="m-rail">
+            <div class="m-brand"><i></i>相册</div>
+            <div class="m-nav"><i></i>时光流</div>
+            <div class="m-nav"><i></i>相册</div>
+            <div class="m-nav"><i></i>人物</div>
+            <div class="m-nav"><i></i>旅程回放</div>
+            <div class="m-nav active"><i></i>成长轨迹</div>
+            <div class="m-nav"><i></i>记忆</div>
+          </div>
+          <div class="m-main">
+            <div class="m-crumb">记忆 <span class="dot"></span> <b>成长轨迹</b></div>
+            <div class="m-people">
+              <div class="person on"><div class="ava">满</div><span class="n">小满</span><span class="c">1,286</span></div>
+              <div class="person"><div class="ava" style="background:linear-gradient(150deg,#4a6b57,#8a9c6b)">妈</div><span class="n">妈妈</span><span class="c">642</span></div>
+              <div class="person"><div class="ava" style="background:linear-gradient(150deg,#455a78,#6b7f9c)">爸</div><span class="n">爸爸</span><span class="c">598</span></div>
+              <div class="person"><div class="ava" style="background:linear-gradient(150deg,#7a5c58,#a98a7a)">外</div><span class="n">外婆</span><span class="c">204</span></div>
+              <div class="person more"><div class="ava">+</div><span class="n">更多</span></div>
+            </div>
+            <div class="m-summary">
+              <p>从 <b>2019.04</b> 记录到 <b>2026.09</b> · 走过 <b>9</b> 个地方 · <b>42</b> 个阶段 · <b>1,286</b> 张</p>
+              <div class="m-controls">
+                <span class="m-btn"><span class="cv"></span>倒序</span>
+                <span class="m-btn">自动（按年龄自适应）</span>
+                <span class="m-btn accent"><span class="spark">✦</span>重新生成</span>
+              </div>
+            </div>
+
+            <div class="tl">
+              <div class="tl-band hero">
+                <div class="band-head">
+                  <span class="band-date">2026.09</span>
+                  <span class="band-place">杭州 · 西湖</span>
+                  <span class="chip">月度</span>
+                  <span class="chip accent">第一次到这儿</span>
+                  <span class="band-count">86 张 · 第 42 段</span>
+                </div>
+                <div class="grid6">
+                  <div class="ph p2"><div class="subj"></div><div class="badge-tl">封面 · 3:2</div><div class="cap"><span>09-14 湖边</span><span>横</span></div></div>
+                  <div class="ph p1"><div class="cap"><span>09-15 断桥</span><span>横</span></div></div>
+                  <div class="ph p7"><div class="cap"><span>09-15 游船</span><span>竖图裁切</span></div></div>
+                  <div class="ph p3"><div class="subj"></div><div class="cap"><span>09-18 民宿</span><span>横</span></div></div>
+                  <div class="ph p4"><div class="cap"><span>09-19 茶园</span><span>横</span></div></div>
+                  <div class="ph p5"><div class="cap"><span>09-21 返程</span><span>竖图裁切</span></div></div>
+                </div>
+                <div class="band-foot"><span>一屏 12 张 · 每段固定 2 行（6 格）</span><span class="link">点开看全部 86 张 ›</span></div>
+              </div>
+
+              <div class="tl-band">
+                <div class="band-head">
+                  <span class="band-date">2026.07 — 08</span>
+                  <span class="band-place">大理 · 洱海</span>
+                  <span class="chip">月度</span>
+                  <span class="band-count">64 张 · 第 41 段</span>
+                </div>
+                <div class="grid6" style="height:112px;overflow:hidden">
+                  <div class="ph p5"><div class="subj"></div><div class="cap"><span>07-22 洱海边</span></div></div>
+                  <div class="ph p4"><div class="cap"><span>07-23 喜洲</span></div></div>
+                  <div class="ph p8"><div class="cap"><span>08-02 古城</span></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note"><div class="k">排布</div><div class="v">左侧 26px 连续时间轴；每段＝段头（时间 / 地点 / 粒度 / 里程碑 / 张数）+ <em>3 列 × 2 行</em> 网格。去掉外层大卡片，用时间线串起段落，段间距 14px 不变。</div></div>
+      <div class="note"><div class="k">取图与裁切</div><div class="v">统一 <em>3:2 等比裁切（cover）</em>，不再 contain 留黑边。封面固定占首格，补充图按候选 rank 顺延；不足 6 格时从 <em>/growth/stage/photos</em> 预取本段照片补齐。</div></div>
+      <div class="note"><div class="k">怎么不空</div><div class="v">每段最少铺满 <em>2 行 = 6 格</em>；一屏可见 12 张（现状 2–3 张）。段头把时间/地点/张数变成信息条，视觉重量从「一张大图」转移到「一面照片墙」。</div></div>
+      <div class="note"><div class="k">空数据兜底</div><div class="v">本段照片 &lt; 3 张时降级为<em>单图横条</em>（96×64 缩略图 + 元信息），只占 1 行；没有可用合影时保留段头 + 渐变占位 + 「这个时期暂无人景合影」提示 chip，不出现大片空面板。</div></div>
+    </div>
+
+    <div class="pc">
+      <div class="pros"><h4>优点</h4><ul>
+        <li>信息密度最高，最像「相册」而不是「文章」；长轨迹也能快速扫。</li>
+        <li>复用现有时间轴结构、游标分页和粒度切换，改动集中在卡片内部。</li>
+        <li>统一 3:2 后每行高度一致，滚动条位置稳定，不会忽高忽低。</li>
+      </ul></div>
+      <div class="cons"><h4>代价 / 风险</h4><ul>
+        <li>6 格必须额外取图：每段一次 <code>stage/photos</code> 会放大请求数，建议加批量接口。</li>
+        <li>3:2 裁切会切掉竖图的上下，人像构图可能被裁到头顶或脚。</li>
+        <li>叙事感最弱，诗意文案只能缩成一行，情绪表达不如 B/C。</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ============ 方案 B ============ -->
+  <section id="b" class="scheme anchor">
+    <div class="scheme-head">
+      <div class="badge">B</div>
+      <div>
+        <h2>年度大图叙事</h2>
+        <p class="one-liner">一句话：按「记录第 N 年」分成叙事区块，每年一张 21:9 通栏主图 + 双竖图 + 文案卡，把空白变成图与字的呼吸。</p>
+      </div>
+      <div class="tag">情绪优先 · 大图叙事</div>
+    </div>
+
+    <div class="mock-frame">
+      <div class="mock" style="height:700px">
+        <div class="aurora"></div>
+        <div class="mock-shell">
+          <div class="m-rail">
+            <div class="m-brand"><i></i>相册</div>
+            <div class="m-nav"><i></i>时光流</div>
+            <div class="m-nav"><i></i>相册</div>
+            <div class="m-nav"><i></i>人物</div>
+            <div class="m-nav"><i></i>旅程回放</div>
+            <div class="m-nav active"><i></i>成长轨迹</div>
+            <div class="m-nav"><i></i>记忆</div>
+          </div>
+          <div class="m-main">
+            <div class="m-crumb">记忆 <span class="dot"></span> <b>成长轨迹</b> <span class="dot"></span> 小满</div>
+            <div class="m-people">
+              <div class="person on"><div class="ava">满</div><span class="n">小满</span><span class="c">1,286</span></div>
+              <div class="person"><div class="ava" style="background:linear-gradient(150deg,#4a6b57,#8a9c6b)">妈</div><span class="n">妈妈</span><span class="c">642</span></div>
+              <div class="person"><div class="ava" style="background:linear-gradient(150deg,#455a78,#6b7f9c)">爸</div><span class="n">爸爸</span><span class="c">598</span></div>
+              <div class="person"><div class="ava" style="background:linear-gradient(150deg,#7a5c58,#a98a7a)">外</div><span class="n">外婆</span><span class="c">204</span></div>
+              <div class="person more"><div class="ava">+</div><span class="n">更多</span></div>
+            </div>
+
+            <div class="year-head" style="margin-top:14px">
+              <div>
+                <div class="y-label">记录第 8 年</div>
+                <div class="y-num">2026</div>
+              </div>
+              <div class="y-stats">
+                <div><b>12</b>段</div><div><b>318</b>张</div><div><b>5</b>地</div><div><b>2</b>里程碑</div>
+              </div>
+            </div>
+
+            <div class="b-hero">
+              <div class="ph p2"><div class="subj"></div></div>
+              <div class="ov">
+                <div class="t">九月，西湖边的第一场秋风</div>
+                <div class="s">2026.09 · 杭州 · 86 张 · 第 42 段</div>
+              </div>
+              <div class="ms"><span class="chip accent">第一次到这儿</span></div>
+            </div>
+
+            <div class="b-duo">
+              <div class="ph p5"><div class="subj"></div><div class="cap"><span>07-23 大理</span><span>4:5</span></div></div>
+              <div class="ph p4"><div class="cap"><span>08-02 喜洲</span><span>4:5</span></div></div>
+              <div class="b-quote">
+                <div class="qk">2026.07 — 08 · 大理</div>
+                <p class="q">洱海，7 月。阳光落在你脸上，像一封没写完的信。</p>
+                <div class="qf">64 张照片 · 第 41 段 <span style="opacity:.6">（诗句复用现有 i18n 模板）</span></div>
+              </div>
+            </div>
+
+            <div class="year-head" style="margin-top:18px;opacity:.55">
+              <div>
+                <div class="y-label">记录第 7 年</div>
+                <div class="y-num">2025</div>
+              </div>
+              <div class="y-stats"><div><b>9</b>段</div><div><b>242</b>张</div><div><b>4</b>地</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note"><div class="k">排布</div><div class="v">按「记录第 N 年」分区（从该人首张照片起算，不写真实年龄）：年标题 + 统计 → <em>21:9 通栏主图</em>（压一层 overlay 写时间/地点）→ 双 4:5 竖图 + 文案卡 → 下一年。</div></div>
+      <div class="note"><div class="k">取图与裁切</div><div class="v">主图 <em>21:9 cover</em>，专挑该年封面分最高、横屏、带景的那张；辅图 <em>4:5 cover</em>，让竖构图主体居中不切脸；两者都只从该年各段的真实封面里取。</div></div>
+      <div class="note"><div class="k">怎么不空</div><div class="v">每年最少 <em>1 行通栏 + 1 行双图</em>，主图面积是现在的 2–3 倍，空白被大图吃掉；年标题的数字（32px）本身成为视觉锚点，替代现在那行灰色小字。</div></div>
+      <div class="note"><div class="k">空数据兜底</div><div class="v">某年只有 1 段时，主图直接撑满整块，文字压在图上，不渲染双图行；该年无横屏封面时改用 4:5 大图 + 两侧主色渐变填充；未定位段合并为「未定位的一年」，用地点图标卡代替空框。</div></div>
+    </div>
+
+    <div class="pc">
+      <div class="pros"><h4>优点</h4><ul>
+        <li>情绪与叙事最强，适合「成长」主题；大图有效面积最大。</li>
+        <li>年份分区让 42 段长轨迹有了天然目录，滚动有节奏。</li>
+        <li>每年只需聚合 3–5 张图，取图成本低于方案 A。</li>
+      </ul></div>
+      <div class="cons"><h4>代价 / 风险</h4><ul>
+        <li>库里没有生日/年龄字段，「第 N 年」只能按首张照片推算，标签必须写「记录第 N 年」。</li>
+        <li>每年固定大图会放大封面质量的差异，选片不好时整页都受影响。</li>
+        <li>比现在更高，纵向翻页变长；照片少的年份容易显得重复。</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ============ 方案 C ============ -->
+  <section id="c" class="scheme anchor">
+    <div class="scheme-head">
+      <div class="badge">C</div>
+      <div>
+        <h2>杂志式错落拼贴</h2>
+        <p class="one-liner">一句话：12 列杂志网格，混排 4:5 / 1:1 / 16:9，用大日期数字和诗句块补位，把空白变成版面。</p>
+      </div>
+      <div class="tag">视觉优先 · 编辑感</div>
+    </div>
+
+    <div class="mock-frame">
+      <div class="mock" style="height:700px">
+        <div class="aurora"></div>
+        <div class="mock-shell">
+          <div class="m-rail">
+            <div class="m-brand"><i></i>相册</div>
+            <div class="m-nav"><i></i>时光流</div>
+            <div class="m-nav"><i></i>相册</div>
+            <div class="m-nav"><i></i>人物</div>
+            <div class="m-nav"><i></i>旅程回放</div>
+            <div class="m-nav active"><i></i>成长轨迹</div>
+            <div class="m-nav"><i></i>记忆</div>
+          </div>
+          <div class="m-main">
+            <div class="m-crumb">记忆 <span class="dot"></span> <b>成长轨迹</b></div>
+            <div class="m-people">
+              <div class="person on"><div class="ava">满</div><span class="n">小满</span><span class="c">1,286</span></div>
+              <div class="person"><div class="ava" style="background:linear-gradient(150deg,#4a6b57,#8a9c6b)">妈</div><span class="n">妈妈</span><span class="c">642</span></div>
+              <div class="person"><div class="ava" style="background:linear-gradient(150deg,#455a78,#6b7f9c)">爸</div><span class="n">爸爸</span><span class="c">598</span></div>
+              <div class="person"><div class="ava" style="background:linear-gradient(150deg,#7a5c58,#a98a7a)">外</div><span class="n">外婆</span><span class="c">204</span></div>
+              <div class="person more"><div class="ava">+</div><span class="n">更多</span></div>
+            </div>
+
+            <div class="collage" style="margin-top:14px">
+              <div class="c-tile" style="grid-column:span 5;grid-row:span 4">
+                <div class="ph p2"><div class="subj"></div></div>
+                <div class="c-label"><b>2026.09</b>杭州 · 西湖 · 86 张</div>
+              </div>
+              <div class="c-year" style="grid-column:span 3;grid-row:span 2">
+                <div class="yy">2026</div>
+                <div class="yl">记录第 8 年 · 12 段 · 318 张</div>
+              </div>
+              <div class="c-tile" style="grid-column:span 4;grid-row:span 2">
+                <div class="ph p1"></div>
+                <div class="c-label"><b>2026.07</b>大理 · 64 张</div>
+              </div>
+              <div class="c-quote" style="grid-column:span 7;grid-row:span 2">
+                <p class="q">洱海，7 月。阳光落在你脸上，像一封没写完的信。</p>
+                <div class="m">2026.07 — 08 · 大理 · 64 张 · 第 41 段</div>
+              </div>
+              <div class="c-tile" style="grid-column:span 3;grid-row:span 3">
+                <div class="ph p3"><div class="subj"></div></div>
+                <div class="c-label"><b>2025.12</b>上海 · 132 张</div>
+              </div>
+              <div class="c-tile" style="grid-column:span 4;grid-row:span 3">
+                <div class="ph p5"></div>
+                <div class="c-label"><b>2025.06</b>青岛 · 47 张</div>
+              </div>
+              <div class="c-tile" style="grid-column:span 5;grid-row:span 2">
+                <div class="ph p4"></div>
+                <div class="c-label"><b>2024.10</b>南京 · 58 张</div>
+              </div>
+              <div class="c-quote" style="grid-column:span 5;grid-row:span 2;border-color:rgba(6,182,212,.22);background:rgba(6,182,212,.09)">
+                <p class="q">那年 6 月，我们在青岛，把日子过成了光。</p>
+                <div class="m">每屏至少 3 列 × 4 行 · 文字块参与补位</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note"><div class="k">排布</div><div class="v">12 列杂志网格：主位 <em>5 列 × 4 行</em>的大图，其余按 3/4/5 列与 2–3 行错落；右侧留一个年份数字块与诗句块，用文字主动填掉边角。</div></div>
+      <div class="note"><div class="k">取图与裁切</div><div class="v">大图 <em>4:5 cover</em>，方块 <em>1:1</em>，横位 <em>16:9</em>；全部 cover，杜绝 contain 留边。每张仍来自真实阶段封面，不重复使用同一张图。</div></div>
+      <div class="note"><div class="k">怎么不空</div><div class="v">版面按「列 × 行」铺满，每屏 8–10 张图 + 2 个文字块；图片高度不一致产生的空隙由 <em>32px 年份数字、诗句块、张数标签</em> 填住，而不是留背景。</div></div>
+      <div class="note"><div class="k">空数据兜底</div><div class="v">只有 1 张照片的段落变成「日期卡」：大号月份 + 单图 + 一句诗，占 3 列 × 3 行，不留空格；整个人的照片为 0 时，给 3 步引导卡（命名人物 → 补拍摄时间 → 重新生成）。</div></div>
+    </div>
+
+    <div class="pc">
+      <div class="pros"><h4>优点</h4><ul>
+        <li>最像「作品集」，留白被版面语言吸收，看起来不再是空白。</li>
+        <li>同样素材能做出层次，竖图、横图、未定位段都有合适的位置。</li>
+        <li>年份数字与诗句块让工具页带上一点纪念册气质。</li>
+      </ul></div>
+      <div class="cons"><h4>代价 / 风险</h4><ul>
+        <li>不规则高度降低「按时间找照片」的效率，时间感弱于 A/B。</li>
+        <li>实现复杂度最高：需要网格计算、不同比例裁切与断点降级。</li>
+        <li>照片少时容易变成「大数字 + 一堆小图」，反而更空。</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ============ 方案 D ============ -->
+  <section id="d" class="scheme anchor">
+    <div class="scheme-head">
+      <div class="badge">D</div>
+      <div>
+        <h2>横向时光轴</h2>
+        <p class="one-liner">一句话：纵向按年份分行，每行横向滑动 16:9 卡片，用最少的纵向空间装下整条时间线。</p>
+      </div>
+      <div class="tag">时间跨度优先 · 交互新</div>
+    </div>
+
+    <div class="mock-frame">
+      <div class="mock" style="height:700px">
+        <div class="aurora"></div>
+        <div class="mock-shell">
+          <div class="m-rail">
+            <div class="m-brand"><i></i>相册</div>
+            <div class="m-nav"><i></i>时光流</div>
+            <div class="m-nav"><i></i>相册</div>
+            <div class="m-nav"><i></i>人物</div>
+            <div class="m-nav"><i></i>旅程回放</div>
+            <div class="m-nav active"><i></i>成长轨迹</div>
+            <div class="m-nav"><i></i>记忆</div>
+          </div>
+          <div class="m-main">
+            <div class="m-crumb">记忆 <span class="dot"></span> <b>成长轨迹</b></div>
+            <div class="m-people">
+              <div class="person on"><div class="ava">满</div><span class="n">小满</span><span class="c">1,286</span></div>
+              <div class="person"><div class="ava" style="background:linear-gradient(150deg,#4a6b57,#8a9c6b)">妈</div><span class="n">妈妈</span><span class="c">642</span></div>
+              <div class="person"><div class="ava" style="background:linear-gradient(150deg,#455a78,#6b7f9c)">爸</div><span class="n">爸爸</span><span class="c">598</span></div>
+              <div class="person"><div class="ava" style="background:linear-gradient(150deg,#7a5c58,#a98a7a)">外</div><span class="n">外婆</span><span class="c">204</span></div>
+              <div class="person more"><div class="ava">+</div><span class="n">更多</span></div>
+            </div>
+
+            <div class="d-year" style="margin-top:16px">
+              <div class="d-yearhead">
+                <span class="n">2026</span>
+                <span class="l">记录第 8 年 · 12 段 · 318 张 · 5 地</span>
+                <span class="r">横向滑动查看全年 →</span>
+              </div>
+              <div class="d-track">
+                <div class="d-card">
+                  <div class="ph p2"><div class="subj"></div><span class="badge-tl">封面 · 16:9</span></div>
+                  <div class="body">
+                    <div class="l1"><span>2026.09 · 杭州</span><span style="color:var(--text-2);font-weight:400">86 张</span></div>
+                    <div class="l2">西湖 · 第一次到这儿</div>
+                  </div>
+                </div>
+                <div class="d-card">
+                  <div class="ph p5"><div class="subj"></div></div>
+                  <div class="body">
+                    <div class="l1"><span>2026.07 · 大理</span><span style="color:var(--text-2);font-weight:400">64 张</span></div>
+                    <div class="l2">洱海 · 第 41 段</div>
+                  </div>
+                </div>
+                <div class="d-card">
+                  <div class="ph p1"></div>
+                  <div class="body">
+                    <div class="l1"><span>2026.02 · 上海</span><span style="color:var(--text-2);font-weight:400">132 张</span></div>
+                    <div class="l2">外滩 · 春节</div>
+                  </div>
+                </div>
+                <div class="d-more"><b>+9</b><span>2026 还有 9 段</span><span style="opacity:.65">横向继续</span></div>
+                <div class="d-poem">
+                  <p>九月，西湖边的风很轻，你还那么小。</p>
+                  <div class="f">诗句块补位，避免行尾空一截</div>
+                </div>
+              </div>
+              <div class="d-hint"><span class="bar"></span>行内横向滚动，滚轮横向手势 / 拖拽 / 触控板</div>
+            </div>
+
+            <div class="d-year">
+              <div class="d-yearhead">
+                <span class="n">2025</span>
+                <span class="l">记录第 7 年 · 9 段 · 242 张 · 4 地</span>
+              </div>
+              <div class="d-track" style="opacity:.9">
+                <div class="d-card">
+                  <div class="ph p3"><div class="subj"></div></div>
+                  <div class="body">
+                    <div class="l1"><span>2025.12 · 上海</span><span style="color:var(--text-2);font-weight:400">132 张</span></div>
+                    <div class="l2">家里 · 第一次走路</div>
+                  </div>
+                </div>
+                <div class="d-card">
+                  <div class="ph p4"></div>
+                  <div class="body">
+                    <div class="l1"><span>2025.06 · 青岛</span><span style="color:var(--text-2);font-weight:400">47 张</span></div>
+                    <div class="l2">海边 · 第 33 段</div>
+                  </div>
+                </div>
+                <div class="d-card">
+                  <div class="ph p8"><div class="subj"></div></div>
+                  <div class="body">
+                    <div class="l1"><span>2025.01 · 南京</span><span style="color:var(--text-2);font-weight:400">58 张</span></div>
+                    <div class="l2">夫子庙 · 第 32 段</div>
+                  </div>
+                </div>
+                <div class="d-more"><b>+6</b><span>2025 还有 6 段</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note"><div class="k">排布</div><div class="v">纵向按年分行，每年一条固定高度横轨；卡片 258px 宽、<em>16:9 封面</em> + 一行标题。年标题左对齐，右侧标「全年 N 段」。</div></div>
+      <div class="note"><div class="k">取图与裁切</div><div class="v">横图统一 <em>16:9 cover</em>；竖图卡片改成 <em>4:5 + 主色渐变底</em>，不把竖图硬塞进 16:9 里切掉半张脸。每张卡只取该段封面，不额外取图。</div></div>
+      <div class="note"><div class="k">怎么不空</div><div class="v">每年一行至少 3 张卡 + 1 个「更多」块，行尾用诗句卡补齐；一屏能同时看到 2 个年份、4–6 张图，纵向空间利用率最高（现在 42 段要滚很久）。</div></div>
+      <div class="note"><div class="k">空数据兜底</div><div class="v">某年只有 1–2 段时，行内补「查看全部」与诗句卡，不留半行空轨；0 段的年份整行不渲染（不出现空标题）；未定位段单独成卡并标「未定位」。</div></div>
+    </div>
+
+    <div class="pc">
+      <div class="pros"><h4>优点</h4><ul>
+        <li>纵向最短，一眼看到「哪几年有记录、哪年空白」。</li>
+        <li>取图成本最低，完全复用现有封面。</li>
+        <li>横滑交互和相册「时光流」的气质一致，适合大屏。</li>
+      </ul></div>
+      <div class="cons"><h4>代价 / 风险</h4><ul>
+        <li>横向滚动在桌面鼠标上可发现性差，需要明显的进度条 / 边缘渐隐提示。</li>
+        <li>单屏能看到的照片总数少于 A/C，情绪表达弱于 B。</li>
+        <li>触控板与滚轮手势要单独处理，移动端适配成本高。</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- ============ 对比 ============ -->
+  <section id="compare" class="anchor">
+    <div class="sec-head">
+      <div>
+        <div class="sec-no">05 / 横向对比</div>
+        <h2>四个方案怎么选</h2>
+        <p>「首屏图片数」按 1280×720 的桌面视口估算；「取图成本」指除封面外还要额外拉多少图。</p>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:150px">方案</th>
+            <th>首屏图片数</th>
+            <th>每组最小密度</th>
+            <th>裁切比例</th>
+            <th>浏览方式</th>
+            <th>数据依赖</th>
+            <th>实现量</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>现状</b></td>
+            <td>2–3 张</td>
+            <td>1 段 1 卡，无分组</td>
+            <td>contain（留边）</td>
+            <td>纵向长列表</td>
+            <td>现有接口</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><b>A · 密集网格流</b><br><span class="tag-mini hi">推荐先试</span></td>
+            <td>约 12 张</td>
+            <td>每段 2 行 = 6 格</td>
+            <td>3:2 cover</td>
+            <td>纵向时间轴</td>
+            <td>需补 3 张/段（批量更好）</td>
+            <td><span class="tag-mini">中</span></td>
+          </tr>
+          <tr>
+            <td><b>B · 年度大图叙事</b></td>
+            <td>3–5 张</td>
+            <td>每年 1 通栏 + 1 双图行</td>
+            <td>21:9 + 4:5 cover</td>
+            <td>纵向年份分区</td>
+            <td>只需聚合现有封面</td>
+            <td><span class="tag-mini">中</span></td>
+          </tr>
+          <tr>
+            <td><b>C · 杂志拼贴</b></td>
+            <td>8–10 张</td>
+            <td>每屏 3 列 × 4 行</td>
+            <td>4:5 / 1:1 / 16:9 cover</td>
+            <td>纵向错落</td>
+            <td>同 A，需要更多不同比例</td>
+            <td><span class="tag-mini warn">高</span></td>
+          </tr>
+          <tr>
+            <td><b>D · 横向时光轴</b></td>
+            <td>4–6 张</td>
+            <td>每年 1 行 ≥3 卡</td>
+            <td>16:9（竖图 4:5）</td>
+            <td>纵向年份 + 横向滑动</td>
+            <td>现有接口即可</td>
+            <td><span class="tag-mini">中</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ Token 与数据前提 ============ -->
+  <section id="data" class="anchor">
+    <div class="sec-head">
+      <div>
+        <div class="sec-no">06 / 落地前提</div>
+        <h2>现有 token 够不够，数据撑不撑得住</h2>
+        <p>结论：配色、字号、圆角、面板材质全部复用，不需要新配色；需要补的是「图片比例」这类布局 token。数据上有 4 个限制必须正视。</p>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="info-card">
+        <h3>复用现有 token（本次示意图已按此取值）</h3>
+        <div class="swatches">
+          <span class="sw"><i style="background:#2F6FED"></i>Primary #2F6FED</span>
+          <span class="sw"><i style="background:#8B5CF6"></i>Violet #8B5CF6</span>
+          <span class="sw"><i style="background:#06B6D4"></i>Cyan #06B6D4</span>
+          <span class="sw"><i style="background:#0A0E17"></i>Base #0A0E17</span>
+          <span class="sw"><i style="background:rgba(255,255,255,.08)"></i>Panel 8%</span>
+          <span class="sw"><i style="background:#F5F7FA"></i>Text #F5F7FA</span>
+          <span class="sw"><i style="background:#9BA6B2"></i>Text-2 #9BA6B2</span>
+          <span class="sw"><i style="background:#F59E0B"></i>Warning #F59E0B</span>
+        </div>
+        <div class="kv"><span>背景 / 光斑</span><code>NasStyleSpec.background · baseColor #0A0E17</code></div>
+        <div class="kv"><span>面板 / 卡片</span><code>panelColor rgba(255,255,255,.08) · radius 18</code></div>
+        <div class="kv"><span>图片压暗</span><code>NasTokens.colorOverlay 0x8A000000</code></div>
+        <div class="kv"><span>字号层级</span><code>display 32 · title 18 · subtitle 16 · body 14 · caption 12 · micro 11</code></div>
+        <div class="kv"><span>间距</span><code>spaceXs 4 · spaceSm 8 · spaceMd 16 · spaceLg 24</code></div>
+      </div>
+
+      <div class="info-card">
+        <h3>建议补充的布局 token（都不是颜色）</h3>
+        <div class="kv"><span>图片比例档</span><code>ratioWide 3:2 · ratioPortrait 4:5 · ratioHero 21:9</code></div>
+        <div class="kv"><span>分组最小行数</span><code>groupMinRows = 2</code></div>
+        <div class="kv"><span>图片间隙</span><code>photoGap = 6（现有 spaceSm 为 8，需更紧）</code></div>
+        <div class="kv"><span>图片遮罩</span><code>复用 colorOverlay，不新增</code></div>
+        <div style="font-size:12px;color:var(--text-2);line-height:1.8;margin-top:10px">
+          说明：这四个方案都没有引入新的设计体系；所有色值、圆角、字号都来自现有
+          <code>NasTokens</code> / <code>ColorScheme</code>。真正缺的是「按比例裁切」的语义常量，
+          建议放进 <code>nas_ui/tokens.dart</code> 统一给相册 / 影视共用。
+        </div>
+      </div>
+    </div>
+
+    <div class="info-card" style="margin-top:14px">
+      <h3>数据层面的限制（不解决就会画不对）</h3>
+      <ul class="warn-list">
+        <li><b>每段只保证 1 张封面。</b><span>补充图上限 2 张，且竖图段被代码强制只放 2 张（不补小图）。所以 A/C 要的 6–10 格无法只靠列表接口拼出来，必须额外调用 <code>/growth/stage/photos</code>；建议加批量接口（一次 10 段 × 6 张），否则 42 段会有大量请求。</span></li>
+        <li><b>没有生日 / 年龄字段。</b><span>自动粒度是用「该人首张照片」推算月龄（&lt;12 月按 30 天、1–3 岁 90 天、3–6 岁 180 天、6 岁后 365 天），不是真实年龄。方案 B 必须写「记录第 N 年」，不能写「3 岁」，否则是编造数据。</span></li>
+        <li><b>里程碑只有两种枚举。</b><span>只有 <code>firstPlace</code> 和 <code>firstScene</code>，做「里程碑分区」信息量不足。要么补派生的里程碑（首次出现的城市、照片最多的月份、地点数跃升），要么像 B 一样只把里程碑当标签用，不做分区主轴。</span></li>
+        <li><b>未定位段可能占比很高。</b><span>没有 GPS 的人像照片会归到 <code>unknown</code>，且跨度被压到 30 天，容易产生大量零散短段。四个方案都给它独立的视觉（短段紧凑行 / 未定位年份卡），否则会直接变成「空白区」。</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    示意图说明：页面为单文件静态 HTML，无外链、无外部字体与图片，双击即可离线打开；视口统一按 1280 逻辑宽绘制并自适应缩放。<br>
+    图中人物、时间、地点、张数均为示例数据，结构对应 <code>PhotoGrowthPerson / PhotoGrowthStage</code>；照片为渐变占位，不代表真实内容。<br>
+    本轮仅出视觉方案，未修改任何业务代码、未提交。
+  </footer>
+</div>
+
+<script>
+  // 1280 逻辑宽的示意图按容器宽度等比缩放；不支持 zoom 的浏览器退化为横向滚动。
+  function fitMocks(){
+    document.querySelectorAll('.mock-frame').forEach(function(frame){
+      var mock = frame.querySelector('.mock');
+      if (!mock) return;
+      var w = frame.getBoundingClientRect().width;
+      var s = Math.min(1, w / 1280);
+      mock.style.zoom = s;
+      var h = parseFloat(mock.style.height) || mock.offsetHeight;
+      frame.style.height = (h * s) + 'px';
+    });
+  }
+  window.addEventListener('resize', fitMocks);
+  window.addEventListener('load', fitMocks);
+  fitMocks();
+
+  // 滚动高亮当前板块
+  var links = Array.prototype.slice.call(document.querySelectorAll('.subnav a'));
+  var sections = links.map(function(a){ return document.querySelector(a.getAttribute('href')); });
+  function spy(){
+    var y = window.scrollY + 120, idx = 0;
+    sections.forEach(function(sec, i){ if (sec && sec.offsetTop <= y) idx = i; });
+    links.forEach(function(a, i){ a.classList.toggle('active', i === idx); });
+  }
+  window.addEventListener('scroll', spy, {passive:true});
+  spy();
+</script>
+</body>
+</html>
