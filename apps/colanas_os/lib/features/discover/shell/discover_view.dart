@@ -220,12 +220,20 @@ class _MediaSearchBarState extends State<_MediaSearchBar> {
     bool filled = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
+    final style = context.nasStyle;
     final radius = BorderRadius.circular(10);
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: filled ? scheme.primary : scheme.surfaceContainerHighest,
-        borderRadius: radius,
+        color: filled ? scheme.primary : style.panelColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: radius,
+          side: BorderSide(
+            color: filled
+                ? scheme.primary.withValues(alpha: 0.55)
+                : style.panelBorderColor,
+          ),
+        ),
         child: InkWell(
           borderRadius: radius,
           onTap: onTap,

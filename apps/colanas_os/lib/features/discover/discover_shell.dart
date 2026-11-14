@@ -530,7 +530,14 @@ class _SiteManagerDialogState extends State<_SiteManagerDialog> {
         context: context,
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setDialogState) => AlertDialog(
-            backgroundColor: Theme.of(ctx).colorScheme.surface,
+            backgroundColor: Color.alphaBlend(
+              ctx.nasStyle.panelColor,
+              ctx.nasStyle.baseColor,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(ctx.nasStyle.radius),
+              side: BorderSide(color: ctx.nasStyle.panelBorderColor),
+            ),
             title: Text(site == null ? tr('discover.pt.newSite') : tr('discover.pt.editSite')),
             content: SizedBox(
               width: 460,
@@ -656,7 +663,14 @@ class _SiteManagerDialogState extends State<_SiteManagerDialog> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(ctx).colorScheme.surface,
+        backgroundColor: Color.alphaBlend(
+          ctx.nasStyle.panelColor,
+          ctx.nasStyle.baseColor,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(ctx.nasStyle.radius),
+          side: BorderSide(color: ctx.nasStyle.panelBorderColor),
+        ),
         title: Text(tr('common.delete')),
         content: Text(tr('discover.pt.deleteConfirm', {'name': '${site['name'] ?? ''}'})),
         actions: [
@@ -687,7 +701,14 @@ class _SiteManagerDialogState extends State<_SiteManagerDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Color.alphaBlend(
+        context.nasStyle.panelColor,
+        context.nasStyle.baseColor,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.nasStyle.radius),
+        side: BorderSide(color: context.nasStyle.panelBorderColor),
+      ),
       title: Row(
         children: [
           Expanded(child: Text(tr('discover.pt.sites'))),
@@ -837,7 +858,14 @@ class _SubscriptionManagerDialogState extends State<_SubscriptionManagerDialog> 
         context: context,
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setDialogState) => AlertDialog(
-            backgroundColor: Theme.of(ctx).colorScheme.surface,
+            backgroundColor: Color.alphaBlend(
+              ctx.nasStyle.panelColor,
+              ctx.nasStyle.baseColor,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(ctx.nasStyle.radius),
+              side: BorderSide(color: ctx.nasStyle.panelBorderColor),
+            ),
             title: Text(sub == null ? tr('discover.pt.newSub') : tr('discover.pt.editSub')),
             content: SizedBox(
               width: 460,
@@ -1023,7 +1051,14 @@ class _SubscriptionManagerDialogState extends State<_SubscriptionManagerDialog> 
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(ctx).colorScheme.surface,
+        backgroundColor: Color.alphaBlend(
+          ctx.nasStyle.panelColor,
+          ctx.nasStyle.baseColor,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(ctx.nasStyle.radius),
+          side: BorderSide(color: ctx.nasStyle.panelBorderColor),
+        ),
         title: Text(tr('common.delete')),
         content: Text(tr('discover.pt.deleteConfirm', {'name': '${sub['mediaTitle'] ?? ''}'})),
         actions: [
@@ -1054,7 +1089,14 @@ class _SubscriptionManagerDialogState extends State<_SubscriptionManagerDialog> 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Color.alphaBlend(
+        context.nasStyle.panelColor,
+        context.nasStyle.baseColor,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.nasStyle.radius),
+        side: BorderSide(color: context.nasStyle.panelBorderColor),
+      ),
       title: Row(
         children: [
           Expanded(child: Text(tr('discover.pt.subscriptions'))),
@@ -1219,7 +1261,14 @@ class _RssRuleDialogState extends State<_RssRuleDialog> {
         context: context,
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setDialogState) => AlertDialog(
-            backgroundColor: Theme.of(ctx).colorScheme.surface,
+            backgroundColor: Color.alphaBlend(
+              ctx.nasStyle.panelColor,
+              ctx.nasStyle.baseColor,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(ctx.nasStyle.radius),
+              side: BorderSide(color: ctx.nasStyle.panelBorderColor),
+            ),
             title: Text(
               rule == null ? tr('discover.rss.newRule') : tr('discover.rss.editRule'),
             ),
@@ -1325,7 +1374,14 @@ class _RssRuleDialogState extends State<_RssRuleDialog> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(ctx).colorScheme.surface,
+        backgroundColor: Color.alphaBlend(
+          ctx.nasStyle.panelColor,
+          ctx.nasStyle.baseColor,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(ctx.nasStyle.radius),
+          side: BorderSide(color: ctx.nasStyle.panelBorderColor),
+        ),
         title: Text(tr('common.delete')),
         content: Text(tr('discover.pt.deleteConfirm', {'name': '${rule['titleRegex'] ?? ''}'})),
         actions: [
@@ -1356,7 +1412,14 @@ class _RssRuleDialogState extends State<_RssRuleDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: Color.alphaBlend(
+        context.nasStyle.panelColor,
+        context.nasStyle.baseColor,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.nasStyle.radius),
+        side: BorderSide(color: context.nasStyle.panelBorderColor),
+      ),
       title: Row(
         children: [
           Expanded(child: Text(tr('discover.rss.rules'))),

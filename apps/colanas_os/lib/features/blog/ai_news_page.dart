@@ -2310,7 +2310,10 @@ class _PlayerBar extends StatelessWidget {
         : (ep.durationSec * 1000).round();
     final pos = player.position.inMilliseconds.clamp(0, total == 0 ? 0 : total);
     return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: context.nasStyle.panelColor,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: context.nasStyle.panelBorderColor),
+      ),
       child: InkWell(
         onTap: () => _open(context),
         child: SafeArea(
