@@ -92,13 +92,17 @@ class VideoTagBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final style = context.nasStyle;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: accent
             ? scheme.primary.withValues(alpha: 0.14)
-            : scheme.surfaceContainerHighest.withValues(alpha: 0.8),
+            : style.panelColor,
         borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: accent ? scheme.primary.withValues(alpha: 0.35) : style.panelBorderColor,
+        ),
       ),
       child: Text(
         text,
@@ -365,7 +369,7 @@ class VideoSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final style = context.nasStyle;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -378,8 +382,9 @@ class VideoSection extends StatelessWidget {
             width: double.infinity,
             padding: cardPadding,
             decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest.withValues(alpha: 0.40),
+              color: style.panelColor,
               borderRadius: BorderRadius.circular(NasTokens.radiusMd),
+              border: Border.all(color: style.panelBorderColor),
             ),
             child: child,
           ),
@@ -929,13 +934,14 @@ class _EpisodeNumberCellState extends State<_EpisodeNumberCell> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final style = context.nasStyle;
     final selected = widget.selected;
-    final base = scheme.surfaceContainerHighest.withValues(alpha: 0.7);
+    final base = style.panelColor;
     final color = selected
         ? scheme.primary
         : (_hovered
-              ? scheme.surfaceContainerHighest
-              : (widget.watched ? base.withValues(alpha: 0.45) : base));
+              ? Color.alphaBlend(style.panelColor, style.baseColor)
+              : (widget.watched ? base.withValues(alpha: 0.55) : base));
     final fg = selected
         ? scheme.onPrimary
         : (widget.watched
@@ -963,7 +969,7 @@ class _EpisodeNumberCellState extends State<_EpisodeNumberCell> {
                         ? scheme.primary
                         : (widget.watched
                               ? scheme.primary.withValues(alpha: 0.35)
-                              : Colors.transparent),
+                              : style.panelBorderColor),
                   ),
           ),
           child: Stack(

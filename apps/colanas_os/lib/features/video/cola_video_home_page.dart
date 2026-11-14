@@ -330,6 +330,7 @@ class _VideoHomePageState extends State<VideoHomePage> {
 
   Widget _sourcesSection(BuildContext context, List<VideoHomeSource> sources) {
     final scheme = Theme.of(context).colorScheme;
+    final style = context.nasStyle;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -350,8 +351,9 @@ class _VideoHomePageState extends State<VideoHomePage> {
                   onTap: () => _openLibrary(s.id, s.name, s.libType),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest,
+                      color: style.panelColor,
                       borderRadius: BorderRadius.circular(NasTokens.radiusMd),
+                      border: Border.all(color: style.panelBorderColor),
                     ),
                     padding: const EdgeInsets.all(NasTokens.spaceSm),
                     child: Row(

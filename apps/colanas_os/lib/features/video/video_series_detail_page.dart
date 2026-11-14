@@ -544,13 +544,20 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
     bool active = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
+    final style = context.nasStyle;
     return Tooltip(
       message: tooltip,
       child: Material(
         color: active
             ? scheme.primary.withValues(alpha: 0.16)
-            : scheme.surfaceContainerHighest.withValues(alpha: 0.7),
-        shape: const CircleBorder(),
+            : style.panelColor,
+        shape: CircleBorder(
+          side: BorderSide(
+            color: active
+                ? scheme.primary.withValues(alpha: 0.55)
+                : style.panelBorderColor,
+          ),
+        ),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,

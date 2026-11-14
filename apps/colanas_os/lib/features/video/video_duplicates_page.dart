@@ -561,7 +561,6 @@ class _VideoDuplicatesPageState extends State<VideoDuplicatesPage> {
     VideoDuplicateGroup group,
     int index,
   ) {
-    final scheme = Theme.of(context).colorScheme;
     final totalBytes = group.items.fold<int>(0, (s, it) => s + it.size);
     return Row(
       children: [
@@ -576,8 +575,9 @@ class _VideoDuplicatesPageState extends State<VideoDuplicatesPage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest,
+                color: context.nasStyle.panelColor,
                 borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: context.nasStyle.panelBorderColor),
               ),
               child: Text(k, style: const TextStyle(fontSize: 9)),
             ),

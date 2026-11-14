@@ -629,13 +629,25 @@ Future<VideoLibraryForm?> showVideoLibraryDialog(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setLocal) => AlertDialog(
-        backgroundColor: Theme.of(ctx).colorScheme.surface,
+        backgroundColor: Color.alphaBlend(
+          ctx.nasStyle.panelColor,
+          ctx.nasStyle.baseColor,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(ctx.nasStyle.radius),
+          side: BorderSide(color: ctx.nasStyle.panelBorderColor),
+        ),
         title: Text(isEdit ? tr('video.library.edit') : tr('video.library.add')),
         content: Theme(
           data: Theme.of(ctx).copyWith(
             inputDecorationTheme: InputDecorationTheme(
               filled: true,
-              fillColor: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+              fillColor: ctx.nasStyle.panelColor,
+              enabledBorder: OutlineInputBorder(
+                borderRadius:
+                    BorderRadius.circular(ctx.nasStyle.radius * 0.55),
+                borderSide: BorderSide(color: ctx.nasStyle.panelBorderColor),
+              ),
             ),
           ),
           child: SizedBox(
@@ -651,7 +663,10 @@ Future<VideoLibraryForm?> showVideoLibraryDialog(
                   const SizedBox(height: NasTokens.spaceSm),
                   NasDropdown<String>(
                     initialValue: libType,
-                    dropdownColor: Theme.of(ctx).colorScheme.surface,
+                    dropdownColor: Color.alphaBlend(
+                      ctx.nasStyle.panelColor,
+                      ctx.nasStyle.baseColor,
+                    ),
                     decoration: InputDecoration(labelText: tr('video.library.type')),
                     items: [
                       DropdownMenuItem(
@@ -802,7 +817,10 @@ Widget _sourceRow(
                 value: d.connType,
                 isDense: true,
                 underline: const SizedBox.shrink(),
-                dropdownColor: Theme.of(ctx).colorScheme.surface,
+                dropdownColor: Color.alphaBlend(
+                  ctx.nasStyle.panelColor,
+                  ctx.nasStyle.baseColor,
+                ),
                 items: [
                   DropdownMenuItem(
                     value: 'local',

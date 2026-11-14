@@ -527,12 +527,13 @@ class VideoPosterCard extends StatelessWidget {
     bool compact = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
+    final style = context.nasStyle;
     final child = Container(
       padding: EdgeInsets.all(compact ? 4 : 5),
       decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.6),
+        color: style.panelColor,
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(color: scheme.onSurface.withValues(alpha: 0.12)),
+        border: Border.all(color: style.panelBorderColor),
       ),
       child: Icon(
         icon,

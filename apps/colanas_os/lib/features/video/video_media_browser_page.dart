@@ -361,8 +361,9 @@ class _VideoMediaBrowserPageState extends State<VideoMediaBrowserPage> {
     if (item.dir) {
       return Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          color: context.nasStyle.panelColor,
           borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+          border: Border.all(color: context.nasStyle.panelBorderColor),
         ),
         child: const Center(
           child: Icon(Icons.folder_outlined, size: 40),
@@ -400,8 +401,9 @@ class _VideoMediaBrowserPageState extends State<VideoMediaBrowserPage> {
             : Icons.insert_drive_file_outlined;
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: context.nasStyle.panelColor,
         borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+        border: Border.all(color: context.nasStyle.panelBorderColor),
       ),
       child: Center(
         child: Icon(

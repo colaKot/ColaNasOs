@@ -422,8 +422,9 @@ class _VideoAppSettingsPageState extends State<VideoAppSettingsPage> {
         NasTokens.spaceXs,
       ),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        color: context.nasStyle.panelColor,
         borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+        border: Border.all(color: context.nasStyle.panelBorderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
