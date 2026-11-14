@@ -177,13 +177,14 @@ class _PhotoTimeContrastPageState extends State<PhotoTimeContrastPage> {
   }
 
   Widget _header() {
-    final scheme = Theme.of(context).colorScheme;
+    // 顶部说明卡走面板材质，不再用深色主题近黑的 surfaceContainerHigh
+    final style = context.nasStyle;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: style.panelColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+        border: Border.all(color: style.panelBorderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,10 +256,11 @@ class _PhotoTimeContrastPageState extends State<PhotoTimeContrastPage> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        // 对照卡：面板材质 + 风格描边
+        color: context.nasStyle.panelColor,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
+          color: context.nasStyle.panelBorderColor,
         ),
       ),
       child: Column(
@@ -324,10 +326,11 @@ class _PhotoTimeContrastPageState extends State<PhotoTimeContrastPage> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        // 无对照提示卡：同上，面板材质
+        color: context.nasStyle.panelColor,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
+          color: context.nasStyle.panelBorderColor,
         ),
       ),
       child: Row(

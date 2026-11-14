@@ -829,7 +829,8 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
                 children: [
                   if (coverPath == null)
                     Container(
-                      color: scheme.surfaceContainerHighest,
+                      // 无封面时用面板材质，别在深色主题下沉成一块黑
+                      color: context.nasStyle.panelColor,
                       child: Icon(icon, color: context.nasTextSecondary),
                     )
                   else
@@ -931,6 +932,10 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
 
   Widget _faceTile(PhotoFaceClusterItem c) {
     final scheme = Theme.of(context).colorScheme;
+    final style = context.nasStyle;
+    // 人物条目用面板材质（半透明 + 风格描边），不再让卡片落到 scheme.surface
+    // 那种近黑底上（2026-11-14 反馈：人物列表卡片发黑，和极光背景割裂）。
+    final solidPanel = Color.alphaBlend(style.panelColor, style.baseColor);
     final named = (c.name ?? '').trim().isNotEmpty;
     final label = named
         ? c.name!
@@ -938,84 +943,92 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
     // 桌面 / Web 右键：重命名 / 合并 / 解散 / 管理人脸（与长按同一批动作）
     return NasContextMenuRegion(
       entries: _faceMenuEntries(c),
-      child: InkWell(
-      borderRadius: BorderRadius.circular(NasTokens.radiusMd),
-      onTap: () => _openCluster(c),
-      onLongPress: () => _faceActions(c),
-      child: Column(
-        children: [
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: named ? scheme.primary.withValues(alpha: 0.6) : scheme.outlineVariant,
-                      width: named ? 2 : 1,
-                    ),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: c.coverFaceId == null
-                      ? Icon(Icons.face_outlined, color: context.nasTextSecondary)
-                      : Image.network(
-                          '${ApiSession.instance.baseUrl}/api/v1/photo/face/image'
-                          '?id=${Uri.encodeComponent(c.coverFaceId!)}&size=200',
-                          headers: ApiSession.instance.authHeaders,
-                          cacheWidth: 200,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Icon(
-                            Icons.face_outlined,
-                            color: context.nasTextSecondary,
-                          ),
+      child: GestureDetector(
+        onLongPress: () => _faceActions(c),
+        child: NasCard(
+          padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+          radius: NasTokens.radiusMd,
+          highlight: named,
+          onTap: () => _openCluster(c),
+          child: Column(
+            children: [
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: named
+                              ? scheme.primary.withValues(alpha: 0.6)
+                              : scheme.outlineVariant,
+                          width: named ? 2 : 1,
                         ),
-                ),
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: scheme.surface.withValues(alpha: 0.88),
-                      borderRadius: BorderRadius.circular(99),
-                      border: Border.all(color: scheme.outlineVariant),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: c.coverFaceId == null
+                          ? Icon(Icons.face_outlined, color: context.nasTextSecondary)
+                          : Image.network(
+                              '${ApiSession.instance.baseUrl}/api/v1/photo/face/image'
+                              '?id=${Uri.encodeComponent(c.coverFaceId!)}&size=200',
+                              headers: ApiSession.instance.authHeaders,
+                              cacheWidth: 200,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => Icon(
+                                Icons.face_outlined,
+                                color: context.nasTextSecondary,
+                              ),
+                            ),
                     ),
-                    child: Text(
-                      '${c.size}',
-                      style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700),
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          // 张数角标：用面板合成出**不透明**的同色系，不再压黑
+                          color: solidPanel,
+                          borderRadius: BorderRadius.circular(99),
+                          border: Border.all(color: style.panelBorderColor),
+                        ),
+                        child: Text(
+                          '${c.size}',
+                          style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700),
+                        ),
+                      ),
                     ),
-                  ),
+                    // 命名入口放右上角，避免长按才想得起来
+                    Positioned(
+                      right: -2,
+                      top: -2,
+                      child: IconButton(
+                        tooltip: tr('ui.photo.074'),
+                        visualDensity: VisualDensity.compact,
+                        iconSize: 15,
+                        onPressed: () => _renameCluster(c),
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                    ),
+                  ],
                 ),
-                // 命名入口放右上角，避免长按才想得起来
-                Positioned(
-                  right: -2,
-                  top: -2,
-                  child: IconButton(
-                    tooltip: tr('ui.photo.074'),
-                    visualDensity: VisualDensity.compact,
-                    iconSize: 15,
-                    onPressed: () => _renameCluster(c),
-                    icon: const Icon(Icons.edit_outlined),
-                  ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: NasTokens.fontMicro,
+                  fontWeight: named ? FontWeight.w700 : FontWeight.w400,
+                  color: named ? null : context.nasTextSecondary,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: NasTokens.fontMicro,
-              fontWeight: named ? FontWeight.w700 : FontWeight.w400,
-              color: named ? null : context.nasTextSecondary,
-            ),
-          ),
-        ],
+        ),
       ),
-    ));
+    );
   }
 
   /// 长按：改名 / 合并 / 隐藏

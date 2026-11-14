@@ -428,6 +428,8 @@ class _ChapterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 章节无封面时用面板材质兜底，不要深色主题下近黑的 surfaceContainerHighest
+    final style = context.nasStyle;
     return SizedBox(
       width: 300,
       child: ClipRRect(
@@ -439,7 +441,7 @@ class _ChapterCard extends StatelessWidget {
               NasCoverImage(url: _thumb(chapter.coverPath), headers: _authHeaders(), fit: BoxFit.cover)
             else
               ColoredBox(
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                color: style.panelColor,
                 child: const Icon(Icons.menu_book_outlined, size: 36),
               ),
             const DecoratedBox(
@@ -551,14 +553,16 @@ class _MemoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // 记忆卡走面板材质，不再用近黑的 surfaceContainerHigh
+    final style = context.nasStyle;
     final tags = [...item.scenes, ...item.activities, ...item.people];
     return Container(
       width: 360,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: style.panelColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+        border: Border.all(color: style.panelBorderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -568,7 +572,7 @@ class _MemoryCard extends StatelessWidget {
             child: AspectRatio(
               aspectRatio: 16 / 9,
               child: item.coverPath.isEmpty
-                  ? ColoredBox(color: scheme.surfaceContainerHighest)
+                  ? ColoredBox(color: style.panelColor)
                   : NasCoverImage(
                       url: _thumb(item.coverPath),
                       headers: _authHeaders(),
@@ -601,7 +605,8 @@ class _MemoryCard extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+                    // 卡片内笔记小框：叠一层面板色，比卡片再亮一档
+                    color: style.panelColor,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(

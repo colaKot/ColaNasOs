@@ -95,6 +95,9 @@ class _PhotoAssistantPageState extends State<PhotoAssistantPage> {
               ActionChip(
                 label: Text(tr(key)),
                 onPressed: _busy ? null : () => _ask(tr(key)),
+                // 预置问题胶囊：走面板材质，别用默认近黑底
+                backgroundColor: context.nasStyle.panelColor,
+                side: BorderSide(color: context.nasStyle.panelBorderColor),
               ),
           ],
         ),
@@ -127,12 +130,14 @@ class _PhotoAssistantPageState extends State<PhotoAssistantPage> {
   }
 
   Widget _header(ColorScheme scheme) {
+    // 页头卡走面板材质，不再用近黑的 surfaceContainerHigh
+    final style = context.nasStyle;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: style.panelColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+        border: Border.all(color: style.panelBorderColor),
       ),
       child: Row(
         children: [
@@ -173,8 +178,11 @@ class _PhotoAssistantPageState extends State<PhotoAssistantPage> {
       decoration: BoxDecoration(
         color: ready && !fallback
             ? scheme.primaryContainer.withValues(alpha: 0.45)
-            : scheme.surfaceContainerHighest,
+            : context.nasStyle.panelColor,
         borderRadius: BorderRadius.circular(10),
+        border: ready && !fallback
+            ? null
+            : Border.all(color: context.nasStyle.panelBorderColor),
       ),
       child: Row(
         children: [
@@ -223,13 +231,14 @@ class _PhotoAssistantPageState extends State<PhotoAssistantPage> {
     String? question,
     bool byModel = false,
   }) {
+    final style = context.nasStyle;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: style.panelColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+        border: Border.all(color: style.panelBorderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

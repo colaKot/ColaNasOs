@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../style.dart';
 import '../tokens.dart';
 
 /// 全系统统一的下拉选择框。
@@ -79,7 +80,11 @@ class NasDropdown<T> extends StatelessWidget {
         padding: padding ?? const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         style: textStyle ??
             theme.textTheme.bodyMedium?.copyWith(fontSize: NasTokens.fontBody),
-        dropdownColor: scheme.surface,
+        // 弹出菜单用面板材质合成的不透明色：跟整站卡片同色系，又不透出下层内容。
+        dropdownColor: Color.alphaBlend(
+          context.nasStyle.panelColor,
+          context.nasStyle.baseColor,
+        ),
         hint: hint,
         icon: Icon(Icons.arrow_drop_down, size: 18, color: scheme.onSurfaceVariant),
       ),
@@ -95,7 +100,10 @@ class NasDropdown<T> extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         decoration: decoration,
         style: textStyle,
-        dropdownColor: scheme.surface,
+        dropdownColor: Color.alphaBlend(
+          context.nasStyle.panelColor,
+          context.nasStyle.baseColor,
+        ),
       );
     }
 
@@ -104,9 +112,9 @@ class NasDropdown<T> extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        color: context.nasStyle.panelColor,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+        border: Border.all(color: context.nasStyle.panelBorderColor),
       ),
       child: field,
     );
@@ -166,12 +174,14 @@ class NasChip extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
+    // 未选中不再用 Material 默认的近黑胶囊，统一走风格面板材质。
+    final style = context.nasStyle;
     final bg = selected
         ? scheme.primary.withValues(alpha: 0.14)
-        : scheme.onSurface.withValues(alpha: 0.05);
+        : style.panelColor;
     final border = selected
         ? scheme.primary.withValues(alpha: 0.55)
-        : scheme.onSurface.withValues(alpha: 0.12);
+        : style.panelBorderColor;
     final fg = selected ? scheme.primary : scheme.onSurfaceVariant;
 
     Widget content = Container(

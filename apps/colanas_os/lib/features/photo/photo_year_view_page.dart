@@ -302,8 +302,9 @@ class _PhotoYearViewPageState extends State<PhotoYearViewPage> {
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-                color: context.nas.surfaceContainerHighest,
-                border: Border.all(color: context.nas.outlineVariant),
+                // 月份格底走面板材质，不再用近黑的 surfaceContainerHighest
+                color: context.nasStyle.panelColor,
+                border: Border.all(color: context.nasStyle.panelBorderColor),
               ),
               clipBehavior: Clip.antiAlias,
               child: Column(

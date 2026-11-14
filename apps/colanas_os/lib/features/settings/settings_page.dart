@@ -1326,9 +1326,9 @@ class _SettingsPageState extends State<SettingsPage> {
           margin: const EdgeInsets.only(top: NasTokens.spaceSm),
           padding: const EdgeInsets.all(NasTokens.spaceSm),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest
-                .withValues(alpha: 0.4),
+            color: context.nasStyle.panelColor,
             borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+            border: Border.all(color: context.nasStyle.panelBorderColor),
           ),
           child: SelectionArea(
             child: Column(

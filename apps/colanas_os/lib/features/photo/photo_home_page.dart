@@ -316,11 +316,13 @@ Map<String, String> get _imageHeaders {
   }
 
   Widget _emptyCard() {
+    final style = context.nasStyle;
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        color: style.panelColor,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: style.panelBorderColor),
       ),
       child: Column(
         children: [
@@ -431,7 +433,7 @@ Map<String, String> get _imageHeaders {
     required VoidCallback onTap,
     double height = 176,
   }) {
-    final scheme = Theme.of(context).colorScheme;
+    final style = context.nasStyle;
     return InkWell(
       borderRadius: BorderRadius.circular(14),
       onTap: onTap,
@@ -439,7 +441,8 @@ Map<String, String> get _imageHeaders {
         height: height,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerHigh,
+          // 底图加载前的兜底色；压在图上的黑色渐变是有意留的（白字可读性）
+          color: style.panelColor,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Stack(
@@ -470,7 +473,7 @@ Map<String, String> get _imageHeaders {
                 ),
               ),
             ] else
-              ColoredBox(color: scheme.surfaceContainerHighest),
+              ColoredBox(color: style.panelColor),
             const DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -521,15 +524,18 @@ Map<String, String> get _imageHeaders {
     required Color color,
     required VoidCallback onTap,
   }) {
-    final scheme = Theme.of(context).colorScheme;
+    final style = context.nasStyle;
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerHigh,
+          // 三条快捷入口原来用 surfaceContainerHigh（深色主题下近黑），
+          // 与极光背景割裂；改成和成长轨迹 / 人物列表同一套面板材质。
+          color: style.panelColor,
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: style.panelBorderColor),
         ),
         child: Row(
           children: [
@@ -567,13 +573,15 @@ Map<String, String> get _imageHeaders {
   }
 
   Widget _card({required Widget child}) {
-    final scheme = Theme.of(context).colorScheme;
+    final style = context.nasStyle;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        // 同一页的大面板（我的照片 / 拍摄时光 / 我的足迹 / 镜头里的陪伴）
+        // 统一走面板材质，别再压成 surfaceContainerHigh 的黑块
+        color: style.panelColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
+        border: Border.all(color: style.panelBorderColor),
       ),
       child: child,
     );
@@ -867,7 +875,7 @@ Map<String, String> get _imageHeaders {
                             height: 52,
                             child: p.coverPath == null
                                 ? ColoredBox(
-                                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                    color: context.nasStyle.panelColor,
                                     child: const Icon(Icons.person_outline),
                                   )
                                 : NasCoverImage(url: _thumb(p.coverPath!), headers: _imageHeaders, cacheWidth: 52),

@@ -344,8 +344,10 @@ class _PhotoPageState extends State<PhotoPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest,
+                  // 面板材质，别再落到深色主题近黑的 surfaceContainerHighest
+                  color: context.nasStyle.panelColor,
                   borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: context.nasStyle.panelBorderColor),
                 ),
                 child: Text(word, style: const TextStyle(fontSize: NasTokens.fontMicro)),
               ),
@@ -1662,6 +1664,9 @@ if (ok != true) return;
               separatorBuilder: (_, _) => const SizedBox(width: NasTokens.spaceXs),
               itemBuilder: (context, i) => ActionChip(
                 visualDensity: VisualDensity.compact,
+                // chip 默认着色在深色主题下是近黑胶囊，统一走面板材质
+                backgroundColor: context.nasStyle.panelColor,
+                side: BorderSide(color: context.nasStyle.panelBorderColor),
                 label: Text(_recentSearches[i]),
                 onPressed: () => _applySuggestion(_recentSearches[i]),
               ),
@@ -1685,6 +1690,9 @@ if (ok != true) return;
                 // 顶部一行本来就该是入口，不是统计报表。
                 return ActionChip(
                   visualDensity: VisualDensity.compact,
+                  // 同上：人物/地点联想胶囊不再用默认近黑底
+                  backgroundColor: context.nasStyle.panelColor,
+                  side: BorderSide(color: context.nasStyle.panelBorderColor),
                   label: Text('${s['value']}'),
                   onPressed: () => _applySuggestion('${s['value']}'),
                 );

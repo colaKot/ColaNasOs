@@ -237,15 +237,17 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final root = _roots[i];
-        final scheme = Theme.of(context).colorScheme;
+        // 文件夹来源卡走面板材质，不再用深色主题下近黑的 surfaceContainerHigh
+        final style = context.nasStyle;
         return InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: () => _openSource(root),
           child: Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: scheme.surfaceContainerHigh,
+              color: style.panelColor,
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: style.panelBorderColor),
             ),
             child: Row(
               children: [
@@ -256,7 +258,7 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
                     height: 56,
                     child: root.coverPath == null
                         ? ColoredBox(
-                            color: scheme.surfaceContainerHighest,
+                            color: style.panelColor,
                             child: const Icon(Icons.folder_outlined),
                           )
                         : NasCoverImage(url: _thumb(root.coverPath!), headers: ApiSession.instance.authHeaders),

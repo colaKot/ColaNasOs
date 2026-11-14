@@ -341,13 +341,14 @@ class _PhotoGeoPageState extends State<PhotoGeoPage> {
   }
 
   Widget _card({required Widget child}) {
-    final scheme = Theme.of(context).colorScheme;
+    // 三个区块卡统一走面板材质，不再用深色主题近黑的 surfaceContainerHigh
+    final style = context.nasStyle;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: style.panelColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
+        border: Border.all(color: style.panelBorderColor),
       ),
       child: child,
     );

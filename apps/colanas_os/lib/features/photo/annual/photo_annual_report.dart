@@ -316,13 +316,15 @@ class _PhotoAnnualReportState extends State<PhotoAnnualReport> {
   }
 
   Widget _card(BuildContext context, {required Widget child, EdgeInsets? padding}) {
-    final theme = Theme.of(context);
+    // 年度报告里的卡框走面板材质，不再用近黑的 surfaceContainerHighest
+    final style = context.nasStyle;
     return Container(
       width: double.infinity,
       padding: padding ?? const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.32),
+        color: style.panelColor,
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: style.panelBorderColor),
       ),
       child: child,
     );
@@ -333,7 +335,8 @@ class _PhotoAnnualReportState extends State<PhotoAnnualReport> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.32),
+        // 指标块：叠一层面板色，比外层卡片再亮一档
+        color: context.nasStyle.panelColor,
         borderRadius: BorderRadius.circular(9),
       ),
       child: Column(
@@ -985,9 +988,7 @@ class _PhotoAnnualReportState extends State<PhotoAnnualReport> {
                       horizontal: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest.withValues(
-                        alpha: 0.32,
-                      ),
+                      color: context.nasStyle.panelColor,
                       borderRadius: BorderRadius.circular(9),
                     ),
                     child: Column(
@@ -1049,9 +1050,7 @@ class _PhotoAnnualReportState extends State<PhotoAnnualReport> {
                     decoration: BoxDecoration(
                       color: i == 0
                           ? theme.colorScheme.primary
-                          : theme.colorScheme.surfaceContainerHighest.withValues(
-                              alpha: 0.5,
-                            ),
+                          : context.nasStyle.panelColor,
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Text(
@@ -1085,7 +1084,7 @@ class _PhotoAnnualReportState extends State<PhotoAnnualReport> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 18),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.32),
+        color: context.nasStyle.panelColor,
         borderRadius: BorderRadius.circular(10),
       ),
       child: Center(

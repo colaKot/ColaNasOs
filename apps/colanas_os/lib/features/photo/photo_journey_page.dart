@@ -169,6 +169,13 @@ class _PhotoJourneyPageState extends State<PhotoJourneyPage> {
                 label: Text(tr('photo.journey.segment', {'index': '${i + 1}'})),
                 selected: i == _segment,
                 onSelected: (_) => _select(i),
+                // chip 默认着色在深色主题下是近黑胶囊，统一走面板材质
+                backgroundColor: context.nasStyle.panelColor,
+                side: BorderSide(color: context.nasStyle.panelBorderColor),
+                selectedColor: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.18),
               ),
             ),
           ),
@@ -180,13 +187,14 @@ class _PhotoJourneyPageState extends State<PhotoJourneyPage> {
   }
 
   Widget _header() {
-    final scheme = Theme.of(context).colorScheme;
+    // 页头卡走面板材质，不再用近黑的 surfaceContainerHigh
+    final style = context.nasStyle;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: style.panelColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+        border: Border.all(color: style.panelBorderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

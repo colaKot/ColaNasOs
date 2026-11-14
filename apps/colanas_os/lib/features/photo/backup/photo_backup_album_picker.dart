@@ -315,13 +315,14 @@ class _AlbumGridTile extends StatelessWidget {
   final _AlbumPreview? preview;
   final VoidCallback onTap;
 
-  /// 相册封面：有缩略图直接铺满，没有就给同色底 + 占位图标。
-  Widget _albumThumb(ThemeData theme, Uint8List? bytes) {
+  /// 相册封面：有缩略图直接铺满，没有就给面板材质兜底 + 占位图标。
+  Widget _albumThumb(BuildContext context, ThemeData theme, Uint8List? bytes) {
     if (bytes != null && bytes.isNotEmpty) {
       return Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true);
     }
     return ColoredBox(
-      color: theme.colorScheme.surfaceContainerHighest,
+      // 封面兜底走面板材质，不再用近黑的 surfaceContainerHighest
+      color: context.nasStyle.panelColor,
       child: Center(
         child: Icon(
           Icons.photo_library_outlined,
@@ -337,8 +338,11 @@ class _AlbumGridTile extends StatelessWidget {
     final theme = Theme.of(context);
     final thumb = preview?.thumb;    final countLabel = preview == null ? '…' : '${preview?.count ?? 0}';
     return Material(
-      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-      borderRadius: BorderRadius.circular(12),
+      color: context.nasStyle.panelColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: context.nasStyle.panelBorderColor),
+      ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -348,7 +352,7 @@ class _AlbumGridTile extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(child: _albumThumb(theme, thumb)),
+                Expanded(child: _albumThumb(context, theme, thumb)),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
                   child: Column(

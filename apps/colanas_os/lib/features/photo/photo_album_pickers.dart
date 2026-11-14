@@ -214,9 +214,8 @@ class _TagPickDialog extends StatelessWidget {
                             borderRadius: BorderRadius.circular(NasTokens.radiusMd),
                             child: path.isEmpty
                                 ? Container(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .surfaceContainerHighest,
+                                    // 相册封面兜底：面板材质
+                                    color: context.nasStyle.panelColor,
                                     child: Icon(
                                       icon,
                                       color: context.nasTextSecondary,
@@ -228,9 +227,7 @@ class _TagPickDialog extends StatelessWidget {
                                     fit: BoxFit.cover,
                                     width: double.infinity,
                                     errorBuilder: (_, _, _) => Container(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .surfaceContainerHighest,
+                                      color: context.nasStyle.panelColor,
                                       child: Icon(
                                         Icons.broken_image_outlined,
                                         color: context.nasTextSecondary,
@@ -422,6 +419,9 @@ class _DateRangeDialogState extends State<_DateRangeDialog> {
                   ActionChip(
                     label: Text(label, style: const TextStyle(fontSize: NasTokens.fontCaption)),
                     onPressed: () => _applyPreset(key),
+                    // 日期预设胶囊走面板材质，别用默认近黑底
+                    backgroundColor: context.nasStyle.panelColor,
+                    side: BorderSide(color: context.nasStyle.panelBorderColor),
                   ),
                 ActionChip(
                   label: Text(
@@ -432,6 +432,8 @@ class _DateRangeDialogState extends State<_DateRangeDialog> {
                     _start = null;
                     _end = null;
                   }),
+                  backgroundColor: context.nasStyle.panelColor,
+                  side: BorderSide(color: context.nasStyle.panelBorderColor),
                 ),
               ],
             ),
