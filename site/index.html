@@ -36,10 +36,10 @@
   "operatingSystem": "Windows 10, Windows 11 (x64)",
   "inLanguage": "zh-CN",
   "description": "ColaNasOs 是一款 WindowsNas 系统：面向单台 Windows 主机的开源自托管 NAS，包含 AI 相册、影视库、音乐、文件与下载、多端同步与本地 AI，一套服务端六端共用。",
-  "softwareVersion": "1.1.0",
+  "softwareVersion": "1.2.0",
   "license": "https://www.gnu.org/licenses/gpl-3.0.html",
   "url": "https://cola.gexuan.net/",
-  "downloadUrl": "https://github.com/colaKot/ColaNasOs/releases/tag/v1.1.0",
+  "downloadUrl": "https://github.com/colaKot/ColaNasOs/releases/tag/v1.2.0",
   "image": "https://cola.gexuan.net/assets/shots/home.webp",
   "screenshot": "https://cola.gexuan.net/assets/shots/home.webp",
   "featureList": [
@@ -107,7 +107,7 @@
 
 <section class="hero">
   <div class="wrap">
-    <span class="hero__eyebrow"><b></b>v1.1.0 已发布 · Windows x64 · 开源 · GPL-3.0</span>
+    <span class="hero__eyebrow"><b></b>v1.2.0 已发布 · Windows x64 · 开源 · GPL-3.0</span>
     <h1>把一台 Windows 电脑<br>变成你的 NAS</h1>
     <p class="hero__lead">
       ColaNasOs 是一款 <strong>WindowsNas 系统</strong>——在 Windows 主机上自托管，把
@@ -115,7 +115,7 @@
       照片、影片和文件只留在你自己的盘上。
     </p>
     <div class="hero__actions">
-      <a class="btn btn--primary" href="#download">下载 v1.1.0</a>
+      <a class="btn btn--primary" href="#download">下载 v1.2.0</a>
       <a class="btn btn--ghost" href="#capabilities">看看能做什么</a>
       <a class="btn btn--ghost" href="https://github.com/colaKot/ColaNasOs" target="_blank" rel="noopener noreferrer">GitHub 仓库</a>
     </div>
@@ -429,7 +429,7 @@
             <div class="spec-row"><span>视觉模型</span><b>人脸 · 场景 · CLIP · OCR · 活动</b></div>
             <div class="spec-row"><span>翻译 / TTS 权重</span><b>约 1.4 GB，按需下载</b></div>
             <div class="spec-row"><span>数据去向</span><b>只在本机，不上传</b></div>
-            <div class="spec-row"><span>当前版本</span><b>v1.1.0</b></div>
+            <div class="spec-row"><span>当前版本</span><b>v1.2.0</b></div>
           </div>
         </div>
       </div>
@@ -453,19 +453,19 @@
           <tbody>
             <tr>
               <td data-label="端">Windows 服务端</td>
-              <td data-label="形态 / 产物"><code>ColaNasOs-Setup-1.1.0.exe</code></td>
+              <td data-label="形态 / 产物"><code>ColaNasOs-Server-1.2.0-Setup.exe</code></td>
               <td data-label="状态"><span class="status status--ok">已发布</span></td>
               <td data-label="说明">Windows 10 / 11 x64，托盘常驻；内置内核、FFmpeg 与视觉模型。</td>
             </tr>
             <tr>
               <td data-label="端">Windows 桌面端</td>
-              <td data-label="形态 / 产物"><code>ColaNasOs-1.1.0-windows-x64.zip</code></td>
+              <td data-label="形态 / 产物"><code>ColaNasOs-Client-1.2.0-Setup.exe</code><br><code>ColaNasOs-Client-1.2.0-windows-x64.zip</code></td>
               <td data-label="状态"><span class="status status--ok">已发布</span></td>
-              <td data-label="说明">解压即用。功能最全，也是目录同步的执行端。</td>
+              <td data-label="说明">安装版或解压即用。功能最全，也是目录同步的执行端。</td>
             </tr>
             <tr>
               <td data-label="端">Android 手机 / 平板</td>
-              <td data-label="形态 / 产物"><code>ColaNasOs-1.1.0-arm64.apk</code></td>
+              <td data-label="形态 / 产物"><code>ColaNasOs-Client-1.2.0-android-arm64.apk</code></td>
               <td data-label="状态"><span class="status status--ok">已发布</span></td>
               <td data-label="说明">手机与平板共用一个包，平板走大屏布局；相册滚动与播放器手势单独调过。</td>
             </tr>
@@ -517,7 +517,7 @@
       <div class="steps">
         <div class="step">
           <h3>装服务端</h3>
-          <p>运行 <code>ColaNasOs-Setup-1.1.0.exe</code>（543.5 MB），装完只在右下角留一个托盘图标。建议右键托盘勾选「开机自动启动」。</p>
+          <p>运行 <code>ColaNasOs-Server-1.2.0-Setup.exe</code>（543.5 MB），装完只在右下角留一个托盘图标。建议右键托盘勾选「开机自动启动」。</p>
         </div>
         <div class="step">
           <h3>创建管理员</h3>
@@ -575,7 +575,7 @@
       </div>
 
       <div class="note">
-        <b style="color:var(--ink-2)">v1.1.0 已知限制</b>：安装包未做代码签名，Windows SmartScreen 可能提示「未知发布者」；
+        <b style="color:var(--ink-2)">v1.2.0 已知限制</b>：安装包未做代码签名，Windows SmartScreen 可能提示「未知发布者」；
         本机构建缺少便携 Python 运行时，装机版的 AI 语音合成不可用，其余功能不受影响；
         翻译与语音合成两个模型（约 1.4 GB）不随安装包分发，在应用内按需下载。
       </div>
@@ -587,8 +587,8 @@
     <div class="wrap">
       <div class="section__head">
         <span class="section__eyebrow">下载</span>
-        <h2>ColaNasOs v1.1.0</h2>
-        <p>三个产物对应三种用法：<b>服务端</b>装在那台常开的电脑上、<b>桌面客户端</b>装在你自己电脑上、<b>安卓客户端</b>装手机。Web 端随服务端内置，不需要单独下载。</p>
+        <h2>ColaNasOs v1.2.0</h2>
+        <p>四个产物对应三种用法：<b>服务端</b>装在那台常开的电脑上、<b>桌面客户端</b>装在你自己电脑上（安装版或便携包二选一）、<b>安卓客户端</b>装手机。Web 端随服务端内置，不需要单独下载。</p>
       </div>
 
       <div class="dl-table">
@@ -597,29 +597,38 @@
         </div>
         <div class="dl-row">
           <span>Windows 服务端 x64<br><small>托盘 + 内核 + Web，装在常开的电脑上</small></span>
-          <span>ColaNasOs-Setup-1.1.0.exe</span>
+          <span>ColaNasOs-Server-1.2.0-Setup.exe</span>
           <span>543.5 MB</span>
           <div class="dl-links">
-            <a href="https://github.com/colaKot/ColaNasOs/releases/download/v1.1.0/ColaNasOs-Setup-1.1.0.exe" target="_blank" rel="noopener noreferrer">下载</a>
-            <a class="dl-mirror" href="https://ghfast.top/https://github.com/colaKot/ColaNasOs/releases/download/v1.1.0/ColaNasOs-Setup-1.1.0.exe" target="_blank" rel="noopener noreferrer">加速</a>
+            <a href="https://github.com/colaKot/ColaNasOs/releases/download/v1.2.0/ColaNasOs-Server-1.2.0-Setup.exe" target="_blank" rel="noopener noreferrer">下载</a>
+            <a class="dl-mirror" href="https://ghfast.top/https://github.com/colaKot/ColaNasOs/releases/download/v1.2.0/ColaNasOs-Server-1.2.0-Setup.exe" target="_blank" rel="noopener noreferrer">加速</a>
+          </div>
+        </div>
+        <div class="dl-row">
+          <span>Windows 客户端 x64<br><small>安装版，连服务端用</small></span>
+          <span>ColaNasOs-Client-1.2.0-Setup.exe</span>
+          <span>28.8 MB</span>
+          <div class="dl-links">
+            <a href="https://github.com/colaKot/ColaNasOs/releases/download/v1.2.0/ColaNasOs-Client-1.2.0-Setup.exe" target="_blank" rel="noopener noreferrer">下载</a>
+            <a class="dl-mirror" href="https://ghfast.top/https://github.com/colaKot/ColaNasOs/releases/download/v1.2.0/ColaNasOs-Client-1.2.0-Setup.exe" target="_blank" rel="noopener noreferrer">加速</a>
           </div>
         </div>
         <div class="dl-row">
           <span>Windows 客户端 x64<br><small>便携包（免安装），连服务端用</small></span>
-          <span>ColaNasOs-1.1.0-windows-x64.zip</span>
-          <span>37.4 MB</span>
+          <span>ColaNasOs-Client-1.2.0-windows-x64.zip</span>
+          <span>38.1 MB</span>
           <div class="dl-links">
-            <a href="https://github.com/colaKot/ColaNasOs/releases/download/v1.1.0/ColaNasOs-1.1.0-windows-x64.zip" target="_blank" rel="noopener noreferrer">下载</a>
-            <a class="dl-mirror" href="https://ghfast.top/https://github.com/colaKot/ColaNasOs/releases/download/v1.1.0/ColaNasOs-1.1.0-windows-x64.zip" target="_blank" rel="noopener noreferrer">加速</a>
+            <a href="https://github.com/colaKot/ColaNasOs/releases/download/v1.2.0/ColaNasOs-Client-1.2.0-windows-x64.zip" target="_blank" rel="noopener noreferrer">下载</a>
+            <a class="dl-mirror" href="https://ghfast.top/https://github.com/colaKot/ColaNasOs/releases/download/v1.2.0/ColaNasOs-Client-1.2.0-windows-x64.zip" target="_blank" rel="noopener noreferrer">加速</a>
           </div>
         </div>
         <div class="dl-row">
           <span>Android 客户端 arm64<br><small>手机 / 平板，连服务端用</small></span>
-          <span>ColaNasOs-1.1.0-arm64.apk</span>
-          <span>42.2 MB</span>
+          <span>ColaNasOs-Client-1.2.0-android-arm64.apk</span>
+          <span>42.4 MB</span>
           <div class="dl-links">
-            <a href="https://github.com/colaKot/ColaNasOs/releases/download/v1.1.0/ColaNasOs-1.1.0-arm64.apk" target="_blank" rel="noopener noreferrer">下载</a>
-            <a class="dl-mirror" href="https://ghfast.top/https://github.com/colaKot/ColaNasOs/releases/download/v1.1.0/ColaNasOs-1.1.0-arm64.apk" target="_blank" rel="noopener noreferrer">加速</a>
+            <a href="https://github.com/colaKot/ColaNasOs/releases/download/v1.2.0/ColaNasOs-Client-1.2.0-android-arm64.apk" target="_blank" rel="noopener noreferrer">下载</a>
+            <a class="dl-mirror" href="https://ghfast.top/https://github.com/colaKot/ColaNasOs/releases/download/v1.2.0/ColaNasOs-Client-1.2.0-android-arm64.apk" target="_blank" rel="noopener noreferrer">加速</a>
           </div>
         </div>
       </div>
@@ -627,9 +636,10 @@
       <details class="sha">
         <summary>查看 SHA256 校验值</summary>
         <ul>
-          <li><span>ColaNasOs-Setup-1.1.0.exe</span><code>afd8b7b7fcc196676a4d376e4e6453fe0a828088aa898c906382f046c3747bb7</code></li>
-          <li><span>ColaNasOs-1.1.0-windows-x64.zip</span><code>6c795b7f2eb28bbd7e646bf989051161943c31b0405a45dc99615bddfc21d70e</code></li>
-          <li><span>ColaNasOs-1.1.0-arm64.apk</span><code>f3d2095f3b13c9f23903ed8354418113f00ff286e255b3a96f0db969f607d40d</code></li>
+          <li><span>ColaNasOs-Server-1.2.0-Setup.exe</span><code>0a66ac28a20bbcfca12f85b7a38e7edbd5e6ebeb010a8de99c50af009b259461</code></li>
+          <li><span>ColaNasOs-Client-1.2.0-Setup.exe</span><code>1d39871fc27faa082608f8f7078f28f39c06145b42980f7bad8f8e848d189f91</code></li>
+          <li><span>ColaNasOs-Client-1.2.0-windows-x64.zip</span><code>7a676c01a1e2d55201bb159fc6b4d290a350ebc541a0bce112cf42c3470c31ec</code></li>
+          <li><span>ColaNasOs-Client-1.2.0-android-arm64.apk</span><code>223e0933da282309150df5704e8718dee4efc5f5857db2fa047468720ac85d8a</code></li>
         </ul>
       </details>
 
@@ -684,7 +694,7 @@
         </details>
         <details class="faq__item">
           <summary>为什么 Windows 提示「未知发布者」？</summary>
-          <p>v1.1.0 安装包未做代码签名，SmartScreen 会拦截未知发布者。确认文件来自本页或 GitHub Releases、并核对 SHA256 后，选择「更多信息 → 仍要运行」即可。</p>
+          <p>v1.2.0 安装包未做代码签名，SmartScreen 会拦截未知发布者。确认文件来自本页或 GitHub Releases、并核对 SHA256 后，选择「更多信息 → 仍要运行」即可。</p>
         </details>
         <details class="faq__item">
           <summary>可以给家人开账号吗？权限能分开吗？</summary>
