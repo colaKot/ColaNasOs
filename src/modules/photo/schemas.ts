@@ -1246,6 +1246,41 @@ export const GrowthStagePhotos = Type.Object(
   { $id: 'PhotoGrowthStagePhotos' },
 );
 
+/**
+ * 拼贴版成长轨迹的批量取图：一次请求拿多段、每段多张。
+ *
+ * 列表页一屏有 20 段，逐段调 `/stage/photos` 会打出一串请求；这里按段收口，
+ * 选片顺序与单段接口一致：封面 → 次图 → 候选池 rank 顺序（已按横屏优先、
+ * 人景等级、pHash 去重排好），不足时再用该时段照片补齐。
+ */
+export const GrowthStagePhotosBatchQuery = Type.Object(
+  {
+    stageIds: Type.String({
+      minLength: 1,
+      maxLength: 4000,
+      description: '逗号分隔的阶段 id，最多 10 个',
+    }),
+    limit: Type.Optional(
+      Type.Integer({ minimum: 1, maximum: 12, description: '每段最多返回几张（默认 8）' }),
+    ),
+  },
+  { $id: 'PhotoGrowthStagePhotosBatchQuery' },
+);
+
+export const GrowthStagePhotoGroup = Type.Object(
+  {
+    stageId: Type.String(),
+    items: Type.Array(Type.Ref(Item)),
+    total: Type.Integer({ description: '该阶段照片总数' }),
+  },
+  { $id: 'PhotoGrowthStagePhotoGroup' },
+);
+
+export const GrowthStagePhotosBatch = Type.Object(
+  { items: Type.Array(Type.Ref(GrowthStagePhotoGroup)) },
+  { $id: 'PhotoGrowthStagePhotosBatch' },
+);
+
 /** 长按封面 → 「换一张」的三个候选 */
 export const GrowthCandidate = Type.Object(
   {
@@ -1414,6 +1449,9 @@ export const PHOTO_SCHEMAS = [
   GrowthStageList,
   GrowthStagePhotosQuery,
   GrowthStagePhotos,
+  GrowthStagePhotosBatchQuery,
+  GrowthStagePhotoGroup,
+  GrowthStagePhotosBatch,
   GrowthCandidate,
   GrowthCandidatesQuery,
   GrowthCandidateList,

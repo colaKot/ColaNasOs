@@ -799,6 +799,10 @@ class ColanasClient:
         """成长轨迹：某阶段的全量照片（真分页）"""
         return self._request("GET", "/api/v1/photo/growth/stage/photos", params, "query")
 
+    def photo_growth_stage_photos_batch(self, **params):
+        """成长轨迹：批量取多段的拼贴照片（每段多张，选片口径同单段）"""
+        return self._request("GET", "/api/v1/photo/growth/stage/photos/batch", params, "query")
+
     def photo_growth_stage_repin(self, **params):
         """成长轨迹：人工指定阶段封面（写 locked，重算不再覆盖）"""
         return self._request("POST", "/api/v1/photo/growth/stage/repin", params, "body")

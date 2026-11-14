@@ -1990,6 +1990,16 @@ class ApiClient {
     return PhotoGrowthStagePhotos.fromJson(_asMap(_decode(res)));
   }
 
+  /// 成长轨迹：批量取多段的拼贴照片（每段多张，选片口径同单段）
+  Future<PhotoGrowthStagePhotosBatch> photoGrowthStagePhotosBatch({required String stageIds, int? limit}) async {
+    final query = <String, String>{
+      'stageIds': stageIds,
+      if (limit != null) 'limit': '$limit',
+    };
+    final res = await transport.send('GET', _uri('/api/v1/photo/growth/stage/photos/batch', query), headers: await _headers());
+    return PhotoGrowthStagePhotosBatch.fromJson(_asMap(_decode(res)));
+  }
+
   /// 成长轨迹：换封面的候选照片（可解释分数）
   Future<PhotoGrowthCandidateList> photoGrowthStageCandidates({required String stageId}) async {
     final query = <String, String>{

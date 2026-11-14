@@ -5962,6 +5962,46 @@ class PhotoGrowthStagePhotos {
       };
 }
 
+class PhotoGrowthStagePhotoGroup {
+  final String stageId;
+  final List<PhotoItem> items;
+  final int total;
+
+  const PhotoGrowthStagePhotoGroup({
+    required this.stageId,
+    required this.items,
+    required this.total,
+  });
+
+  factory PhotoGrowthStagePhotoGroup.fromJson(Map<String, dynamic> json) => PhotoGrowthStagePhotoGroup(
+        stageId: json['stageId'] as String,
+        items: (json['items'] as List<dynamic>).map((e) => PhotoItem.fromJson(e as Map<String, dynamic>)).toList(),
+        total: json['total'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'stageId': stageId,
+        'items': items.map((e) => e.toJson()).toList(),
+        'total': total,
+      };
+}
+
+class PhotoGrowthStagePhotosBatch {
+  final List<PhotoGrowthStagePhotoGroup> items;
+
+  const PhotoGrowthStagePhotosBatch({
+    required this.items,
+  });
+
+  factory PhotoGrowthStagePhotosBatch.fromJson(Map<String, dynamic> json) => PhotoGrowthStagePhotosBatch(
+        items: (json['items'] as List<dynamic>).map((e) => PhotoGrowthStagePhotoGroup.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
 class PhotoGrowthCandidate {
   final String assetId;
   final String path;

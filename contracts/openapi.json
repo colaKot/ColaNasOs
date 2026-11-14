@@ -6726,6 +6726,63 @@
           }
         }
       },
+      "PhotoGrowthStagePhotosBatchQuery": {
+        "type": "object",
+        "required": [
+          "stageIds"
+        ],
+        "properties": {
+          "stageIds": {
+            "minLength": 1,
+            "maxLength": 4000,
+            "description": "逗号分隔的阶段 id，最多 10 个",
+            "type": "string"
+          },
+          "limit": {
+            "minimum": 1,
+            "maximum": 12,
+            "description": "每段最多返回几张（默认 8）",
+            "type": "integer"
+          }
+        }
+      },
+      "PhotoGrowthStagePhotoGroup": {
+        "type": "object",
+        "required": [
+          "stageId",
+          "items",
+          "total"
+        ],
+        "properties": {
+          "stageId": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhotoItem"
+            }
+          },
+          "total": {
+            "description": "该阶段照片总数",
+            "type": "integer"
+          }
+        }
+      },
+      "PhotoGrowthStagePhotosBatch": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhotoGrowthStagePhotoGroup"
+            }
+          }
+        }
+      },
       "PhotoGrowthCandidate": {
         "type": "object",
         "required": [
@@ -28852,6 +28909,66 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PhotoGrowthStagePhotos"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/photo/growth/stage/photos/batch": {
+      "get": {
+        "operationId": "photoGrowthStagePhotosBatch",
+        "summary": "成长轨迹：批量取多段的拼贴照片（每段多张，选片口径同单段）",
+        "tags": [
+          "photo"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "maxLength": 4000,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "stageIds",
+            "required": true,
+            "description": "逗号分隔的阶段 id，最多 10 个"
+          },
+          {
+            "schema": {
+              "minimum": 1,
+              "maximum": 12,
+              "type": "integer"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "description": "每段最多返回几张（默认 8）"
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhotoGrowthStagePhotosBatch"
                 }
               }
             }

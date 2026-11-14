@@ -1,7 +1,7 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**411 个路径 / 437 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**412 个路径 / 438 个操作 / 18 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
@@ -14,7 +14,7 @@
 - **开放集成（Webhook / deliveries）**（`integration`）· 6 个操作 · [跳转](#integration)
 - **音乐**（`music`）· 35 个操作 · [跳转](#music)
 - **其他**（`other`）· 2 个操作 · [跳转](#other)
-- **相册**（`photo`）· 140 个操作 · [跳转](#photo)
+- **相册**（`photo`）· 141 个操作 · [跳转](#photo)
 - **player**（`player`）· 2 个操作 · [跳转](#player)
 - **pt**（`pt`）· 26 个操作 · [跳转](#pt)
 - **RSS 订阅**（`rss`）· 15 个操作 · [跳转](#rss)
@@ -1487,6 +1487,13 @@ GPS 视觉候选生成进度 · `photoGeoVisionStatus`
 
 - 参数：`stageId` · 查询 · string · **必填**<br>`cursor` · 查询 · string · 可选<br>`limit` · 查询 · integer · 可选
 - 响应：200 `PhotoGrowthStagePhotos` · 错误 400
+
+#### `GET /api/v1/photo/growth/stage/photos/batch`
+
+成长轨迹：批量取多段的拼贴照片（每段多张，选片口径同单段） · `photoGrowthStagePhotosBatch`
+
+- 参数：`stageIds` · 查询 · string · **必填**<br>`limit` · 查询 · integer · 可选
+- 响应：200 `PhotoGrowthStagePhotosBatch` · 错误 400
 
 #### `POST /api/v1/photo/growth/stage/repin`
 

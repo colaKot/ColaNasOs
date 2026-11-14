@@ -1027,6 +1027,139 @@ export async function stagePhotos(
   };
 }
 
+/**
+ * 拼贴版列表的批量取图：一次拿多段、每段多张。
+ *
+ * 顺序与单段接口保持同一口径：
+ *   1. 人工 / 自动封面；
+ *   2. 次图（只有封面是竖图时才存在）；
+ *   3. 候选池按 rank 顺序（建轨时已做横屏优先、人景等级、pHash 连拍去重）；
+ *   4. 仍不够时，用该时段内此人的照片按拍摄时间补齐。
+ *
+ * 去重同时按 asset id、路径与非空 pHash，避免同一张连拍在拼贴里重复出现。
+ */
+export async function stagePhotosBatch(
+  k: KernelApi,
+  owner: string,
+  stageIds: string[],
+  perStage: number,
+): Promise<Array<{ stageId: string; items: ReturnType<typeof toItem>[]; total: number }>> {
+  const ids = [...new Set(stageIds.map((s) => String(s || '').trim()).filter(Boolean))];
+  if (ids.length === 0) return [];
+  const idSql = sql.join(ids.map((id) => sql`${id}`), sql`, `);
+
+  const stages = (
+    await sql<GrowthStageRow>`
+      select * from photo_growth_stages
+       where owner_id = ${owner} and hidden = 0 and id in (${idSql})
+    `.execute(k.db)
+  ).rows;
+  const stageById = new Map(stages.map((s) => [s.id, s]));
+
+  type BatchRow = PhotoItemRow & { stage_id: string; rank: number; phash: string | null };
+  const rows = (
+    await sql<BatchRow>`
+      select a.stage_id, a.rank, i.*
+        from photo_growth_stage_assets a
+        join photo_items i on i.id = a.asset_id
+       where a.stage_id in (${idSql})
+         and i.in_trash = 0
+         and coalesce(i.media_kind, 'image') <> 'video'
+       order by a.stage_id asc, a.rank asc
+    `.execute(k.db)
+  ).rows;
+
+  const byStage = new Map<string, BatchRow[]>();
+  for (const r of rows) {
+    const list = byStage.get(r.stage_id) ?? [];
+    list.push(r);
+    byStage.set(r.stage_id, list);
+  }
+
+  const out: Array<{ stageId: string; items: ReturnType<typeof toItem>[]; total: number }> = [];
+  for (const id of ids) {
+    const stage = stageById.get(id);
+    if (!stage) continue;
+    const pool = byStage.get(id) ?? [];
+    const picked: BatchRow[] = [];
+    const usedIds = new Set<string>();
+    const usedPaths = new Set<string>();
+    const usedHash = new Set<string>();
+    const push = (r: BatchRow) => {
+      if (picked.length >= perStage) return;
+      if (usedIds.has(r.id) || usedPaths.has(r.rel_path)) return;
+      const hash = String(r.phash || '');
+      if (hash && usedHash.has(hash)) return;
+      usedIds.add(r.id);
+      usedPaths.add(r.rel_path);
+      if (hash) usedHash.add(hash);
+      picked.push(r);
+    };
+
+    // 1) 封面：人工换过封面时 rank 顺序会变，先按 asset id 找回
+    const cover =
+      pool.find((r) => stage.cover_asset_id != null && r.id === stage.cover_asset_id) ??
+      pool.find((r) => r.rel_path === String(stage.cover_path || ''));
+    if (cover) push(cover);
+    // 2) 次图（竖图段）
+    if (stage.secondary_path) {
+      const secondary = pool.find((r) => r.rel_path === stage.secondary_path);
+      if (secondary) push(secondary);
+    }
+    // 3) 候选池 rank 顺序
+    for (const r of pool) push(r);
+
+    // 4) 候选池不够（该段照片很少 / 候选被裁掉）时，用时段内照片按时间补齐
+    if (picked.length < perStage && num(stage.photo_count) > picked.length) {
+      const extra = (
+        await sql<PhotoItemRow & { phash: string | null }>`
+          select i.* from photo_items i
+           where i.in_trash = 0
+             and i.library_id in (select id from photo_libraries where owner_id = ${owner})
+             and i.taken_at between ${num(stage.start_at)} and ${num(stage.end_at)}
+             and exists (select 1 from photo_faces f
+                          where f.photo_id = i.id and f.cluster_id = ${stage.person_id})
+           order by i.taken_at asc, i.id asc
+           limit ${Math.max(perStage * 3, 24)}
+        `.execute(k.db)
+      ).rows;
+      for (const r of extra) {
+        push({ ...r, stage_id: id, rank: 0, phash: r.phash ?? null });
+      }
+    }
+
+    // 尺寸兜底：老照片 photo_items.width/height 常为 NULL，卡片里按 4:3 兜底会把
+    // 竖图放进横槽、留一大片白（2026-11-13 实测）。人脸表里有识别阶段的
+    // img_width/img_height，按同一个 photo 取最大的一张脸所在图尺寸回填。
+    const missing = picked.filter((r) => !num(r.width) || !num(r.height));
+    if (missing.length > 0) {
+      const sizes = (
+        await sql<{ photo_id: string; w: number | null; h: number | null }>`
+          select photo_id, max(img_width) as w, max(img_height) as h
+            from photo_faces
+           where photo_id in (${sql.join(missing.map((r) => sql`${r.id}`), sql`, `)})
+             and img_width is not null and img_height is not null
+           group by photo_id
+        `.execute(k.db)
+      ).rows;
+      const sizeById = new Map(sizes.map((r) => [r.photo_id, r]));
+      for (const r of missing) {
+        const s = sizeById.get(r.id);
+        if (!s) continue;
+        r.width = num(s.w);
+        r.height = num(s.h);
+      }
+    }
+
+    out.push({
+      stageId: id,
+      items: picked.map(toItem),
+      total: num(stage.photo_count),
+    });
+  }
+  return out;
+}
+
 /** 换封面的候选：候选池里排除当前封面，取前 3 张。 */
 export async function stageCandidates(k: KernelApi, stage: GrowthStageRow) {
   const rows = (
@@ -1048,7 +1181,7 @@ export async function stageCandidates(k: KernelApi, stage: GrowthStageRow) {
   const map = new Map(paths.map((r) => [r.id, String(r.rel_path || '')]));
   return rows
     .map((r) => {
-      let grade = '';
+      let grade: string;
       try {
         grade = String((JSON.parse(r.reason_json || '{}') as { grade?: string }).grade || '');
       } catch {

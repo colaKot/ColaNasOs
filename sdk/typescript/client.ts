@@ -987,6 +987,11 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/photo/growth/stage/photos', params, 'query');
   }
 
+  /** 成长轨迹：批量取多段的拼贴照片（每段多张，选片口径同单段） */
+  async photoGrowthStagePhotosBatch(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/photo/growth/stage/photos/batch', params, 'query');
+  }
+
   /** 成长轨迹：人工指定阶段封面（写 locked，重算不再覆盖） */
   async photoGrowthStageRepin(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/photo/growth/stage/repin', params, 'body');

@@ -1367,6 +1367,8 @@
     "photo.growth.poem4": "{place}的云很低，笑声很高。{year} 年 {month} 月。",
     "photo.growth.poem5": "从{place}出发，一路都是好天气。",
     "photo.growth.poem6": "{month} 月的{place}，镜头记住了风，也记住了你。",
+    "photo.growth.recordYear": "记录第 {n} 年",
+    "photo.growth.yearStats": "{stages} 段 · {photos} 张",
     "photo.growth.somewhere": "某个地方",
     "photo.growth.quarter": "季",
     "photo.growth.rebuild": "重新生成",

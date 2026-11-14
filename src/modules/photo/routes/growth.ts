@@ -12,6 +12,7 @@ import {
   repinStage,
   stageCandidates,
   stagePhotos,
+  stagePhotosBatch,
 } from '../growth';
 import type { FastifyInstance } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
@@ -112,6 +113,35 @@ export async function registerPhotoGrowth(
         return reply.code(400).send({ error: Err.badRequest, message: 'invalid cursor' });
       }
       return stagePhotos(k, uidOf(req as any), stage, q.cursor, h.limitOf(q.limit, 60, 200));
+    },
+  );
+
+  app.get(
+    '/api/v1/photo/growth/stage/photos/batch',
+    secured('photo:read', {
+      schema: {
+        operationId: 'photoGrowthStagePhotosBatch',
+        tags: TAG,
+        summary: '成长轨迹：批量取多段的拼贴照片（每段多张，选片口径同单段）',
+        querystring: h.ref('PhotoGrowthStagePhotosBatchQuery'),
+        response: { 200: h.ref('PhotoGrowthStagePhotosBatch'), 400: h.ref('PhotoErrorResponse') },
+      },
+    }),
+    async (req, reply) => {
+      const q = (req.query || {}) as { stageIds?: string; limit?: number };
+      const ids = String(q.stageIds || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+      if (ids.length === 0) {
+        return reply.code(400).send({ error: Err.badRequest, message: 'stageIds required' });
+      }
+      // 一屏最多 20 段，客户端按 10 段一批；超过 10 段直接拒绝，避免单请求放大 SQL
+      if (ids.length > 10) {
+        return reply.code(400).send({ error: Err.badRequest, message: 'at most 10 stages per batch' });
+      }
+      const limit = Math.max(1, Math.min(12, Number(q.limit) || 8));
+      return { items: await stagePhotosBatch(k, uidOf(req as any), ids, limit) };
     },
   );
 

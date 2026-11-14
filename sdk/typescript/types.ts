@@ -1774,6 +1774,21 @@ export type PhotoGrowthStagePhotos = {
   "stage": PhotoGrowthStage;
 };
 
+export type PhotoGrowthStagePhotosBatchQuery = {
+  "stageIds": string;
+  "limit"?: number;
+};
+
+export type PhotoGrowthStagePhotoGroup = {
+  "stageId": string;
+  "items": PhotoItem[];
+  "total": number;
+};
+
+export type PhotoGrowthStagePhotosBatch = {
+  "items": PhotoGrowthStagePhotoGroup[];
+};
+
 export type PhotoGrowthCandidate = {
   "assetId": string;
   "path": string;

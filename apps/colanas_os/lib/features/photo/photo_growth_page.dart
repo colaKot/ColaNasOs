@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_media/nas_media.dart';
@@ -42,6 +44,14 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
   bool _asc = false;
   String _granularity = 'auto';
   final ScrollController _scroll = ScrollController();
+
+  /// 每段的多张照片：批量接口按 10 段一批取回，卡片内最多展示 8 张。
+  ///
+  /// 列表页一屏 20 段，逐段请求会打出一串接口调用；失败或还没回来时回落到
+  /// stage 自带的封面 / 次图 / 补充图（不足 5 张就有几张显示几张，不补空位）。
+  final Map<String, List<PhotoItem>> _stagePhotos = {};
+
+  static const int maxPhotos = 8;
 
   /// 用户亲手挑过的人物条名单；null = 没挑过，默认放前 [_barLimit] 个。
   ///
@@ -165,6 +175,8 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
         _summary = res.summary;
         _loadingMore = false;
       });
+      // 先渲染封面兜底，再按批补图；失败不打断列表
+      unawaited(_loadStagePhotos(_stages));
       if (reset && _scroll.hasClients) {
         if (!preserveScroll) {
           _scroll.jumpTo(0);
@@ -180,6 +192,35 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
       if (!mounted) return;
       setState(() => _loadingMore = false);
       NasSnack.show(context, '$e');
+    }
+  }
+
+  /// 批量补图：按 10 段一批请求，已经拿到的段不再重复拉。
+  ///
+  /// 每段最多 8 张，卡片里横竖混排；不足 5 张时就有几张显示几张。
+  Future<void> _loadStagePhotos(List<PhotoGrowthStage> stages) async {
+    final ids = <String>[
+      for (final s in stages)
+        if (!_stagePhotos.containsKey(s.id)) s.id,
+    ];
+    if (ids.isEmpty) return;
+    for (var i = 0; i < ids.length; i += 10) {
+      final end = i + 10 < ids.length ? i + 10 : ids.length;
+      try {
+        final res = await _client.photoGrowthStagePhotosBatch(
+          stageIds: ids.sublist(i, end).join(','),
+          limit: maxPhotos,
+        );
+        if (!mounted) return;
+        setState(() {
+          for (final g in res.items) {
+            _stagePhotos[g.stageId] = g.items.take(maxPhotos).toList();
+          }
+        });
+      } catch (_) {
+        // 批量接口不可用时回落到封面/次图/补充图，列表本身不受影响
+        return;
+      }
     }
   }
 
@@ -280,21 +321,6 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
     return short ? '${d.year}.$m' : '${d.year}-$m-${d.day.toString().padLeft(2, '0')}';
   }
 
-  String _spanLabel(String kind) {
-    switch (kind) {
-      case 'month':
-        return tr('photo.growth.spanMonth');
-      case 'quarter':
-        return tr('photo.growth.spanQuarter');
-      case 'halfYear':
-        return tr('photo.growth.spanHalfYear');
-      case 'year':
-        return tr('photo.growth.spanYear');
-      default:
-        return tr('photo.growth.auto');
-    }
-  }
-
   String _milestoneLabel(String m) {
     if (m == 'firstPlace') return tr('photo.growth.milestoneFirstPlace');
     if (m == 'firstScene') return tr('photo.growth.milestoneFirstScene');
@@ -329,7 +355,7 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
         ),
       );
     } else {
-      body.addAll(_stages.map(_timelineRow));
+      body.addAll(_yearSections());
     }
     if (_loadingMore) {
       body.add(
@@ -353,9 +379,13 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
             delegate: _PinnedPersonBar(extent: _personBarHeight, child: _personBar()),
           ),
         SliverPadding(
-          // 右边不留 padding：卡片自己留 16，让滚动条/内容更贴窗口右边
+          // 右边不留 padding：内容自己留 16，让滚动条/内容更贴窗口右边
           padding: const EdgeInsets.fromLTRB(16, 0, 0, 28),
-          sliver: SliverList(delegate: SliverChildListDelegate(body)),
+          // 用 builder 懒构建：年份块里的图很多，避免一次把全部段落建出来
+          sliver: SliverList.builder(
+            itemCount: body.length,
+            itemBuilder: (context, i) => body[i],
+          ),
         ),
       ],
     );
@@ -410,7 +440,7 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
                 children: [
                   CircleAvatar(
                     radius: 28,
-                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                    backgroundColor: context.nasStyle.panelColor,
                     child: const Icon(Icons.add),
                   ),
                   const SizedBox(height: 4),
@@ -442,7 +472,7 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
                     ),
                     child: CircleAvatar(
                       radius: 26,
-                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                      backgroundColor: context.nasStyle.panelColor,
                       backgroundImage: p.coverFaceId == null
                           ? null
                           : NetworkImage(
@@ -535,228 +565,334 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
     );
   }
 
-  Widget _timelineRow(PhotoGrowthStage s) {
-    final scheme = Theme.of(context).colorScheme;
-    // 不再用 IntrinsicHeight：固有高度测量会和竖线的 Expanded 形成循环，
-    // 遇到 LayoutBuilder 更会直接抛 computeMaxIntrinsicHeight 异常，
-    // 连锁把 sliver 布局链打断（2026-11-13 点成长轨迹浏览器卡死）。
-    // 改成 Stack + Positioned：高度由卡片一次布局决定，竖线自动填满。
-    return Stack(
+  // ---------------------------------------------------------------- 杂志拼贴
+  //
+  // 按年份成块，块内保持 3 列节奏：段落卡片负责放封面，诗句块负责补角，
+  // 年份数字负责定调。每张卡片的高度由封面原图宽高比决定（AspectRatio），
+  // 图片用 contain 完整显示，不再用固定高度 + cover 把横图/竖图裁掉。
+  // 同一时刻的多张照片仍在二级页里看，卡片只负责把「这一段的封面」讲清楚。
+
+  List<Widget> _yearSections() {
+    if (_stages.isEmpty) return const [];
+    final firstYear = _firstYear();
+    final groups = <int, List<PhotoGrowthStage>>{};
+    final order = <int>[];
+    for (final s in _stages) {
+      final y = DateTime.fromMillisecondsSinceEpoch(s.startAt * 1000).year;
+      if (!groups.containsKey(y)) order.add(y);
+      groups.putIfAbsent(y, () => <PhotoGrowthStage>[]).add(s);
+    }
+    return [
+      for (var i = 0; i < order.length; i++) ...[
+        _yearSection(order[i], groups[order[i]]!, firstYear),
+        if (i < order.length - 1) const SizedBox(height: 26),
+      ],
+    ];
+  }
+
+  /// 「记录第 N 年」的起点：库里没有生日，只能用该人最早一张照片的年份。
+  int _firstYear() {
+    var first = 0;
+    void consider(int sec) {
+      if (sec <= 0) return;
+      final y = DateTime.fromMillisecondsSinceEpoch(sec * 1000).year;
+      if (first == 0 || y < first) first = y;
+    }
+
+    for (final s in _stages) {
+      consider(s.startAt);
+    }
+    consider(_summary?.firstAt ?? 0);
+    return first;
+  }
+
+  Widget _yearSection(int year, List<PhotoGrowthStage> stages, int firstYear) {
+    final photos = stages.fold<int>(0, (sum, s) => sum + s.photoCount);
+    final n = firstYear > 0 ? year - firstYear + 1 : 1;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 26),
-          child: _stageCard(s),
-        ),
-        Positioned(
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: 26,
-          child: Column(
-            children: [
-              const SizedBox(height: 10),
-              Container(
-                width: 11,
-                height: 11,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: s.milestone.isNotEmpty ? scheme.primary : scheme.outlineVariant,
-                  border: Border.all(color: scheme.surface, width: 2),
-                ),
+        Wrap(
+          spacing: 10,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              '$year',
+              style: const TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.w700,
+                height: 1.05,
+                letterSpacing: -0.6,
               ),
-              Expanded(
-                child: Container(
-                  width: 2,
-                  color: scheme.outlineVariant.withValues(alpha: 0.5),
-                ),
-              ),
-            ],
-          ),
+            ),
+            Text(
+              tr('photo.growth.recordYear', {'n': '$n'}),
+              style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+            ),
+            Text(
+              tr('photo.growth.yearStats', {
+                'stages': '${stages.length}',
+                'photos': '$photos',
+              }),
+              style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+            ),
+          ],
         ),
+        const SizedBox(height: 10),
+        for (var i = 0; i < stages.length; i++) ...[
+          _stageBlock(stages[i]),
+          if (i < stages.length - 1) const SizedBox(height: 12),
+        ],
       ],
     );
   }
 
-  Widget _stageCard(PhotoGrowthStage s) {
+  // ------------------------------------------------------------ 单列记忆块
+  //
+  // 页面从上到下是一条单列：一个块（一个时间段 / 一个记忆）占满整行，块与块
+  // 纵向排列，高度随内容自适应。瀑布流只发生在块内部 —— 照片区按列紧贴排布，
+  // 每列长度各不相同，形成错落；不再是「一行两张卡片」的多列卡片布局。
+
+  Widget _stageBlock(PhotoGrowthStage s) {
     final scheme = Theme.of(context).colorScheme;
+    final style = context.nasStyle;
+    final unknown = s.placeName.isEmpty;
     final milestone = _milestoneLabel(s.milestone);
-    return Container(
-      // 右侧留 16，配合列表右边 padding 0，让滚动条尽量贴窗口右边
-      margin: const EdgeInsets.only(right: 16, bottom: 14),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.25)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                '${_date(s.startAt)} — ${_date(s.endAt)}',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-              Text(
-                s.placeName.isEmpty ? tr('photo.growth.unknownPlace') : s.placeName,
-                style: TextStyle(fontSize: 12, color: context.nasTextSecondary),
-              ),
-              Text(
-                _spanLabel(s.spanKind),
-                style: TextStyle(fontSize: 10, color: context.nasTextSecondary),
-              ),
-              if (milestone.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: scheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(6),
+    final d = DateTime.fromMillisecondsSinceEpoch(s.startAt * 1000);
+    final mm = d.month.toString().padLeft(2, '0');
+    final photos = _photosOf(s);
+    return GestureDetector(
+      onTap: () => _openStage(s),
+      onLongPress: () => _repin(s),
+      // 块底色走 NasStyle 的面板材质（半透明 + 背景模糊 + 风格描边），
+      // 不再用 surfaceContainerHigh —— 深色主题下那是近黑的实色块（2026-11-14 反馈）。
+      child: NasPanel(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        radius: 14,
+        // 一屏会有十几二十个块，逐个 BackdropFilter 太贵；背景是渐变，
+        // 关掉模糊视觉几乎无差别，保留面板色 / 描边 / 阴影即可。
+        blur: 0,
+        border: Border.all(
+          color: unknown
+              ? scheme.primary.withValues(alpha: 0.45)
+              : style.panelBorderColor,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  unknown ? '${d.year}.$mm' : '${d.year}.$mm · ${s.placeName}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: context.nasTextSecondary,
                   ),
-                  child: Text(milestone, style: const TextStyle(fontSize: 10)),
                 ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          LayoutBuilder(
-            builder: (context, c) {
-              final photos = _stageImages(s);
-              final story = _stageStory(s);
-              // 卡片够宽时把右边的空位利用起来：照片在左，一段小文案在右
-              if (c.maxWidth >= 640) {
+                if (unknown) _unknownChip(),
+                if (milestone.isNotEmpty) _milestoneChip(milestone),
+              ],
+            ),
+            const SizedBox(height: 8),
+            LayoutBuilder(
+              builder: (context, c) {
+                // 宽屏把诗句/计数放到右侧文字栏，照片区专心排图；
+                // 窄屏文字落到照片下方，避免每列被挤成一条。
+                final wide = c.maxWidth >= 860;
+                final textWidth = wide ? 220.0 : c.maxWidth;
+                final photoWidth = wide ? c.maxWidth - textWidth - 16 : c.maxWidth;
+                final columns = photoWidth >= 900
+                    ? 4
+                    : photoWidth >= 560
+                        ? 3
+                        : 2;
+                final grid = _photoColumns(photos, columns, photoWidth);
+                final text = _blockText(s);
+                if (!wide) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [grid, const SizedBox(height: 10), text],
+                  );
+                }
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: photos),
-                    const SizedBox(width: 14),
-                    SizedBox(width: 210, child: story),
+                    Expanded(child: grid),
+                    const SizedBox(width: 16),
+                    SizedBox(width: textWidth, child: text),
                   ],
                 );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [photos, const SizedBox(height: 10), story],
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                tr('photo.growth.stageIndex', {'seq': '${s.seq}'}),
-                style: TextStyle(fontSize: 10, color: context.nasTextSecondary),
-              ),
-              Text(
-                tr('photo.growth.photoCount', {'count': '${s.photoCount}'}),
-                style: TextStyle(fontSize: 10, color: context.nasTextSecondary),
-              ),
-              if (s.locked)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.push_pin, size: 12),
-                    const SizedBox(width: 2),
-                    Text(tr('photo.growth.pinned'), style: const TextStyle(fontSize: 10)),
-                  ],
-                ),
-              if (s.hint == 'noScenePortrait')
-                Text(
-                  tr('photo.growth.hintNoScenePortrait'),
-                  style: TextStyle(fontSize: 10, color: context.nasTextSecondary),
-                ),
-            ],
-          ),
-        ],
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _stageImages(PhotoGrowthStage s) {
-    final secondary = s.secondaryPath;
-    // 服务端选片已保证：有横屏就只出一张横图（跨整行、完整显示）；
-    // 实在没有横屏时凑两张竖图并排，避免单张竖图把卡片撑得又高又空。
-    final pair = secondary != null;
-    // 竖屏段（两张竖图并排）不再补小图：两张大图占满一行以后，底下再塞一张
-    // 扁扁的小图很难看，而且小图自己不管是横是竖都跟这一行对不齐 —— 用户明确
-    // 说这种「两张大图 + 中间/底下小图」的组合很奇怪，索性竖屏段只留两张大图。
-    final extras = pair
-        ? const <String>[]
-        : s.extraPaths
-            .where((p) => p.isNotEmpty && p != s.coverPath)
-            .take(2)
-            .toList();
-    final main = Row(
+  /// 块内照片瀑布流：把照片逐张投进当前最矮的列，每张按列宽等比铺满。
+  ///
+  /// 列宽固定、高度 = 列宽 / 宽高比，所以照片本身不裁切、不留边；列与列之间的
+  /// 高度差就是错落感的来源。段内照片不足时按实际张数收列，不留空位。
+  Widget _photoColumns(List<_GrowthPhoto> photos, int columns, double width) {
+    const gap = 6.0;
+    if (photos.isEmpty) {
+      return Container(
+        height: 120,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          // 空占位也跟面板同色，避免深色主题下出现一块纯黑
+          color: context.nasStyle.panelColor,
+          border: Border.all(color: context.nasStyle.panelBorderColor),
+        ),
+        child: Center(
+          child: Icon(Icons.photo_outlined, size: 24, color: context.nasTextSecondary),
+        ),
+      );
+    }
+    // 照片少时直接按张数收列，避免右边空出一整列。
+    final used = photos.length < columns ? photos.length : columns;
+    final colWidth =
+        ((width - gap * (used - 1)) / used).clamp(0.0, 380.0).toDouble();
+    final buckets = List.generate(used, (_) => <_GrowthPhoto>[]);
+    final heights = List.filled(used, 0.0);
+    for (final p in photos) {
+      var target = 0;
+      for (var c = 1; c < used; c++) {
+        if (heights[c] < heights[target]) target = c;
+      }
+      buckets[target].add(p);
+      heights[target] += colWidth / p.ratio + gap;
+    }
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: PhotoAdaptiveImage(
-            path: s.coverPath,
-            width: s.coverWidth?.toDouble(),
-            height: s.coverHeight?.toDouble(),
-            minHeight: 160,
-            maxHeight: 420,
-            onTap: () => _openStage(s),
-            onLongPress: () => _repin(s),
-          ),
-        ),
-        if (secondary != null) ...[
-          const SizedBox(width: 6),
-          Expanded(
-            child: PhotoAdaptiveImage(
-              path: secondary,
-              width: s.secondaryWidth?.toDouble(),
-              height: s.secondaryHeight?.toDouble(),
-              minHeight: 160,
-              maxHeight: 420,
-              thumbSize: 512,
-              onTap: () => _openStage(s),
+        for (var c = 0; c < used; c++) ...[
+          if (c > 0) const SizedBox(width: gap),
+          SizedBox(
+            width: colWidth,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final p in buckets[c]) ...[
+                  _GrowthPhotoTile(
+                    path: p.path,
+                    width: colWidth,
+                    fallbackRatio: p.ratio,
+                  ),
+                  const SizedBox(height: gap),
+                ],
+              ],
             ),
           ),
         ],
       ],
     );
-    if (extras.isEmpty) return main;
-    // 同一段的另外两张：让「这个时期」不只有一张封面，也更容易看到景
+  }
+
+  /// 块内文字：诗句 + 段序号/张数。日期和地点角标在块头。
+  Widget _blockText(PhotoGrowthStage s) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        main,
-        const SizedBox(height: 6),
-        SizedBox(
-          height: 118,
-          child: Row(
-            children: [
-              for (var i = 0; i < extras.length; i++) ...[
-                if (i > 0) const SizedBox(width: 6),
-                Expanded(
-                  child: PhotoAdaptiveImage(
-                    path: extras[i],
-                    thumbSize: 320,
-                    minHeight: 80,
-                    maxHeight: 160,
-                    onTap: () => _openStage(s),
-                  ),
-                ),
-              ],
-            ],
-          ),
+        Text(
+          _poemLine(s),
+          maxLines: 4,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 13, height: 1.8, letterSpacing: 0.3),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '${tr('photo.growth.stageIndex', {'seq': '${s.seq}'})} · '
+          '${tr('photo.growth.photoCount', {'count': '${s.photoCount}'})}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 10, color: context.nasTextSecondary),
         ),
       ],
     );
   }
 
-  /// 照片右边那段小文案：按阶段轮换 6 句，避免同屏重复。
-  ///
-  /// 服务端没有 VLM 阶段文案，这里用 i18n 模板 + 地点/年月拼；
-  /// 诗在数据之外，UI 文案仍全部走契约。
-  Widget _stageStory(PhotoGrowthStage s) {
+  /// 每段照片：批量结果优先（最多 8 张），没回来/失败时用 stage 自带图兜底。
+  List<_GrowthPhoto> _photosOf(PhotoGrowthStage s) {
+    final batch = _stagePhotos[s.id];
+    if (batch != null && batch.isNotEmpty) {
+      final photos = <_GrowthPhoto>[
+        for (final p in batch)
+          if (p.path.isNotEmpty)
+            _GrowthPhoto(p.path, p.width?.toDouble(), p.height?.toDouble()),
+      ];
+      if (photos.isNotEmpty) return photos.take(maxPhotos).toList();
+    }
+    return <_GrowthPhoto>[
+      if (s.coverPath.isNotEmpty)
+        _GrowthPhoto(
+          s.coverPath,
+          s.coverWidth?.toDouble(),
+          s.coverHeight?.toDouble(),
+        ),
+      if ((s.secondaryPath ?? '').isNotEmpty)
+        _GrowthPhoto(
+          s.secondaryPath!,
+          s.secondaryWidth?.toDouble(),
+          s.secondaryHeight?.toDouble(),
+        ),
+      for (final p in s.extraPaths)
+        if (p.isNotEmpty) _GrowthPhoto(p, null, null),
+    ].take(maxPhotos).toList();
+  }
+
+  Widget _unknownChip() {
+    final style = context.nasStyle;
     final scheme = Theme.of(context).colorScheme;
+    // 以前是黑色半透明底 + 白字，压在面板上像一块黑补丁；改用面板材质 + 主题描边
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: style.panelColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: scheme.primary.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.place_outlined, size: 11, color: scheme.primary),
+          const SizedBox(width: 3),
+          Text(
+            tr('photo.growth.unknownPlace'),
+            style: TextStyle(fontSize: 10, color: scheme.primary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _milestoneChip(String label) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 10, color: Colors.white),
+      ),
+    );
+  }
+
+  /// 诗句：复用现有 6 句 i18n 模板，按段轮换。
+  String _poemLine(PhotoGrowthStage s) {
     final d = DateTime.fromMillisecondsSinceEpoch(s.startAt * 1000);
     final place = s.placeName.isEmpty ? tr('photo.growth.somewhere') : s.placeName;
     final args = {
@@ -764,7 +900,7 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
       'year': '${d.year}',
       'month': '${d.month}',
     };
-    final line = switch (s.seq % 6) {
+    return switch (s.seq % 6) {
       0 => tr('photo.growth.poem1', args),
       1 => tr('photo.growth.poem2', args),
       2 => tr('photo.growth.poem3', args),
@@ -772,42 +908,144 @@ class _PhotoGrowthTrackPageState extends State<PhotoGrowthTrackPage> {
       4 => tr('photo.growth.poem5', args),
       _ => tr('photo.growth.poem6', args),
     };
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
-      decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.16)),
+  }
+
+}
+
+/// 块内瀑布流里的一张缩略图：定宽，高度按真实宽高比撑开。
+///
+/// 为什么要解码真实尺寸：库里 `photo_items.width/height` 存的是 EXIF 旋转前的
+/// 像素（竖拍照片也是 2048×1536），而缩略图是 ffmpeg 自动转正后的竖图。
+/// 只看元数据会把竖图当成横图，块内排布就会出现大块留白。
+class _GrowthPhotoTile extends StatefulWidget {
+  const _GrowthPhotoTile({
+    required this.path,
+    required this.width,
+    required this.fallbackRatio,
+  });
+
+  final String path;
+
+  /// 列宽：照片按这个宽度铺满，高度由比例算
+  final double width;
+  final double fallbackRatio;
+
+  @override
+  State<_GrowthPhotoTile> createState() => _GrowthPhotoTileState();
+}
+
+class _GrowthPhotoTileState extends State<_GrowthPhotoTile> {
+  static const int _thumbSize = 480;
+  static const double _minRatio = 0.5;
+  static const double _maxRatio = 2.4;
+
+  ImageStream? _stream;
+  ImageStreamListener? _listener;
+  double? _measured;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(covariant _GrowthPhotoTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.path != widget.path) {
+      _detach();
+      _measured = null;
+      _resolve();
+    }
+  }
+
+  @override
+  void dispose() {
+    _detach();
+    super.dispose();
+  }
+
+  void _detach() {
+    final stream = _stream;
+    final listener = _listener;
+    if (stream != null && listener != null) stream.removeListener(listener);
+    _stream = null;
+    _listener = null;
+  }
+
+  void _resolve() {
+    if (widget.path.isEmpty || _stream != null) return;
+    // 与 NasCoverImage 用同一个 provider（同样的 cacheWidth 包装），
+    // 这样量尺寸不会额外再下一次缩略图，直接复用图片缓存。
+    final provider = ResizeImage.resizeIfNeeded(
+      _thumbSize,
+      null,
+      NetworkImage(
+        MediaUrls(ApiSession.instance.baseUrl).thumbnail(widget.path, size: _thumbSize),
+        headers: ApiSession.instance.authHeaders,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '${d.year}.${d.month.toString().padLeft(2, '0')}',
-            style: TextStyle(
-              fontSize: 10,
-              letterSpacing: 1.6,
-              color: scheme.primary.withValues(alpha: 0.85),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            line,
-            style: const TextStyle(fontSize: 13, height: 1.75, letterSpacing: 0.3),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            tr('photo.growth.photoCount', {'count': '${s.photoCount}'}),
-            style: TextStyle(fontSize: 10, color: context.nasTextSecondary),
-          ),
-        ],
+    );
+    final stream = provider.resolve(ImageConfiguration.empty);
+    final listener = ImageStreamListener(
+      (info, _) {
+        final h = info.image.height;
+        if (h <= 0) return;
+        final ratio = info.image.width / h;
+        if (!mounted) return;
+        if (_measured == null || (_measured! - ratio).abs() > 0.01) {
+          setState(() => _measured = ratio);
+        }
+      },
+      onError: (Object error, StackTrace? stack) {},
+    );
+    stream.addListener(listener);
+    _stream = stream;
+    _listener = listener;
+  }
+
+  double get _ratio =>
+      (_measured ?? widget.fallbackRatio).clamp(_minRatio, _maxRatio).toDouble();
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: SizedBox(
+        width: widget.width,
+        // 高度完全由真实比例决定：块内的错落感就来自各列高度不同
+        height: widget.width / _ratio,
+        child: NasCoverImage(
+          url: MediaUrls(ApiSession.instance.baseUrl)
+              .thumbnail(widget.path, size: _thumbSize),
+          headers: ApiSession.instance.authHeaders,
+          cacheWidth: _thumbSize,
+          // 槽位比例就是照片比例，contain 只是兜底不裁切
+          fit: BoxFit.contain,
+          icon: Icons.broken_image_outlined,
+        ),
       ),
     );
   }
 }
 
 /// 阶段二级页：这个时期的全部照片（真分页）+ 换封面。
+/// 块内瀑布流里的一张照片：路径 + 原图宽高（用于估算列高）。
+class _GrowthPhoto {
+  const _GrowthPhoto(this.path, this.width, this.height);
+
+  final String path;
+  final double? width;
+  final double? height;
+
+  /// 原图宽高比；缺数据按 4:3，极端比例夹到 0.55~2.2 只防布局爆掉。
+  double get ratio {
+    final w = width ?? 0;
+    final h = height ?? 0;
+    if (w <= 0 || h <= 0) return 4.0 / 3.0;
+    return (w / h).clamp(0.55, 2.2).toDouble();
+  }
+}
+
 class PhotoGrowthStagePage extends StatefulWidget {
   const PhotoGrowthStagePage({super.key, required this.stage, this.onCoverChanged});
 
