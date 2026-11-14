@@ -1,7 +1,7 @@
 name: sync_client
 description: ColaNasOs 同步独立端（通过 path 依赖复用主客户端代码）
 publish_to: 'none'
-version: 1.1.0+2
+version: 1.2.0+3
 
 environment:
   sdk: ^3.13.7

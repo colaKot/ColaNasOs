@@ -64,15 +64,16 @@ Electron 44.9.3（外壳）+ `utilityProcess` 内核（TypeScript / Fastify / Ky
 
 ## 快速开始
 
-下载安装（当前版本 **1.1.0**，全部产物见 [Releases](https://github.com/colaKot/ColaNasOs/releases/latest)）：
+下载安装（当前版本 **1.2.0**，全部产物见 [Releases](https://github.com/colaKot/ColaNasOs/releases/latest)）：
 
 | 平台 | 产物 | 说明 |
 | --- | --- | --- |
-| Windows | `ColaNasOs-Setup-1.1.0.exe` | 安装版（含服务端内核与本地 AI 运行时） |
-| Windows 便携 | `ColaNasOs-1.1.0-windows-x64.zip` | 解压即用，适合不想安装的场景 |
-| Android | `ColaNasOs-1.1.0-arm64.apk` | arm64 手机 / 平板 |
+| Windows 服务端 | `ColaNasOs-Server-1.2.0-Setup.exe` | 安装版：托盘 + 内核 + Web 界面 + 本地 AI 运行时 |
+| Windows 客户端 | `ColaNasOs-Client-1.2.0-Setup.exe` | Flutter 桌面客户端，装完连本机或局域网里的服务端 |
+| Windows 客户端便携 | `ColaNasOs-Client-1.2.0-windows-x64.zip` | 解压即用，适合不想安装的场景 |
+| Android 客户端 | `ColaNasOs-Client-1.2.0-android-arm64.apk` | arm64 手机 / 平板 |
 
-服务端随 Windows 安装包一起分发（Electron 外壳内置内核），不单独提供安装包。
+服务端与客户端分开打包：服务端负责内核与 Web 界面，客户端是 Flutter 桌面端，可以只装在另一台电脑上连局域网服务端。
 
 本地起服务端（**默认方式**，内核与 Flutter 都热更新）：
 
