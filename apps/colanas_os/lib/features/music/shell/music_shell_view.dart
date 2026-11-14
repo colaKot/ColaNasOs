@@ -216,24 +216,23 @@ class _MusicShellViewState extends State<MusicShellView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final dark = theme.brightness == Brightness.dark;
+    final style = context.nasStyle;
     // 移植页有 13+ 处读 theme.extension<CustomColors>()：不注册时恒为 null，
     // 背景落空 + 页面按深色配色写死 → 手机上整片发灰、白字看不清。
     // 只在音乐壳子树注册，不动全局主题。
     final themed = theme.copyWith(
       extensions: <ThemeExtension<dynamic>>[
         CustomColors(
-          nestedCardColor: dark
-              ? cs.surfaceContainerLow
-              : cs.surfaceContainerLowest,
-          emptyCardColor: cs.surfaceContainerLow,
-          leftTreeBgColor: dark ? cs.surfaceContainerHigh : cs.surfaceContainer,
+          // 卡片 / 左树 / 播放条统一走风格面板材质：以前用 surfaceContainer* 的
+          // 合成实色，深色主题下依旧是一块近黑，和极光背景割裂。
+          nestedCardColor: style.panelColor,
+          emptyCardColor: style.panelColor,
+          leftTreeBgColor: style.panelColor,
           // 透明 = 各页面/遮罩不铺自己的底，统一透出 ShellView 里铺的那层 App 背景。
           // 以前这里是 `cs.surface`，深色主题下等于纯黑，音乐壳所有二级页都像「黑洞」。
           mainContentBgColor: Colors.transparent,
-          oprationBarBgColor: cs.surfaceContainerLow,
-          hairlineBorderColor: cs.outlineVariant,
+          oprationBarBgColor: style.panelColor,
+          hairlineBorderColor: style.panelBorderColor,
         ),
       ],
     );

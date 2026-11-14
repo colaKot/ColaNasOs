@@ -29,7 +29,7 @@ class MusicCollectionListView extends StatelessWidget {
         final localExtendedPalette = localTheme.extension<CustomColors>();
         final localBarColor =
             localExtendedPalette?.oprationBarBgColor ??
-            localTheme.colorScheme.surface;
+            localTheme.colorScheme.surfaceContainerLow;
 
         final localGrid = MusicCardGrid(
           items: ctrl.items,

@@ -120,7 +120,8 @@ class _AlbumArtistCollectionPageState extends State<AlbumArtistListPage> {
           ),
           child: _AlbumArtistListBody(
             controller: controller,
-            barColor: palette?.oprationBarBgColor ?? theme.colorScheme.surface,
+            barColor:
+                palette?.oprationBarBgColor ?? theme.colorScheme.surfaceContainerLow,
             scrollController: _scroll,
             onOpenGroup: (name) => _openGroup(overlay, name),
           ),

@@ -345,9 +345,16 @@ class _CardMenuButton extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return MenuAnchor(
       style: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(scheme.surface),
+        backgroundColor: WidgetStatePropertyAll(
+          Color.alphaBlend(
+            context.nasStyle.panelColor,
+            context.nasStyle.baseColor,
+          ),
+        ),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-        side: WidgetStatePropertyAll(BorderSide(color: scheme.outlineVariant)),
+        side: WidgetStatePropertyAll(
+          BorderSide(color: context.nasStyle.panelBorderColor),
+        ),
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(NasTokens.radiusMd),

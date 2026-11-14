@@ -3,6 +3,7 @@ import '../../../compat/cola_custom_colors.dart';
 import '../../../compat/host.dart';
 
 import 'package:flutter/material.dart';
+import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
 
 import '../../../compat/getx.dart';
 import '../../controller/cola_playlist_controller.dart';
@@ -242,7 +243,10 @@ class AppPlayListTopBar extends StatelessWidget {
       builder: (ctx) {
         final theme = Theme.of(ctx);
         return Material(
-          color: theme.colorScheme.surface,
+          color: Color.alphaBlend(
+            ctx.nasStyle.panelColor,
+            ctx.nasStyle.baseColor,
+          ),
           child: Obx(() {
             return ListView(
               shrinkWrap: true,

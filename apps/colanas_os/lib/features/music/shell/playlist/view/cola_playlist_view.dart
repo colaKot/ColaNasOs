@@ -128,7 +128,7 @@ class _PlayListListViewState extends State<PlayListListView> {
         final localExtendedPalette = localTheme.extension<CustomColors>();
         final localBarColor =
             localExtendedPalette?.oprationBarBgColor ??
-            localTheme.colorScheme.surface;
+            localTheme.colorScheme.surfaceContainerLow;
         final localOverlayCtrl = selectionMode
             ? null
             : (Get.isRegistered<PlayListOverlayController>()

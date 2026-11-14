@@ -315,7 +315,7 @@ class _MusicListPageState extends State<MusicListPage> {
         final theme = Theme.of(context);
         final palette = theme.extension<CustomColors>();
         final barColor =
-            palette?.oprationBarBgColor ?? theme.colorScheme.surface;
+            palette?.oprationBarBgColor ?? theme.colorScheme.surfaceContainerLow;
         final overlay = _overlayController();
 
         final page = Column(

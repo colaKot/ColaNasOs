@@ -7,6 +7,7 @@ import '../play_ctrl_fullscreen/parts/cola_stage_playlist_drawer.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
 
 import '../../compat/getx.dart';
 
@@ -133,7 +134,7 @@ class ColaMusicFloatingBar extends StatelessWidget {
         final theme = Theme.of(context);
         final palette = theme.extension<CustomColors>();
         final barColor = (palette?.oprationBarBgColor ??
-                theme.colorScheme.surface)
+                context.nasStyle.panelColor)
             .withValues(alpha: 0.92);
         final compact = constraints.maxWidth < 750;
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
 
 import '../../../compat/ui_kit.dart';
 import '../../../compat/host.dart';
@@ -230,7 +231,10 @@ class _SourceSheet extends StatelessWidget {
     maxChildSize: 0.75,
     expand: false,
     builder: (sheetContext, sheetScroll) => Material(
-      color: Theme.of(sheetContext).colorScheme.surface,
+      color: Color.alphaBlend(
+        sheetContext.nasStyle.panelColor,
+        sheetContext.nasStyle.baseColor,
+      ),
       child: ListView(
         controller: sheetScroll,
         padding: const EdgeInsets.only(bottom: 12),

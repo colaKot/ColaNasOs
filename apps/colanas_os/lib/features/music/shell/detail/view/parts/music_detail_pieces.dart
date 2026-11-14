@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
 
 import '../../../compat/cola_api_controller.dart';
 import '../../../compat/getx.dart';
@@ -264,9 +265,7 @@ class MusicActionButton extends StatelessWidget {
         ? theme.colorScheme.primary
         : (active
               ? theme.colorScheme.primary.withValues(alpha: 0.10)
-              : theme.colorScheme.surfaceContainerHighest.withValues(
-                  alpha: 0.5,
-                ));
+              : context.nasStyle.panelColor);
 
     final content = Row(
       mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
@@ -294,7 +293,12 @@ class MusicActionButton extends StatelessWidget {
       opacity: enabled ? 1 : 0.5,
       child: Material(
         color: bg,
-        borderRadius: BorderRadius.circular(999),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(999),
+          side: primary
+              ? BorderSide.none
+              : BorderSide(color: context.nasStyle.panelBorderColor),
+        ),
         child: InkWell(
           borderRadius: BorderRadius.circular(999),
           onTap: onPressed,

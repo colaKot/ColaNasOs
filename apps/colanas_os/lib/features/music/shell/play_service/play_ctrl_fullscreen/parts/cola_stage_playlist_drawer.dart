@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
 
 import '../../../compat/getx.dart';
 import '../../../list/models/cola_list_models.dart';
@@ -29,7 +30,10 @@ class ColaMusicStageQueueSheet {
       useSafeArea: true,
       isScrollControlled: true,
       context: context,
-      backgroundColor: theme.colorScheme.surface,
+      backgroundColor: Color.alphaBlend(
+        context.nasStyle.panelColor,
+        context.nasStyle.baseColor,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -71,7 +75,10 @@ class ColaMusicStageQueueSheet {
           child: Align(
             alignment: Alignment.centerRight,
             child: Material(
-              color: theme.colorScheme.surface,
+              color: Color.alphaBlend(
+                context.nasStyle.panelColor,
+                context.nasStyle.baseColor,
+              ),
               child: ConstrainedBox(
                 constraints: BoxConstraints(
                   maxWidth: panelWidth.max,

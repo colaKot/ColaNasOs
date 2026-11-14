@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_context_menu/flutter_context_menu.dart';
 import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
+import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
 
 import '../../../../core/app_navigator.dart';
 
@@ -735,10 +736,10 @@ class _CustomExpandableSearchBarState extends State<CustomExpandableSearchBar> {
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 8),
             filled: true,
-            fillColor: theme.colorScheme.surfaceContainerHighest,
+            fillColor: context.nasStyle.panelColor,
             border: OutlineInputBorder(
               borderRadius: radius,
-              borderSide: BorderSide.none,
+              borderSide: BorderSide(color: context.nasStyle.panelBorderColor),
             ),
             suffixIcon: Row(
               mainAxisSize: MainAxisSize.min,

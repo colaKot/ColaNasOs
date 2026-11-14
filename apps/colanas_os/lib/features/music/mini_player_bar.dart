@@ -76,8 +76,11 @@ class _Bar extends StatelessWidget {
             NasTokens.spaceXs,
           ),
       child: Material(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(NasTokens.radiusMd),
+        color: context.nasStyle.panelColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(NasTokens.radiusMd),
+          side: BorderSide(color: context.nasStyle.panelBorderColor),
+        ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => _open(context),

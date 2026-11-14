@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
 
 import '../../../shared/music_primitives.dart';
 
@@ -114,9 +115,15 @@ class _ColaMusicDockVolumeState extends State<ColaMusicDockVolume> {
             link: _anchorLink,
             offset: _popupOffset,
             child: Material(
-              color: palette.colorScheme.surface,
+              color: Color.alphaBlend(
+                context.nasStyle.panelColor,
+                context.nasStyle.baseColor,
+              ),
               elevation: 10.0,
-              borderRadius: const BorderRadius.all(Radius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: const BorderRadius.all(Radius.circular(10)),
+                side: BorderSide(color: context.nasStyle.panelBorderColor),
+              ),
               clipBehavior: Clip.antiAlias,
               child: ConstrainedBox(
                 constraints: const BoxConstraints.tightFor(
@@ -293,7 +300,10 @@ class _DockVolumePopupState extends State<_DockVolumePopup> {
     final palette = widget.theme;
 
     return Material(
-      color: palette.colorScheme.surface,
+      color: Color.alphaBlend(
+        context.nasStyle.panelColor,
+        context.nasStyle.baseColor,
+      ),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Column(

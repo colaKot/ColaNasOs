@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
 
 import '../../../compat/base_components.dart';
 import '../../../compat/getx.dart';
@@ -168,7 +169,7 @@ class _HoverCircleMenuAnchorState extends State<_HoverCircleMenuAnchor> {
   Widget build(BuildContext context) {
     final palette = Theme.of(context);
     return MenuAnchor(
-      style: _menuStyle(palette),
+      style: _menuStyle(context),
       menuChildren: <Widget>[
         for (final item in widget.menuChildren)
           MouseRegion(
@@ -196,14 +197,19 @@ class _HoverCircleMenuAnchorState extends State<_HoverCircleMenuAnchor> {
     );
   }
 
-  static MenuStyle _menuStyle(ThemeData palette) => MenuStyle(
+  static MenuStyle _menuStyle(BuildContext context) => MenuStyle(
     shape: WidgetStatePropertyAll(
       RoundedRectangleBorder(
         borderRadius: BorderRadius.all(Radius.circular(12)),
-        side: BorderSide(color: palette.dividerColor, width: 1.0),
+        side: BorderSide(color: context.nasStyle.panelBorderColor, width: 1.0),
       ),
     ),
     padding: const WidgetStatePropertyAll(EdgeInsets.fromLTRB(0, 0, 0, 0)),
-    backgroundColor: WidgetStatePropertyAll(palette.colorScheme.surface),
+    backgroundColor: WidgetStatePropertyAll(
+      Color.alphaBlend(
+        context.nasStyle.panelColor,
+        context.nasStyle.baseColor,
+      ),
+    ),
   );
 }

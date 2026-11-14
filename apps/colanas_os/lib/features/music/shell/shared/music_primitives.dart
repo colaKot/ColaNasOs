@@ -13,11 +13,11 @@ import '../compat/host.dart';
 extension MusicThemeX on BuildContext {
   Color get musicBarColor =>
       Theme.of(this).extension<CustomColors>()?.oprationBarBgColor ??
-      Theme.of(this).colorScheme.surface;
+      Theme.of(this).colorScheme.surfaceContainerLow;
 
   Color get musicContentBgColor =>
       Theme.of(this).extension<CustomColors>()?.mainContentBgColor ??
-      Theme.of(this).colorScheme.surface;
+      Theme.of(this).colorScheme.surfaceContainerLow;
 }
 
 /// 搜索框：把 TextEditingController 生命周期与外部 Rx 同步收在一处。

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
 
 import '../../../compat/ui_kit.dart';
 import '../../../compat/host.dart';
@@ -210,9 +211,11 @@ Widget _buildSourceButton(
             showDragHandle: true,
             useSafeArea: true,
             builder: (ctx) {
-              final localTheme = Theme.of(ctx);
               return Material(
-                color: localTheme.colorScheme.surface,
+                color: Color.alphaBlend(
+                  ctx.nasStyle.panelColor,
+                  ctx.nasStyle.baseColor,
+                ),
                 child: MusicListSourcePanel(controller: controller),
               );
             },

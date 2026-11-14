@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
 
 import '../../../compat/cola_custom_colors.dart';
 import '../../../compat/getx.dart';
@@ -64,7 +65,7 @@ class _MusicDetailSelectionBarState extends State<MusicDetailSelectionBar> {
     final theme = Theme.of(context);
     final barColor =
         theme.extension<CustomColors>()?.oprationBarBgColor ??
-        theme.colorScheme.surface;
+        context.nasStyle.panelColor;
     return Obx(() {
       final selecting = widget.controller.isMultiSelectMode.value;
       _syncPlayerBar(selecting);

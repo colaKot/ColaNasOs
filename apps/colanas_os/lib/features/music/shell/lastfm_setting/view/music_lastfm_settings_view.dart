@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../compat/cola_api_controller.dart';
@@ -95,9 +96,9 @@ class _MusicLastfmSettingsViewState extends State<MusicLastfmSettingsView> {
                   vertical: 9,
                 ),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHigh,
+                  color: context.nasStyle.panelColor,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: theme.dividerColor),
+                  border: Border.all(color: context.nasStyle.panelBorderColor),
                 ),
                 child: SelectableText(
                   _callbackUrl,
@@ -461,14 +462,13 @@ class _MusicLastfmSettingsViewState extends State<MusicLastfmSettingsView> {
   }
 
   Widget _card({required Widget child}) {
-    final theme = Theme.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
+        color: context.nasStyle.panelColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
+        border: Border.all(color: context.nasStyle.panelBorderColor),
       ),
       child: child,
     );

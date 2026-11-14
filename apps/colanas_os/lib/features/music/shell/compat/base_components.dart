@@ -4,9 +4,9 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
 
 import '../../../../core/session.dart';
-import 'cola_custom_colors.dart';
 
 /// 网络图片：带鉴权头 + 加载占位 + 圆角（替代 extended_image 版）
 class CustomExtendedImage extends StatelessWidget {
@@ -123,20 +123,14 @@ class CustomGlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final custom = theme.extension<CustomColors>();
+    final style = context.nasStyle;
     final box = Container(
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: style.panelColor,
         borderRadius: BorderRadius.circular(borderRadius),
-        border:
-            border ??
-            Border.all(
-              color: custom?.hairlineBorderColor ?? const Color(0x1F000000),
-              width: 0.5,
-            ),
+        border: border ?? Border.all(color: style.panelBorderColor, width: 0.5),
       ),
       // 卡片里会直接放 ListTile / SwitchListTile：水波纹画在**最近的 Material** 上，
       // 这层背景会把它盖住（debug 下抛「ListTile background color or ink splashes
