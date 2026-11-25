@@ -1911,6 +1911,17 @@ class I18nKeys {
   static const settingsLogsLevelInfo = 'settings.logsLevelInfo';
   static const settingsLogsLevelWarn = 'settings.logsLevelWarn';
   static const settingsLogsTruncated = 'settings.logsTruncated';
+  static const settingsMcpTitle = 'settings.mcp.title';
+  static const settingsMcpSubtitle = 'settings.mcp.subtitle';
+  static const settingsMcpTabContent = 'settings.mcp.tabContent';
+  static const settingsMcpTabDev = 'settings.mcp.tabDev';
+  static const settingsMcpCopy = 'settings.mcp.copy';
+  static const settingsMcpCopied = 'settings.mcp.copied';
+  static const settingsMcpGenToken = 'settings.mcp.genToken';
+  static const settingsMcpGenTokenHint = 'settings.mcp.genTokenHint';
+  static const settingsMcpContentHint = 'settings.mcp.contentHint';
+  static const settingsMcpDevHint = 'settings.mcp.devHint';
+  static const settingsMcpToolsTitle = 'settings.mcp.toolsTitle';
   static const settingsMediaSection = 'settings.mediaSection';
   static const settingsNavAccount = 'settings.nav.account';
   static const settingsAccountTitle = 'settings.account.title';
@@ -3267,4 +3278,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 3215;
+const int i18nKeyCount = 3226;

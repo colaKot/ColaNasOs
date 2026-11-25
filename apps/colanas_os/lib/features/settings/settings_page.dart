@@ -21,6 +21,7 @@ import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import '../update/update_section.dart';
 import 'help_page.dart';
+import 'mcp_settings_page.dart';
 import 'style_preview_page.dart';
 import '../../shell/mobile_frame.dart';
 import '../../shell/app_nav_shell.dart';
@@ -1183,14 +1184,41 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  /// 「MCP」入口：把内容 / 工程信息接给 AI IDE（Trae / WorkBuddy 等）。
+  Widget _mcpRow() {
+    return InkWell(
+      borderRadius: BorderRadius.circular(NasTokens.radiusSm),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const McpSettingsPage()),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceSm),
+        child: Row(
+          children: [
+            const Icon(Icons.hub_outlined, size: 20),
+            const SizedBox(width: NasTokens.spaceSm),
+            Expanded(child: Text(tr('settings.mcp.title'))),
+            Icon(Icons.chevron_right, size: 18, color: context.nasTextSecondary),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _maintenance() {
     // 缓存清理 / 数据库整理 / 重启都要 `system:write`：没有权限的账号只留帮助，
     // 免得点一下弹一条 403。
     if (!_canSystemWrite) {
-      return _section(tr('ui.settings.h59156f'), [_helpRow()]);
+      return _section(tr('ui.settings.h59156f'), [
+        _helpRow(),
+        const Divider(height: 1),
+        _mcpRow(),
+      ]);
     }
     return _section(tr('ui.settings.h59156f'), [
       _helpRow(),
+      const Divider(height: 1),
+      _mcpRow(),
       const Divider(height: 1),
       Row(
         children: [

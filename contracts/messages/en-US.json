@@ -3592,6 +3592,17 @@
     "update.tvHint": "Remote: left/right to choose, OK to confirm, Back to close",
     "update.fullReady": "Installer downloaded — run it to finish the update",
     "update.checkFailed": "Check failed · tap to retry",
-    "update.noAsset": "No auto-installable package in this release; download it from the project page"
+    "update.noAsset": "No auto-installable package in this release; download it from the project page",
+    "settings.mcp.title": "MCP",
+    "settings.mcp.subtitle": "Expose ColaNasOs content and project info to AI IDEs (Trae / WorkBuddy / Cursor).",
+    "settings.mcp.tabContent": "Content",
+    "settings.mcp.tabDev": "Dev console",
+    "settings.mcp.copy": "Copy config",
+    "settings.mcp.copied": "Copied",
+    "settings.mcp.genToken": "Generate token",
+    "settings.mcp.genTokenHint": "Generate a read-only token and fill it into the config; shown only once.",
+    "settings.mcp.contentHint": "Query photos / videos / music / files on this server. stdio requires the IDE on the same machine.",
+    "settings.mcp.devHint": "Query project info and run diagnostics in your source repo. Replace the path; no token needed.",
+    "settings.mcp.toolsTitle": "Available tools"
   }
 }

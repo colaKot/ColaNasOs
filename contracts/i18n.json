@@ -2580,6 +2580,17 @@
     "settings.logsTruncated": {
       "lines": {}
     },
+    "settings.mcp.title": {},
+    "settings.mcp.subtitle": {},
+    "settings.mcp.tabContent": {},
+    "settings.mcp.tabDev": {},
+    "settings.mcp.copy": {},
+    "settings.mcp.copied": {},
+    "settings.mcp.genToken": {},
+    "settings.mcp.genTokenHint": {},
+    "settings.mcp.contentHint": {},
+    "settings.mcp.devHint": {},
+    "settings.mcp.toolsTitle": {},
     "settings.mediaSection": {},
     "settings.nav.account": {},
     "settings.account.title": {},

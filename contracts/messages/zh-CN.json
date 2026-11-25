@@ -3592,6 +3592,17 @@
     "update.tvHint": "遥控器：左右选择，OK 确认，返回关闭",
     "update.fullReady": "安装包已下载完成，运行它即可完成更新",
     "update.checkFailed": "检查失败 · 点此重试",
-    "update.noAsset": "这个版本没有可自动安装的安装包，请到项目主页手动下载"
+    "update.noAsset": "这个版本没有可自动安装的安装包，请到项目主页手动下载",
+    "settings.mcp.title": "MCP",
+    "settings.mcp.subtitle": "把 ColaNasOs 的内容与工程信息暴露给 AI IDE（Trae / WorkBuddy / Cursor 等）",
+    "settings.mcp.tabContent": "内容查询",
+    "settings.mcp.tabDev": "工程台",
+    "settings.mcp.copy": "复制配置",
+    "settings.mcp.copied": "已复制",
+    "settings.mcp.genToken": "生成令牌",
+    "settings.mcp.genTokenHint": "生成一个只读令牌并填入配置；明文只显示这一次，请及时保存。",
+    "settings.mcp.contentHint": "连接本机服务端，查相册 / 影视 / 音乐 / 文件。stdio 方式要求 IDE 与服务端在同一台机器。",
+    "settings.mcp.devHint": "在源码仓库里查工程信息与做诊断。把路径换成你自己的仓库位置，无需令牌。",
+    "settings.mcp.toolsTitle": "可用工具"
   }
 }
