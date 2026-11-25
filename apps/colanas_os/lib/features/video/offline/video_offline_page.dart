@@ -230,17 +230,17 @@ class _VideoOfflinePageState extends State<VideoOfflinePage> {
 
   Widget _chip(BuildContext context, String id, String label) {
     final selected = _library == id;
-    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: selected,
-        onSelected: (_) => setState(() {
-          _library = id;
-          _sel.exit();
-        }),
-        selectedColor: scheme.primary.withValues(alpha: 0.16),
+      child: Center(
+        child: NasPillChip(
+          label: label,
+          selected: selected,
+          onTap: () => setState(() {
+            _library = id;
+            _sel.exit();
+          }),
+        ),
       ),
     );
   }

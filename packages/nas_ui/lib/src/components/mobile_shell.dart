@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../i18n.dart';
+import '../style.dart';
 import '../tokens.dart';
 import 'panel.dart';
+import 'pill_tabs.dart';
 import 'side_nav.dart';
 
 /// 手机端外壳：**一套实现，所有模块共用**。
@@ -55,6 +57,7 @@ class NasMobileAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.transparent = false,
     this.automaticallyImplyLeading = false,
     this.homeTooltip,
+    this.showHome = true,
   });
 
   /// 标题；空串 = 不显示文字（只剩按钮，给沉浸页留位）
@@ -77,6 +80,9 @@ class NasMobileAppBar extends StatelessWidget implements PreferredSizeWidget {
   /// 房子按钮的 tooltip（默认用系统的「返回」，不合适，调用方应传「工作台」）
   final String? homeTooltip;
 
+  /// 是否显示左上角房子。相册独立端没有工作台，可以关掉。
+  final bool showHome;
+
   static const double barHeight = 56;
 
   @override
@@ -98,15 +104,17 @@ class NasMobileAppBar extends StatelessWidget implements PreferredSizeWidget {
             border: transparent ? scheme.onSurface.withValues(alpha: 0.12) : null,
           )
         // 房子是手机端的固定锚点：**任何一级页都有**，即使调用方没给回调
-        // （点击无效也比"这页没有房子"好排查）。
-        : _RoundIconButton(
+        // （点击无效也比"这页没有房子"好排查）。独立端没有工作台，可显式隐藏。
+        : showHome
+        ? _RoundIconButton(
             icon: Icons.home_outlined,
             tooltip: homeTooltip ??
                 MaterialLocalizations.of(context).backButtonTooltip,
             onPressed: onHome ?? () {},
             background: transparent ? scheme.surface.withValues(alpha: 0.78) : null,
             border: transparent ? scheme.onSurface.withValues(alpha: 0.12) : null,
-          );
+          )
+        : null;
 
     return ColoredBox(
       color: bg,
@@ -119,10 +127,12 @@ class NasMobileAppBar extends StatelessWidget implements PreferredSizeWidget {
               height: barHeight,
               child: Row(
                 children: [
-                  const SizedBox(width: NasTokens.spaceXs),
-                  // leading 恒非空：没给 onHome/onBack 时也要有房子（见上面的注释）
-                  leading,
-                  const SizedBox(width: NasTokens.spaceXs),
+                  if (leading != null) ...[
+                    const SizedBox(width: NasTokens.spaceXs),
+                    // 普通页面一定有房子；独立端可以显式隐藏
+                    leading,
+                    const SizedBox(width: NasTokens.spaceXs),
+                  ],
                   Expanded(
                     child: Text(
                       title,
@@ -314,11 +324,15 @@ class NasMorePage extends StatelessWidget {
     required this.title,
     required this.groups,
     required this.onSelect,
+    this.header,
   });
 
   final String title;
   final List<NasNavGroup> groups;
   final ValueChanged<String> onSelect;
+
+  /// 分组列表之上的自定义入口（如相册独立端的「手机备份」大横条）
+  final Widget? header;
 
   @override
   Widget build(BuildContext context) {
@@ -331,6 +345,10 @@ class NasMorePage extends StatelessWidget {
         NasTokens.spaceXl,
       ),
       children: [
+        if (header != null) ...[
+          header!,
+          const SizedBox(height: NasTokens.spaceMd),
+        ],
         for (final group in groups) ...[
           if (group.title.isNotEmpty)
             Padding(
@@ -419,6 +437,7 @@ class NasAppScaffold extends StatelessWidget {
     this.showTabs = true,
     this.backgroundColor,
     this.homeTooltip,
+    this.showHome = true,
   });
 
   final String title;
@@ -443,6 +462,9 @@ class NasAppScaffold extends StatelessWidget {
   final Color? backgroundColor;
   final String? homeTooltip;
 
+  /// 是否显示左上角房子（相册独立端关掉）
+  final bool showHome;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -459,6 +481,7 @@ class NasAppScaffold extends StatelessWidget {
             actions: actions,
             bottom: appBarBottom,
             homeTooltip: homeTooltip,
+            showHome: showHome,
           ),
           Expanded(
             child: Stack(
@@ -499,7 +522,11 @@ class NasAppScaffold extends StatelessWidget {
   }
 }
 
-/// 悬浮胶囊条（相册/影视的视图切换）。选中项用主色填充。
+/// 悬浮胶囊条（相册/影视的视图切换）。
+///
+/// 观感与「下载管理」顶部页签保持一致：胶囊各自成块，选中项是主色淡底 + 主色
+/// 文字，未选中项是亮一档的玻璃色。以前整条用的是 `scheme.surface`（深色主题下
+/// 接近纯黑），用户 2026-11-25 反馈依旧像一块黑底。
 class NasFloatingChips extends StatelessWidget {
   const NasFloatingChips({
     super.key,
@@ -522,16 +549,18 @@ class NasFloatingChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final spec = context.nasStyle;
     final row = <Widget>[
       if (leading != null) leading!,
       for (var i = 0; i < labels.length; i++)
         Padding(
-          padding: const EdgeInsets.only(left: 2),
-          child: _Chip(
+          padding: const EdgeInsets.only(left: 6),
+          child: NasPillChip(
             label: labels[i],
             selected: i == selectedIndex,
+            compact: true,
             onTap: () => onSelect(i),
+            style: spec,
           ),
         ),
     ];
@@ -543,53 +572,23 @@ class NasFloatingChips extends StatelessWidget {
         : Row(
             children: [
               for (var i = 0; i < row.length; i++)
-                if (i == 0 && leading != null) row[i] else Expanded(child: row[i]),
+                if (i == 0 && leading != null)
+                  row[i]
+                else
+                  Expanded(child: row[i]),
             ],
           );
     return Container(
-      height: 45,
+      height: 46,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
-        color: scheme.surface.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(22.5),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+        // 半透明面板 + 基色合成：不再是纯黑，压在照片上也还能看清文字
+        color: Color.alphaBlend(spec.panelColor, spec.baseColor)
+            .withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(23),
+        border: Border.all(color: spec.panelBorderColor),
       ),
       child: content,
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        height: 32,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? scheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Text(
-          label,
-          maxLines: 1,
-          style: TextStyle(
-            fontSize: NasTokens.fontCaption,
-            fontWeight: FontWeight.w600,
-            color: selected ? scheme.onPrimary : scheme.onSurface,
-          ),
-        ),
-      ),
     );
   }
 }

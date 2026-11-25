@@ -90,13 +90,19 @@ class _VideoOfflineDownloadsPageState extends State<VideoOfflineDownloadsPage> {
           child: Row(
             children: [
               Expanded(
-                child: Wrap(
-                  spacing: 8,
-                  children: [
-                    _tabChip(0, tr('video.offline.tabActive'), active.length),
-                    _tabChip(1, tr('video.offline.tabFailed'), failed.length),
-                    _tabChip(2, tr('video.offline.tabDone'), done.length),
+                child: NasPillTabs(
+                  labels: [
+                    tr('video.offline.tabActive'),
+                    tr('video.offline.tabFailed'),
+                    tr('video.offline.tabDone'),
                   ],
+                  counts: [
+                    active.isEmpty ? null : active.length,
+                    failed.isEmpty ? null : failed.length,
+                    done.isEmpty ? null : done.length,
+                  ],
+                  selectedIndex: _tab,
+                  onSelect: (i) => setState(() => _tab = i),
                 ),
               ),
               // 下载设置：仅 WiFi / 限速 / 多连接加速，以及「清理服务端产物」
@@ -124,67 +130,6 @@ class _VideoOfflineDownloadsPageState extends State<VideoOfflineDownloadsPage> {
           },
         ),
       ],
-    );
-  }
-
-  /// 页签用同一套胶囊样式：未选中是面板色底 + 次要文字色，选中换成主色淡底 +
-  /// 主色文字 + 加粗。统一自己画形状，不再让 ChoiceChip 给未选中项描一圈边框、
-  /// 给选中项去掉边框还塞一个对勾（两套形状叠在一起看着像两种控件）。
-  Widget _tabChip(int index, String label, int count) {
-    final scheme = Theme.of(context).colorScheme;
-    final selected = _tab == index;
-    final radius = BorderRadius.circular(999);
-    return Material(
-      color: selected
-          ? scheme.primary.withValues(alpha: 0.14)
-          : context.nasStyle.panelColor,
-      borderRadius: radius,
-      child: InkWell(
-        borderRadius: radius,
-        onTap: () => setState(() => _tab = index),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: NasTokens.fontBody,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  color: selected ? scheme.primary : context.nasTextSecondary,
-                ),
-              ),
-              if (count > 0) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? scheme.primary.withValues(alpha: 0.20)
-                        : context.nasStyle.panelBorderColor,
-                    borderRadius: radius,
-                  ),
-                  child: Text(
-                    '$count',
-                    style: TextStyle(
-                      fontSize: NasTokens.fontMicro,
-                      height: 1.3,
-                      fontWeight: FontWeight.w600,
-                      color: selected
-                          ? scheme.primary
-                          : context.nasTextSecondary,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
     );
   }
 
