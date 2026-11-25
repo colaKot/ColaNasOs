@@ -121,10 +121,18 @@ internal object NativeVideoHost {
                     result.success(null)
                     return
                 }
+                // 跟手切集：直接平移最底层的 PlayerView，视频画面才跟着手指走
+                "setOffset" -> {
+                    playerView?.translationY = call.argument<Number>("dy")?.toFloat() ?: 0f
+                    result.success(null)
+                    return
+                }
             }
             val current = ensureSession(activity.applicationContext)
             when (call.method) {
                 "open" -> {
+                    // 新画面从原位开始，避免沿用上一条滑动切集留下的位移
+                    playerView?.translationY = 0f
                     val url = call.argument<String>("url")?.trim().orEmpty()
                     if (url.isEmpty()) {
                         result.error("invalid_url", "Playback URL is empty", null)
@@ -174,6 +182,9 @@ internal object NativeVideoHost {
             playerView = view
             viewOwner = WeakReference(activity)
         }
+        // 切集时旧页面可能把画面滑出屏幕（translationY = -h）：新页面一接管就归位，
+        // 否则要等 open 才复位，中间几秒就是纯黑
+        view.translationY = 0f
         if (view.parent == null) {
             // index 0 = 最底层；FlutterView 在它上面，透明像素处露出视频
             content.addView(

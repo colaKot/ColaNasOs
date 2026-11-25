@@ -85,12 +85,31 @@ class TvMedia3PlayerController {
   static const _methodChannel = MethodChannel('com.colanas.os/tv_media3');
   static const _eventChannel = EventChannel('com.colanas.os/tv_media3/events');
 
+  /// 原生 PlayerView 与会话在进程内是**唯一**的（Activity 只有一个底层 Surface）。
+  /// 换集时新页面先建、旧页面后 dispose，旧页面若无条件 detach / dispose，
+  /// 会把新页面刚挂上的视频层摘掉，表现为「页面在、画面全空」。
+  /// 因此只有最后创建 / 最后挂上的控制器才有权操作原生层。
+  static TvMedia3PlayerController? _active;
+
+  /// 原生事件通道：整个进程只订阅一次。
+  ///
+  /// 每个播放页各自 `receiveBroadcastStream()` 会在同一条 EventChannel 上重复
+  /// listen / cancel。Android 侧一条通道只维护一个活动流，旧页面销毁时 cancel
+  /// 会抛 `PlatformException(No active stream to cancel)`，还会把新会话打断
+  /// （表现：切集后黑屏不播）。这里持有一条共享流，各控制器只听本地广播。
+  static Stream<dynamic>? _sharedEvents;
+  static Stream<dynamic> get _events =>
+      _sharedEvents ??= _eventChannel.receiveBroadcastStream();
+
   final _stateChanges = StreamController<TvMedia3State>.broadcast();
   TvMedia3State _state = const TvMedia3State();
   StreamSubscription<dynamic>? _eventSubscription;
   bool _disposed = false;
   bool _attached = false;
   Map<String, Object?>? _lastOpen;
+
+  /// 是否是当前原生层的所有者。桌面 / Web 没有原生层，恒为 true。
+  bool get isActiveInstance => !_supported || identical(_active, this);
 
   TvMedia3State get state => _state;
   Stream<TvMedia3State> get states => _stateChanges.stream;
@@ -117,14 +136,19 @@ class TvMedia3PlayerController {
   TvMedia3PlayerController() {
     // 只有 Android 装了原生视频通道。桌面 / Web 监听会拿到 MissingPluginException，
     // 反而把播放页顶成错误页，所以这里直接不订阅。
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
-    _eventSubscription = _eventChannel.receiveBroadcastStream().listen(
+    if (!_supported) return;
+    _active = this;
+    _eventSubscription = _events.listen(
       (event) {
+        // 已被新播放页接管：原生状态属于新会话，旧页面不能再跟着动
+        // （否则旧页面会用自己那部片重开会话，和新页面互相顶，表现为黑屏）
+        if (!isActiveInstance) return;
         if (event is Map) {
           _update(TvMedia3State.fromMap(Map<Object?, Object?>.from(event)));
         }
       },
       onError: (Object error) {
+        if (!isActiveInstance) return;
         _update(
           TvMedia3State(error: 'Native video event channel failed: $error'),
         );
@@ -152,7 +176,10 @@ class TvMedia3PlayerController {
 
   /// 让原生层把视频 Surface 挂到 Flutter 下面。
   Future<void> attach() async {
-    if (_disposed || _attached) return;
+    if (_disposed) return;
+    // 谁最后挂上谁拥有原生层（从上层页面返回时也会走到这里）
+    if (_supported) _active = this;
+    if (_attached) return;
     _attached = true;
     try {
       await _methodChannel.invokeMethod<void>('attach');
@@ -161,10 +188,25 @@ class TvMedia3PlayerController {
     }
   }
 
+  /// 重新接管原生层所有权：页面重新回到最上层时调用，
+  /// 此时新页面已经销毁，原生层需要交还给这个还活着的页面。
+  void claim() {
+    if (_disposed || !_attached) return;
+    if (!_supported) return;
+    final cur = _active;
+    // 只有当前没有别的活控制器时才接管：换集时旧页面还会再 build 一次，
+    // 不能让它把新页面的所有权抢回去（抢回去 => 新页面无法 open => 黑屏）
+    if (cur == null || identical(cur, this) || cur._disposed) {
+      _active = this;
+    }
+  }
+
   /// 从窗口里摘下原生视频层（离开播放页时调用）。
   Future<void> detach() async {
     if (!_attached) return;
     _attached = false;
+    // 已被新播放页接管：原生层现在归它，不能摘
+    if (!isActiveInstance) return;
     try {
       await _methodChannel.invokeMethod<void>('detach');
     } on PlatformException {
@@ -190,6 +232,8 @@ class TvMedia3PlayerController {
     String? title,
   }) async {
     if (_disposed) throw StateError('TV Media3 player is disposed');
+    // 已被新播放页接管：旧页面的延迟回调（直连判定 / 补播）不能再改共享会话
+    if (!isActiveInstance) return;
     final args = <String, Object?>{
       'url': url,
       'positionMs': positionMs < 0 ? 0 : positionMs,
@@ -223,7 +267,7 @@ class TvMedia3PlayerController {
       _invoke('setShuffle', {'enabled': enabled});
 
   Future<void> stop() async {
-    if (_disposed) return;
+    if (_disposed || !isActiveInstance) return;
     _lastOpen = null;
     try {
       await _methodChannel.invokeMethod<void>('stop');
@@ -231,6 +275,18 @@ class TvMedia3PlayerController {
       // 播放器还没建出来：没有可停的东西
     }
     _update(const TvMedia3State());
+  }
+
+  /// 跟手平移原生视频层（上下滑动切集时用）。传 0 复原。
+  Future<void> setOffset(double dy) async {
+    if (_disposed || !isActiveInstance) return;
+    try {
+      await _methodChannel.invokeMethod<void>('setOffset', {'dy': dy});
+    } on PlatformException {
+      // 原生层不在：忽略，画面最多不跟手
+    } on MissingPluginException {
+      // 桌面 / Web 没有原生层
+    }
   }
 
   /// 位置：重新打开（换档 / 续播）时用上一次的源与播放意图。
@@ -242,18 +298,22 @@ class TvMedia3PlayerController {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    final wasActive = isActiveInstance;
     await _eventSubscription?.cancel();
     _eventSubscription = null;
     if (!_supported) {
       await _stateChanges.close();
       return;
     }
-    try {
-      await _methodChannel.invokeMethod<void>('dispose');
-    } on PlatformException {
-      // Activity 已销毁：原生层随之释放
-    } on MissingPluginException {
-      // 原生通道不存在（极少数桌面 / 测试环境）
+    if (wasActive) {
+      if (identical(_active, this)) _active = null;
+      try {
+        await _methodChannel.invokeMethod<void>('dispose');
+      } on PlatformException {
+        // Activity 已销毁：原生层随之释放
+      } on MissingPluginException {
+        // 原生通道不存在（极少数桌面 / 测试环境）
+      }
     }
     await _stateChanges.close();
   }
@@ -263,6 +323,7 @@ class TvMedia3PlayerController {
     Map<String, Object?> args = const {},
   ]) async {
     if (_disposed) throw StateError('TV Media3 player is disposed');
+    if (!isActiveInstance) return;
     await _methodChannel.invokeMethod<void>(method, args);
   }
 

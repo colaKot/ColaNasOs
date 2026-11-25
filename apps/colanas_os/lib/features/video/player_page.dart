@@ -30,6 +30,8 @@ import '../../core/video_render.dart';
 import '../../core/video_subtitle_prefs.dart';
 import 'player_screen.dart';
 import 'tv_player_controls.dart';
+import 'video_card.dart';
+import 'video_item_actions.dart';
 import 'tv_media3_player.dart';
 
 String _redactedUrlForLog(String value) {
@@ -60,8 +62,13 @@ bool _isExplicitDecoderOpenFailure(String message) {
       m.contains('unknown codec') ||
       m.contains('failed to initialize video decoder') ||
       m.contains('error while decoding') ||
-      // MKV 里 DV 配置只有 dvcC、没有 hvcC 时，Media3 解析器会抛这类异常
-      m.contains('illegalargumentexception');
+      // MKV 里 DV 配置只有 dvcC、没有 hvcC 时，Media3 解析器会抛这类异常；
+      // 部分非标准封装还会在轨道校验阶段直接抛 IllegalStateException
+      // （ERROR_CODE_FAILED_RUNTIME_CHECK: Unexpected runtime error），
+      // 同样是「本机解不了」，必须落到转码兜底，而不是直接弹「播放失败」。
+      m.contains('illegalargumentexception') ||
+      m.contains('illegalstateexception') ||
+      m.contains('error_code_failed_runtime_check');
 }
 
 /// 内置播放器：media_kit 作为跨平台内核，**控制层全部自绘**。
@@ -95,6 +102,8 @@ class PlayerPage extends StatefulWidget {
     this.startAt,
     this.onPosition,
     this.localSubtitles = const <String>[],
+    this.mixedLibrary = false,
+    this.previewItem,
   });
 
   /// 带短期令牌的原画直链（`/api/v1/video/stream-url` 签发）
@@ -151,11 +160,22 @@ class PlayerPage extends StatefulWidget {
   /// 在线播放走 `/video/subtitle` 接口，这里只服务「文件就在本机」的场景。
   final List<String> localSubtitles;
 
+  /// 从图片 / 视频混合库进入：这类库的播放页不放快退 / 快进按钮，
+  /// 改为在右侧常驻「播放列表 + 删除当前影片」。
+  final bool mixedLibrary;
+
+  /// 换集目标条目（只在上/下一条切换时传）。
+  ///
+  /// 有了它，新播放页一出来就先铺这一条自己的抽帧，等真正解出第一帧再撤掉 ——
+  /// 换集过程不会先露黑底、也不会先闪一下路由转场动画。
+  final VideoItem? previewItem;
+
   @override
   State<PlayerPage> createState() => _PlayerPageState();
 }
 
-class _PlayerPageState extends State<PlayerPage> {
+class _PlayerPageState extends State<PlayerPage>
+    with SingleTickerProviderStateMixin {
   late final Player _player;
   late final VideoController _controller;
   late final TvMedia3PlayerController _tvMedia3Player;
@@ -241,6 +261,24 @@ class _PlayerPageState extends State<PlayerPage> {
   bool _boosting = false;
   bool _controls = true;
   bool _locked = false;
+
+  /// 换集时铺着的「下一条抽帧」还在不在。
+  ///
+  /// 只有 [PlayerPage.previewItem] 非空（上下切集进来）时才为 true；
+  /// 真正解出第一帧 / 出错 / 超时后就撤掉，露出下面的视频画面。
+  late bool _showOpeningFrame = widget.previewItem != null;
+  Timer? _openingFrameGuard;
+
+  /// 撤掉换集占位图（首帧已出 / 出错 / 兜底超时）。
+  void _dropOpeningFrame() {
+    _openingFrameGuard?.cancel();
+    _openingFrameGuard = null;
+    if (mounted && _showOpeningFrame) {
+      setState(() => _showOpeningFrame = false);
+    } else {
+      _showOpeningFrame = false;
+    }
+  }
 
   /// 进播放器时的朝向（null = 还没读到，按竖屏处理）
   bool? _entryPortrait;
@@ -876,6 +914,20 @@ class _PlayerPageState extends State<PlayerPage> {
       _renewIfTokenExpired(message);
     });
 
+    // 换集占位图：
+    // - 安卓原生 Media3 链路由 [_onTvMedia3State] 的首帧回调撤图；
+    // - 桌面 / Web 的 media_kit 纹理链路在这里等第一帧解出来（videoParams）。
+    // 12 秒还没出帧就兜底撤掉，绝不能让一张图把画面永久盖住。
+    if (widget.previewItem != null) {
+      _openingFrameGuard = Timer(const Duration(seconds: 12), _dropOpeningFrame);
+      _logSubs.add(
+        _player.stream.videoParams.listen((p) {
+          if (_nativeTvActive) return;
+          if ((p.dw ?? p.w ?? 0) > 0) _dropOpeningFrame();
+        }),
+      );
+    }
+
     // initState 里不能取 ScaffoldMessenger 这类 InheritedWidget：
     // dependOnInheritedWidgetOfExactType 要求 initState 已经走完，否则
     // _prepareCompatible 的第一行就会抛「called before initState() completed」，
@@ -1089,6 +1141,8 @@ class _PlayerPageState extends State<PlayerPage> {
         route: 'player.decode/${_sessionId ?? 'direct'}',
       );
     }
+    // 第一帧已经上屏：把换集时铺着的抽帧撤掉，让视频从占位图同一个位置接着播
+    if (state.firstFrameMs != null && _showOpeningFrame) _dropOpeningFrame();
     final error = state.error;
     if (_nativeTvActive && error != null && error.isNotEmpty) {
       unawaited(_handleTvMedia3Error(error));
@@ -1208,6 +1262,7 @@ class _PlayerPageState extends State<PlayerPage> {
         _tvMode &&
         !_tunnelOffRetried &&
         !message.toLowerCase().contains('illegalargumentexception') &&
+        !message.toLowerCase().contains('illegalstateexception') &&
         !_isTranscode &&
         widget.itemId != null &&
         _isExplicitDecoderOpenFailure(message)) {
@@ -1302,12 +1357,19 @@ class _PlayerPageState extends State<PlayerPage> {
     _tvHoldDelay?.cancel();
     _tvHoldTick?.cancel();
     _tryOriginalTimer?.cancel();
-    // 离开播放页：根背景层恢复，原生视频层在下面同步摘掉
-    nativeVideoLayerActive.value = false;
+    _openingFrameGuard?.cancel();
+    // 离开播放页：根背景层恢复，原生视频层在下面同步摘掉。
+    // 换集是「新页面先建、旧页面后销毁」，旧页面此时已经不是原生层的所有者，
+    // 再置 false 会把新页面刚露出来的视频盖成纯黑（用户看到的就是空白页）。
+    if (_tvMedia3Player.isActiveInstance) {
+      nativeVideoLayerActive.value = false;
+    }
     for (final sub in _logSubs) {
       sub.cancel();
     }
     _volumeVN.dispose();
+    _swipeAnim.dispose();
+    _swipeOffset.dispose();
     // 退出播放器（可能是**在全屏里按返回**，而不是先点退出全屏）必须把屏幕
     // 朝向还回去：全屏时按视频比例锁了 landscape，只还原 SystemUiMode 的话
     // 人已经回到列表页、手机还横着 —— 用户反馈「退出影片以后一直是横屏」。
@@ -1336,6 +1398,9 @@ class _PlayerPageState extends State<PlayerPage> {
   }) async {
     await _renderReady;
     if (!mounted) return;
+    // 旧页面已被新播放页接管：它自己的重试 / 兜底不能再抢共用的原生会话，
+    // 否则两个页面交替 open，新页面永远起不来（黑屏）。
+    if (!_tvMedia3Player.isActiveInstance) return;
     final openGen = ++_openGen;
     _url = u;
     final useNativeTv = _shouldUseNativeTvPlayer;
@@ -1399,7 +1464,10 @@ class _PlayerPageState extends State<PlayerPage> {
       if (useNativeTv) {
         // 音视频分离时 `u` 仍是原片直链（只有音频走 HLS），不能按 HLS 声明，
         // 否则 Media3 会把 MKV/MP4 当 m3u8 解析直接失败。
-        final formatHint = (_isTranscode && _mergedAudioUrl == null)
+        // 反过来，只要 URL 本身就是播放列表（`.m3u8`），就必须按 HLS 声明，
+        // 否则 Media3 走 ProgressiveMediaSource，报“没有解复用器能读”。
+        final isHlsUrl = Uri.tryParse(u)?.path.toLowerCase().endsWith('.m3u8') ?? false;
+        final formatHint = (isHlsUrl || (_isTranscode && _mergedAudioUrl == null))
             ? 'hls'
             : (widget.compat?['container'] as String? ??
                   Uri.tryParse(u)?.path.split('.').last ??
@@ -1784,7 +1852,9 @@ class _PlayerPageState extends State<PlayerPage> {
       if (!mounted ||
           openGeneration != _openGen ||
           _isTranscode ||
-          _error != null) {
+          _error != null ||
+          // 已被新播放页接管：旧页面不能再把共享会话切走
+          !_tvMedia3Player.isActiveInstance) {
         return;
       }
       elapsed = Duration(seconds: i + 1);
@@ -1829,7 +1899,8 @@ class _PlayerPageState extends State<PlayerPage> {
     if (!mounted ||
         openGeneration != _openGen ||
         _isTranscode ||
-        _error != null) {
+        _error != null ||
+        !_tvMedia3Player.isActiveInstance) {
       return;
     }
     w = _playbackWidth;
@@ -1885,6 +1956,10 @@ class _PlayerPageState extends State<PlayerPage> {
           _isTranscode = true;
           _preset = 'original';
           _codec = 'original';
+          // 原片封装会话里已经带上了 AAC 音轨：之前为了「音频分离」挂的外挂流
+          // 必须丢掉，否则 formatHint 会按原容器（mkv/mp4）声明，Media3 把这段
+          // m3u8 当普通文件解析，直接报 PARSING_CONTAINER_UNSUPPORTED
+          _mergedAudioUrl = null;
         });
         await _openUrl(u, retries: 5);
         if (mounted) setState(() => _preparing = false);
@@ -3335,19 +3410,122 @@ class _PlayerPageState extends State<PlayerPage> {
   /// 和短剧连播页的手感保持一致。松手才切，滑到一半反悔不算。
   double _vDragDy = 0;
 
-  void _onVerticalDragStart(DragStartDetails d) => _vDragDy = 0;
+  /// 跟手切集的实时位移：画面上移为负。原生 Surface 的画面要同步平移，
+  /// 不然手势只动了控件、视频不动（用户反馈「不是跟我手势切走的」）。
+  final ValueNotifier<double> _swipeOffset = ValueNotifier<double>(0);
+  late final AnimationController _swipeAnim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 210),
+  );
+  double _swipeFrom = 0;
+  double _swipeTo = 0;
+  bool _swipeSwitching = false;
+  double _lastNativeOffset = 0;
 
-  void _onVerticalDragUpdate(DragUpdateDetails d) => _vDragDy += d.delta.dy;
+  int get _playlistIndex =>
+      _playlist.indexWhere((e) => e.id == widget.itemId);
 
-  void _onVerticalDragEnd(DragEndDetails d) {
-    if (!_hasPlaylist || _locked) return;
-    const threshold = 60.0;
-    if (_vDragDy <= -threshold) {
-      _playAdjacent(1); // 上滑 = 下一条
-    } else if (_vDragDy >= threshold) {
-      _playAdjacent(-1); // 下滑 = 上一条
+  bool _hasAdjacent(int delta) {
+    if (!_hasPlaylist) return false;
+    final i = _playlistIndex;
+    if (i < 0) return false;
+    final j = i + delta;
+    return j >= 0 && j < _playlist.length;
+  }
+
+  VideoItem? _adjacentItem(int delta) {
+    if (!_hasAdjacent(delta)) return null;
+    return _playlist[_playlistIndex + delta];
+  }
+
+  void _applySwipeOffset(double dy) {
+    _swipeOffset.value = dy;
+    // 安卓视频在原生 SurfaceView 上：按同一段位移平移原生层，画面才跟手
+    if (_nativeTvActive && (dy - _lastNativeOffset).abs() >= 0.5) {
+      _lastNativeOffset = dy;
+      unawaited(_tvMedia3Player.setOffset(dy));
     }
+  }
+
+  void _swipeAnimTick() {
+    final t = Curves.easeOutCubic.transform(_swipeAnim.value);
+    _applySwipeOffset(_swipeFrom + (_swipeTo - _swipeFrom) * t);
+  }
+
+  Future<bool> _animateSwipeTo(double to) async {
+    _swipeAnim
+      ..removeListener(_swipeAnimTick)
+      ..addListener(_swipeAnimTick);
+    _swipeFrom = _swipeOffset.value;
+    _swipeTo = to;
+    try {
+      await _swipeAnim.forward(from: 0).orCancel;
+    } on TickerCanceled {
+      return false;
+    } finally {
+      _swipeAnim.removeListener(_swipeAnimTick);
+    }
+    if (!mounted) return false;
+    return true;
+  }
+
+  void _onVerticalDragStart(DragStartDetails d) {
     _vDragDy = 0;
+    if (!_hasPlaylist || _locked || _swipeSwitching) return;
+    if (_controls) setState(() => _controls = false);
+  }
+
+  void _onVerticalDragUpdate(DragUpdateDetails d) {
+    _vDragDy += d.delta.dy;
+    if (!_hasPlaylist || _locked || _swipeSwitching) return;
+    final h = MediaQuery.sizeOf(context).height;
+    var dy = _vDragDy;
+    // 到头了只给 1/4 的位移（橡皮筋），提示这边没有下一条
+    if (dy < 0 && !_hasAdjacent(1)) dy *= 0.25;
+    if (dy > 0 && !_hasAdjacent(-1)) dy *= 0.25;
+    _applySwipeOffset(dy.clamp(-h, h).toDouble());
+  }
+
+  Future<void> _onVerticalDragEnd(DragEndDetails d) async {
+    if (!_hasPlaylist || _locked || _swipeSwitching) {
+      _vDragDy = 0;
+      return;
+    }
+    final h = MediaQuery.sizeOf(context).height;
+    final velocity = d.primaryVelocity ?? 0;
+    final dy = _vDragDy;
+    _vDragDy = 0;
+    final up = dy < 0 || (dy == 0 && velocity < 0);
+    final delta = up ? 1 : -1;
+    final wantsNext = _hasAdjacent(delta);
+    final enough = dy.abs() > h * 0.18 || velocity.abs() > 650;
+    if (!wantsNext || !enough) {
+      // 没到阈值 / 到头了：回弹
+      await _animateSwipeTo(0);
+      _applySwipeOffset(0);
+      return;
+    }
+    _swipeSwitching = true;
+    // 画面整块滑出屏幕，接着在新页面里继续（新画面从底部就位）
+    await _animateSwipeTo(up ? -h : h);
+    if (!mounted) return;
+    final it = _adjacentItem(delta);
+    if (it == null) {
+      await _animateSwipeTo(0);
+      _applySwipeOffset(0);
+      _swipeSwitching = false;
+      return;
+    }
+    try {
+      await _playOther(it, popSheet: false);
+    } finally {
+      // 换页失败时把画面拉回来，别停在半空中
+      if (mounted) {
+        _swipeOffset.value = 0;
+        _applySwipeOffset(0);
+        _swipeSwitching = false;
+      }
+    }
   }
 
   /// 拖动中：只更新预览，不做 seek（每帧都 seek 会把转码会话拖垮）
@@ -4923,9 +5101,20 @@ class _PlayerPageState extends State<PlayerPage> {
           : '${ApiSession.instance.baseUrl}${res.url}';
       if (!mounted) return;
       if (popSheet) Navigator.of(context).pop();
+      // 原生视频层现在由新页面接管（旧页面 dispose 不会再拆），
+      // 这里必须先把旧画面停住，否则切集过程中上一集的声音还在响。
+      if (_nativeTvActive) {
+        unawaited(_tvMedia3Player.pause());
+      } else {
+        unawaited(_player.pause());
+      }
       await Navigator.of(context).pushReplacement(
-        MaterialPageRoute<void>(
-          builder: (_) => PlayerPage(
+        // 换集不能带页面转场：上一页已经把下一条的抽帧滑到整屏，这里再滑 / 缩放
+        // 一次就成了「从左到右闪一下」。新页面用同一张图接上，才是无缝。
+        PageRouteBuilder<void>(
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+          pageBuilder: (_, _, _) => PlayerPage(
             url: u,
             title: it.title,
             itemId: it.id,
@@ -4936,6 +5125,8 @@ class _PlayerPageState extends State<PlayerPage> {
             // 合集内切一条就整队列丢失，「下一个」再也按不动。
             playlist: _playlist,
             playlistIsSeries: _playlistIsSeries,
+            mixedLibrary: widget.mixedLibrary,
+            previewItem: it,
           ),
         ),
       );
@@ -4990,7 +5181,7 @@ class _PlayerPageState extends State<PlayerPage> {
         : _btn(Icons.lock_outline, tr('player.lock'), () {
             setState(() => _locked = true);
           });
-
+    // 混合库：列表按钮常驻排在前面（删除按钮在左侧「播放顺序」后面）
     if (wide) {
       return [
         speed,
@@ -5015,8 +5206,17 @@ class _PlayerPageState extends State<PlayerPage> {
     return [
       speed,
       quality,
+      // 混合库：列表直接摆在控制栏上，往左靠
+      if (widget.mixedLibrary) ?playlist,
       _btn(Icons.more_horiz, tr('common.more'), () {
-        _showMore([subtitle, audio, ?playlist, info, settings, ?lock]);
+        _showMore([
+          subtitle,
+          audio,
+          if (!widget.mixedLibrary) ?playlist,
+          info,
+          settings,
+          ?lock,
+        ]);
       }),
       fullscreen,
     ];
@@ -5031,6 +5231,42 @@ class _PlayerPageState extends State<PlayerPage> {
         child: Wrap(spacing: 8, runSpacing: 8, children: extras),
       ),
     );
+  }
+
+  /// 「删除当前影片」的二次确认是否已被本次登录跳过，以及当时选的回收站设置。
+  /// 只存在内存里：重启 App / 重新登录就重新弹。
+  static bool _deleteSkipConfirm = false;
+  static bool _deleteToTrash = false;
+
+  Future<void> _deleteCurrent() async {
+    final id = widget.itemId;
+    if (id == null) return;
+    var toTrash = _deleteToTrash;
+    if (!_deleteSkipConfirm) {
+      final picked = await showDialog<({bool toTrash, bool dontAsk})>(
+        context: context,
+        builder: (_) => _DeleteCurrentDialog(title: widget.title),
+      );
+      if (picked == null || !mounted) return;
+      toTrash = picked.toTrash;
+      if (picked.dontAsk) {
+        _deleteSkipConfirm = true;
+        _deleteToTrash = picked.toTrash;
+      }
+    }
+    if (!mounted) return;
+    final ok = await deleteVideoItemsNow(context, [id], toTrash: toTrash);
+    if (!ok || !mounted) return;
+    final index = _playlist.indexWhere((e) => e.id == id);
+    final rest = [..._playlist]..removeWhere((e) => e.id == id);
+    setState(() => _playlist = rest);
+    if (rest.isEmpty) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    // 删掉当前这条后紧接着播下一条：删除后原位置就是原来的下一条
+    final next = rest[(index < 0 ? 0 : index).clamp(0, rest.length - 1)];
+    await _playOther(next, popSheet: false);
   }
 
   Widget _progressRow() => StreamBuilder<Duration>(
@@ -5119,8 +5355,11 @@ class _PlayerPageState extends State<PlayerPage> {
             ),
             _btn(Icons.skip_next, tr('player.next'), () => _playAdjacent(1)),
           ],
-          _btn(Icons.replay_10, tr('player.rewind10'), () => _seekBy(-10)),
-          _btn(Icons.forward_30, tr('player.forward30'), () => _seekBy(30)),
+          // 混合库的播放页不要快退 / 快进，位置让给「列表 + 删除」（在右侧按钮组里）
+          if (!widget.mixedLibrary) ...[
+            _btn(Icons.replay_10, tr('player.rewind10'), () => _seekBy(-10)),
+            _btn(Icons.forward_30, tr('player.forward30'), () => _seekBy(30)),
+          ],
           PopupMenuButton<String>(
             tooltip: tr('player.loop'),
             color: const Color(0xFF222222),
@@ -5173,6 +5412,13 @@ class _PlayerPageState extends State<PlayerPage> {
               ),
             ],
           ),
+          // 混合库：删除当前影片紧跟在「播放顺序」后面
+          if (widget.mixedLibrary && widget.itemId != null)
+            _btn(
+              Icons.delete_outline,
+              tr('player.deleteCurrent'),
+              _deleteCurrent,
+            ),
         ],
       );
     },
@@ -5267,8 +5513,14 @@ class _PlayerPageState extends State<PlayerPage> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _btn(Icons.replay_30, tr('player.rewind10'), () => _seekBy(-10)),
-              const SizedBox(width: 24),
+              if (!widget.mixedLibrary) ...[
+                _btn(
+                  Icons.replay_30,
+                  tr('player.rewind10'),
+                  () => _seekBy(-10),
+                ),
+                const SizedBox(width: 24),
+              ],
               StreamBuilder<bool>(
                 stream: _playingStream,
                 builder: (_, snap) => IconButton(
@@ -5285,8 +5537,14 @@ class _PlayerPageState extends State<PlayerPage> {
                   },
                 ),
               ),
-              const SizedBox(width: 24),
-              _btn(Icons.forward_30, tr('player.forward30'), () => _seekBy(30)),
+              if (!widget.mixedLibrary) ...[
+                const SizedBox(width: 24),
+                _btn(
+                  Icons.forward_30,
+                  tr('player.forward30'),
+                  () => _seekBy(30),
+                ),
+              ],
             ],
           ),
         ),
@@ -5356,6 +5614,24 @@ class _PlayerPageState extends State<PlayerPage> {
 
   Widget _statusLayer() {
     if (_preparing) {
+      // 上下切集进来：整屏已经铺着这一条自己的抽帧，再压一层黑色加载页
+      // 就会「图一闪 → 黑一下 → 才出画面」。这里只留一个转圈。
+      if (widget.previewItem != null && _showOpeningFrame && _error == null) {
+        return const Positioned.fill(
+          child: IgnorePointer(
+            child: Center(
+              child: SizedBox(
+                width: 40,
+                height: 40,
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: Colors.white70,
+                ),
+              ),
+            ),
+          ),
+        );
+      }
       return Positioned.fill(
         child: ColoredBox(
           color: Colors.black.withValues(alpha: 0.82),
@@ -5465,6 +5741,99 @@ class _PlayerPageState extends State<PlayerPage> {
       controls: null,
       fit: _fit,
       fill: Colors.black,
+    );
+  }
+
+  /// 跟手切集时补上屏幕空白处的相邻条目封面卡。
+  ///
+  /// 原生 SurfaceView 在 Flutter 下面，视频往上移走以后露出来的是窗口底色；
+  /// 用一张整屏的不透明卡片盖住，观感才是「上一条被推走、下一条跟上来」。
+  Widget _swipePreviewLayer() {
+    return ValueListenableBuilder<double>(
+      valueListenable: _swipeOffset,
+      builder: (_, dy, _) {
+        if (dy == 0) return const SizedBox.shrink();
+        final item = dy < 0 ? _adjacentItem(1) : _adjacentItem(-1);
+        if (item == null) return const SizedBox.shrink();
+        final h = MediaQuery.sizeOf(context).height;
+        final top = dy < 0 ? h + dy : dy - h;
+        return Stack(
+          children: [
+            Positioned(
+              top: top,
+              left: 0,
+              right: 0,
+              height: h,
+              child: IgnorePointer(
+                child: _swipePreviewCard(item, next: dy < 0),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _swipePreviewCard(VideoItem item, {required bool next}) {
+    final label = relatedBasename(item.path);
+    return ColoredBox(
+      color: Colors.black,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 用下一条自己的抽帧铺满整屏：竖屏片源抽出来就是竖屏，和即将起播的
+          // 画面同构图。以前用同名横版图 contain 居中，竖屏切换时中间闪一张
+          // 横图，割裂感很强。
+          VideoFramePreview(item: item),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.center,
+                end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Color(0xCC000000)],
+              ),
+            ),
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 96),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    tr(next ? 'player.next' : 'player.prev'),
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_swipeSwitching)
+            const Center(
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: Colors.white70,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -6389,6 +6758,8 @@ class _PlayerPageState extends State<PlayerPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 页面重新回到最上层时收回原生视频层的所有权（换集新页面已销毁的场景）
+    if (ModalRoute.of(context)?.isCurrent ?? true) _tvMedia3Player.claim();
     final tv = TvScope.of(context);
     final wide = MediaQuery.sizeOf(context).width >= 720;
     return PopScope(
@@ -6452,10 +6823,33 @@ class _PlayerPageState extends State<PlayerPage> {
                       _playbackSetRate(_rate);
                       setState(() {});
                     },
-                    child: _videoSurface(),
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: _swipeOffset,
+                      builder: (_, dy, child) {
+                        // 安卓画面在原生层上，已经由 setOffset 平移；这里只搬 Flutter 画面
+                        if (_nativeTvActive || dy == 0) return child!;
+                        return Transform.translate(
+                          offset: Offset(0, dy),
+                          child: child,
+                        );
+                      },
+                      child: _videoSurface(),
+                    ),
                   ),
                 ),
               ),
+              // 跟手切集时，屏幕剩下的部分由相邻条目的封面卡补上（不接手势）
+              _swipePreviewLayer(),
+              // 换集进场：新页面一出来就铺上这一条自己的抽帧（和上一页滑走的
+              // 那张是同一张图，缓存命中不闪），等真正解出第一帧再撤掉。
+              if (widget.previewItem != null &&
+                  _showOpeningFrame &&
+                  _error == null)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: VideoFramePreview(item: widget.previewItem!),
+                  ),
+                ),
               if (_error != null)
                 Positioned.fill(child: _errorLayer())
               else ...[
@@ -6535,6 +6929,81 @@ class _PlayerPageState extends State<PlayerPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 混合库播放页「删除当前影片」的二次确认。
+///
+/// 默认不勾选回收站（和其他影视删除一致）；勾选「不再提示」后，
+/// 本次登录内再删就按这次的选择直接删，不再弹窗。
+class _DeleteCurrentDialog extends StatefulWidget {
+  const _DeleteCurrentDialog({this.title});
+
+  final String? title;
+
+  @override
+  State<_DeleteCurrentDialog> createState() => _DeleteCurrentDialogState();
+}
+
+class _DeleteCurrentDialogState extends State<_DeleteCurrentDialog> {
+  bool _toTrash = false;
+  bool _dontAsk = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = widget.title;
+    return AlertDialog(
+      title: Text(tr('player.deleteCurrent')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null && title.isNotEmpty) ...[
+            Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 6),
+          ],
+          CheckboxListTile(
+            value: _toTrash,
+            onChanged: (v) => setState(() => _toTrash = v ?? false),
+            title: Text(tr('video.dup.toTrash')),
+            subtitle: Text(tr('video.dup.toTrashHint')),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+          ),
+          if (!_toTrash)
+            Text(
+              tr('video.delete.permanentHint'),
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          CheckboxListTile(
+            value: _dontAsk,
+            onChanged: (v) => setState(() => _dontAsk = v ?? false),
+            title: Text(tr('player.deleteDontAsk')),
+            subtitle: Text(tr('player.deleteDontAskHint')),
+            controlAffinity: ListTileControlAffinity.leading,
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(tr('common.cancel')),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            context,
+            (toTrash: _toTrash, dontAsk: _dontAsk),
+          ),
+          child: Text(tr('common.delete')),
+        ),
+      ],
     );
   }
 }

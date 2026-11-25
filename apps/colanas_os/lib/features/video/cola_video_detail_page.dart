@@ -312,6 +312,9 @@ class VideoDetailPageState extends State<VideoDetailPage> {
             sourceBytes: target.size,
             // 转码是边转边播，播放器拿不到总长，用片源时长兜进度条
             durationMs: target.durationMs,
+            // 剧集 / 短剧在详情页直接起播时也带上队列：上下滑动切上一集 / 下一集
+            playlist: _seriesEpisodes.length > 1 ? _seriesEpisodes : null,
+            playlistIsSeries: _seriesEpisodes.length > 1,
           ),
         ),
       );

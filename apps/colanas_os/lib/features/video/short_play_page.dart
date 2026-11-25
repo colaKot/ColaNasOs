@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -52,6 +54,13 @@ class _ShortPlayPageState extends State<ShortPlayPage> {
   String? _error;
   bool _paused = false;
 
+  /// 当前这一集的视频纹理真的解出第一帧了。
+  ///
+  /// 没出帧之前继续盖着这一集的抽帧：换集时抽帧不会「消失一下再出画面」。
+  bool _frameReady = false;
+  StreamSubscription<VideoParams>? _videoParamsSub;
+  Timer? _frameGuard;
+
   @override
   void initState() {
     super.initState();
@@ -61,6 +70,10 @@ class _ShortPlayPageState extends State<ShortPlayPage> {
     if (widget.items.isNotEmpty) {
       _player = Player();
       _videoController = VideoController(_player!);
+      _videoParamsSub = _player!.stream.videoParams.listen((p) {
+        if (!mounted || !_ready || _frameReady) return;
+        if ((p.dw ?? p.w ?? 0) > 0) setState(() => _frameReady = true);
+      });
       WidgetsBinding.instance.addPostFrameCallback((_) => _ensurePlayback());
     }
   }
@@ -68,6 +81,9 @@ class _ShortPlayPageState extends State<ShortPlayPage> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onKey);
+    _frameGuard?.cancel();
+    final paramsSub = _videoParamsSub;
+    if (paramsSub != null) unawaited(paramsSub.cancel());
     // 退出时尽力存一次进度（不 await，页面已经在销毁）
     _saveProgress();
     _player?.dispose();
@@ -118,6 +134,25 @@ class _ShortPlayPageState extends State<ShortPlayPage> {
     setState(() => _paused = !_paused);
   }
 
+  /// 预热相邻几集的抽帧：服务端抽帧是懒生成的（SMB 来源第一次要先 404 /
+  /// 后台排队），提前要一次，滑到下一集时加载占位就能直接出整屏截图。
+  void _warmNeighborFrames() {
+    for (var d = 1; d <= 2; d++) {
+      final j = _index + d;
+      if (j >= widget.items.length) break;
+      unawaited(
+        precacheImage(
+          NetworkImage(
+            videoFrameUrl(widget.items[j]),
+            headers: videoArtHeaders,
+          ),
+          context,
+          onError: (_, _) {},
+        ),
+      );
+    }
+  }
+
   /// 换集前先把上一集的观看位置落库，短剧集短、丢进度很影响续看。
   Future<void> _saveProgress() async {
     final id = _loadedId;
@@ -142,13 +177,16 @@ class _ShortPlayPageState extends State<ShortPlayPage> {
 
   Future<void> _ensurePlayback() async {
     if (!mounted || widget.items.isEmpty || _player == null) return;
+    _warmNeighborFrames();
     final item = _current;
     if (_loadedId == item.id && _ready) return;
     await _saveProgress();
     _loadedId = item.id;
     _ready = false;
+    _frameReady = false;
     _error = null;
     _paused = false;
+    _frameGuard?.cancel();
     if (mounted) setState(() {});
     try {
       final res = await ApiSession.instance.client.videoStreamUrl(id: item.id);
@@ -156,7 +194,20 @@ class _ShortPlayPageState extends State<ShortPlayPage> {
       final url = '${ApiSession.instance.baseUrl}${res.url}';
       await _player!.open(Media(url), play: true);
       if (!mounted) return;
-      setState(() => _ready = true);
+      // open 完成时第一帧可能已经解出来了（[videoParams] 事件早于这次 setState），
+      // 直接读一次状态，免得占位图一直盖着等超时。
+      final vp = _player!.state.videoParams;
+      setState(() {
+        _ready = true;
+        if ((vp.dw ?? vp.w ?? 0) > 0) _frameReady = true;
+      });
+      // 兜底：8 秒还不出帧就撤掉占位，不能让它把画面永久盖住
+      _frameGuard?.cancel();
+      if (!_frameReady) {
+        _frameGuard = Timer(const Duration(seconds: 8), () {
+          if (mounted && !_frameReady) setState(() => _frameReady = true);
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -198,36 +249,38 @@ class _ShortPlayPageState extends State<ShortPlayPage> {
 
   Widget _page(VideoItem item, bool active) {
     if (active && _ready && _videoController != null) {
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _togglePause,
-        child: Center(
-          child: AspectRatio(
-            aspectRatio: _aspectOf(item),
-            child: Video(
-              controller: _videoController!,
-              controls: null,
-              fit: BoxFit.contain,
-              fill: Colors.black,
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _togglePause,
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: _aspectOf(item),
+                child: Video(
+                  controller: _videoController!,
+                  controls: null,
+                  fit: BoxFit.contain,
+                  fill: Colors.black,
+                ),
+              ),
             ),
           ),
-        ),
+          // 纹理还没出第一帧：继续盖着这一集的抽帧，画面直接在同一张图上出现，
+          // 不会先露一下黑底（用户反馈的「截帧图消失后又闪一下」）。
+          if (!_frameReady)
+            IgnorePointer(child: VideoFramePreview(item: item)),
+        ],
       );
     }
     return Stack(
       fit: StackFit.expand,
       children: [
-        Center(
-          child: AspectRatio(
-            aspectRatio: _aspectOf(item),
-            child: NasCoverImage(
-              url: videoPosterUrl(item, kind: 'fanart'),
-              headers: videoArtHeaders,
-              fit: BoxFit.contain,
-              icon: Icons.movie_outlined,
-            ),
-          ),
-        ),
+        // 换集加载占位用这一条自己的抽帧铺满整屏：竖屏片源抽出来就是竖屏，
+        // 和接着起播的画面同构图。以前这里放的是同名横版图（contain 居中），
+        // 竖屏视频前面先闪一张横图，割裂感很强。
+        VideoFramePreview(item: item),
         Center(
           child: _error == null
               ? const SizedBox(
