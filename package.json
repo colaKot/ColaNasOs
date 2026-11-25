@@ -56,6 +56,8 @@
     "installer.check": "node tool/check/installer.js",
     "lint": "eslint .",
     "mcp": "node sidecars/mcp/main.js",
+    "mcp.tools.check": "node tool/check/mcp-tools.js",
+    "mcp:dev": "node tool/mcp-dev/main.js",
     "migrate:status": "node tool/migrate.js status",
     "migrate:up": "node tool/migrate.js up",
     "migrate:verify": "node tool/migrate.js verify",

@@ -70,6 +70,7 @@ const STEPS = [
   { script: 'build', label: '编译 TypeScript', est: 2500, layer: 'build' },
   { script: 'lint', label: 'ESLint', est: 6700 },
   { script: 'errors.check', label: '错误码一致性（Err 常量 / 契约登记）', est: 470 },
+  { script: 'mcp.tools.check', label: 'MCP 工具清单（contracts ↔ 两套 server）', est: 300 },
   { script: 'test', label: 'node:test 单测', est: 21700 },
   { script: 'gen.check', label: 'OpenAPI 与代码一致', est: 11100 },
   { script: 'gen:errors.check', label: '错误码表与契约一致', est: 520 },
@@ -186,6 +187,7 @@ const FULL_TRIGGERS = [
 
 const CONTRACT_STEPS = [
   'errors.check',
+  'mcp.tools.check',
   'gen.check',
   'gen:errors.check',
   'gen:play-quality.check',

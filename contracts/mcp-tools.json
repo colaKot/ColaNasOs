@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "description": "MCP 工具清单单一真源。两套 MCP server（stdio sidecar 与内核 HTTP）的工具集与 serverInfo 以本文件为准；代码新增 / 改名 / 删除工具必须先在这里登记，否则 mcp.tools.check 会失败。group 表示能力组：content=内容查询（全通道），engineering=工程信息（仅本地 stdio），diagnostics=诊断（仅本地 stdio）。",
+  "servers": {
+    "stdio": {
+      "transport": "stdio",
+      "source": "sidecars/mcp/main.js",
+      "serverInfo": { "name": "colanas-mcp", "version": "1.0.0" },
+      "group": "content",
+      "tools": [
+        {
+          "name": "files_list",
+          "description": "列出 files 根内某个目录（相对路径），返回名称与是否为目录"
+        },
+        { "name": "photo_timeline", "description": "相册时间轴（按拍摄时间倒序）" },
+        { "name": "video_list", "description": "影视列表（可关键词搜索；series=none 只看影片）" },
+        { "name": "music_list", "description": "音乐曲目列表（可关键词 / 艺术家 / 专辑过滤）" },
+        { "name": "system_monitor", "description": "整机监控：CPU 采样、内存、磁盘、负载、运行时长" },
+        { "name": "media_libraries", "description": "各媒体库概况（相册 / 影视 / 音乐）" }
+      ]
+    },
+    "photo": {
+      "transport": "http",
+      "source": "src/modules/photo/mcp.ts",
+      "serverInfo": { "name": "colanas-photo", "version": "1.0.0" },
+      "group": "content",
+      "tools": [
+        { "name": "photo_search", "description": "按关键词 / 时间范围搜索照片" },
+        { "name": "photo_recent", "description": "最近拍摄的照片" },
+        { "name": "photo_similar", "description": "以图搜图：给一张照片找相似照片" },
+        { "name": "photo_scenes", "description": "场景标签分布，或某个场景下的照片" },
+        { "name": "photo_faces", "description": "人物相册列表（人脸簇）" },
+        { "name": "photo_stats", "description": "照片总量 / 年份分布 / 活跃天数" }
+      ]
+    },
+    "dev": {
+      "transport": "stdio",
+      "source": "tool/mcp-dev/main.js",
+      "serverInfo": { "name": "colanas-dev", "version": "1.0.0" },
+      "group": "engineering",
+      "tools": [
+        { "name": "doc_search", "description": "在 docs/ 与 AGENTS.md 等工程文档里按关键词检索，返回文件:行号 + 片段" },
+        { "name": "contract_lookup", "description": "查契约：error 错误码 / api 路由 / i18n 键 / app 应用 / glossary 术语" },
+        { "name": "api_endpoint", "description": "按 path 或 operationId 查端点：method / 权限 / 参数 / 响应码" },
+        { "name": "project_facts", "description": "工程元信息：版本 / 各端版本 / 模块清单 / 契约计数 / MCP 工具数 / 文档数" },
+        { "name": "diag_digest", "description": "读 dist/verify-report.json，返回结构化摘要：是否通过、失败步骤、最慢步骤" },
+        { "name": "diag_static", "description": "跑一组轻量只读检查（错误码 / 契约一致性 / i18n / sbom 等），不 build、不跑 smoke" },
+        { "name": "log_query", "description": "查内核日志（%APPDATA%/colanas_os_server/logs），按级别 / 关键字过滤，只读尾部" }
+      ]
+    }
+  }
+}

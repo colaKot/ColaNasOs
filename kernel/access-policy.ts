@@ -40,7 +40,7 @@ export const PUBLIC_API_PREFIXES = [
   '/api/v1/auth',
   '/api/v1/share/info',
   '/api/v1/share/download',
-  '/api/v1/mcp',
+  '/api/mcp',
 ];
 
 /**

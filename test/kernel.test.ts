@@ -253,7 +253,7 @@ test('access-policy: 白名单命中与拒绝', () => {
 
 test('access-policy: 公共通道与未登记前缀放行', () => {
   assert.equal(checkAppAccess(['photo'], '/api/v1/auth/login').ok, true);
-  assert.equal(checkAppAccess(['photo'], '/api/v1/mcp/tools').ok, true);
+  assert.equal(checkAppAccess(['photo'], '/api/mcp').ok, true);
   assert.equal(checkAppAccess(['photo'], '/api/v1/unknown/new').ok, true);
 });
 
