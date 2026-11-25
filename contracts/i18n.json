@@ -1080,6 +1080,11 @@
     "nav.home": {},
     "nav.logout": {},
     "nav.more": {},
+    "photo.about.build": {
+      "code": {}
+    },
+    "photo.about.licenses": {},
+    "photo.about.tagline": {},
     "photo.ai.activities": {},
     "photo.ai.allDone": {},
     "photo.ai.alreadyQueued": {},
@@ -2292,6 +2297,9 @@
     "player.embeddedSubtitle": {
       "n": {}
     },
+    "player.deleteCurrent": {},
+    "player.deleteDontAsk": {},
+    "player.deleteDontAskHint": {},
     "player.fit": {},
     "player.fitContain": {},
     "player.fitCover": {},
@@ -3449,6 +3457,9 @@
     "video.dup.deleteDone": {
       "count": {}
     },
+    "video.dup.deleteDonePermanent": {
+      "count": {}
+    },
     "video.dup.deletePartial": {
       "done": {},
       "failed": {}
@@ -4002,6 +4013,8 @@
     "video.pruneConfirm": {
       "count": {}
     },
+    "video.scan.alreadyRunning": {},
+    "video.scan.queued": {},
     "video.scanDone": {
       "added": {},
       "updated": {},

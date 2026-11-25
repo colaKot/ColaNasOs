@@ -876,6 +876,9 @@ class I18nKeys {
   static const navLogout = 'nav.logout';
   static const navMore = 'nav.more';
   // ---- photo ----
+  static const photoAboutBuild = 'photo.about.build';
+  static const photoAboutLicenses = 'photo.about.licenses';
+  static const photoAboutTagline = 'photo.about.tagline';
   static const photoAiActivities = 'photo.ai.activities';
   static const photoAiAllDone = 'photo.ai.allDone';
   static const photoAiAlreadyQueued = 'photo.ai.alreadyQueued';
@@ -1689,6 +1692,9 @@ class I18nKeys {
   static const playerCompatOn = 'player.compatOn';
   static const playerDolbyVision = 'player.dolbyVision';
   static const playerEmbeddedSubtitle = 'player.embeddedSubtitle';
+  static const playerDeleteCurrent = 'player.deleteCurrent';
+  static const playerDeleteDontAsk = 'player.deleteDontAsk';
+  static const playerDeleteDontAskHint = 'player.deleteDontAskHint';
   static const playerFit = 'player.fit';
   static const playerFitContain = 'player.fitContain';
   static const playerFitCover = 'player.fitCover';
@@ -2652,6 +2658,7 @@ class I18nKeys {
   static const videoDupClearSelection = 'video.dup.clearSelection';
   static const videoDupDeleteConfirm = 'video.dup.deleteConfirm';
   static const videoDupDeleteDone = 'video.dup.deleteDone';
+  static const videoDupDeleteDonePermanent = 'video.dup.deleteDonePermanent';
   static const videoDupDeletePartial = 'video.dup.deletePartial';
   static const videoDupDeleteSelected = 'video.dup.deleteSelected';
   static const videoDupDeleteTaskTimeout = 'video.dup.deleteTaskTimeout';
@@ -2990,6 +2997,8 @@ class I18nKeys {
   static const videoOfflineWifiOnlyHint = 'video.offline.wifiOnlyHint';
   static const videoPlayUrlFailed = 'video.playUrlFailed';
   static const videoPruneConfirm = 'video.pruneConfirm';
+  static const videoScanAlreadyRunning = 'video.scan.alreadyRunning';
+  static const videoScanQueued = 'video.scan.queued';
   static const videoScanDone = 'video.scanDone';
   static const videoScrapeApply = 'video.scrape.apply';
   static const videoScrapeBatchConfirm = 'video.scrape.batchConfirm';
@@ -3198,4 +3207,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 3146;
+const int i18nKeyCount = 3155;

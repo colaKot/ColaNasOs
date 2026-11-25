@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nas_core/nas_core.dart' show localizeErrorText;
 
 import '../tokens.dart';
 
@@ -51,6 +52,8 @@ class NasSnack {
     bool clearQueue = false,
   }) {
     final withIcon = icon || error;
+    // 服务端异常原文可能是英文：统一在这里按当前语言收口，避免中文界面漏英文。
+    final text = localizeErrorText(message);
     if (clearQueue) messenger.clearSnackBars();
     messenger.showSnackBar(
       SnackBar(
@@ -63,10 +66,10 @@ class NasSnack {
                     color: Colors.white,
                   ),
                   const SizedBox(width: NasTokens.spaceSm),
-                  Expanded(child: Text(message)),
+                  Expanded(child: Text(text)),
                 ],
               )
-            : Text(message),
+            : Text(text),
         backgroundColor: error ? const Color(NasTokens.colorDanger) : null,
         action: action,
         duration: duration ?? const Duration(seconds: 4),

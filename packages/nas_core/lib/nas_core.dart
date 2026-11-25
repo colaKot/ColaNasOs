@@ -10,6 +10,7 @@ export 'api/transport.dart';
 export 'app_nav_spec.dart';
 export 'app_registry.dart';
 export 'capability_matrix.dart';
+export 'error_text.dart';
 export 'events.dart';
 export 'i18n.dart';
 export 'l10n/keys.dart';

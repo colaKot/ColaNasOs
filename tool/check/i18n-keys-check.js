@@ -45,16 +45,36 @@ function walk(dir) {
       continue;
     }
     if (!entry.name.endsWith('.dart')) continue;
-    const lines = fs.readFileSync(path.join(root, rel), 'utf-8').split('\n');
-    lines.forEach((line, i) => {
-      for (const m of line.matchAll(/\btr\(\s*'([^']+)'/g)) {
-        const key = m[1];
-        if (key.includes('$')) continue; // 动态拼接，静态无法判定
-        if (known.has(key)) continue;
-        if (!missing.has(key)) missing.set(key, []);
-        missing.get(key).push(`${rel}:${i + 1}`);
+    const text = fs.readFileSync(path.join(root, rel), 'utf-8');
+    // 按整个 `tr(...)` 调用扫参数：`tr(a ? 'x.y' : 'x.z')` 这种同一行只有第一个键
+    // 会被行内正则漏掉，界面上于是又冒出「英文」（其实是第二个键名）。
+    for (const call of text.matchAll(/\btr\s*\(/g)) {
+      const loc = `${rel}:${text.slice(0, call.index).split('\n').length}`;
+      let i = call.index + call[0].length;
+      let depth = 1;
+      while (i < text.length && depth > 0) {
+        const ch = text[i];
+        if (ch === "'") {
+          let j = i + 1;
+          while (j < text.length && !(text[j] === "'" && text[j - 1] !== '\\')) j += 1;
+          const key = text.slice(i + 1, j);
+          i = j + 1;
+          if (key.includes('$')) continue; // 动态拼接，静态无法判定
+          if (!/^[a-z][a-zA-Z0-9]*(\.[a-zA-Z0-9_]+)+$/.test(key)) continue; // 占位符值等非键
+          if (known.has(key)) continue;
+          if (!missing.has(key)) missing.set(key, []);
+          missing.get(key).push(loc);
+          continue;
+        }
+        if (ch === '/' && text[i + 1] === '/') {
+          while (i < text.length && text[i] !== '\n') i += 1;
+          continue;
+        }
+        if (ch === '(') depth += 1;
+        else if (ch === ')') depth -= 1;
+        i += 1;
       }
-    });
+    }
   }
 }
 
