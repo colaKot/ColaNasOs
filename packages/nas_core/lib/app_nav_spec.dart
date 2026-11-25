@@ -301,6 +301,8 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         icon: 'podcast',
         items: <NavItemSpec>[
           NavItemSpec(id: 'aiNews', labelKey: 'blog.nav.aiNews', icon: 'newspaper_outlined'),
+          NavItemSpec(id: 'localBlog', labelKey: 'blog.nav.localBlog', icon: 'folder_outlined'),
+          NavItemSpec(id: 'blogCollections', labelKey: 'blog.nav.blogCollections', icon: 'collections_bookmark_outlined'),
         ],
       ),
     ],

@@ -103,6 +103,38 @@ class ColanasClient:
         """带短期令牌的播放地址"""
         return self._request("GET", "/api/v1/blog/audio-url", params, "query")
 
+    def blog_collection_add(self, **params):
+        """把本地音频加入合集（同合集内按路径去重）"""
+        return self._request("POST", "/api/v1/blog/collections/add", params, "body")
+
+    def blog_collection_create(self, **params):
+        """新建空博客合集"""
+        return self._request("POST", "/api/v1/blog/collections", params, "body")
+
+    def blog_collection_items(self, **params):
+        """合集内的音频（按排序）"""
+        return self._request("GET", "/api/v1/blog/collections/items", params, "query")
+
+    def blog_collection_remove(self, **params):
+        """删除合集（不动本地音频）"""
+        return self._request("POST", "/api/v1/blog/collections/remove", params, "body")
+
+    def blog_collection_remove_item(self, **params):
+        """从合集移除一条音频（不动本地文件）"""
+        return self._request("POST", "/api/v1/blog/collections/remove-item", params, "body")
+
+    def blog_collection_reorder(self, **params):
+        """按给定的条目顺序重排合集"""
+        return self._request("POST", "/api/v1/blog/collections/reorder", params, "body")
+
+    def blog_collections(self, **params):
+        """博客合集列表（含音频数与封面）"""
+        return self._request("GET", "/api/v1/blog/collections", params, "query")
+
+    def blog_collection_update(self, **params):
+        """重命名 / 修改合集简介"""
+        return self._request("POST", "/api/v1/blog/collections/update", params, "body")
+
     def blog_episodes(self, **params):
         """已生成的节目（新的在前）"""
         return self._request("GET", "/api/v1/blog/episodes", params, "query")
@@ -110,6 +142,38 @@ class ColanasClient:
     def blog_generate(self, **params):
         """立即生成一期（后台执行）"""
         return self._request("POST", "/api/v1/blog/generate", params, "body")
+
+    def blog_local_audio(self, **params):
+        """本地音频流（支持 Range / ETag）"""
+        return self._request("GET", "/api/v1/blog/local/audio", params, "query")
+
+    def blog_local_audio_url(self, **params):
+        """本地音频的带令牌播放地址"""
+        return self._request("GET", "/api/v1/blog/local/audio-url", params, "query")
+
+    def blog_local_browse(self, **params):
+        """浏览目录源（多层子目录 + 只列音频 + 同名图片封面）"""
+        return self._request("GET", "/api/v1/blog/local/browse", params, "query")
+
+    def blog_local_cover(self, **params):
+        """本地音频的同名封面（没有同名图片时 404）"""
+        return self._request("GET", "/api/v1/blog/local/cover", params, "query")
+
+    def blog_local_delete(self, **params):
+        """删除本地音频文件（只删音频，不动同名封面）"""
+        return self._request("POST", "/api/v1/blog/local/delete", params, "body")
+
+    def blog_local_source_add(self, **params):
+        """添加本地目录源（只存配置，不搬文件）"""
+        return self._request("POST", "/api/v1/blog/local/sources", params, "body")
+
+    def blog_local_source_remove(self, **params):
+        """移除目录源（仅移除配置，不删本地文件）"""
+        return self._request("POST", "/api/v1/blog/local/sources/remove", params, "body")
+
+    def blog_local_sources(self, **params):
+        """本地博客目录源列表"""
+        return self._request("GET", "/api/v1/blog/local/sources", params, "query")
 
     def blog_mt_model(self, **params):
         """本地翻译模型下载状态（实时探测磁盘）"""

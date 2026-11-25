@@ -771,7 +771,10 @@ class _AiNewsPageState extends State<AiNewsPage> {
             ),
             AnimatedBuilder(
               animation: _player,
-              builder: (context, _) => _PlayerBar(player: _player),
+              // 本地博客的音频也在同一个全局播放器里：这个页面的迷你条只属于 AI 新闻
+              builder: (context, _) => _player.kind == BlogPlaybackKind.aiNews
+                  ? _PlayerBar(player: _player)
+                  : const SizedBox.shrink(),
             ),
           ],
         );

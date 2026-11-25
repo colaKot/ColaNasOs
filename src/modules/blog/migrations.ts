@@ -13,6 +13,63 @@ import type { Migration } from '../../../kernel/migrator';
  */
 export const BLOG_MIGRATIONS: Migration[] = [
   {
+    id: '191_blog_local',
+    async up(db) {
+      // 本地博客目录源：用户添加的本地文件夹（只存配置，不搬文件）
+      await sql`
+        create table if not exists blog_local_sources (
+          id text primary key,
+          owner_id text not null,
+          name text not null,
+          path text not null,
+          created_at integer not null,
+          updated_at integer not null
+        )
+      `.execute(db);
+      await sql`
+        create index if not exists idx_blog_local_sources_owner
+          on blog_local_sources (owner_id, created_at desc)
+      `.execute(db);
+
+      // 博客合集：用户的播放列表（空合集可以先建，再往里加音频）
+      await sql`
+        create table if not exists blog_collections (
+          id text primary key,
+          owner_id text not null,
+          name text not null,
+          description text not null default '',
+          created_at integer not null,
+          updated_at integer not null
+        )
+      `.execute(db);
+      await sql`
+        create index if not exists idx_blog_collections_owner
+          on blog_collections (owner_id, created_at desc)
+      `.execute(db);
+
+      // 合集成员：路径是绝对路径（与目录源扫描结果一致），同一合集内按 path 去重
+      await sql`
+        create table if not exists blog_collection_items (
+          id text primary key,
+          collection_id text not null,
+          owner_id text not null,
+          path text not null,
+          title text not null,
+          position integer not null default 0,
+          created_at integer not null
+        )
+      `.execute(db);
+      await sql`
+        create index if not exists idx_blog_collection_items_order
+          on blog_collection_items (collection_id, position, created_at)
+      `.execute(db);
+      await sql`
+        create unique index if not exists idx_blog_collection_items_unique
+          on blog_collection_items (collection_id, path)
+      `.execute(db);
+    },
+  },
+  {
     id: '148_blog_episode_news',
     async up(db) {
       // 本期素材清单（标题 / 原文链接 / 来源 / 分类）：文稿弹窗底部要列引用链接。

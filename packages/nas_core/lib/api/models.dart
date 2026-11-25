@@ -293,6 +293,8 @@ class BlogVoiceRemoveBody {
 class BlogEpisodeItem {
   final String id;
   final String title;
+  final String? sourcePath;
+  final String? coverUrl;
   final String voice;
   final double speed;
   final double durationSec;
@@ -310,6 +312,8 @@ class BlogEpisodeItem {
   const BlogEpisodeItem({
     required this.id,
     required this.title,
+    required this.sourcePath,
+    required this.coverUrl,
     required this.voice,
     required this.speed,
     required this.durationSec,
@@ -328,6 +332,8 @@ class BlogEpisodeItem {
   factory BlogEpisodeItem.fromJson(Map<String, dynamic> json) => BlogEpisodeItem(
         id: json['id'] as String,
         title: json['title'] as String,
+        sourcePath: json['sourcePath'] as String?,
+        coverUrl: json['coverUrl'] as String?,
         voice: json['voice'] as String,
         speed: (json['speed'] as num).toDouble(),
         durationSec: (json['durationSec'] as num).toDouble(),
@@ -346,6 +352,8 @@ class BlogEpisodeItem {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'title': title,
+        'sourcePath': sourcePath,
+        'coverUrl': coverUrl,
         'voice': voice,
         'speed': speed,
         'durationSec': durationSec,
@@ -847,6 +855,486 @@ class BlogErrorResponse {
         'error': error,
         if (message != null) 'message': message!,
         if (code != null) 'code': code!,
+      };
+}
+
+class BlogLocalSource {
+  final String id;
+  final String name;
+  final String path;
+  final int createdAt;
+  final int updatedAt;
+
+  const BlogLocalSource({
+    required this.id,
+    required this.name,
+    required this.path,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory BlogLocalSource.fromJson(Map<String, dynamic> json) => BlogLocalSource(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        path: json['path'] as String,
+        createdAt: json['createdAt'] as int,
+        updatedAt: json['updatedAt'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'path': path,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
+      };
+}
+
+class BlogLocalSourceListResponse {
+  final List<BlogLocalSource> items;
+
+  const BlogLocalSourceListResponse({
+    required this.items,
+  });
+
+  factory BlogLocalSourceListResponse.fromJson(Map<String, dynamic> json) => BlogLocalSourceListResponse(
+        items: (json['items'] as List<dynamic>).map((e) => BlogLocalSource.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class BlogLocalSourceBody {
+  final String path;
+  final String? name;
+
+  const BlogLocalSourceBody({
+    required this.path,
+    this.name,
+  });
+
+  factory BlogLocalSourceBody.fromJson(Map<String, dynamic> json) => BlogLocalSourceBody(
+        path: json['path'] as String,
+        name: json['name'] == null ? null : json['name'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'path': path,
+        if (name != null) 'name': name!,
+      };
+}
+
+class BlogLocalSourceRemoveBody {
+  final String id;
+
+  const BlogLocalSourceRemoveBody({
+    required this.id,
+  });
+
+  factory BlogLocalSourceRemoveBody.fromJson(Map<String, dynamic> json) => BlogLocalSourceRemoveBody(
+        id: json['id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+      };
+}
+
+class BlogLocalDir {
+  final String name;
+  final String path;
+
+  const BlogLocalDir({
+    required this.name,
+    required this.path,
+  });
+
+  factory BlogLocalDir.fromJson(Map<String, dynamic> json) => BlogLocalDir(
+        name: json['name'] as String,
+        path: json['path'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'name': name,
+        'path': path,
+      };
+}
+
+class BlogLocalAudio {
+  final String name;
+  final String title;
+  final String path;
+  final int size;
+  final String? coverUrl;
+
+  const BlogLocalAudio({
+    required this.name,
+    required this.title,
+    required this.path,
+    required this.size,
+    required this.coverUrl,
+  });
+
+  factory BlogLocalAudio.fromJson(Map<String, dynamic> json) => BlogLocalAudio(
+        name: json['name'] as String,
+        title: json['title'] as String,
+        path: json['path'] as String,
+        size: json['size'] as int,
+        coverUrl: json['coverUrl'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'name': name,
+        'title': title,
+        'path': path,
+        'size': size,
+        'coverUrl': coverUrl,
+      };
+}
+
+class BlogLocalBrowseResponse {
+  final String path;
+  final String? parent;
+  final List<BlogLocalDir> dirs;
+  final List<BlogLocalAudio> audios;
+
+  const BlogLocalBrowseResponse({
+    required this.path,
+    required this.parent,
+    required this.dirs,
+    required this.audios,
+  });
+
+  factory BlogLocalBrowseResponse.fromJson(Map<String, dynamic> json) => BlogLocalBrowseResponse(
+        path: json['path'] as String,
+        parent: json['parent'] as String?,
+        dirs: (json['dirs'] as List<dynamic>).map((e) => BlogLocalDir.fromJson(e as Map<String, dynamic>)).toList(),
+        audios: (json['audios'] as List<dynamic>).map((e) => BlogLocalAudio.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'path': path,
+        'parent': parent,
+        'dirs': dirs.map((e) => e.toJson()).toList(),
+        'audios': audios.map((e) => e.toJson()).toList(),
+      };
+}
+
+class BlogLocalAudioUrlResponse {
+  final String url;
+  final int expiresInSec;
+
+  const BlogLocalAudioUrlResponse({
+    required this.url,
+    required this.expiresInSec,
+  });
+
+  factory BlogLocalAudioUrlResponse.fromJson(Map<String, dynamic> json) => BlogLocalAudioUrlResponse(
+        url: json['url'] as String,
+        expiresInSec: json['expiresInSec'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'url': url,
+        'expiresInSec': expiresInSec,
+      };
+}
+
+class BlogLocalDeleteBody {
+  final List<String> paths;
+
+  const BlogLocalDeleteBody({
+    required this.paths,
+  });
+
+  factory BlogLocalDeleteBody.fromJson(Map<String, dynamic> json) => BlogLocalDeleteBody(
+        paths: (json['paths'] as List<dynamic>).cast<String>(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'paths': paths,
+      };
+}
+
+class BlogLocalDeleteResponse {
+  final bool ok;
+  final int deleted;
+
+  const BlogLocalDeleteResponse({
+    required this.ok,
+    required this.deleted,
+  });
+
+  factory BlogLocalDeleteResponse.fromJson(Map<String, dynamic> json) => BlogLocalDeleteResponse(
+        ok: json['ok'] as bool,
+        deleted: json['deleted'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'ok': ok,
+        'deleted': deleted,
+      };
+}
+
+class BlogCollection {
+  final String id;
+  final String name;
+  final String description;
+  final int tracks;
+  final String? coverUrl;
+  final int createdAt;
+  final int updatedAt;
+
+  const BlogCollection({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.tracks,
+    required this.coverUrl,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory BlogCollection.fromJson(Map<String, dynamic> json) => BlogCollection(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        description: json['description'] as String,
+        tracks: json['tracks'] as int,
+        coverUrl: json['coverUrl'] as String?,
+        createdAt: json['createdAt'] as int,
+        updatedAt: json['updatedAt'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'description': description,
+        'tracks': tracks,
+        'coverUrl': coverUrl,
+        'createdAt': createdAt,
+        'updatedAt': updatedAt,
+      };
+}
+
+class BlogCollectionListResponse {
+  final List<BlogCollection> items;
+
+  const BlogCollectionListResponse({
+    required this.items,
+  });
+
+  factory BlogCollectionListResponse.fromJson(Map<String, dynamic> json) => BlogCollectionListResponse(
+        items: (json['items'] as List<dynamic>).map((e) => BlogCollection.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class BlogCollectionBody {
+  final String name;
+  final String? description;
+
+  const BlogCollectionBody({
+    required this.name,
+    this.description,
+  });
+
+  factory BlogCollectionBody.fromJson(Map<String, dynamic> json) => BlogCollectionBody(
+        name: json['name'] as String,
+        description: json['description'] == null ? null : json['description'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'name': name,
+        if (description != null) 'description': description!,
+      };
+}
+
+class BlogCollectionUpdateBody {
+  final String id;
+  final String? name;
+  final String? description;
+
+  const BlogCollectionUpdateBody({
+    required this.id,
+    this.name,
+    this.description,
+  });
+
+  factory BlogCollectionUpdateBody.fromJson(Map<String, dynamic> json) => BlogCollectionUpdateBody(
+        id: json['id'] as String,
+        name: json['name'] == null ? null : json['name'] as String,
+        description: json['description'] == null ? null : json['description'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        if (name != null) 'name': name!,
+        if (description != null) 'description': description!,
+      };
+}
+
+class BlogCollectionIdBody {
+  final String id;
+
+  const BlogCollectionIdBody({
+    required this.id,
+  });
+
+  factory BlogCollectionIdBody.fromJson(Map<String, dynamic> json) => BlogCollectionIdBody(
+        id: json['id'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+      };
+}
+
+class BlogCollectionItem {
+  final String id;
+  final String path;
+  final String title;
+  final int size;
+  final String? coverUrl;
+
+  const BlogCollectionItem({
+    required this.id,
+    required this.path,
+    required this.title,
+    required this.size,
+    required this.coverUrl,
+  });
+
+  factory BlogCollectionItem.fromJson(Map<String, dynamic> json) => BlogCollectionItem(
+        id: json['id'] as String,
+        path: json['path'] as String,
+        title: json['title'] as String,
+        size: json['size'] as int,
+        coverUrl: json['coverUrl'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'path': path,
+        'title': title,
+        'size': size,
+        'coverUrl': coverUrl,
+      };
+}
+
+class BlogCollectionItemsResponse {
+  final String id;
+  final String name;
+  final String description;
+  final List<BlogCollectionItem> items;
+
+  const BlogCollectionItemsResponse({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.items,
+  });
+
+  factory BlogCollectionItemsResponse.fromJson(Map<String, dynamic> json) => BlogCollectionItemsResponse(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        description: json['description'] as String,
+        items: (json['items'] as List<dynamic>).map((e) => BlogCollectionItem.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'name': name,
+        'description': description,
+        'items': items.map((e) => e.toJson()).toList(),
+      };
+}
+
+class BlogCollectionAddBody {
+  final String id;
+  final List<String> paths;
+
+  const BlogCollectionAddBody({
+    required this.id,
+    required this.paths,
+  });
+
+  factory BlogCollectionAddBody.fromJson(Map<String, dynamic> json) => BlogCollectionAddBody(
+        id: json['id'] as String,
+        paths: (json['paths'] as List<dynamic>).cast<String>(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'paths': paths,
+      };
+}
+
+class BlogCollectionAddResponse {
+  final bool ok;
+  final int added;
+  final int skipped;
+
+  const BlogCollectionAddResponse({
+    required this.ok,
+    required this.added,
+    required this.skipped,
+  });
+
+  factory BlogCollectionAddResponse.fromJson(Map<String, dynamic> json) => BlogCollectionAddResponse(
+        ok: json['ok'] as bool,
+        added: json['added'] as int,
+        skipped: json['skipped'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'ok': ok,
+        'added': added,
+        'skipped': skipped,
+      };
+}
+
+class BlogCollectionRemoveItemBody {
+  final String id;
+  final String itemId;
+
+  const BlogCollectionRemoveItemBody({
+    required this.id,
+    required this.itemId,
+  });
+
+  factory BlogCollectionRemoveItemBody.fromJson(Map<String, dynamic> json) => BlogCollectionRemoveItemBody(
+        id: json['id'] as String,
+        itemId: json['itemId'] as String,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'itemId': itemId,
+      };
+}
+
+class BlogCollectionReorderBody {
+  final String id;
+  final List<String> itemIds;
+
+  const BlogCollectionReorderBody({
+    required this.id,
+    required this.itemIds,
+  });
+
+  factory BlogCollectionReorderBody.fromJson(Map<String, dynamic> json) => BlogCollectionReorderBody(
+        id: json['id'] as String,
+        itemIds: (json['itemIds'] as List<dynamic>).cast<String>(),
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'itemIds': itemIds,
       };
 }
 

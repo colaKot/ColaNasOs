@@ -1,4 +1,5 @@
 import { Type } from '@sinclair/typebox';
+import { BLOG_LOCAL_SCHEMAS } from './local-schemas';
 
 /**
  * blog 模块路由契约（唯一真源：运行时校验 + OpenAPI + Dart 客户端）。
@@ -109,6 +110,14 @@ export const BlogEpisodeItem = Type.Object(
   {
     id: Type.String(),
     title: Type.String(),
+    /** 本地博客音频的绝对路径；AI 新闻为 null（播放地址按 id 生成） */
+    sourcePath: Type.Union([Type.String(), Type.Null()], {
+      description: '本地博客音频路径；AI 新闻期次为 null',
+    }),
+    /** 封面地址（本地博客 = 同名图片；AI 新闻暂为 null，由播放器按稿件 / 品牌图显示） */
+    coverUrl: Type.Union([Type.String(), Type.Null()], {
+      description: '封面地址（带令牌）；没有封面时为 null',
+    }),
     voice: Type.String(),
     speed: Type.Number(),
     durationSec: Type.Number(),
@@ -351,4 +360,5 @@ export const BLOG_SCHEMAS = [
   BlogNewsItem,
   BlogNewsResponse,
   BlogErrorResponse,
+  ...BLOG_LOCAL_SCHEMAS,
 ];

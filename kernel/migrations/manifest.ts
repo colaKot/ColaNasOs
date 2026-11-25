@@ -239,6 +239,8 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '189_video_actor_block',
   // 演员封面手选片：右键把某部片设为她的封面，落空自动回落默认规则
   '190_video_actor_cover',
+  // 本地博客：目录源 + 博客合集（用户自建的本地音频播放列表）
+  '191_blog_local',
 ]);
 
 export interface OrderCheck {

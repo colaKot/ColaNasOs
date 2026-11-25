@@ -284,6 +284,118 @@ class ApiClient {
     return _asMap(_decode(res));
   }
 
+  /// 本地博客目录源列表
+  Future<BlogLocalSourceListResponse> blogLocalSources() async {
+    final res = await transport.send('GET', _uri('/api/v1/blog/local/sources'), headers: await _headers());
+    return BlogLocalSourceListResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 添加本地目录源（只存配置，不搬文件）
+  Future<BlogLocalSource> blogLocalSourceAdd({required BlogLocalSourceBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/local/sources'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogLocalSource.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 移除目录源（仅移除配置，不删本地文件）
+  Future<BlogOkResponse> blogLocalSourceRemove({required BlogLocalSourceRemoveBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/local/sources/remove'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogOkResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 浏览目录源（多层子目录 + 只列音频 + 同名图片封面）
+  Future<BlogLocalBrowseResponse> blogLocalBrowse({required String sourceId, String? path}) async {
+    final query = <String, String>{
+      'sourceId': sourceId,
+      if (path != null) 'path': path,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/blog/local/browse', query), headers: await _headers());
+    return BlogLocalBrowseResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 本地音频的带令牌播放地址
+  Future<BlogLocalAudioUrlResponse> blogLocalAudioUrl({required String path}) async {
+    final query = <String, String>{
+      'path': path,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/blog/local/audio-url', query), headers: await _headers());
+    return BlogLocalAudioUrlResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 本地音频流（支持 Range / ETag）
+  Future<Map<String, dynamic>> blogLocalAudio({required String path}) async {
+    final query = <String, String>{
+      'path': path,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/blog/local/audio', query), headers: await _headers());
+    return _asMap(_decode(res));
+  }
+
+  /// 本地音频的同名封面（没有同名图片时 404）
+  Future<Map<String, dynamic>> blogLocalCover({required String path}) async {
+    final query = <String, String>{
+      'path': path,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/blog/local/cover', query), headers: await _headers());
+    return _asMap(_decode(res));
+  }
+
+  /// 删除本地音频文件（只删音频，不动同名封面）
+  Future<BlogLocalDeleteResponse> blogLocalDelete({required BlogLocalDeleteBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/local/delete'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogLocalDeleteResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 博客合集列表（含音频数与封面）
+  Future<BlogCollectionListResponse> blogCollections() async {
+    final res = await transport.send('GET', _uri('/api/v1/blog/collections'), headers: await _headers());
+    return BlogCollectionListResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 新建空博客合集
+  Future<BlogCollection> blogCollectionCreate({required BlogCollectionBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/collections'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogCollection.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 重命名 / 修改合集简介
+  Future<BlogCollection> blogCollectionUpdate({required BlogCollectionUpdateBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/collections/update'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogCollection.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 删除合集（不动本地音频）
+  Future<BlogOkResponse> blogCollectionRemove({required BlogCollectionIdBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/collections/remove'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogOkResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 合集内的音频（按排序）
+  Future<BlogCollectionItemsResponse> blogCollectionItems({required String id}) async {
+    final query = <String, String>{
+      'id': id,
+    };
+    final res = await transport.send('GET', _uri('/api/v1/blog/collections/items', query), headers: await _headers());
+    return BlogCollectionItemsResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 把本地音频加入合集（同合集内按路径去重）
+  Future<BlogCollectionAddResponse> blogCollectionAdd({required BlogCollectionAddBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/collections/add'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogCollectionAddResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 从合集移除一条音频（不动本地文件）
+  Future<BlogOkResponse> blogCollectionRemoveItem({required BlogCollectionRemoveItemBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/collections/remove-item'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogOkResponse.fromJson(_asMap(_decode(res)));
+  }
+
+  /// 按给定的条目顺序重排合集
+  Future<BlogOkResponse> blogCollectionReorder({required BlogCollectionReorderBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/collections/reorder'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogOkResponse.fromJson(_asMap(_decode(res)));
+  }
+
   /// 语音模型下载状态（实时探测磁盘）
   Future<BlogTtsModelResponse> blogTtsModel() async {
     final res = await transport.send('GET', _uri('/api/v1/blog/tts/model'), headers: await _headers());

@@ -445,6 +445,9 @@ export function toEpisode(r: any) {
   return {
     id: String(r.id),
     title: String(r.title || ''),
+    // 本地博客的音频不经数据库：播放器复用同一套队列模型，这两个字段给本地条目用
+    sourcePath: null,
+    coverUrl: null,
     voice: String(r.voice || ''),
     speed: Number(r.speed || 1),
     durationSec: Number(r.duration_sec || 0),

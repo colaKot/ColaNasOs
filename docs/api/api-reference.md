@@ -1,13 +1,13 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**438 个路径 / 467 个操作 / 19 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**452 个路径 / 483 个操作 / 19 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
 - **子账号与权限**（`accounts`）· 25 个操作 · [跳转](#accounts)
 - **认证与账号**（`auth`）· 1 个操作 · [跳转](#auth)
-- **blog**（`blog`）· 23 个操作 · [跳转](#blog)
+- **blog**（`blog`）· 39 个操作 · [跳转](#blog)
 - **discover**（`discover`）· 23 个操作 · [跳转](#discover)
 - **events**（`events`）· 1 个操作 · [跳转](#events)
 - **文件**（`files`）· 18 个操作 · [跳转](#files)
@@ -229,6 +229,61 @@ IP 黑名单 · `securityIpList`
 - 参数：`id` · 查询 · string · **必填**
 - 响应：200 `BlogAudioUrlResponse` · 错误 404
 
+#### `GET /api/v1/blog/collections`
+
+博客合集列表（含音频数与封面） · `blogCollections`
+
+- 响应：200 `BlogCollectionListResponse`
+
+#### `POST /api/v1/blog/collections`
+
+新建空博客合集 · `blogCollectionCreate`
+
+- 请求体：（空对象）
+- 响应：200 `BlogCollection` · 错误 400
+
+#### `POST /api/v1/blog/collections/add`
+
+把本地音频加入合集（同合集内按路径去重） · `blogCollectionAdd`
+
+- 请求体：（空对象）
+- 响应：200 `BlogCollectionAddResponse` · 错误 404
+
+#### `GET /api/v1/blog/collections/items`
+
+合集内的音频（按排序） · `blogCollectionItems`
+
+- 参数：`id` · 查询 · string · **必填**
+- 响应：200 `BlogCollectionItemsResponse` · 错误 404
+
+#### `POST /api/v1/blog/collections/remove`
+
+删除合集（不动本地音频） · `blogCollectionRemove`
+
+- 请求体：（空对象）
+- 响应：200 `BlogOkResponse`
+
+#### `POST /api/v1/blog/collections/remove-item`
+
+从合集移除一条音频（不动本地文件） · `blogCollectionRemoveItem`
+
+- 请求体：（空对象）
+- 响应：200 `BlogOkResponse`
+
+#### `POST /api/v1/blog/collections/reorder`
+
+按给定的条目顺序重排合集 · `blogCollectionReorder`
+
+- 请求体：（空对象）
+- 响应：200 `BlogOkResponse`
+
+#### `POST /api/v1/blog/collections/update`
+
+重命名 / 修改合集简介 · `blogCollectionUpdate`
+
+- 请求体：（空对象）
+- 响应：200 `BlogCollection` · 错误 404
+
 #### `GET /api/v1/blog/episodes`
 
 已生成的节目（新的在前） · `blogEpisodes`
@@ -242,6 +297,61 @@ IP 黑名单 · `securityIpList`
 
 - 请求体：（空对象）
 - 响应：200 `BlogGenerateResponse` · 错误 409 / 503
+
+#### `GET /api/v1/blog/local/audio`
+
+本地音频流（支持 Range / ETag） · `blogLocalAudio`
+
+- 参数：`path` · 查询 · string · **必填**
+- 响应：200 - · 错误 404
+
+#### `GET /api/v1/blog/local/audio-url`
+
+本地音频的带令牌播放地址 · `blogLocalAudioUrl`
+
+- 参数：`path` · 查询 · string · **必填**
+- 响应：200 `BlogLocalAudioUrlResponse` · 错误 404
+
+#### `GET /api/v1/blog/local/browse`
+
+浏览目录源（多层子目录 + 只列音频 + 同名图片封面） · `blogLocalBrowse`
+
+- 参数：`sourceId` · 查询 · string · **必填**<br>`path` · 查询 · string · 可选
+- 响应：200 `BlogLocalBrowseResponse` · 错误 400 / 404
+
+#### `GET /api/v1/blog/local/cover`
+
+本地音频的同名封面（没有同名图片时 404） · `blogLocalCover`
+
+- 参数：`path` · 查询 · string · **必填**
+- 响应：200 - · 错误 404
+
+#### `POST /api/v1/blog/local/delete`
+
+删除本地音频文件（只删音频，不动同名封面） · `blogLocalDelete`
+
+- 请求体：（空对象）
+- 响应：200 `BlogLocalDeleteResponse`
+
+#### `GET /api/v1/blog/local/sources`
+
+本地博客目录源列表 · `blogLocalSources`
+
+- 响应：200 `BlogLocalSourceListResponse`
+
+#### `POST /api/v1/blog/local/sources`
+
+添加本地目录源（只存配置，不搬文件） · `blogLocalSourceAdd`
+
+- 请求体：（空对象）
+- 响应：200 `BlogLocalSource` · 错误 400
+
+#### `POST /api/v1/blog/local/sources/remove`
+
+移除目录源（仅移除配置，不删本地文件） · `blogLocalSourceRemove`
+
+- 请求体：（空对象）
+- 响应：200 `BlogOkResponse`
 
 #### `GET /api/v1/blog/mt/model`
 
@@ -2567,7 +2677,7 @@ HTTPS 证书状态（用户上传证书方案） · `systemTlsInfo`
 
 检查更新（服务端增量 / 客户端整包；默认 6 小时缓存） · `systemUpdateCheck`
 
-- 参数：`component` · 查询 · enum(server, client_pc, client_android) · 可选<br>`current` · 查询 · string · 可选<br>`currentCode` · 查询 · integer · 可选<br>`build` · 查询 · enum(phone, tv) · 可选<br>`force` · 查询 · enum(1, 0) · 可选
+- 参数：`component` · 查询 · enum(server, client_pc, client_android) · 可选<br>`current` · 查询 · string · 可选<br>`currentCode` · 查询 · integer · 可选<br>`build` · 查询 · enum(phone, tv, photo) · 可选<br>`force` · 查询 · enum(1, 0) · 可选
 - 响应：200 `SystemUpdateCheckResponse`
 
 #### `GET /api/v1/system/update/config`

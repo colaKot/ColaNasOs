@@ -273,6 +273,93 @@
     "blog.cat.worldFinance": {},
     "blog.cat.worldGeneral": {},
     "blog.cat.worldTech": {},
+    "blog.collection.add": {},
+    "blog.collection.addNew": {},
+    "blog.collection.addNewHint": {},
+    "blog.collection.addNone": {},
+    "blog.collection.addTitle": {},
+    "blog.collection.added": {
+      "added": {}
+    },
+    "blog.collection.create": {},
+    "blog.collection.createAndAdd": {},
+    "blog.collection.createFailed": {
+      "error": {}
+    },
+    "blog.collection.created": {},
+    "blog.collection.deleteConfirm": {
+      "name": {}
+    },
+    "blog.collection.description": {},
+    "blog.collection.descriptionHint": {},
+    "blog.collection.edit": {},
+    "blog.collection.empty": {},
+    "blog.collection.emptyHint": {},
+    "blog.collection.itemsEmpty": {},
+    "blog.collection.itemsEmptyHint": {},
+    "blog.collection.moveDown": {},
+    "blog.collection.moveUp": {},
+    "blog.collection.name": {},
+    "blog.collection.nameHint": {},
+    "blog.collection.open": {},
+    "blog.collection.playAll": {},
+    "blog.collection.removeConfirm": {
+      "name": {}
+    },
+    "blog.collection.removeDone": {},
+    "blog.collection.removeFailed": {
+      "error": {}
+    },
+    "blog.collection.removeItem": {},
+    "blog.collection.saveFailed": {
+      "error": {}
+    },
+    "blog.collection.subtitle": {},
+    "blog.collection.title": {},
+    "blog.collection.tracks": {
+      "count": {}
+    },
+    "blog.local.addFailed": {
+      "error": {}
+    },
+    "blog.local.addSource": {},
+    "blog.local.addSourceFailed": {
+      "error": {}
+    },
+    "blog.local.addSourceTitle": {},
+    "blog.local.addToCollection": {},
+    "blog.local.added": {
+      "added": {}
+    },
+    "blog.local.browseEmpty": {},
+    "blog.local.delete": {},
+    "blog.local.deleteConfirm": {
+      "count": {}
+    },
+    "blog.local.deleteDone": {
+      "count": {}
+    },
+    "blog.local.deleteFailed": {
+      "error": {}
+    },
+    "blog.local.pickFolder": {},
+    "blog.local.play": {},
+    "blog.local.removeSource": {},
+    "blog.local.removeSourceConfirm": {
+      "name": {}
+    },
+    "blog.local.selected": {
+      "count": {}
+    },
+    "blog.local.sourceAdded": {},
+    "blog.local.sourceName": {},
+    "blog.local.sourceNameHint": {},
+    "blog.local.sourcePath": {},
+    "blog.local.sourcesEmpty": {},
+    "blog.local.sourcesEmptyHint": {},
+    "blog.local.subtitle": {},
+    "blog.local.title": {},
+    "blog.local.up": {},
     "blog.count.unit": {
       "count": {}
     },
@@ -354,7 +441,9 @@
     "blog.mt.model.switching": {},
     "blog.mt.model.title": {},
     "blog.nav.aiNews": {},
+    "blog.nav.blogCollections": {},
     "blog.nav.content": {},
+    "blog.nav.localBlog": {},
     "blog.plan.enable": {},
     "blog.plan.hint": {},
     "blog.plan.time": {},
@@ -366,6 +455,7 @@
     "blog.player.play": {},
     "blog.player.prev": {},
     "blog.player.title": {},
+    "blog.player.volume": {},
     "blog.queue.add": {},
     "blog.queue.addAll": {},
     "blog.queue.added": {},

@@ -104,6 +104,9 @@ const QUERY_TOKEN_PATHS = new Set([
   // AI 播客的 mp3 / 试听句：播放器（media_kit / 浏览器 <audio>）只能给 URL
   '/api/v1/blog/audio',
   '/api/v1/blog/preview/audio',
+  // 本地博客：音频流与同名封面同样只能把令牌放 query（Image / <audio> 带不了头）
+  '/api/v1/blog/local/audio',
+  '/api/v1/blog/local/cover',
   // 浏览器 WebSocket 不能自定义请求头，只能把会话 JWT 放 query
   '/api/v1/system/terminal/ws',
 ]);

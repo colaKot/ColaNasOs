@@ -104,10 +104,13 @@ class _BlogQueueSheetState extends State<_BlogQueueSheet> {
                                   fontWeight: current ? FontWeight.w600 : null,
                                 ),
                               ),
-                              subtitle: Text(
-                                formatDurationMs((ep.durationSec * 1000).round()),
-                                style: TextStyle(fontSize: NasTokens.fontCaption),
-                              ),
+                              // 本地博客时长为 0（打开后由播放器解析），不显示假时长
+                              subtitle: ep.durationSec > 0
+                                  ? Text(
+                                      formatDurationMs((ep.durationSec * 1000).round()),
+                                      style: const TextStyle(fontSize: NasTokens.fontCaption),
+                                    )
+                                  : null,
                               onTap: () {
                                 Navigator.of(context).pop();
                                 p.jumpTo(i);

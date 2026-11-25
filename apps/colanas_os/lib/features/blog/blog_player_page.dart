@@ -60,6 +60,8 @@ class _BlogPlayerPageState extends State<BlogPlayerPage> {
 
   void _onPlayerChanged() {
     if (!mounted) return;
+    // 本地博客没有新闻稿：不去请求 /blog/script，避免每切一首发一次无效请求
+    if (_player.kind == BlogPlaybackKind.localBlog) return;
     final id = _player.episode?.id;
     if (id == null || id == _scriptForId || _scriptLoading) return;
     unawaited(_fetchScript(id));
@@ -160,13 +162,14 @@ class _BlogPlayerPageState extends State<BlogPlayerPage> {
   Widget _build(BuildContext context) {
     final p = _player;
     final ep = p.episode;
+    final local = p.kind == BlogPlaybackKind.localBlog;
     final total = p.duration.inMilliseconds > 0
         ? p.duration.inMilliseconds
         : (ep == null ? 0 : (ep.durationSec * 1000).round());
     final pos = p.position.inMilliseconds.clamp(0, total == 0 ? 0 : total);
     final scheme = Theme.of(context).colorScheme;
 
-    if (_blocks.isNotEmpty) {
+    if (!local && _blocks.isNotEmpty) {
       final active = _activeIndexOf(
         Duration(milliseconds: pos),
         Duration(milliseconds: total),
@@ -179,8 +182,39 @@ class _BlogPlayerPageState extends State<BlogPlayerPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(tr('blog.player.title')),
+        title: Text(local ? tr('blog.nav.localBlog') : tr('blog.player.title')),
         actions: [
+          MenuAnchor(
+            menuChildren: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: SizedBox(
+                  width: 180,
+                  child: Row(
+                    children: [
+                      Icon(
+                        p.muted ? Icons.volume_off : Icons.volume_up,
+                        size: 18,
+                      ),
+                      Expanded(
+                        child: Slider(
+                          value: p.volume,
+                          max: 100,
+                          onChanged: (v) => p.setVolume(v),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            builder: (context, controller, _) => IconButton(
+              tooltip: tr('blog.player.volume'),
+              icon: Icon(p.muted ? Icons.volume_off : Icons.volume_up),
+              onPressed: () =>
+                  controller.isOpen ? controller.close() : controller.open(),
+            ),
+          ),
           IconButton(
             tooltip: tr('blog.queue.title'),
             onPressed: () => showBlogQueueSheet(context, p),
@@ -201,9 +235,11 @@ class _BlogPlayerPageState extends State<BlogPlayerPage> {
                       children: [
                         AspectRatio(
                           aspectRatio: 1,
-                          child: _blocks.isNotEmpty || _scriptLoading
-                              ? _scriptPanel(scheme)
-                              : _artwork(scheme),
+                          child: local
+                              ? _localArtwork(ep.coverUrl, scheme)
+                              : _blocks.isNotEmpty || _scriptLoading
+                                  ? _scriptPanel(scheme)
+                                  : _artwork(scheme),
                         ),
                         const SizedBox(height: NasTokens.spaceLg),
                         Text(
@@ -218,11 +254,13 @@ class _BlogPlayerPageState extends State<BlogPlayerPage> {
                         ),
                         const SizedBox(height: NasTokens.spaceXs),
                         Text(
-                          [
-                            formatDateTimeSec(ep.createdAt),
-                            formatDurationMs(total),
-                            tr('blog.episodes.items', {'count': ep.itemCount}),
-                          ].join(' · '),
+                          local
+                              ? formatDurationMs(total)
+                              : [
+                                  formatDateTimeSec(ep.createdAt),
+                                  formatDurationMs(total),
+                                  tr('blog.episodes.items', {'count': ep.itemCount}),
+                                ].join(' · '),
                           style: TextStyle(
                             fontSize: NasTokens.fontCaption,
                             color: context.nasTextSecondary,
@@ -347,6 +385,33 @@ class _BlogPlayerPageState extends State<BlogPlayerPage> {
         size: 96,
         color: scheme.onPrimaryContainer,
       ),
+    );
+  }
+
+  /// 本地博客：有同名图片就整块铺满封面，没有就用统一的博客图标（与列表页一致）
+  Widget _localArtwork(String? coverUrl, ColorScheme scheme) {
+    if (coverUrl == null || coverUrl.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(NasTokens.radiusLg),
+          gradient: LinearGradient(
+            colors: [scheme.primaryContainer, scheme.tertiaryContainer],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Icon(
+          Icons.podcasts,
+          size: 96,
+          color: scheme.onPrimaryContainer,
+        ),
+      );
+    }
+    return NasCoverImage(
+      url: coverUrl,
+      icon: Icons.podcasts,
+      cacheWidth: 1024,
+      borderRadius: NasTokens.radiusLg,
     );
   }
 

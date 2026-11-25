@@ -37,6 +37,7 @@ import {
 import { fetchNews } from './news';
 import { resetLocalLlm, translateNews } from './translate';
 import { startBlogSchedule } from './schedule';
+import { registerLocalBlog } from './local';
 import { resolveTtsPaths } from '../../../kernel/tts/paths';
 import { MAX_VOICE_BYTES, removeUserVoice, saveUserVoice } from '../../../kernel/tts/voices';
 import { ttsModel } from '../../../kernel/tts/download';
@@ -83,6 +84,9 @@ export const blog: ServerModule = {
 
   async register(app, k) {
     for (const schema of BLOG_SCHEMAS) app.addSchema(schema);
+
+    // 本地博客 / 博客合集：与 AI 新闻同属 blog 域，各自独立的目录源与合集数据
+    await registerLocalBlog(app, k);
 
     // 一键下载的落点：装机版 resources/ 多半只读，模型统一写到用户数据目录。
     // 这一步同时把 <dataDir>/tts 注入 paths.ts 的搜索根，status() 每次实时探测它。

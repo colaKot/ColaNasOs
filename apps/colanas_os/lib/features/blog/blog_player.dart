@@ -12,6 +12,19 @@ import '../../core/client_log.dart';
 import '../../core/session.dart';
 import '../music/media_session.dart';
 
+/// 播放来源：AI 新闻（服务端生成的 mp3）与本地博客（用户目录里的音频）。
+///
+/// 队列结构相同（[BlogEpisodeItem]），差异只在取播放地址与播放页是否展示文章区。
+enum BlogPlaybackKind { aiNews, localBlog }
+
+/// 接口返回的封面 / 音频地址是相对路径（令牌放在 query 里），
+/// `Image.network` / media_kit 需要绝对地址，这里统一拼上服务端根地址。
+String? blogMediaUrl(String? url) {
+  if (url == null || url.isEmpty) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return '${ApiSession.instance.baseUrl}$url';
+}
+
 /// AI 新闻的**全局**播放器。
 ///
 /// 不复用 `MusicPlaybackService`：那个服务的队列是 `MusicTrack`，走曲库 stream 路由；
@@ -78,12 +91,22 @@ class BlogPlayer extends ChangeNotifier {
 
   int _index = -1;
 
+  /// 当前队列属于哪个二级入口。播放页据此决定是否展示新闻稿 / 文章区。
+  BlogPlaybackKind _kind = BlogPlaybackKind.aiNews;
+  BlogPlaybackKind get kind => _kind;
+
   Duration position = Duration.zero;
   Duration duration = Duration.zero;
   bool playing = false;
   bool loading = false;
   String? error;
   double rate = 1;
+
+  /// 音量（media_kit 的 0~100）。淡入淡出只临时改播放器音量，
+  /// 这里单独记住用户目标值，避免淡入结束后回到旧音量。
+  double _volume = 100;
+  double get volume => _volume;
+  bool get muted => _volume <= 0;
 
   List<BlogEpisodeItem> get queue => _queue;
   List<BlogEpisodeItem> get library => _library;
@@ -254,9 +277,14 @@ class BlogPlayer extends ChangeNotifier {
 
   /// 播放某一期：默认把列表里的全部已完成期次当成队列（自动连播）。
   /// [queue] 同时进 `_library`，播放列表弹层可以再把其它期次加进来。
-  Future<void> play(BlogEpisodeItem target, List<BlogEpisodeItem> queue) async {
+  Future<void> play(
+    BlogEpisodeItem target,
+    List<BlogEpisodeItem> queue, {
+    BlogPlaybackKind kind = BlogPlaybackKind.aiNews,
+  }) async {
     final playable = queue.where((e) => e.status == 'done').toList(growable: false);
     if (playable.isEmpty) return;
+    _kind = kind;
     _library = playable;
     _queue = playable;
     _index = playable.indexWhere((e) => e.id == target.id).clamp(0, playable.length - 1);
@@ -344,6 +372,31 @@ class BlogPlayer extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 音量滑杆：同步更新淡入淡出的目标音量，避免下一次淡入又拉回 100。
+  Future<void> setVolume(double value) async {
+    _volume = value.clamp(0.0, 100.0).toDouble();
+    final fader = _fader;
+    if (fader != null) fader.target = _volume;
+    try {
+      await _player?.setVolume(_volume);
+    } catch (_) {
+      // 播放器可能已被释放，音量失败不影响界面状态
+    }
+    notifyListeners();
+  }
+
+  /// 静音 / 取消静音（记忆上一次的非零音量）
+  Future<void> toggleMute() async {
+    if (_volume > 0) {
+      _lastAudibleVolume = _volume;
+      await setVolume(0);
+    } else {
+      await setVolume(_lastAudibleVolume <= 0 ? 100 : _lastAudibleVolume);
+    }
+  }
+
+  double _lastAudibleVolume = 100;
+
   Future<void> _load({Duration? resumeAt}) async {
     final current = episode;
     if (current == null) return;
@@ -375,8 +428,18 @@ class BlogPlayer extends ChangeNotifier {
           channelName: I18n.instance.tr('audio.channelName'),
         );
       }
-      final res = await ApiSession.instance.client.blogAudioUrl(id: current.id);
-      final url = '${ApiSession.instance.baseUrl}${res.url}';
+      final String url;
+      if (_kind == BlogPlaybackKind.localBlog) {
+        final source = current.sourcePath;
+        if (source == null || source.isEmpty) {
+          throw StateError('local blog item missing sourcePath');
+        }
+        final res = await ApiSession.instance.client.blogLocalAudioUrl(path: source);
+        url = '${ApiSession.instance.baseUrl}${res.url}';
+      } else {
+        final res = await ApiSession.instance.client.blogAudioUrl(id: current.id);
+        url = '${ApiSession.instance.baseUrl}${res.url}';
+      }
       final p = _ensure();
       // 先把音量压到 0，起播后再淡回来：与「音乐刚停」的输出重配叠在一起时
       // 满音量起播会有一声爆音。
@@ -453,6 +516,13 @@ class BlogPlayer extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 系统媒体面板显示「AI 新闻 / 本地博客」，与播放来源保持一致
+  String get _sourceLabel => I18n.instance.tr(
+        _kind == BlogPlaybackKind.localBlog
+            ? 'blog.nav.localBlog'
+            : 'blog.nav.aiNews',
+      );
+
   /// 系统媒体面板（锁屏 / 通知栏 / 耳机键）。Web 端有它，Android 才把这一路
   /// 当成真正的媒体会话，切后台 / 熄屏时不会被浏览器冻掉；桌面 / 原生端是空实现。
   void _syncMediaSession() {
@@ -466,7 +536,7 @@ class BlogPlayer extends ChangeNotifier {
           owner: this,
           id: current.id,
           title: current.title,
-          artist: I18n.instance.tr('blog.nav.aiNews'),
+          artist: _sourceLabel,
           album: '',
           playing: playing,
           position: position,
@@ -487,7 +557,7 @@ class BlogPlayer extends ChangeNotifier {
     }
     updateMediaSession(
       title: current.title,
-      artist: I18n.instance.tr('blog.nav.aiNews'),
+      artist: _sourceLabel,
       album: '',
       playing: playing,
       onPlay: () {

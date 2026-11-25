@@ -316,6 +316,8 @@
         "required": [
           "id",
           "title",
+          "sourcePath",
+          "coverUrl",
           "voice",
           "speed",
           "durationSec",
@@ -336,6 +338,16 @@
           },
           "title": {
             "type": "string"
+          },
+          "sourcePath": {
+            "description": "本地博客音频路径；AI 新闻期次为 null",
+            "type": "string",
+            "nullable": true
+          },
+          "coverUrl": {
+            "description": "封面地址（带令牌）；没有封面时为 null",
+            "type": "string",
+            "nullable": true
           },
           "voice": {
             "type": "string"
@@ -841,6 +853,478 @@
           },
           "code": {
             "type": "string"
+          }
+        }
+      },
+      "BlogLocalSource": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "path",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "description": "展示名（默认取目录名，可改名）",
+            "type": "string"
+          },
+          "path": {
+            "description": "本地绝对路径（POSIX 风格）",
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "BlogLocalSourceListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlogLocalSource"
+            }
+          }
+        }
+      },
+      "BlogLocalSourceBody": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "本地目录绝对路径",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "type": "string"
+          }
+        }
+      },
+      "BlogLocalSourceRemoveBody": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "BlogLocalDir": {
+        "type": "object",
+        "required": [
+          "name",
+          "path"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "description": "POSIX 风格绝对路径（回传给 browse 的 path）",
+            "type": "string"
+          }
+        }
+      },
+      "BlogLocalAudio": {
+        "type": "object",
+        "required": [
+          "name",
+          "title",
+          "path",
+          "size",
+          "coverUrl"
+        ],
+        "properties": {
+          "name": {
+            "description": "文件名（含扩展名）",
+            "type": "string"
+          },
+          "title": {
+            "description": "主文件名（不含扩展名），作为播放标题",
+            "type": "string"
+          },
+          "path": {
+            "description": "音频文件绝对路径",
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "coverUrl": {
+            "description": "同名封面图地址（带令牌）；没有同名图片时为 null",
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "BlogLocalBrowseQuery": {
+        "type": "object",
+        "required": [
+          "sourceId"
+        ],
+        "properties": {
+          "sourceId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "path": {
+            "description": "要浏览的目录；空 = 目录源根目录",
+            "type": "string"
+          }
+        }
+      },
+      "BlogLocalBrowseResponse": {
+        "type": "object",
+        "required": [
+          "path",
+          "parent",
+          "dirs",
+          "audios"
+        ],
+        "properties": {
+          "path": {
+            "description": "当前目录（POSIX 风格绝对路径）",
+            "type": "string"
+          },
+          "parent": {
+            "description": "上一级目录；已在目录源根目录时为 null",
+            "type": "string",
+            "nullable": true
+          },
+          "dirs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlogLocalDir"
+            }
+          },
+          "audios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlogLocalAudio"
+            }
+          }
+        }
+      },
+      "BlogLocalPathQuery": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "BlogLocalAudioUrlResponse": {
+        "type": "object",
+        "required": [
+          "url",
+          "expiresInSec"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "expiresInSec": {
+            "type": "integer"
+          }
+        }
+      },
+      "BlogLocalDeleteBody": {
+        "type": "object",
+        "required": [
+          "paths"
+        ],
+        "properties": {
+          "paths": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "BlogLocalDeleteResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "deleted"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "deleted": {
+            "type": "integer"
+          }
+        }
+      },
+      "BlogCollection": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "tracks",
+          "coverUrl",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "tracks": {
+            "type": "integer"
+          },
+          "coverUrl": {
+            "description": "合集内第一首带同名封面的音频封面；没有时为 null",
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": "integer"
+          }
+        }
+      },
+      "BlogCollectionListResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlogCollection"
+            }
+          }
+        }
+      },
+      "BlogCollectionBody": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "maxLength": 120,
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 500,
+            "type": "string"
+          }
+        }
+      },
+      "BlogCollectionUpdateBody": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "maxLength": 120,
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 500,
+            "type": "string"
+          }
+        }
+      },
+      "BlogCollectionIdBody": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "BlogCollectionItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "path",
+          "title",
+          "size",
+          "coverUrl"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "description": "音频绝对路径",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "coverUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "BlogCollectionItemsQuery": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "BlogCollectionItemsResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "items"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlogCollectionItem"
+            }
+          }
+        }
+      },
+      "BlogCollectionAddBody": {
+        "type": "object",
+        "required": [
+          "id",
+          "paths"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "paths": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "BlogCollectionAddResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "added",
+          "skipped"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "added": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          }
+        }
+      },
+      "BlogCollectionRemoveItemBody": {
+        "type": "object",
+        "required": [
+          "id",
+          "itemId"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "itemId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "BlogCollectionReorderBody": {
+        "type": "object",
+        "required": [
+          "id",
+          "itemIds"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "itemIds": {
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            }
           }
         }
       },
@@ -19209,6 +19693,652 @@
                       "type": "boolean"
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/local/sources": {
+      "get": {
+        "operationId": "blogLocalSources",
+        "summary": "本地博客目录源列表",
+        "tags": [
+          "blog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogLocalSourceListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "blogLocalSourceAdd",
+        "summary": "添加本地目录源（只存配置，不搬文件）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogLocalSourceBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogLocalSource"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/local/sources/remove": {
+      "post": {
+        "operationId": "blogLocalSourceRemove",
+        "summary": "移除目录源（仅移除配置，不删本地文件）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogLocalSourceRemoveBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/local/browse": {
+      "get": {
+        "operationId": "blogLocalBrowse",
+        "summary": "浏览目录源（多层子目录 + 只列音频 + 同名图片封面）",
+        "tags": [
+          "blog"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "sourceId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "path",
+            "required": false,
+            "description": "要浏览的目录；空 = 目录源根目录"
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogLocalBrowseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/local/audio-url": {
+      "get": {
+        "operationId": "blogLocalAudioUrl",
+        "summary": "本地音频的带令牌播放地址",
+        "tags": [
+          "blog"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "path",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogLocalAudioUrlResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/local/audio": {
+      "get": {
+        "operationId": "blogLocalAudio",
+        "summary": "本地音频流（支持 Range / ETag）",
+        "tags": [
+          "blog"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "path",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/local/cover": {
+      "get": {
+        "operationId": "blogLocalCover",
+        "summary": "本地音频的同名封面（没有同名图片时 404）",
+        "tags": [
+          "blog"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "path",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/local/delete": {
+      "post": {
+        "operationId": "blogLocalDelete",
+        "summary": "删除本地音频文件（只删音频，不动同名封面）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogLocalDeleteBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogLocalDeleteResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/collections": {
+      "get": {
+        "operationId": "blogCollections",
+        "summary": "博客合集列表（含音频数与封面）",
+        "tags": [
+          "blog"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogCollectionListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "blogCollectionCreate",
+        "summary": "新建空博客合集",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogCollectionBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/collections/update": {
+      "post": {
+        "operationId": "blogCollectionUpdate",
+        "summary": "重命名 / 修改合集简介",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogCollectionUpdateBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogCollection"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/collections/remove": {
+      "post": {
+        "operationId": "blogCollectionRemove",
+        "summary": "删除合集（不动本地音频）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogCollectionIdBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/collections/items": {
+      "get": {
+        "operationId": "blogCollectionItems",
+        "summary": "合集内的音频（按排序）",
+        "tags": [
+          "blog"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogCollectionItemsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/collections/add": {
+      "post": {
+        "operationId": "blogCollectionAdd",
+        "summary": "把本地音频加入合集（同合集内按路径去重）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogCollectionAddBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogCollectionAddResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/collections/remove-item": {
+      "post": {
+        "operationId": "blogCollectionRemoveItem",
+        "summary": "从合集移除一条音频（不动本地文件）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogCollectionRemoveItemBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogOkResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blog/collections/reorder": {
+      "post": {
+        "operationId": "blogCollectionReorder",
+        "summary": "按给定的条目顺序重排合集",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogCollectionReorderBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogOkResponse"
                 }
               }
             }

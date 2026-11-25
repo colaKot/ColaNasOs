@@ -76,6 +76,8 @@ export type BlogVoiceRemoveBody = {
 export type BlogEpisodeItem = {
   "id": string;
   "title": string;
+  "sourcePath": string;
+  "coverUrl": string;
   "voice": string;
   "speed": number;
   "durationSec": number;
@@ -224,6 +226,139 @@ export type BlogErrorResponse = {
   "error": string;
   "message"?: string;
   "code"?: string;
+};
+
+export type BlogLocalSource = {
+  "id": string;
+  "name": string;
+  "path": string;
+  "createdAt": number;
+  "updatedAt": number;
+};
+
+export type BlogLocalSourceListResponse = {
+  "items": BlogLocalSource[];
+};
+
+export type BlogLocalSourceBody = {
+  "path": string;
+  "name"?: string;
+};
+
+export type BlogLocalSourceRemoveBody = {
+  "id": string;
+};
+
+export type BlogLocalDir = {
+  "name": string;
+  "path": string;
+};
+
+export type BlogLocalAudio = {
+  "name": string;
+  "title": string;
+  "path": string;
+  "size": number;
+  "coverUrl": string;
+};
+
+export type BlogLocalBrowseQuery = {
+  "sourceId": string;
+  "path"?: string;
+};
+
+export type BlogLocalBrowseResponse = {
+  "path": string;
+  "parent": string;
+  "dirs": BlogLocalDir[];
+  "audios": BlogLocalAudio[];
+};
+
+export type BlogLocalPathQuery = {
+  "path": string;
+};
+
+export type BlogLocalAudioUrlResponse = {
+  "url": string;
+  "expiresInSec": number;
+};
+
+export type BlogLocalDeleteBody = {
+  "paths": string[];
+};
+
+export type BlogLocalDeleteResponse = {
+  "ok": boolean;
+  "deleted": number;
+};
+
+export type BlogCollection = {
+  "id": string;
+  "name": string;
+  "description": string;
+  "tracks": number;
+  "coverUrl": string;
+  "createdAt": number;
+  "updatedAt": number;
+};
+
+export type BlogCollectionListResponse = {
+  "items": BlogCollection[];
+};
+
+export type BlogCollectionBody = {
+  "name": string;
+  "description"?: string;
+};
+
+export type BlogCollectionUpdateBody = {
+  "id": string;
+  "name"?: string;
+  "description"?: string;
+};
+
+export type BlogCollectionIdBody = {
+  "id": string;
+};
+
+export type BlogCollectionItem = {
+  "id": string;
+  "path": string;
+  "title": string;
+  "size": number;
+  "coverUrl": string;
+};
+
+export type BlogCollectionItemsQuery = {
+  "id": string;
+};
+
+export type BlogCollectionItemsResponse = {
+  "id": string;
+  "name": string;
+  "description": string;
+  "items": BlogCollectionItem[];
+};
+
+export type BlogCollectionAddBody = {
+  "id": string;
+  "paths": string[];
+};
+
+export type BlogCollectionAddResponse = {
+  "ok": boolean;
+  "added": number;
+  "skipped": number;
+};
+
+export type BlogCollectionRemoveItemBody = {
+  "id": string;
+  "itemId": string;
+};
+
+export type BlogCollectionReorderBody = {
+  "id": string;
+  "itemIds": string[];
 };
 
 export type DiscoverScrapeBody = {

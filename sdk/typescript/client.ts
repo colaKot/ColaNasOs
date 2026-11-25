@@ -117,6 +117,46 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/blog/audio-url', params, 'query');
   }
 
+  /** 把本地音频加入合集（同合集内按路径去重） */
+  async blogCollectionAdd(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/collections/add', params, 'body');
+  }
+
+  /** 新建空博客合集 */
+  async blogCollectionCreate(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/collections', params, 'body');
+  }
+
+  /** 合集内的音频（按排序） */
+  async blogCollectionItems(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/collections/items', params, 'query');
+  }
+
+  /** 删除合集（不动本地音频） */
+  async blogCollectionRemove(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/collections/remove', params, 'body');
+  }
+
+  /** 从合集移除一条音频（不动本地文件） */
+  async blogCollectionRemoveItem(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/collections/remove-item', params, 'body');
+  }
+
+  /** 按给定的条目顺序重排合集 */
+  async blogCollectionReorder(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/collections/reorder', params, 'body');
+  }
+
+  /** 博客合集列表（含音频数与封面） */
+  async blogCollections(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/collections', params, 'query');
+  }
+
+  /** 重命名 / 修改合集简介 */
+  async blogCollectionUpdate(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/collections/update', params, 'body');
+  }
+
   /** 已生成的节目（新的在前） */
   async blogEpisodes(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/blog/episodes', params, 'query');
@@ -125,6 +165,46 @@ export class ColanasClient {
   /** 立即生成一期（后台执行） */
   async blogGenerate(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/blog/generate', params, 'body');
+  }
+
+  /** 本地音频流（支持 Range / ETag） */
+  async blogLocalAudio(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/local/audio', params, 'query');
+  }
+
+  /** 本地音频的带令牌播放地址 */
+  async blogLocalAudioUrl(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/local/audio-url', params, 'query');
+  }
+
+  /** 浏览目录源（多层子目录 + 只列音频 + 同名图片封面） */
+  async blogLocalBrowse(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/local/browse', params, 'query');
+  }
+
+  /** 本地音频的同名封面（没有同名图片时 404） */
+  async blogLocalCover(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/local/cover', params, 'query');
+  }
+
+  /** 删除本地音频文件（只删音频，不动同名封面） */
+  async blogLocalDelete(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/local/delete', params, 'body');
+  }
+
+  /** 添加本地目录源（只存配置，不搬文件） */
+  async blogLocalSourceAdd(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/local/sources', params, 'body');
+  }
+
+  /** 移除目录源（仅移除配置，不删本地文件） */
+  async blogLocalSourceRemove(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/local/sources/remove', params, 'body');
+  }
+
+  /** 本地博客目录源列表 */
+  async blogLocalSources(params: Record<string, any> = {}): Promise<any> {
+    return this.request('GET', '/api/v1/blog/local/sources', params, 'query');
   }
 
   /** 本地翻译模型下载状态（实时探测磁盘） */
