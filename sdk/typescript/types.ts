@@ -3222,6 +3222,8 @@ export type VideoItem = {
   "actors": string[];
   "directors": string[];
   "hasArt": boolean;
+  "coverWidth"?: number;
+  "coverHeight"?: number;
   "imdbId": string;
   "doubanId": string;
   "tmdbId": number;

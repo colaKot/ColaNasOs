@@ -72,6 +72,7 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
 
   int _reqSeq = 0;
   bool _refreshing = false;
+  bool _filling = false;
 
   /// 多选：全站统一由 `NasSelectionController` 承载（进入 / 切换 / 全选 / 退出），
   /// 页面不再自己维护 `bool + Set`。图片库 / 混合库与普通影视列表共用一套操作条。
@@ -98,7 +99,8 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
     _folderMode = SettingsStore.instance.getBool(_k('folderMode')) ?? true;
     _waterfall = SettingsStore.instance.getBool(_k('waterfall')) ?? false;
     _showName = SettingsStore.instance.getBool(_k('showName')) ?? true;
-    _folderPath = SettingsStore.instance.getString(_k('folderPath')) ?? '';
+    // 不恢复上次浏览的目录：从左侧栏点库名进来必须落在库根。
+    // 以前记住 folderPath 会把人带回某个来源根（多来源库里看着和库根一样，却少了别的来源）。
     _sortBy = SettingsStore.instance.getString(_k('sortBy')) ?? 'name';
     _sortOrder = SettingsStore.instance.getString(_k('sortOrder')) ?? 'asc';
     _letter = SettingsStore.instance.getString(_k('letter')) ?? '';
@@ -129,6 +131,30 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
     if (_loadingMore || _cursor == null || !_scroll.hasClients) return;
     if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 420) {
       _load(more: true);
+    }
+  }
+
+  /// 首屏一页装不满视口时（大屏 / 高分辨率窗口下 60 条只有 4 行左右），
+  /// `maxScrollExtent` 是 0，滚动事件永远不会触发，后面的条目就再也拉不出来。
+  /// 这里补一次：只要还能拉下一页且内容不足以滚动，就继续拉，直到能滚或没有下一页。
+  void _scheduleFillViewport() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_fillViewport());
+    });
+  }
+
+  Future<void> _fillViewport() async {
+    if (_filling || !mounted) return;
+    _filling = true;
+    try {
+      for (var i = 0; i < 10; i++) {
+        if (!mounted || _cursor == null || _loadingMore || _loading) return;
+        if (!_scroll.hasClients) return;
+        if (_scroll.position.maxScrollExtent > 8) return;
+        await _load(more: true);
+      }
+    } finally {
+      _filling = false;
     }
   }
 
@@ -211,6 +237,8 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
         }
       });
       _saveCache(key);
+      // 拉完一页就检查是否撑满视口：撑不满时没有滚动事件，必须主动续页
+      _scheduleFillViewport();
       // 命中缓存时 folders 也是缓存的，不必再发那条最重的整库聚合；
       // 首次进入 / 手动强制刷新才补一次。
       if (!more && snap == null) unawaited(_loadFolders(seq, key));
@@ -274,7 +302,6 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
 
   Future<void> _enterFolder(String path) async {
     setState(() => _folderPath = path);
-    await SettingsStore.instance.setString(_k('folderPath'), path);
     if (_scroll.hasClients) _scroll.jumpTo(0);
     await _load(reset: true);
   }
@@ -771,9 +798,6 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
                     if (!_folderMode) _folderPath = '';
                   });
                   SettingsStore.instance.setBool(_k('folderMode'), _folderMode);
-                  if (!_folderMode) {
-                    SettingsStore.instance.setString(_k('folderPath'), '');
-                  }
                   _load(reset: true);
                 },
                 icon: Icon(
@@ -965,9 +989,17 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
     // shrinkWrap 的网格为了算出总高度会把**已加载的全部条目**一次性建出来，
     // 翻到十几页就有上千个图片 widget 同时存在（每张还要发请求），滚动必卡。
     // sliver 由视口决定构建范围，翻多少建多少。
-    return CustomScrollView(
-      controller: _scroll,
-      slivers: [
+    return NotificationListener<ScrollMetricsNotification>(
+      // 窗口拉大后内容可能又变得撑不满视口，这里补一次续页
+      onNotification: (n) {
+        if (n.depth == 0 && n.metrics.maxScrollExtent <= 8) {
+          _scheduleFillViewport();
+        }
+        return false;
+      },
+      child: CustomScrollView(
+        controller: _scroll,
+        slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(
             NasTokens.spaceSm,
@@ -1020,10 +1052,11 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
                     ),
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1256,7 +1289,15 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
     );
   }
 
+  /// 单元格按**封面图自己的比例**排。
+  ///
+  /// 混合库里视频的封面常常是同目录同名图片（`foo.mp4` + `foo.jpg`）：
+  /// 服务端回查到了这张图的宽高就优先用它，否则按视频自身的宽高，
+  /// 最后才退到 16:9 / 4:3。按视频比例开格子会把竖构图封面裁掉一截。
   double _aspectOf(VideoItem item) {
+    final cw = item.coverWidth ?? 0;
+    final ch = item.coverHeight ?? 0;
+    if (cw > 0 && ch > 0) return cw / ch;
     final w = item.width ?? 0;
     final h = item.height ?? 0;
     if (w > 0 && h > 0) return w / h;

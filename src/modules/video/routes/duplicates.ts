@@ -791,6 +791,36 @@ export async function deleteVideoItems(
   const movedSidecars: string[] = [];
   const moved = new Set<string>();
   const dirOf = (rel: string) => rel.replace(/\\/g, '/').replace(/[^/]+$/, '');
+  /** 文件名去掉扩展名：混合库里 `Movie.mp4` 与 `Movie.jpg` 算同一条 */
+  const stemOf = (rel: string) => {
+    const base = rel.replace(/\\/g, '/').split('/').pop() || '';
+    return base.replace(/\.[^.]+$/, '').toLowerCase();
+  };
+
+  // ---- 同名图片：混合库里图片是视频的一部分（列表里折成封面） --------------
+  // `Movie.mp4` + `Movie.jpg` 在混合库只显示一条。只删视频的话，图片条目
+  // 和文件都还在，列表里就会冒出一张没有视频的孤儿图片；这里把同库 / 同目录 /
+  // 同名的图片条目一并纳入删除（文件随视频一起进回收站或永久删除）。
+  if (videoRows.length > 0) {
+    const stems = new Set(videoRows.map((r) => stemOf(r.rel_path)));
+    const dirs = new Set(videoRows.map((r) => dirOf(r.rel_path)));
+    const libList = sql.join(
+      [...new Set(videoRows.map((r) => r.library_id))].map((v) => sql`${v}`),
+      sql`, `,
+    );
+    const candidates = (
+      await sql<{ id: string; library_id: string; rel_path: string }>`
+        select id, library_id, rel_path from image_items
+         where library_id in (${libList})
+      `.execute(k.db)
+    ).rows;
+    for (const row of candidates) {
+      if (imageRows.some((r) => r.id === row.id)) continue;
+      if (!dirs.has(dirOf(row.rel_path))) continue;
+      if (!stems.has(stemOf(row.rel_path))) continue;
+      imageRows.push(row);
+    }
+  }
 
   /**
    * 回收站目录：**跟源文件同一个卷**。
@@ -867,13 +897,15 @@ export async function deleteVideoItems(
       }
       for (const p of await sidecarsOf(r)) protectedSet.add(normAbs(p));
     }
-    // 同目录的图片条目本身也不能被当成侧车删掉
+    // 同目录的图片条目本身也不能被当成侧车删掉（本次要删的那些除外：
+    // 同名图片已经并进 `ids`，它的文件必须跟着视频一起走）
     const imgRows = (
-      await sql<{ rel_path: string }>`
-        select rel_path from image_items where library_id in (${libList})
+      await sql<{ id: string; rel_path: string }>`
+        select id, rel_path from image_items where library_id in (${libList})
       `.execute(k.db)
     ).rows;
     for (const r of imgRows) {
+      if (ids.includes(r.id)) continue;
       if (!targetDirs.has(dirOf(r.rel_path))) continue;
       try {
         protectedSet.add(normAbs(resolveAnyPath(root, r.rel_path)));

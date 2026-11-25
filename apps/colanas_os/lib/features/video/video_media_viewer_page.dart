@@ -42,6 +42,8 @@ Future<void> openVideoPlayer(
           durationMs: item.durationMs,
           // 播放器里上下拖动切上一条 / 下一条
           playlist: playlist,
+          // 图片 / 混合库：控制栏改成「列表 + 删除当前影片」，不放快退快进
+          mixedLibrary: true,
         ),
       ),
     );

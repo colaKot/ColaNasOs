@@ -6,7 +6,7 @@ import { Err } from '../../../../kernel/errors';
 import { filesRoot, resolveAnyPath } from '../../files/fs-root';
 import { pathVisible, visibilityOf } from '../../files/visibility';
 import { TRASH_DIR, movePath } from '../../files/ops';
-import { effectiveSources, offlineCond, offlineSmbPrefixes } from '../sources';
+import { effectiveSources, offlineCond, offlineSmbPrefixes, sourceLabelOf, type VideoSourceRow } from '../sources';
 import { libTypeOf } from '../media-type';
 import {
   dirExpr,
@@ -29,6 +29,19 @@ import {
 import type { FastifyInstance } from 'fastify';
 import type { KernelApi } from '../../../../kernel/types';
 import type { VideoHelpers } from '../helpers';
+
+/** 折叠来源根的分隔符，和 `rootsOf()` 保持同一口径才能对上 */
+function foldRoot(input: string): string {
+  return String(input || '')
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '');
+}
+
+/** 面包屑里的来源名：本地取末两级目录，SMB 取 `host/share` */
+function sourceLabelOfRoot(root: string, sources: VideoSourceRow[]): string {
+  const src = sources.find((s) => foldRoot(s.root_path) === root);
+  return src ? sourceLabelOf(src) : root;
+}
 
 /**
  * 图片库 / 混合库的文件夹层级。
@@ -147,7 +160,12 @@ export function registerVideoImageFolders(
         kind: 'image' | 'video',
       ) => {
         for (const r of rows) {
-          const dir = String(r.dir || '').replace(/\/+$/, '');
+          // dir_path 由扫描按 `root_path + '/' + 子路径` 写入，SMB 来源是
+          // `\\host\share/JK/` 这种混合形态；比较前统一折成正斜杠，
+          // 否则 `dir.startsWith(root + '/')` 永远匹配不上，整个来源的文件夹被丢弃。
+          const dir = String(r.dir || '')
+            .replace(/\\/g, '/')
+            .replace(/\/+$/, '');
           const count = Number(r.cnt) || 0;
           if (!dir || count <= 0) continue;
           const root = scopeRoots.find((x) => dir === x || dir.startsWith(`${x}/`));
@@ -237,10 +255,25 @@ export function registerVideoImageFolders(
         .sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
 
       const root = currentPath ? requireRoot(currentPath, roots) : null;
+      let segments = folderSegments(currentPath, root);
+      let parentPath = parentFolderOf(currentPath, root);
+      if (roots.length > 1 && root && currentPath) {
+        if (currentPath === root) {
+          // 停在来源根本身（旧版本「上一级」会把人带到这里）：这一层必须画出来。
+          // 否则面包屑只剩库名、返回键还是灰的，看着和库根一模一样，
+          // 用户会以为「库里就这些内容」，SMB 来源的文件夹等于不存在。
+          segments = [{ name: sourceLabelOfRoot(root, sources), path: root }];
+          parentPath = '';
+        } else if (parentPath === root) {
+          // 多来源库的库根已经把各来源的子目录合并展示，来源根不是一个真实层级：
+          // 一级子目录的「上一级」直接回库根，别把用户丢进只含单个来源的伪装根目录。
+          parentPath = '';
+        }
+      }
       const result = {
         path: currentPath,
-        parentPath: parentFolderOf(currentPath, root),
-        segments: folderSegments(currentPath, root),
+        parentPath,
+        segments,
         folders,
         selfCount: selfImageCount + selfVideoCount,
         selfImageCount,
@@ -302,16 +335,24 @@ export function registerVideoImageFolders(
       await movePath(abs, dest);
 
       const prefix = `${target}/`;
+      // rel_path 里 SMB 来源是 `\\host\share/JK/a.jpg` 这种混合形态；UNC 目录删除时
+      // 也要像读侧一样折一次斜杠，否则文件搬走了、索引行却留着。
+      const relCond = (alias: string) =>
+        target.startsWith('//')
+          ? sql`(replace(${sql.raw(alias)}.rel_path, ${'\\'}, '/') = ${target}
+                or substr(replace(${sql.raw(alias)}.rel_path, ${'\\'}, '/'), 1, ${prefix.length}) = ${prefix})`
+          : sql`(${sql.raw(alias)}.rel_path = ${target}
+                or substr(${sql.raw(alias)}.rel_path, 1, ${prefix.length}) = ${prefix})`;
       const res = await k.db.transaction().execute(async (trx: any) => {
         const img = await sql`
           delete from image_items
            where library_id = ${lib.id}
-             and (rel_path = ${target} or substr(rel_path, 1, ${prefix.length}) = ${prefix})
+             and ${relCond('image_items')}
         `.execute(trx);
         const vid = await sql`
           delete from video_items
            where library_id = ${lib.id}
-             and (rel_path = ${target} or substr(rel_path, 1, ${prefix.length}) = ${prefix})
+             and ${relCond('video_items')}
         `.execute(trx);
         await sql`
           update video_libraries

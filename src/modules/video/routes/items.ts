@@ -1,5 +1,6 @@
 import { sql } from 'kysely';
 import { pathVisible, pathWhere, visibilityOf } from '../../files/visibility';
+import { filesRoot } from '../../files/fs-root';
 import { Type } from '@sinclair/typebox';
 import { ftsPhrase } from '../../files/fts';
 import { actorKey } from '../jp-actor';
@@ -78,6 +79,69 @@ async function withRank(k: KernelApi, items: Array<Record<string, unknown>>): Pr
       rankMonthly: monthly.get(code) ?? null,
     };
   });
+}
+
+/**
+ * 给视频补「封面图本身的宽高」（`coverWidth` / `coverHeight`）。
+ *
+ * 混合库里视频的封面经常就是**同目录同名图片**（`foo.mp4` + `foo.jpg`）：
+ * 扫描时 `findLocalPoster` 把 `foo.jpg` 登记成 `nfo_poster`，列表走 `/video/art`
+ * 输出的就是这张照片。单元格若按**视频**的宽高比开，竖构图照片会被
+ * `BoxFit.cover` 裁掉一截（瀑布流里最明显，2026-11-25 反馈）。
+ *
+ * 图片扫描时 `readImageMeta` 已经把宽高落进 `image_items.width/height`，
+ * 这里按登记的海报路径回查一次即可 —— 只查本页这几十条，不额外读盘。
+ * 查不到（远端 URL / 图不在库内 / 不在图片索引里）就留空，客户端按 video 宽高兜底。
+ */
+async function attachCoverSize(k: KernelApi, rows: MediaRow[]): Promise<void> {
+  // `image_items.rel_path` 的形态取决于来源根怎么登记：库路径是绝对路径时
+  // 它也是绝对路径（`D:/down/a.jpg`），相对 files 根时则是 `mixed/a.jpg`。
+  // 而海报路径永远是绝对路径，所以两种形态都试一遍。
+  const root = filesRoot().replace(/\\/g, '/').replace(/\/+$/, '');
+  const posterKeys = (r: MediaRow): string[] => {
+    const raw = String(r.nfo_poster ?? '').trim() || String(r.nfo_thumb ?? '').trim();
+    if (!raw || /^https?:\/\//i.test(raw)) return [];
+    const abs = raw.replace(/\\/g, '/');
+    const keys = [abs];
+    const lower = abs.toLowerCase();
+    const lowerRoot = root.toLowerCase();
+    if (lower.startsWith(`${lowerRoot}/`)) keys.push(abs.slice(root.length + 1));
+    return keys;
+  };
+  const targets = rows.filter(
+    (r) => String(r.media_type ?? 'video') !== 'image' && posterKeys(r).length > 0,
+  );
+  if (targets.length === 0) return;
+
+  const rels = [...new Set(targets.flatMap(posterKeys))];
+  // 只查同一个库：`image_items` 上有 (library_id, rel_path) 唯一索引，
+  // 不带 library_id 就退化成整表扫描（照片库动辄几十万行）。
+  const libraryId = String(targets[0].library_id || '');
+  const sizes = new Map<string, { w: number; h: number }>();
+  // SQLite 参数上限 999（老版本 999）：300 一条足够
+  for (let i = 0; i < rels.length; i += 300) {
+    const chunk = rels.slice(i, i + 300);
+    const res = await sql<{ rel_path: string; width: number | null; height: number | null }>`
+        select rel_path, width, height from image_items
+         where library_id = ${libraryId}
+           and rel_path in (${sql.join(chunk.map((v) => sql`${v}`), sql`, `)})
+      `.execute(k.db);
+    for (const row of res.rows) {
+      const w = Number(row.width) || 0;
+      const h = Number(row.height) || 0;
+      if (w > 0 && h > 0) sizes.set(String(row.rel_path).replace(/\\/g, '/'), { w, h });
+    }
+  }
+  if (sizes.size === 0) return;
+  for (const r of targets) {
+    for (const key of posterKeys(r)) {
+      const hit = sizes.get(key);
+      if (!hit) continue;
+      r.cover_width = hit.w;
+      r.cover_height = hit.h;
+      break;
+    }
+  }
 }
 
 /** 逗号分隔的多选参数 → 数组（去空、去重、限长） */
@@ -456,8 +520,11 @@ export async function registerVideoItems(app: FastifyInstance, k: KernelApi, h: 
           const [vs, is] = await Promise.all([videoRows(limit + 1), imageRows(limit + 1)]);
           const merged = mergeRows(vs, is);
           const { page, last } = sortPage(merged, limit);
+          const cleaned = dropSharedArtwork(page);
+          // 瀑布流按封面图自己的比例开格子（同名图片当封面时尤其重要）
+          await attachCoverSize(k, cleaned);
           return put({
-            items: await withRank(k, dropSharedArtwork(page).map(toItem)),
+            items: await withRank(k, cleaned.map(toItem)),
             nextCursor: last
               ? encodeSortCursor(
                   last.sort_key ?? '',

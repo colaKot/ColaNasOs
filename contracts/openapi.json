@@ -12187,6 +12187,14 @@
             "description": "是否已有刮削海报；false 时客户端回退首帧",
             "type": "boolean"
           },
+          "coverWidth": {
+            "type": "integer",
+            "nullable": true
+          },
+          "coverHeight": {
+            "type": "integer",
+            "nullable": true
+          },
           "imdbId": {
             "type": "string",
             "nullable": true
@@ -38732,13 +38740,19 @@
                   "enum": [
                     "tv"
                   ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "photo"
+                  ]
                 }
               ]
             },
             "in": "query",
             "name": "build",
             "required": false,
-            "description": "安卓客户端构建形态：TV 只下发 apk_tv，手机只下发 apk"
+            "description": "安卓客户端构建形态：TV 只下发 apk_tv，手机只下发 apk，相册端只下发 apk_photo"
           },
           {
             "schema": {

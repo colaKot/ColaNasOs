@@ -258,6 +258,15 @@ export const Item = Type.Object(
     actors: Type.Array(Type.String(), { description: '演员名（按 NFO 顺序，最多 15）' }),
     directors: Type.Array(Type.String()),
     hasArt: Type.Boolean({ description: '是否已有刮削海报；false 时客户端回退首帧' }),
+    /**
+     * 封面图本身的宽高（像素，仅服务端已确认尺寸时有值）。
+     *
+     * 混合库里 `foo.mp4` + `foo.jpg` 这种同名配对的封面就是那张照片，
+     * 宽高比与视频不同：瀑布流按封面的比例开格子，整张图才显示得全。
+     * 缺省 / null = 未知，客户端按 `width` / `height`（视频自身）兜底。
+     */
+    coverWidth: Type.Optional(NullableInteger),
+    coverHeight: Type.Optional(NullableInteger),
     imdbId: NullableString,
     doubanId: NullableString,
     tmdbId: NullableInteger,

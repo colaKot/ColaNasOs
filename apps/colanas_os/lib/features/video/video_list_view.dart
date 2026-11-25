@@ -80,6 +80,7 @@ class _VideoListViewState extends State<VideoListView> {
   String? _nextCursor;
   bool _loading = true;
   bool _loadingMore = false;
+  bool _filling = false;
   String? _error;
   String _q = '';
   int _total = 0;
@@ -177,6 +178,30 @@ class _VideoListViewState extends State<VideoListView> {
     }
   }
 
+  /// 首屏一页装不满视口时（大屏 / 高分辨率窗口下 24 条不足 4 行），
+  /// `maxScrollExtent` 是 0，滚动事件永远不触发，后面的分页就再也不会拉。
+  /// 这里主动续页，直到内容能滚或没有下一页。
+  void _scheduleFillViewport() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_fillViewport());
+    });
+  }
+
+  Future<void> _fillViewport() async {
+    if (_filling || !mounted) return;
+    _filling = true;
+    try {
+      for (var i = 0; i < 10; i++) {
+        if (!mounted || _nextCursor == null || _loadingMore || _loading) return;
+        if (!_scroll.hasClients) return;
+        if (_scroll.position.maxScrollExtent > 8) return;
+        await _load(more: true);
+      }
+    } finally {
+      _filling = false;
+    }
+  }
+
   Future<void> _load({bool more = false}) async {
     setState(() {
       if (more) {
@@ -216,6 +241,7 @@ class _VideoListViewState extends State<VideoListView> {
         _loading = false;
         _loadingMore = false;
       });
+      _scheduleFillViewport();
       if (!more) {
         unawaited(_loadCount());
         // facets 供筛选面板出选项，首屏就拉一次；有缓存时直接命中不发请求
@@ -1507,7 +1533,16 @@ class _VideoListViewState extends State<VideoListView> {
                 )
               : RefreshIndicator(
                   onRefresh: () => _load(),
-                  child: _grid(context),
+                  child: NotificationListener<ScrollMetricsNotification>(
+                    // 窗口拉大后可能又撑不满视口，补一次续页
+                    onNotification: (n) {
+                      if (n.depth == 0 && n.metrics.maxScrollExtent <= 8) {
+                        _scheduleFillViewport();
+                      }
+                      return false;
+                    },
+                    child: _grid(context),
+                  ),
                 ),
         ),
         if (_loadingMore)

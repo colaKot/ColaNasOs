@@ -12,14 +12,16 @@ import type { VideoSourceRow } from './sources';
 export type FolderMode = 'exact' | 'subtree' | '';
 
 export function normalizeRelPath(input?: string | null): string {
-  const rel = String(input || '')
-    .replace(/\\/g, '/')
-    .replace(/^\/+|\/+$/g, '');
+  const raw = String(input || '').replace(/\\/g, '/');
+  // UNC 路径的前导 `//` 是语义的一部分（`//host/share`），不能像普通绝对路径
+  // 那样剥掉，否则 requireRoot 会把它当成 `host/share` 判越界（SMB 来源 403）。
+  const unc = raw.startsWith('//');
+  const rel = raw.replace(/^\/+|\/+$/g, '');
   if (!rel) return '';
   for (const seg of rel.split('/')) {
     if (seg === '..' || seg === '.') throw httpError(400, 'invalid folder path');
   }
-  return rel;
+  return unc ? `//${rel}` : rel;
 }
 
 export function rootsOf(sources: VideoSourceRow[]): string[] {
@@ -28,8 +30,13 @@ export function rootsOf(sources: VideoSourceRow[]): string[] {
     .filter(Boolean);
 }
 
+/** 统一折叠成正斜杠再比较：SMB 的 dir_path 是 `\\host\share/JK/` 这种混合形态。 */
+function foldSlashes(input: string): string {
+  return String(input || '').replace(/\\/g, '/');
+}
+
 export function rootOf(folderPath: string, roots: string[]): string | null {
-  const p = String(folderPath || '');
+  const p = foldSlashes(folderPath);
   if (!p) return null;
   for (const root of roots) {
     if (p === root || p.startsWith(`${root}/`)) return root;
@@ -47,8 +54,9 @@ export function requireRoot(folderPath: string, roots: string[]): string | null 
 
 /** 面包屑：来源根 → 当前目录逐级路径 */
 export function folderSegments(folderPath: string, root: string | null): Array<{ name: string; path: string }> {
-  if (!folderPath || !root) return [];
-  const rel = folderPath.slice(root.length).replace(/^\/+/, '');
+  const full = foldSlashes(folderPath);
+  if (!full || !root) return [];
+  const rel = full.slice(root.length).replace(/^\/+/, '');
   if (!rel) return [];
   const out: Array<{ name: string; path: string }> = [];
   let acc = root;
@@ -60,9 +68,10 @@ export function folderSegments(folderPath: string, root: string | null): Array<{
 }
 
 export function parentFolderOf(folderPath: string, root: string | null): string | null {
-  if (!folderPath || !root) return null;
-  if (folderPath === root) return null;
-  const parent = folderPath.replace(/\/+$/, '').split('/').slice(0, -1).join('/');
+  const full = foldSlashes(folderPath);
+  if (!full || !root) return null;
+  if (full === root) return null;
+  const parent = full.replace(/\/+$/, '').split('/').slice(0, -1).join('/');
   return parent && parent.length >= root.length ? parent : null;
 }
 
@@ -81,6 +90,11 @@ export function dirExpr(alias: string): ReturnType<typeof sql> {
   return sql`${sql.raw(alias)}.dir_path`;
 }
 
+/** SQL 里折叠来源路径的反斜杠（SMB 的 dir_path 是 `\\host\share/JK/` 混合形态） */
+function dirSlashExpr(alias: string): ReturnType<typeof sql> {
+  return sql`replace(${dirExpr(alias)}, ${'\\'}, '/')`;
+}
+
 /** 图片库 / 混合库列表的文件夹范围条件 */
 export function scopeCond(
   alias: string,
@@ -92,13 +106,19 @@ export function scopeCond(
   const p = String(folderPath || '');
   if (p) {
     const prefix = `${p}/`;
+    // UNC 路径（`//host/share/...`）在 dir_path 列里写成 `\\host\share/...`，
+    // 必须在 SQL 里折一次斜杠才比得上；本地盘符路径形态一致，继续走索引。
+    const dir = p.startsWith('//') ? dirSlashExpr(alias) : dirExpr(alias);
     return folderMode === 'exact'
-      ? sql`${dirExpr(alias)} = ${prefix}`
-      : sql`substr(${dirExpr(alias)}, 1, ${prefix.length}) = ${prefix}`;
+      ? sql`${dir} = ${prefix}`
+      : sql`substr(${dir}, 1, ${prefix.length}) = ${prefix}`;
   }
   // 库根：exact = 各来源根目录自身；subtree = 整库
   if (folderMode === 'subtree') return sql`1 = 1`;
-  const parts = roots.map((r) => sql`${dirExpr(alias)} = ${`${r}/`}`);
+  const parts = roots.map((r) => {
+    const dir = r.startsWith('//') ? dirSlashExpr(alias) : dirExpr(alias);
+    return sql`${dir} = ${`${r}/`}`;
+  });
   return parts.length > 0 ? sql`(${sql.join(parts, sql` or `)})` : sql`1 = 0`;
 }
 
@@ -166,7 +186,11 @@ export function folderPathOf(input?: string | null): string {
 }
 
 export function joinRel(root: string, rel: string): string {
-  return path.posix.join(root.replace(/\\/g, '/'), rel.replace(/\\/g, '/'));
+  const base = String(root || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  const suffix = String(rel || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  const joined = path.posix.join(base, suffix);
+  // path.posix.join 会把 UNC 的前导 `//` 塌成一个 `/`，这里补回来
+  return base.startsWith('//') && !joined.startsWith('//') ? `/${joined}` : joined;
 }
 
 /** 数字补零后的名字，供 SQL 自然排序 */

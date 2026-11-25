@@ -10795,6 +10795,8 @@ class VideoItem {
   final List<String> actors;
   final List<String> directors;
   final bool hasArt;
+  final int? coverWidth;
+  final int? coverHeight;
   final String? imdbId;
   final String? doubanId;
   final int? tmdbId;
@@ -10846,6 +10848,8 @@ class VideoItem {
     required this.actors,
     required this.directors,
     required this.hasArt,
+    this.coverWidth,
+    this.coverHeight,
     required this.imdbId,
     required this.doubanId,
     required this.tmdbId,
@@ -10898,6 +10902,8 @@ class VideoItem {
         actors: (json['actors'] as List<dynamic>).cast<String>(),
         directors: (json['directors'] as List<dynamic>).cast<String>(),
         hasArt: json['hasArt'] as bool,
+        coverWidth: json['coverWidth'] == null ? null : json['coverWidth'] as int?,
+        coverHeight: json['coverHeight'] == null ? null : json['coverHeight'] as int?,
         imdbId: json['imdbId'] as String?,
         doubanId: json['doubanId'] as String?,
         tmdbId: json['tmdbId'] as int?,
@@ -10950,6 +10956,8 @@ class VideoItem {
         'actors': actors,
         'directors': directors,
         'hasArt': hasArt,
+        if (coverWidth != null) 'coverWidth': coverWidth!,
+        if (coverHeight != null) 'coverHeight': coverHeight!,
         'imdbId': imdbId,
         'doubanId': doubanId,
         'tmdbId': tmdbId,

@@ -53,6 +53,13 @@ export interface MediaRow {
   nfo_source?: string | null;
   nfo_updated_at?: number | null;
   match_nfo?: number | null;
+  /**
+   * 封面图本身的尺寸（像素）：列表按登记的海报路径回查 `image_items` 得到。
+   * 混合库里封面是「视频同名图片」时，宽高与视频并不一致 ——
+   * 瀑布流要按这张图的比例排版，才不会裁掉一截。
+   */
+  cover_width?: number | null;
+  cover_height?: number | null;
   /** 每用户已观看（查询时 left join video_watch 得到） */
   watched?: number | null;
 }
@@ -216,6 +223,9 @@ export function toItem(r: MediaRow) {
     directors: jsonList(r.nfo_directors),
     /** 有值即「已刮削」；客户端据此决定海报走 /video/art 还是首帧回退 */
     hasArt: !!(String(r.nfo_poster ?? '').trim() || String(r.nfo_thumb ?? '').trim()),
+    /** 封面图自己的宽高（已知时才有值）：瀑布流按它排版，图片才不会被裁 */
+    coverWidth: r.cover_width == null ? null : Number(r.cover_width),
+    coverHeight: r.cover_height == null ? null : Number(r.cover_height),
     imdbId: r.nfo_imdb_id ?? null,
     doubanId: r.nfo_douban_id ?? null,
     tmdbId: r.nfo_tmdb_id == null ? null : Number(r.nfo_tmdb_id),

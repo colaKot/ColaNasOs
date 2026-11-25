@@ -61,7 +61,9 @@ const PNG = Buffer.from(
   fs.writeFileSync(path.join(setA, 'two.png'), PNG);
   fs.writeFileSync(path.join(setA, 'three.png'), PNG);
   fs.writeFileSync(path.join(mixed, 'cover.png'), PNG);
-  fs.writeFileSync(path.join(mixed, 'movie.jpg'), Buffer.alloc(64, 2)); // 与 movie.mp4 同名
+  // 与 movie.mp4 同名：扫描时会被登记成这部片的封面（`findLocalPoster`），
+  // 列表要把这张图自己的宽高带回去，瀑布流才不会被视频比例裁掉一截
+  fs.writeFileSync(path.join(mixed, 'movie.png'), PNG);
   fs.writeFileSync(path.join(mixed, 'movie.mp4'), Buffer.alloc(2048, 1));
 
   process.env.COLANAS_DEV_TOKEN = '1';
@@ -182,6 +184,14 @@ const PNG = Buffer.from(
       mixedList.some((x) => x.mediaType === 'image') &&
       !mixedList.some((x) => x.title === 'movie' && x.mediaType === 'image'),
     mixedList.map((x) => `${x.mediaType}:${x.title}`).join(','),
+  );
+  // 封面是同名图片时，列表要带上那张图自己的宽高：1×1 的 PNG ≠ 视频的 16:9，
+  // 客户端（瀑布流）按 `coverWidth/coverHeight` 开格子，整张封面才显示得全
+  const mixedVideo = mixedList.find((x) => x.mediaType === 'video');
+  check(
+    'mixed_cover_size',
+    !!mixedVideo && mixedVideo.coverWidth === 1 && mixedVideo.coverHeight === 1,
+    JSON.stringify(mixedVideo && { cw: mixedVideo.coverWidth, ch: mixedVideo.coverHeight }),
   );
   r = await app.inject({
     method: 'GET',

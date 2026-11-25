@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
@@ -61,6 +63,87 @@ String videoArtUrl(VideoItem item, {String kind = 'poster', int size = 0}) {
 Map<String, String> get videoArtHeaders {
   final token = ApiSession.instance.token;
   return token == null ? const {} : {'authorization': 'Bearer $token'};
+}
+
+/// 条目自己的抽帧地址（服务端 `/video/poster`，懒生成 + 文件缓存）。
+///
+/// 竖屏片源抽出来就是竖屏，构图和随后要播的画面对得上；换集加载时用它做
+/// 整屏占位，才不会出现「竖屏视频前面先闪一张同名横版图」的割裂感。
+String videoFrameUrl(VideoItem item) {
+  final base = ApiSession.instance.baseUrl;
+  if (item.mediaType == 'image') {
+    return '$base/api/v1/files/thumb?path=${Uri.encodeComponent(item.path)}&size=1080';
+  }
+  return '$base/api/v1/video/poster?id=${Uri.encodeComponent(item.id)}';
+}
+
+/// 换集加载占位：把条目的抽帧铺满整屏（`cover`），起播以后再换掉。
+///
+/// 抽帧是懒生成的：SMB 来源第一次请求会先 404、后台排队再出图，所以这里
+/// 自动重试几次；一直拿不到才退回刮削图（也按 `cover` 铺满，不留横图居中）。
+class VideoFramePreview extends StatefulWidget {
+  const VideoFramePreview({super.key, required this.item, this.cacheWidth});
+
+  final VideoItem item;
+  final int? cacheWidth;
+
+  @override
+  State<VideoFramePreview> createState() => _VideoFramePreviewState();
+}
+
+class _VideoFramePreviewState extends State<VideoFramePreview> {
+  static const _maxRetries = 4;
+
+  int _attempt = 0;
+  Timer? _retryTimer;
+
+  @override
+  void didUpdateWidget(covariant VideoFramePreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.item.id != widget.item.id) {
+      _retryTimer?.cancel();
+      _attempt = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleRetry() {
+    _retryTimer?.cancel();
+    _retryTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _attempt++);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_attempt > _maxRetries) {
+      return NasCoverImage(
+        url: videoPosterUrl(widget.item, kind: 'fanart'),
+        headers: videoArtHeaders,
+        fit: BoxFit.cover,
+        cacheWidth: widget.cacheWidth,
+        borderRadius: 0,
+        icon: Icons.movie_outlined,
+      );
+    }
+    return Image.network(
+      videoFrameUrl(widget.item),
+      // 换 key 才会重新发请求（加载失败的图已被 ImageCache 清掉）
+      key: ValueKey('${widget.item.id}#$_attempt'),
+      fit: BoxFit.cover,
+      cacheWidth: widget.cacheWidth,
+      headers: videoArtHeaders,
+      errorBuilder: (_, _, _) {
+        _scheduleRetry();
+        return const ColoredBox(color: Colors.black);
+      },
+    );
+  }
 }
 
 /// 副标题：年份 · 分辨率 · 片长 · 评分（能凑几个凑几个，不硬塞占位符）

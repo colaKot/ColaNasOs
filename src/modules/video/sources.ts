@@ -428,6 +428,27 @@ export function isOfflinePath(relPath: string, prefixes: string[]): boolean {
 }
 
 /**
+ * 来源在界面里的展示名：本地取末两级目录（`D:/down/mt/move` → `mt/move`），
+ * SMB 取 `host/share`（带子路径）。取末两级是因为一级目录常常只叫 `movies` /
+ * `media`，几个来源看起来全一样。
+ */
+export function sourceLabelOf(src: VideoSourceRow): string {
+  if (String(src.conn_type) === 'smb') {
+    const host = String(src.host || '').trim();
+    const share = String(src.share || '').trim();
+    const sub = String(src.sub_path || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    const base = [host, share].filter(Boolean).join('/');
+    return sub ? `${base}/${sub}` : base || String(src.root_path || '');
+  }
+  const segs = String(src.root_path || '')
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '')
+    .split('/')
+    .filter(Boolean);
+  return segs.slice(-2).join('/') || String(src.root_path || '');
+}
+
+/**
  * 登记库的所有本地来源根，让缩略图 / 播放 / 字幕能读到 files 根之外的文件。
  * 启动时和每次改库后都要调 —— 这个白名单是进程内内存，重启即失效。
  */

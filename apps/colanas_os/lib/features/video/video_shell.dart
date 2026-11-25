@@ -149,7 +149,18 @@ class _VideoShellPageState extends State<VideoShellPage> {
       },
       selection: _selection,
       content: (key) => _withDetail(key),
+      onReselect: _onReselect,
     );
+  }
+
+  /// 再点一次左侧栏里已经打开的库名：回到库根。
+  ///
+  /// 切库本来就会换 key、内容重建；只有「同一个库再点一次」是空操作，
+  /// 用户却期望它像重新进库一样回到根目录 —— 这里换一次 epoch 强制重建。
+  void _onReselect(String key) {
+    if (!key.startsWith('lib:')) return;
+    VideoDetailRouter.instance.closeAll();
+    setState(() => _epoch++);
   }
 
   /// 二级内容 + 三级详情层。
@@ -252,8 +263,6 @@ class _VideoShellPageState extends State<VideoShellPage> {
         return const VideoFavoritesPage();
       case 'browse':
         return const VideoMediaBrowserPage();
-      case 'jp_rank':
-        return const VideoJpRankPage();
       case 'jp_actor':
         final jp = _libraries.where((l) => l.libType == 'jp_movie').toList();
         return VideoJpActorPage(
