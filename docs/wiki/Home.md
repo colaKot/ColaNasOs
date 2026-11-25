@@ -2,7 +2,7 @@
 
 > 在一台 Windows 主机上自托管的 NAS OS：相册、影视、音乐、文件、下载、同步与本地 AI 收进同一个服务端；桌面 / 手机 / Web / Android TV / Apple TV / 鸿蒙共用一套 Flutter 界面。数据只留在本机。
 
-**当前版本：[v1.3.3](https://github.com/colaKot/ColaNasOs/releases/tag/v1.3.3)**　·　[官网](https://cola.gexuan.net/)　·　[源码](https://github.com/colaKot/ColaNasOs)　·　许可 GPL-3.0
+**当前版本：[v1.5.0](https://github.com/colaKot/ColaNasOs/releases/tag/v1.5.0)**（[GitCode 国内镜像](https://gitcode.com/cocacola23/ColaNasOs/releases/tag/v1.5.0)）　·　[官网](https://cola.gexuan.net/)　·　[源码](https://github.com/colaKot/ColaNasOs)　·　许可 GPL-3.0
 
 ---
 
@@ -16,22 +16,22 @@ ColaNasOs 把「一台常开的 Windows 电脑」变成一台 NAS：
 
 ## 快速开始
 
-1. 下载并安装 **服务端**（`ColaNasOs-Server-1.3.3-Setup.exe`）→ 装完右下角只有一个托盘图标。
+1. 下载并安装 **服务端**（`ColaNasOs-Server-1.5.0-Setup.exe`）→ 装完右下角只有一个托盘图标。
 2. 在「设置」里登记**相册库 / 影视库 / 音乐库**（都是「文件」根下的子目录）。
 3. 想在别的电脑上用，装 **客户端**（Windows / Android / Android TV 各一个包），填服务端地址登录。
 
 → 详见 [快速开始](Getting-Started)
 
-## 最新变化（v1.3.3 之后的主干，尚未发版）
+## 最新变化（v1.5.0 之后的主干，尚未发版）
 
-当前公开安装包仍是 v1.3.3，主干版本已推进到 1.3.13。下面这些已在主干，需等下一个安装包才会在设备上生效：
+当前公开安装包是 v1.5.0，主干版本已推进到 1.5.7（Android buildCode 78）。下面这些已在主干，需等下一个安装包才会在设备上生效：
 
-- **电视端硬解与兼容性**：TV 播放器开隧道模式（音视频同步交给 SoC 硬件通道，4K / HDR 不掉帧）、解码器回退（DV / HEVC 10bit 硬解失败时换其它解码器，不再黑屏）、24p 匹配电视刷新率；选中无平台解码器的音轨（TrueHD / DTS-HD MA）时主动报错并切服务端转码（视频直通 + 音频转 AAC），避免有画面没声音；平台视图走 Hybrid Composition 真实 Surface，保住 HDR / 杜比元数据。
-- **Android TV 遥控器**：↑/↓ 一次走一行，到页面最顶才回 tab；返回先回当前栏目 tab，在 tab 上再按一次才退出。播放器里 ↓ 唤出操作栏、← → 跳时间、OK 暂停/继续、返回退出播放页。
-- **大屏密度**：TV 版面按视口等比缩放（不再有 0.85 下限），网格列数按屏宽自适应，4K 电视一屏能看到更多行。
-- **原片直连**：电视按屏幕 HDR 能力决定 DV / HDR10+ 是否直连，支持时不转码，硬解走 MediaCodec；原画档会话只换容器不重编码，元数据原样保留。播放器设置里可关闭这一策略。
-- **响度归一**：库级开关通过 `compat.audioNormalize` 下发，直连时由播放器套 `dynaudnorm`；转码与离线下载在服务端做。
-- **相册人物**：支持批量隐藏 / 并组 / 解散，单个人物右键可直接隐藏。
+- **相册独立端（新增端）**：从同一份 `apps/colanas_os` 用 `build-photo.bat` 构建，入口 `lib/main_photo.dart`，登录后**直进相册时间轴**（没有回工作台的房子）。applicationId `com.colanas.photo`，可与主客户端**并存安装**；「更多」页新增「关于」，可查版本 / 更新 / 当前 NAS 地址 / 项目主页。更新通道已加 `apk_photo` 身份（`build=photo` 只回相册包），**正式安装包待发版**。
+- **安卓三包身份**：`apk`（主客户端）/ `apk_tv`（电视）/ `apk_photo`（相册独立端）三者身份不同、绝不互通；检查更新时客户端分别带 `build=phone|tv|photo`。
+- **电视播放器交互**：遥控器**长按左右键 420 ms 后加速拖动进度**（4×→180× 指数增长，松开才真正 seek）；支持**上下滑跟手切集**（原生层同步平移、相邻抽帧占位、无转场，修复换集黑屏）；混合库播放页改成「列表 + 删除当前影片」，去掉快退 / 快进。
+- **杜比视界兼容**：DV 电视必须**关隧道**并钉住 DV 视频轨 + AAC 音轨（MTK 电视开隧道只拿到 HEVC 解码器、输出会退化成 HDR10 基础层）；`.m3u8` 按 HLS 声明，解码诊断落日志。
+- **影视 / 图片混合库**：同名图片作视频封面（`foo.mp4` + `foo.jpg` 只显示一条），图片点开全屏查看器、上下滑翻页；服务端回传封面宽高按真实比例排版；删除视频时**同名图片一并删除**（避免孤儿图片）；修复 SMB / UNC 路径斜杠折叠导致的 403 与文件夹丢失；日本榜单入口移到「发现」页。
+- **音乐 / 播客**：Android 改用**自建 MediaStyle 前台服务**，通知栏 / 锁屏显示媒体卡与上一首 / 播放暂停 / 下一首（规避国产 ROM 不显示 audio_service 通知）；起停与 TTS 分块加淡入淡出，消除切源 / 段间爆音。
 
 ## Wiki 导航
 
@@ -40,7 +40,7 @@ ColaNasOs 把「一台常开的 Windows 电脑」变成一台 NAS：
 | [快速开始](Getting-Started) | 安装、连服务端、首次配置 |
 | [架构总览](Architecture) | 进程模型、技术栈、目录结构 |
 | [服务端内核](Server-Kernel) | 模块注册、迁移、任务队列、鉴权、Sidecar |
-| [客户端](Client) | 六端一套代码、目录、播放器要点 |
+| [客户端](Client) | 多端一套代码、目录、播放器要点（含相册独立端） |
 | [契约与 API](Contracts-API) | 单一真源、代码生成链、错误契约、文件传输协议 |
 | [功能模块](Modules) | 14 个注册 / 13 个开放的应用，15 个服务端域分别做什么 |
 | [本地 AI 与模型](Local-AI) | 人脸、场景、语义检索、OCR、翻译、TTS |
@@ -67,7 +67,7 @@ ColaNasOs 把「一台常开的 Windows 电脑」变成一台 NAS：
 │ Sidecars（独立进程，NDJSON over named pipe）               │
 │ ai-infer(ONNX) │ media(ffmpeg) │ indexer │ photo-ai │ mcp  │
 ├──────────────────────────────────────────────────────────┤
-│ Flutter 单栈客户端（Windows / Android / Web / TV / 鸿蒙）    │
+│ Flutter 单栈客户端（桌面 / 手机 / Web / TV / 鸿蒙 / 相册独立端）│
 │ packages/nas_core · nas_ui · nas_media                    │
 ├──────────────────────────────────────────────────────────┤
 │ 存储：SQLite(better-sqlite3) + sqlite-vec  +  本机文件系统   │

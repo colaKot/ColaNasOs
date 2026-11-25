@@ -86,7 +86,7 @@ ColaNasOs/
 ├─ contracts/              # TypeBox → OpenAPI → 生成产物；locales/errors/apps/i18n 单一真源
 ├─ electron/               # 外壳：main / preload / tray / installer / updater
 ├─ packages/               # 客户端共享包：nas_core / nas_ui / nas_media
-├─ apps/                   # 客户端：colanas_os（主端）+ music/photo/sync 独立端
+├─ apps/                   # 客户端：colanas_os（主端，含 main.dart / main_tv.dart / main_photo.dart 三入口）+ music/photo/sync 脚手架（历史）
 ├─ docs/                   # 设计文档、ADR、基准、API 参考、用户/运维手册
 ├─ tool/                   # gen/ check/ build/ bench/ split/ verify 等工具
 ├─ vendor/                 # 随包分发的第三方二进制与模型（ffmpeg / llama / transmission）
@@ -101,11 +101,12 @@ ColaNasOs/
 | productName | `ColaNasOs` | 安装包 / 快捷方式显示名 |
 | `package.json` name | `colanas_os_server` | 决定数据目录 `%APPDATA%\colanas_os_server` |
 | appId | `com.colanas.os` | Electron 安装标识 |
+| 相册独立端 applicationId | `com.colanas.photo` | 与主客户端**并存安装**，非替换；检查更新带 `build=photo` 只回 `apk_photo` |
 | Flutter `pubspec` name | `ColaNasOs` | Dart 包前缀 |
 | 鸿蒙 `bundleName` | `com.colanas.os` | 鸿蒙应用标识 |
 | 构建产物目录 | `D<NNN>` | `build/D<NNN>` → 安装后 `versions/D<NNN>`，更新器按版本号单调递增选 |
 
-> 首个发行版发布后**不可再改**（改 = 数据目录 / 安装标识漂移）。
+> 首个发行版发布后主标识**不可再改**（改 = 数据目录 / 安装标识漂移）。相册独立端用**新增**的 `com.colanas.photo`，不影响主客户端标识。安卓三份包 `apk` / `apk_tv` / `apk_photo` 身份不同、绝不互通。
 
 ## 数据流举例：看一部没转过的电影
 
@@ -118,6 +119,6 @@ ColaNasOs/
 ## 相关页面
 
 - [服务端内核](Server-Kernel) —— 内核各子系统
-- [客户端](Client) —— 六端怎么共用一套代码
+- [客户端](Client) —— 多端怎么共用一套代码
 - [契约与 API](Contracts-API) —— 单一真源与生成链
 - [功能模块](Modules) —— 14 个应用分别做什么

@@ -33,6 +33,7 @@ dev.bat
 | `start.bat` | 生产形态（Electron 壳 + 无 dev-token / 无 CORS） |
 | `build-web.bat` | 重建 `apps/colanas_os/build/web`（服务端内置的 Web 界面） |
 | `TV.bat` | TV 版面预览（5175 + 控制口 5176） |
+| `build-photo.bat` | 相册独立端出包（`main_photo.dart` + `-PnasApp=photo`，→ `ColaNasOs-Photo-<ver>-android-arm64.apk`） |
 
 ⚠️ **5173 的 `flutter run` 在跑时不要构建 web**（抢同一个 build 目录）。
 
@@ -91,6 +92,10 @@ flutter build apk --release --target-platform android-arm64 \
   --target lib/main_tv.dart --dart-define=COLANAS_TV=1     # Android TV
 ```
 
+相册独立端在仓库根目录用 `build-photo.bat`（内部 `--target lib/main_photo.dart --android-project-arg=nasApp=photo`，applicationId `com.colanas.photo`，可装在主客户端旁边）。
+
+⚠️ **安卓三份包不可互通**：`apk` / `apk_tv` / `apk_photo` 身份不同，客户端检查更新分别带 `build=phone|tv|photo`；`tool/release/release.js` 已加映射，发版要同时提供三份包（相册端当前待正式发版，`release/update.json` 尚未挂 `apk_photo`）。
+
 ⚠️ **只 analyze 改动过的文件是不够的** —— 会漏掉「被别处引用的库文件」。批量替换脚本曾把一个库文件清成 0 字节，单文件检查全绿、全量却报 7 个 error。批量改完顺手扫一遍提交内文件的字节数是否骤降。
 
 ## 工程红线（违反了按缺陷处理）
@@ -119,7 +124,7 @@ flutter build apk --release --target-platform android-arm64 \
 ## 加一个功能的标准流程
 
 1. 改 **TypeBox schema**（新增路由 / 字段），不手写生成物。
-2. 需要新文案 → 改 `contracts/i18n.json` + `contracts/messages/{zh-CN,en-US}.json` → `npm run gen:i18n`。
+2. 需要新文案 → 改 `contracts/i18n.json` + `contracts/messages/{zh-CN,en-US}.json` → `npm run gen:i18n`（键数写在 `packages/nas_core/lib/l10n/keys.dart` 的 `i18nKeyCount`，当前 3155）。
 3. 需要新页面 → 走 `node tool/new-app.js`，并在 `contracts/apps.json` 里登记导航（否则 `tool/check/app-nav-check.js` 的双向对账会报 `nav-orphan`）。
 4. 跑生成链：`build → gen → gen:client → api:doc → sdk → gen:i18n → migrate:verify`。
 5. `flutter analyze lib` 全量 + 相关 smoke + `npm run verify`。

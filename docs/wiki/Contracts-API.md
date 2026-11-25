@@ -13,7 +13,7 @@ TypeBox schema（内核 + 各域模块的 route）
         │
         ├─► ① Dart ApiClient + DTO ──► packages/nas_core/lib/api/
         ├─► ② i18n 键骨架（多语言）
-        ├─► ③ AppRegistry（六端入口注册表）
+        ├─► ③ AppRegistry（多端入口注册表，含相册独立端）
         ├─► ④ TypeScript / Python SDK ──► sdk/
         └─► ⑤ API 文档 ──► docs/api/api-reference.md
 ```

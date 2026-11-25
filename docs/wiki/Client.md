@@ -1,9 +1,9 @@
 # 客户端
 
-> 一份 Flutter 代码，编译出桌面 / 手机 / Web / Android TV / Apple TV / 鸿蒙各端。
+> 一份 Flutter 代码，编译出桌面 / 手机 / Web / Android TV / Apple TV / 鸿蒙 / 相册独立端各端。
 > 细节见仓库 `docs/04-客户端.md`。
 
-## 六端一套代码
+## 一套代码，多端入口
 
 | 端 | 入口 | 说明 |
 | --- | --- | --- |
@@ -13,8 +13,9 @@
 | Android TV | `apps/colanas_os/lib/main_tv.dart` | 独立入口，遥控器焦点导航；打包加 `--dart-define=COLANAS_TV=1` |
 | Apple TV | 原生壳 + Flutter 界面 | 官方无 Flutter 支持，保留 Swift 壳 + 桥接 |
 | 鸿蒙 | `apps/colanas_os/ohos/` | `flutter_ohos` fork，必须与 Flutter 3.47 配套 |
+| 相册独立端 | `apps/colanas_os/lib/main_photo.dart` | 同一工程换入口，登录后直进相册时间轴；`build-photo.bat` 用 `-PnasApp=photo` 出包，applicationId `com.colanas.photo`，与主客户端**并存安装** |
 
-> TV 版与普通版**共用全部业务代码**，只换入口与外壳：播放器、影视、音乐、我的四个板块完全同源，改一处全端生效。
+> TV 版 / 相册版与普通版**共用全部业务代码**，只换入口与外壳：播放器、影视、音乐、我的四个板块完全同源，改一处全端生效。相册版隐藏「回工作台」的房子入口，登录后直接落在相册时间轴。
 
 ## 仓库里的客户端代码
 
@@ -24,6 +25,7 @@ apps/
 │  ├─ lib/
 │  │  ├─ main.dart          # 普通入口
 │  │  ├─ main_tv.dart       # TV 入口（runColanasApp(tvEntry: true)）
+│  │  ├─ main_photo.dart    # 相册独立端入口（runColanasApp(mode: photo)）
 │  │  ├─ core/              # API 会话、设置、日志、播放内核与工具
 │  │  ├─ shell/             # 导航外壳、登录、首页
 │  │  └─ features/          # photo video music files discover blog ai
@@ -31,8 +33,8 @@ apps/
 │  │                        # accounts terminal settings tv home login
 │  ├─ test/                 # 单测
 │  └─ ohos/ windows/ android/ ios/ linux/ web/
-├─ music_client/            # 独立音乐端
-├─ photo_client/            # 独立相册端
+├─ music_client/            # 独立音乐端（历史工程）
+├─ photo_client/            # 历史脚手架；相册正式包改从 colanas_os 用 build-photo.bat 出
 └─ sync_client/             # 独立同步端
 
 packages/
@@ -41,7 +43,7 @@ packages/
 └─ nas_media/               # 媒体播放相关
 ```
 
-**独立端**（`music_client` / `photo_client` / `sync_client`）从「path 依赖整份 app」改成了依赖 `nas_core` / `nas_ui`，改完必须跑各自的自检脚本（`_check_standalone_*.py`）。
+**独立端**（`music_client` / `photo_client` / `sync_client`）从「path 依赖整份 app」改成了依赖 `nas_core` / `nas_ui`，改完必须跑各自的自检脚本（`_check_standalone_*.py`）。其中 `photo_client/` **只保留为历史脚手架**：相册的正式包现在从 `apps/colanas_os` 用根目录 `build-photo.bat` 构建（换入口 + 换 applicationId，保留完整的备份服务 / 更新安装器 / FileProvider），产物 `ColaNasOs-Photo-<ver>-android-arm64.apk`。
 
 ## 导航
 
@@ -67,7 +69,10 @@ packages/
 | TV 音轨与平台视图 | `onTracksChanged` 检测音轨：选中 TrueHD / DTS-HD MA 这类无平台解码器的音轨时主动报错，让 Dart 侧切服务端转码（视频直通 + 音频转 AAC），避免「有画面没声音」；平台视图走 **Hybrid Composition 真实 Surface**（`initExpensiveAndroidView` + `AndroidViewSurface`），保住 HDR / 杜比动态元数据 |
 | 直连 vs 转码 | 用户选「原画」时优先直连；转码只发生在结构性解不了、用户显式选了分辨率档、直连实测跟不上或颜色无法保证时 |
 | 原画直通 | `preset=original` 会话只换容器不重编码，DV / HDR 元数据原样保留；播放列表读 ffmpeg 真实分片，音轨可安全封装时一并 copy |
-| DV / HDR | 电视按 `Display.HdrCapabilities` 决定，支持 DV / HDR10+ 就交给电视；桌面 libmpv 因缺少 libplacebo / RPU 仍不做 DV 直连 |
+| DV / HDR | 电视按 `Display.HdrCapabilities` 决定，支持 DV / HDR10+ 就交给电视；桌面 libmpv 因缺少 libplacebo / RPU 仍不做 DV 直连。**DV 电视必须关隧道**并钉住 DV 视频轨 + AAC 音轨：MTK 电视开隧道只拿到 HEVC 解码器、输出会退化成 HDR10 基础层；`.m3u8` 按 HLS 声明，DV 硬解失败兜底加 `illegalstateexception`，解码诊断落日志 |
+| 长按加速拖进度 | TV 遥控器左右键按住 **420 ms** 后升级为加速拖动，速度 4×→180× 指数增长，**松开才真正 seek**；短按仍是普通跳时间 |
+| 跟手切集 | 上下滑切集在原生层用 `PlayerView.setOffset` 同步平移，相邻条目抽帧卡补屏，无缝 `pushReplacement` 无转场，修复换集黑屏 / 所有权竞争（`_active` / `claim()` / `isActiveInstance`） |
+| 混合库播放 | 影视 / 图片混合库播放页改成「列表 + 删除当前影片」，去掉快退 / 快进；短剧换集预热相邻抽帧、抽帧占位到首帧 |
 | 响度归一 | 库级开关随 `compat.audioNormalize` 下发；直连时播放器套 `dynaudnorm`，转码流由服务端处理 |
 | 首片 | 2 秒分片 + `force_key_frames 2s` + 缩短 probesize ⇒ 同机首片约 1.1 s（不含色调映射） |
 | 冷启动慢 | 8 s 那截是**硬件编码器探测**（逐个试编），探测结果落盘复用，第二次只要 0.3 s |
@@ -86,7 +91,7 @@ packages/
 ## 无障碍与多端输入
 
 - TV 外框：↑/↓ 按内容行移动，到页面最顶才回 tab；← → 横向移动焦点；OK 进入内容 / 确认。返回从内容区先回当前栏目的 tab，站在 tab 上第一次给退出提示、3 秒内再按一次才退出，其它任意键清零。
-- TV 播放器：无操作栏时 OK = 暂停/继续、← → = 跳时间；↓ 唤出操作栏（先落进度行），再按 ↓ 进入按钮行选字幕 / 音轨 / 画质；OK 在进度行收起操作栏、在按钮行执行；返回直接退出播放页。
+- TV 播放器：无操作栏时 OK = 暂停/继续、← → = 跳时间（**长按左右键加速拖动进度，松开才 seek**）；↓ 唤出操作栏（先落进度行），再按 ↓ 进入按钮行选字幕 / 音轨 / 画质；OK 在进度行收起操作栏、在按钮行执行；上下滑跟手切集；返回直接退出播放页。
 - 键盘：空格播放/暂停、← 快退 10 s、→ 快进 30 s、↑↓ 切上一条/下一条（仅在有播放队列时接管）、F 全屏、M 静音。
 - TV 与 PC 的跳转**走同一条 `_seekTo`**，只是键位布局按遥控器重新分配。
 
