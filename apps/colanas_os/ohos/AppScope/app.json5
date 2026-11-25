@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.colanas.os",
     "vendor": "colanas",
-    "versionCode": 1005000,
-    "versionName": "1.5.0",
+    "versionCode": 1005007,
+    "versionName": "1.5.7",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
   }
