@@ -51,8 +51,11 @@ curl -s -X POST "http://127.0.0.1:5174/hot-reload?token=colanas-dev-ctl"    # �
 | （精简包）      | `npm run dist:lite` → `dist_installer/ColaNasOs-Server-<版本>-<arch>-lite-setup.exe`（不含 `vendor/models`，约 206 MB）                            | 不需要本地 AI / 体积敏感时用                                                           |
 | （PC 客户端）   | `build-pc.bat`（= `npm run dist:client`）→ `dist_installer/ColaNasOs-Client-<版本>-Setup.exe` + 同名便携 zip（Flutter Windows 桌面端）          | 客户端与服务端分开安装；客户端也能连局域网里的服务端                                   |
 | （安卓客户端）  | `build-android.bat` → `dist_installer/ColaNasOs-Client-<版本>-android-arm64.apk`（Flutter Android 客户端）                                        | 出手机包时用；**安卓包是客户端**，连服务端                                              |
+| （相册独立端）  | `build-photo.bat` → `dist_installer/ColaNasOs-Photo-<版本>-android-arm64.apk`（相册 App，applicationId `com.colanas.photo`，可与主客户端并存）        | 出相册包时用；与主客户端**同一工程同一版本**，只换 applicationId / 桌面名称 / 入口 `lib/main_photo.dart` |
 
 **产物一律落在 `dist_installer/`，文件名带 `Server` / `Client` 前缀**：装完分不清装的是哪个是踩过的坑。
+**相册独立端的更新走同一份 `update.json` 的 `client_android.assets.apk_photo`**：检查更新时客户端带
+`build=photo`，服务端只回相册包 —— `apk`（主客户端手机）/ `apk_tv` / `apk_photo` 三份包身份不同，绝不互通。
 客户端另有「开机自动启动」开关（托盘右键 + 设置 → 外观），落地为
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`（值名 `ColaNasOs 客户端`）。
 

@@ -12,6 +12,7 @@ import '../core/app_settings.dart';
 import '../core/audio_background.dart';
 import '../core/client_log.dart';
 import '../core/i18n_setup.dart';
+import '../core/launch_mode.dart';
 import '../core/perf_diagnostics.dart';
 import '../core/session.dart';
 import '../core/settings_store.dart';
@@ -20,7 +21,7 @@ import '../core/video_render.dart';
 import '../features/login/login_page.dart';
 import '../features/music/music_page.dart';
 import '../features/photo/backup/photo_backup_bootstrap.dart';
-import '../features/photo/photo_page.dart';
+import '../features/photo/photo_shell.dart';
 import '../features/sync/sync_page.dart';
 import '../features/sync/sync_engine.dart';
 import '../features/sync/sync_scheduler.dart';
@@ -31,12 +32,7 @@ import '../features/update/update_service.dart';
 import 'app_shell.dart';
 import 'desktop_tray.dart';
 
-/// 启动模式：完整客户端 / 相册独立端 / 音乐独立端 / 同步独立端。
-///
-/// 独立端**复用主客户端**：`photo_client` / `music_client` / `sync_client`
-/// 通过 path 依赖复用本包，入口只有一行 `runColanasApp(mode: ...)`。
-/// 改主客户端，各端同步生效。
-enum AppLaunchMode { full, photo, music, sync }
+export '../core/launch_mode.dart' show AppLaunchMode;
 
 /// 客户端机器标识：PC 端与同步任务共用 SyncFs 的稳定设备 id；
 /// 移动端 / 普通 Web 使用本地持久化的随机 id。
@@ -87,6 +83,7 @@ Future<void> runColanasApp({
   AppLaunchMode mode = AppLaunchMode.full,
   bool tvEntry = false,
 }) async {
+  currentLaunchMode = mode;
   WidgetsFlutterBinding.ensureInitialized();
   // 启动阶段耗时：用户反馈「打开就卡、完全点不了」时，先要分清是启动阶段
   // 卡在磁盘/网络（设置、会话恢复）还是渲染。这里只记几个时间点，结束后
@@ -295,7 +292,9 @@ class ColaNasApp extends StatelessWidget {
                     if (tvEntry) return const TvShell();
                     return switch (launchMode) {
                       AppLaunchMode.full => const AppShell(),
-                      AppLaunchMode.photo => const PhotoPage(),
+                      // 相册独立端也走相册模块外壳：登录后只有相册各页，
+                      // 没有「回工作台」的房子（见 PhotoShellPage）。
+                      AppLaunchMode.photo => const PhotoShellPage(),
                       AppLaunchMode.music => const MusicPage(),
                       AppLaunchMode.sync => const SyncPage(),
                     };

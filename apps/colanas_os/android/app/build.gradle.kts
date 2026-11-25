@@ -16,6 +16,15 @@ val nasAbiFilters = if (nasAbi == "universal") {
     listOf(nasAbi)
 }
 
+// 端形态开关：`-PnasApp=photo` 出「相册独立端」（`build-photo.bat` 传），
+// 不传就是主客户端。同一个工程、同一套原生能力，只换 applicationId 与桌面名称 ——
+// 相册端要单独装、单独更新，包名必须与主客户端不同，否则会互相覆盖安装。
+// 版本号仍与主客户端共用 pubspec 的 `X.Y.Z+B`（相册版本 = 主 app 版本）。
+val nasApp = (project.findProperty("nasApp") as String?)?.trim().orEmpty()
+val nasIsPhoto = nasApp == "photo"
+val nasAppId = if (nasIsPhoto) "com.colanas.photo" else "com.colanas.os"
+val nasAppLabel = if (nasIsPhoto) "ColaNas 相册" else "ColaNasOs 客户端"
+
 android {
     namespace = "com.colanas.os"
     compileSdk = flutter.compileSdkVersion
@@ -27,8 +36,10 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.colanas.os"
+        // 主客户端 `com.colanas.os`；相册端 `com.colanas.photo`（见上面的 nasApp）
+        applicationId = nasAppId
+        // 桌面名称随端形态变化（清单里写 `${appLabel}`）
+        manifestPlaceholders["appLabel"] = nasAppLabel
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

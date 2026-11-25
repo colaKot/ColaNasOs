@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/app_visibility.dart';
+import '../../core/launch_mode.dart';
 import '../../core/session.dart';
 import '../../shell/app_nav_shell.dart';
+import 'backup/photo_backup_banner.dart';
 import 'backup_page.dart';
 import 'cleanup_page.dart';
 import 'footprint_map_page.dart';
@@ -23,6 +25,7 @@ import 'photo_preview_settings_page.dart';
 import 'photo_geo_page.dart';
 import 'photo_growth_page.dart';
 
+import 'photo_about_page.dart';
 import 'photo_source_page.dart';
 import 'photo_timeline_tab.dart';
 import 'photo_trash_page.dart';
@@ -42,7 +45,9 @@ class PhotoShellPage extends StatefulWidget {
 
 class _PhotoShellPageState extends State<PhotoShellPage> {
   /// 相册首页的卡片要能跳到别的菜单项（如「回忆」「人物」），走外部选中项
-  final NavSelection _selection = NavSelection('home');
+  final NavSelection _selection = NavSelection(
+    currentLaunchMode == AppLaunchMode.photo ? 'timeline' : 'home',
+  );
 
   Widget _content(String key) {
     // 契约里没有、但页面已实现的入口：
@@ -107,6 +112,10 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
         return const PhotoCleanupPage(embedded: true);
       case 'backup':
         return const PhotoBackupPage(embedded: true);
+      case 'about':
+        // 「关于」只在相册独立端出现（契约里 `when: standalone`）：
+        // 主客户端的版本信息在「设置 → 关于」，这里再放一份会把用户绕晕。
+        return const PhotoAboutPage();
       case 'trash':
         return const PhotoTrashPage();
       case 'source':
@@ -131,14 +140,23 @@ class _PhotoShellPageState extends State<PhotoShellPage> {
 
   @override
   Widget build(BuildContext context) {
+    // 相册独立端：没有工作台，不显示「回工作台」的房子；登录后直接落在照片时间轴。
+    final standalone = currentLaunchMode == AppLaunchMode.photo;
     return AppNavShell(
       appId: 'photo',
-      defaultKey: 'home',
+      defaultKey: standalone ? 'timeline' : 'home',
       selection: _selection,
+      showHome: !standalone,
+      // 「更多」页顶部放手机备份大横条（与工作台同一个入口，点进去就是备份页）
+      moreHeader: standalone && isMobileApp()
+          ? const PhotoBackupBanner()
+          : null,
       // 「相册备份」只在手机 App 出现（契约里该项 `when: mobileApp`）：
       // 它要读本机相册权限，web / 桌面没有这个东西
       conditions: {
         if (isMobileApp()) 'mobileApp',
+        // 相册独立端专有条目（「关于」）：主客户端有自己的「设置 → 关于」
+        if (standalone) 'standalone',
         // AI 设置（模型 / 识别参数）涉及整库配置，只给超级管理员看
         if (ApiSession.instance.isAdmin) 'superAdmin',
       },
