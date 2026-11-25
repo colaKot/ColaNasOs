@@ -5,6 +5,7 @@ import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
 import '../../core/app_version.dart';
+import '../../core/launch_mode.dart';
 import '../../core/session.dart';
 import '../../core/settings_store.dart';
 import '../../core/tv_mode.dart';
@@ -20,6 +21,18 @@ import 'update_install.dart';
 /// 服务端更新走同一份清单（`system/update/check?component=server`），
 /// 由设置页里的「服务端更新」区块负责，与客户端更新互不阻塞。
 enum UpdatePhase { idle, checking, available, downloading, verifying, installing, done, failed }
+
+/// 安卓要装哪一份包：`apk_tv` / `apk_photo` / `apk`。
+///
+/// 三份包身份不同，绝不能互相代替（见 `ClientUpdate.assetFor`）：
+/// TV 与主客户端手机包是同一个 applicationId，相册端是另一个 applicationId。
+/// 判断依据是**启动入口**（`tv_mode.dart` / `launch_mode.dart`），
+/// 不是可以随手切换的界面设置。
+String get clientApkKind {
+  if (isTvPackage) return 'apk_tv';
+  if (currentLaunchMode == AppLaunchMode.photo) return 'apk_photo';
+  return 'apk';
+}
 
 class UpdateAsset {
   const UpdateAsset({
@@ -64,27 +77,35 @@ class ClientUpdate {
 
   /// 按平台挑要装的资产：PC 只认 setup（便携版走 zip，不在这里自替换）
   ///
-  /// 安卓按**包身份** [isTvPackage] 分辨装的是哪一份包 —— 不能用可切换的
-  /// `tvMode` 设置：手机用户把 TV 版面打开后，不该被推 TV 安装包。
-  /// 包身份由入口决定（见 `tv_mode.dart`），不依赖 `--dart-define` 写没写对。
+  /// 安卓按**包身份**分三份，绝不能互通：
+  ///   - TV 包 → `apk_tv`（与手机包同一个 applicationId，装错就是把电视端换成手机 UI）
+  ///   - 相册独立端 → `apk_photo`（另一个 applicationId，装错就是凭空多出一个主客户端）
+  ///   - 主客户端手机包 → `apk`
   ///
-  /// **绝不允许回落到另一份包**：手机包和 TV 包是同一个 applicationId，
-  /// 电视上装进手机包就等于把遥控器彻底废掉（这也是「TV 更新成手机端」的成因）。
-  /// 拿不到与自己匹配的资产时返回 null，界面显示「没有适用于本端的安装包」。
-  UpdateAsset? assetFor(String platform) {
-    if (platform == 'client_android') {
-      final want = isTvPackage ? 'apk_tv' : 'apk';
-      for (final a in assets) {
-        if (a.kind == want) return a;
-      }
-      return null;
-    }
-    // PC 只认安装版：便携版是 zip，没法「自己替换自己」，硬跑只会把 zip 当 exe 启动
+  /// 包身份由入口决定（见 `tv_mode.dart` / `launch_mode.dart`），不依赖
+  /// `--dart-define` 写没写对。拿不到与自己匹配的资产时返回 null，
+  /// 界面显示「没有适用于本端的安装包」。
+  UpdateAsset? assetFor(String platform) => assetForPlatform(platform, assets);
+}
+
+/// 按平台从资产清单里挑出「本端能装的那一份」。
+///
+/// 与 [ClientUpdate.assetFor] 是同一套规则，抽成函数是因为「检查更新」阶段
+/// 就要先判断有没有本端的包：相册独立端 / TV 包身份不同，正式发版经常只发
+/// 主客户端手机包，那时不能只凭服务端的 `hasUpdate` 就亮红点。
+UpdateAsset? assetForPlatform(String platform, List<UpdateAsset> assets) {
+  if (platform == 'client_android') {
+    final want = clientApkKind;
     for (final a in assets) {
-      if (a.kind == 'setup') return a;
+      if (a.kind == want) return a;
     }
     return null;
   }
+  // PC 只认安装版：便携版是 zip，没法「自己替换自己」，硬跑只会把 zip 当 exe 启动
+  for (final a in assets) {
+    if (a.kind == 'setup') return a;
+  }
+  return null;
 }
 
 class UpdateStatus {
@@ -213,14 +234,36 @@ class UpdateService {
       error: '',
     );
     try {
-      final res = await ApiSession.instance.client.systemUpdateCheck(
-        component: component,
-        current: kAppVersion,
-        currentCode: kAppVersionCode,
-        // 自报构建形态：服务端据此只给我们这一份包（TV 拿不到手机包，反之亦然）
-        build: component == 'client_android' ? (isTvPackage ? 'tv' : 'phone') : null,
-        force: force ? '1' : '0',
-      );
+      // 自报构建形态：服务端据此只给我们这一份包
+      // （TV 拿不到手机包，相册端拿不到主客户端包，反之亦然）
+      final buildKind = component == 'client_android'
+          ? switch (clientApkKind) {
+              'apk_tv' => 'tv',
+              'apk_photo' => 'photo',
+              _ => 'phone',
+            }
+          : null;
+      Future<SystemUpdateCheckResponse> request(String? build) {
+        return ApiSession.instance.client.systemUpdateCheck(
+          component: component,
+          current: kAppVersion,
+          currentCode: kAppVersionCode,
+          build: build,
+          force: force ? '1' : '0',
+        );
+      }
+
+      SystemUpdateCheckResponse res;
+      try {
+        res = await request(buildKind);
+      } on ApiError catch (e) {
+        // 老服务端的 querystring 校验只认 phone/tv，带 photo 会直接 400。
+        // 只有这种情况才退回「不带 build」：服务端会把三份包都给出来，
+        // 客户端自己按包身份挑（`assetFor` 仍然只认自己那一份），
+        // 升级服务端后自动恢复精确过滤。离线 / 超时不重试，避免白等两遍。
+        if (buildKind != 'photo' || e.statusCode != 400) rethrow;
+        res = await request(null);
+      }
       serverCheck.value = res;
       // 服务端把「清单源不可达」也返回 200 + error：不能当成「已是最新」
       if (res.error.isNotEmpty) {
@@ -250,8 +293,15 @@ class UpdateService {
             .map(UpdateAsset.fromJson)
             .whereType<UpdateAsset>()
             .toList();
+        // 只有清单里真有「本端能装的包」才算有更新。
+        //
+        // 服务端已经按 `build=photo|tv|phone` 过滤，但两端版本对不上时会走到
+        // 「不带 build」的兼容老服务端口径：那时服务端按主客户端的版本回
+        // `hasUpdate=true`，相册端拿到的却只有 apk / apk_tv —— 于是界面上一直
+        // 提示有新版本，点进去却没有可下载的包（用户反馈）。这里按包身份再收一次口。
+        final hasOwnAsset = assetForPlatform(component, assets) != null;
         info = ClientUpdate(
-          hasUpdate: raw['hasUpdate'] == true,
+          hasUpdate: raw['hasUpdate'] == true && hasOwnAsset,
           latestSemver: '${raw['latestSemver'] ?? ''}',
           latestVersionCode: (raw['latestVersionCode'] as num?)?.toInt() ?? 0,
           notes: notes,
@@ -263,6 +313,9 @@ class UpdateService {
         await SettingsStore.instance.setString('update.latestSemver', info.latestSemver);
         status.value = const UpdateStatus(phase: UpdatePhase.available);
       } else {
+        // 没有「本端可装」的新版本：把上次缓存的新版本号清掉，避免 6 小时内
+        // 登录时又凭它亮一个下载不了的更新红点（见 [checkOnLogin]）。
+        await SettingsStore.instance.setString('update.latestSemver', '');
         status.value = const UpdateStatus(phase: UpdatePhase.idle);
       }
     } catch (e) {
@@ -301,9 +354,9 @@ class UpdateService {
       return;
     }
     // 最后一道闸：安卓上装的包必须与自己这份构建同形态。
-    // 宁可这次不更新，也不能把电视端换成手机 UI。
+    // 宁可这次不更新，也不能把电视端换成手机 UI / 给相册端装上主客户端。
     if (!kIsWeb && component == 'client_android') {
-      final want = isTvPackage ? 'apk_tv' : 'apk';
+      final want = clientApkKind;
       if (asset.kind != want) {
         status.value = UpdateStatus(
           phase: UpdatePhase.failed,

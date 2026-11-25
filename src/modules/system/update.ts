@@ -271,8 +271,8 @@ export function registerSystemUpdate(app: FastifyInstance, k: KernelApi): void {
           current: Type.Optional(Type.String({ maxLength: 32, description: '客户端当前 semver' })),
           currentCode: Type.Optional(Type.Integer({ minimum: 0 })),
           build: Type.Optional(
-            Type.Union([Type.Literal('phone'), Type.Literal('tv')], {
-              description: '安卓客户端构建形态：TV 只下发 apk_tv，手机只下发 apk',
+            Type.Union([Type.Literal('phone'), Type.Literal('tv'), Type.Literal('photo')], {
+              description: '安卓客户端构建形态：TV 只下发 apk_tv，手机只下发 apk，相册端只下发 apk_photo',
             }),
           ),
           force: Type.Optional(Type.Union([Type.Literal('1'), Type.Literal('0')])),
@@ -300,7 +300,9 @@ export function registerSystemUpdate(app: FastifyInstance, k: KernelApi): void {
        * 本地调试包优先：安卓 + 调试目录里有 APK 时，连清单源都不碰。
        * 否则离线 NAS 会先在 GitCode / GitHub 上等满超时，用户看到的是「检查半天」。
        */
-      const useLocalApk = q.component === 'client_android' && svc.hasLocalApk();
+      const buildKind =
+        q.build === 'tv' ? 'tv' : q.build === 'photo' ? 'photo' : q.build === 'phone' ? 'phone' : undefined;
+      const useLocalApk = q.component === 'client_android' && svc.hasLocalApk(buildKind);
       /**
        * 检查失败**不是**接口错误：内网 NAS 常年离线，清单源也可能临时不可达。
        * 这里返回 200 + `error` 字段，让界面显示「检查失败，可稍后重试」，
@@ -355,7 +357,7 @@ export function registerSystemUpdate(app: FastifyInstance, k: KernelApi): void {
             currentVersionCode: q.currentCode,
             lanBase: lanBase(req),
             force,
-            build: q.build === 'tv' ? 'tv' : q.build === 'phone' ? 'phone' : undefined,
+            build: buildKind,
           });
           // 顺手把安装包缓存到本机：下次客户端来要时，局域网地址就是第一条。
           // 本地调试包本身就是局域网文件，再去拉清单预取只会白等超时。

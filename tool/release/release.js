@@ -247,6 +247,8 @@ function main() {
       client_android: [
         ['apk', 'apk'],
         ['apk_tv', 'apk-tv'],
+        // 相册独立端（com.colanas.photo）：与主客户端版本号一致，但包身份不同
+        ['apk_photo', 'apk-photo'],
       ],
     }[id];
     const assets = {};

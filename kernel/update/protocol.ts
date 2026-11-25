@@ -70,7 +70,15 @@ export interface ServerComponent {
   critical?: boolean;
 }
 
-export type ClientAssetKind = 'setup' | 'portable' | 'apk' | 'apk_tv';
+/**
+ * 客户端资产种类。
+ *
+ * 安卓三份包是**三个不同的 applicationId / 用途**，绝不能互相代替：
+ *   - `apk`        主客户端手机包（com.colanas.os）
+ *   - `apk_tv`     主客户端 TV 包（同一个 applicationId，编译入口不同）
+ *   - `apk_photo`  相册独立端包（com.colanas.photo，可与主客户端并存）
+ */
+export type ClientAssetKind = 'setup' | 'portable' | 'apk' | 'apk_tv' | 'apk_photo';
 
 export interface ClientComponent {
   semver: string;

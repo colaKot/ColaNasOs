@@ -274,10 +274,15 @@ export type InstallMode = 'auto' | 'delta' | 'full';
 /**
  * 安卓客户端的构建形态。
  *
- * 手机包与 TV 包是**同一个 applicationId**，服务器只能靠客户端自报的 `build`
- * 分辨，所以检查更新时一定要带上它 —— 否则电视上会被推手机包。
+ * - `phone`：主客户端手机包（com.colanas.os）
+ * - `tv`：主客户端 TV 包（同一个 applicationId，编译入口不同）
+ * - `photo`：相册独立端（com.colanas.photo，与主客户端并存）
+ *
+ * 三份包的 applicationId / 用途都不同，服务器只能靠客户端自报的 `build`
+ * 分辨，所以检查更新时一定要带上它 —— 否则相册端会被推成主客户端包，
+ * 电视上会被推手机包。
  */
-export type AndroidBuildKind = 'phone' | 'tv';
+export type AndroidBuildKind = 'phone' | 'tv' | 'photo';
 
 export interface ClientCheck {
   component: 'client_pc' | 'client_android';
@@ -356,6 +361,15 @@ export class UpdateService {
    * `kTvBuild` 选 `apk` / `apk_tv`。
    */
   readonly localTvApkDir: string;
+  /**
+   * 相册独立端调试包目录。
+   *
+   * 相册端是**另一个 applicationId**（com.colanas.photo），可以和主客户端并存，
+   * 但也意味着不能和手机包共用同一个投放目录（否则相册端会拿到主客户端包）。
+   *
+   * 默认 `<dataDir>/update/local-apk-photo`，可用 `COLANAS_LOCAL_PHOTO_APK_DIR` 覆盖。
+   */
+  readonly localPhotoApkDir: string;
   /** 本地 APK 的 sha256 缓存（按 文件名 + size + mtime 失效） */
   private readonly localApkMemo = new Map<string, { key: string; sha256: string }>();
   private readonly memo: SourceMemo;
@@ -387,6 +401,9 @@ export class UpdateService {
     this.localTvApkDir = process.env.COLANAS_LOCAL_TV_APK_DIR
       ? path.resolve(process.env.COLANAS_LOCAL_TV_APK_DIR)
       : path.join(this.updateDir, 'local-apk-tv');
+    this.localPhotoApkDir = process.env.COLANAS_LOCAL_PHOTO_APK_DIR
+      ? path.resolve(process.env.COLANAS_LOCAL_PHOTO_APK_DIR)
+      : path.join(this.updateDir, 'local-apk-photo');
     this.memo = new SourceMemo(path.join(this.updateDir, 'source-memo.json'));
   }
 
@@ -685,6 +702,10 @@ export class UpdateService {
     return this.apkCandidateIn(this.localTvApkDir);
   }
 
+  private localPhotoApkCandidate() {
+    return this.apkCandidateIn(this.localPhotoApkDir);
+  }
+
   private apkCandidateIn(dir: string): {
     file: string;
     name: string;
@@ -726,9 +747,23 @@ export class UpdateService {
     return { file: best.file, name: best.name, size: best.size, sha256: digest, meta };
   }
 
-  /** 目录里是否有调试 APK（不做哈希，供路由决定是否跳过清单源） */
-  hasLocalApk(): boolean {
-    for (const dir of [this.localApkDir, this.localTvApkDir]) {
+  /**
+   * 目录里是否有调试 APK（不做哈希，供路由决定是否跳过清单源）。
+   *
+   * 传了 `build` 就只看这一种构建形态的目录：相册端目录空着、
+   * 手机包目录里有包时，不能因为「有本地包」就跳过清单源 —— 那会让相册端
+   * 永远看不到线上更新。
+   */
+  hasLocalApk(build?: AndroidBuildKind): boolean {
+    const dirs =
+      build === 'photo'
+        ? [this.localPhotoApkDir]
+        : build === 'tv'
+          ? [this.localTvApkDir]
+          : build === 'phone'
+            ? [this.localApkDir]
+            : [this.localApkDir, this.localTvApkDir, this.localPhotoApkDir];
+    for (const dir of dirs) {
       try {
         if (fs.readdirSync(dir).some((n) => /\.apk$/i.test(n))) return true;
       } catch {
@@ -741,7 +776,7 @@ export class UpdateService {
   /** 局域网下载地址的 sha 校验：只允许分发当前目录里真实存在的那个 APK */
   localAssetPath(sha256Hex: string): string | null {
     const want = sha256Hex.toLowerCase();
-    for (const cand of [this.localApkCandidate(), this.localTvApkCandidate()]) {
+    for (const cand of [this.localApkCandidate(), this.localTvApkCandidate(), this.localPhotoApkCandidate()]) {
       if (cand && cand.sha256.toLowerCase() === want) return cand.file;
     }
     return null;
@@ -783,7 +818,11 @@ export class UpdateService {
     if (component !== 'client_android') return null;
     const phone = this.localApkCandidate();
     const tv = this.localTvApkCandidate();
-    if (!phone && !tv) return null;
+    const photo = this.localPhotoApkCandidate();
+    if (!phone && !tv && !photo) return null;
+    // 相册端只认相册调试目录：目录空着就回 null 走清单源，不能因为手机包
+    // 存在就判定「没有更新」—— 那会让相册端永远看不到线上版本。
+    if (opts.build === 'photo' && !photo) return null;
     const base = (opts.lanBase || '').replace(/\/+$/, '');
     if (!base) return null;
 
@@ -793,23 +832,29 @@ export class UpdateService {
      * 只下发与自己这一份包匹配的资产。
      *
      * 手机包和 TV 包是**同一个 applicationId**，装错就是把电视端换成手机 UI
-     * （遥控器点不动，连退出都难）。所以 TV 构建只认 `apk_tv`，手机只认 `apk`；
-     * 拿不到匹配的包时宁可回「没有更新」，也不能拿另一份凑数。
-     * `build` 缺省（老客户端）才两个都给 —— 那批客户端自己按 `kTvBuild` 挑。
+     * （遥控器点不动，连退出都难）；相册端是**另一个 applicationId**
+     * （com.colanas.photo），装错就是凭空多出一个主客户端。所以三种构建
+     * 各自只认自己那一种资产，拿不到匹配的包时宁可回「没有更新」。
+     * `build` 缺省（老客户端）才三个都给 —— 那批客户端自己按包身份挑。
      */
     const picked =
       opts.build === 'tv'
         ? tv
           ? [{ cand: tv, kind: 'apk_tv' as ClientAssetKind }]
           : []
-        : opts.build === 'phone'
-          ? phone
-            ? [{ cand: phone, kind: 'apk' as ClientAssetKind }]
+        : opts.build === 'photo'
+          ? photo
+            ? [{ cand: photo, kind: 'apk_photo' as ClientAssetKind }]
             : []
-          : [
-              ...(phone ? [{ cand: phone, kind: 'apk' as ClientAssetKind }] : []),
-              ...(tv ? [{ cand: tv, kind: 'apk_tv' as ClientAssetKind }] : []),
-            ];
+          : opts.build === 'phone'
+            ? phone
+              ? [{ cand: phone, kind: 'apk' as ClientAssetKind }]
+              : []
+            : [
+                ...(phone ? [{ cand: phone, kind: 'apk' as ClientAssetKind }] : []),
+                ...(tv ? [{ cand: tv, kind: 'apk_tv' as ClientAssetKind }] : []),
+                ...(photo ? [{ cand: photo, kind: 'apk_photo' as ClientAssetKind }] : []),
+              ];
     if (!picked.length) {
       // 明确「没有适用于当前端形态的包」，不要退化成「有更新但下不了」
       this.log('no local apk for this build', { build: opts.build || '' });
@@ -886,21 +931,28 @@ export class UpdateService {
         : true;
 
     /**
-     * 安卓资产按构建形态过滤：TV 只留 `apk_tv`，手机只留 `apk`。
+     * 安卓资产按构建形态过滤：TV 只留 `apk_tv`，手机只留 `apk`，
+     * 相册端只留 `apk_photo`。
      *
-     * 清单里只发了其中一份时（发版漏传 TV 包、或历史版本根本没有 TV 资产），
+     * 清单里只发了其中一份时（发版漏传 TV / 相册包、或历史版本根本没有该资产），
      * 宁可报「没有适用于本端的包」，也不能把另一份塞给客户端 —— 那会把电视端
-     * 直接换成手机 UI。
+     * 直接换成手机 UI，或者给相册端装上一个主客户端。
      */
     const wantKind: ClientAssetKind | '' =
-      component !== 'client_android' ? '' : opts.build === 'tv' ? 'apk_tv' : opts.build === 'phone' ? 'apk' : '';
+      component !== 'client_android'
+        ? ''
+        : opts.build === 'tv'
+          ? 'apk_tv'
+          : opts.build === 'photo'
+            ? 'apk_photo'
+            : opts.build === 'phone'
+              ? 'apk'
+              : '';
     const assets = Object.entries(c.assets ?? {})
       .filter(([kind]) => {
         if (!wantKind) return true;
         // 只对齐「另一个 apk 兄弟」，别的 kind（setup / portable）不参与安卓判断
-        if (wantKind === 'apk_tv') return kind !== 'apk';
-        if (wantKind === 'apk') return kind !== 'apk_tv';
-        return true;
+        return kind === wantKind;
       })
       .map(([kind, ref]) => ({
         kind: kind as ClientAssetKind,
