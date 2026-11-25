@@ -48,6 +48,9 @@ class AppNavShell extends StatefulWidget {
     this.conditions = const {},
     this.titleOf,
     this.selection,
+    this.showHome = true,
+    this.moreHeader,
+    this.onReselect,
   });
 
   /// 手机端「回工作台」的全局回调：由 [AppShell] 在 initState 注册。
@@ -78,6 +81,18 @@ class AppNavShell extends StatefulWidget {
 
   /// 外部选中项控制器（页面内快捷入口要跳菜单时用）
   final NavSelection? selection;
+
+  /// 手机顶栏是否显示「回工作台」的房子。相册独立端没有工作台，传 false。
+  final bool showHome;
+
+  /// 「更多」页顶部的自定义入口（如相册独立端的「手机备份」大横条）
+  final Widget? moreHeader;
+
+  /// 重复点当前已选中的菜单项（例如再点一次左侧栏的库名）时回调。
+  ///
+  /// 换选中项时内容本来就会重建，不需要这个回调；只有「同一个 key 再点一次」
+  /// 在默认实现里是空操作。影视库用它实现「点库名 = 回到库根」。
+  final void Function(String key)? onReselect;
 
   @override
   State<AppNavShell> createState() => _AppNavShellState();
@@ -180,6 +195,7 @@ class _AppNavShellState extends State<AppNavShell> {
   void _select(String id) {
     final selection = widget.selection;
     final tab = _tabOf(id);
+    final again = (selection?.key ?? _localKey) == id;
     // 换模块必须退出多选：否则工具条会挂在新页面上，点下去操作的是旧页面
     _bulk.hide();
     setState(() {
@@ -189,6 +205,7 @@ class _AppNavShellState extends State<AppNavShell> {
       if (selection == null) _localKey = id;
     });
     if (selection != null) selection.select(id);
+    if (again) widget.onReselect?.call(id);
   }
 
   /// 从「更多」页进入某一项：内容换、底部仍高亮「更多」
@@ -324,6 +341,7 @@ class _AppNavShellState extends State<AppNavShell> {
         title: tr('nav.more'),
         groups: _moreGroups(),
         onSelect: _selectFromMore,
+        header: widget.moreHeader,
       );
     }
     return KeyedSubtree(
@@ -368,7 +386,8 @@ class _AppNavShellState extends State<AppNavShell> {
                 notifier: _bulk,
                 child: NasAppScaffold(
                   title: _showingMorePage ? tr('nav.more') : _title,
-                  onHome: AppNavShell.onExitToHome,
+                  onHome: widget.showHome ? AppNavShell.onExitToHome : null,
+                  showHome: widget.showHome,
                   homeTooltip: tr('nav.home'),
                   onBack: back,
                   items: _mobileTabItems,

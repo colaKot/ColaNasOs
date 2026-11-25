@@ -3,12 +3,15 @@ import 'dart:async';
 // 以下 lint 属于本仓源码风格，保持 1:1 不改写。
 // ignore_for_file: use_null_aware_elements, unnecessary_underscores, use_build_context_synchronously, unused_element, dead_code, dead_null_aware_expression
 import '../../photo/folder_picker.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_context_menu/flutter_context_menu.dart';
 import 'package:nas_ui/nas_ui.dart';
+
 import '../../../shell/app_nav_shell.dart';
 import 'compat/getx.dart';
 import 'compat/i18n.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/display_labels.dart';
@@ -38,16 +41,18 @@ class DiscoverView extends StatelessWidget {
             _DiscoverTopBar(controller),
             const Divider(height: 1),
             Expanded(
-              child: Obx(() => IndexedStack(
-                    index: controller.tabIndex.value,
-                    children: [
-                      _DiscoverTab(controller),
-                      _PtTab(controller),
-                      _RssTab(controller),
-                      _TasksTab(controller),
-                      _SettingsTab(controller),
-                    ],
-                  )),
+              child: Obx(
+                () => IndexedStack(
+                  index: controller.tabIndex.value,
+                  children: [
+                    _DiscoverTab(controller),
+                    _PtTab(controller),
+                    _RssTab(controller),
+                    _TasksTab(controller),
+                    _SettingsTab(controller),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
@@ -87,7 +92,10 @@ String _proxiedImage(String raw, {String size = 'w342'}) {
 /// 取条目海报（优先用相对路径，回退到后端给的绝对地址）
 String _posterOf(Map<String, dynamic> item, {String size = 'w342'}) {
   final p = (item['poster_path'] ?? '').toString();
-  return _proxiedImage(p.isNotEmpty ? p : (item['poster_url'] ?? '').toString(), size: size);
+  return _proxiedImage(
+    p.isNotEmpty ? p : (item['poster_url'] ?? '').toString(),
+    size: size,
+  );
 }
 
 /// 与「日本片榜单」一致的胶囊按钮样式
@@ -115,17 +123,27 @@ Widget _pill(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon,
-                size: dense ? 13 : 15,
-                color: selected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface),
+            Icon(
+              icon,
+              size: dense ? 13 : 15,
+              color: selected
+                  ? theme.colorScheme.onPrimary
+                  : theme.colorScheme.onSurface,
+            ),
             const SizedBox(width: 4),
           ],
           Text(
             label,
-            style: (dense ? theme.textTheme.labelMedium : theme.textTheme.labelLarge)?.copyWith(
-              color: selected ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface,
-              fontWeight: FontWeight.w600,
-            ),
+            style:
+                (dense
+                        ? theme.textTheme.labelMedium
+                        : theme.textTheme.labelLarge)
+                    ?.copyWith(
+                      color: selected
+                          ? theme.colorScheme.onPrimary
+                          : theme.colorScheme.onSurface,
+                      fontWeight: FontWeight.w600,
+                    ),
           ),
         ],
       ),
@@ -158,31 +176,40 @@ class _DiscoverTopBar extends StatelessWidget {
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: Obx(() => Row(
-                    children: [
-                      for (final t in _tabs) ...[
-                        _pill(
-                          theme,
-                          label: t['label']!.tr,
-                          selected: c.tabIndex.value == int.parse(t['index']!),
-                          onTap: () => c.setTab(int.parse(t['index']!)),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
+              child: Obx(
+                () => Row(
+                  children: [
+                    for (final t in _tabs) ...[
+                      _pill(
+                        theme,
+                        label: t['label']!.tr,
+                        selected: c.tabIndex.value == int.parse(t['index']!),
+                        onTap: () => c.setTab(int.parse(t['index']!)),
+                      ),
+                      const SizedBox(width: 8),
                     ],
-                  )),
+                  ],
+                ),
+              ),
             ),
           ),
           const SizedBox(width: 8),
-          Obx(() => IconButton(
-                tooltip: 'discover_refresh'.tr,
-                visualDensity: VisualDensity.compact,
-                onPressed: c.browsing.value ? null : () => c.loadBrowse(reset: true),
-                icon: c.browsing.value
-                    ? const SizedBox(
-                        width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.refresh, size: 20),
-              )),
+          Obx(
+            () => IconButton(
+              tooltip: 'discover_refresh'.tr,
+              visualDensity: VisualDensity.compact,
+              onPressed: c.browsing.value
+                  ? null
+                  : () => c.loadBrowse(reset: true),
+              icon: c.browsing.value
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh, size: 20),
+            ),
+          ),
         ],
       ),
     );
@@ -348,10 +375,16 @@ class _CatalogInfoBar extends StatelessWidget {
       padding: const EdgeInsets.only(top: 2, bottom: 6),
       child: Row(
         children: [
-          Icon(Icons.local_fire_department, size: 16, color: theme.colorScheme.primary),
+          Icon(
+            Icons.local_fire_department,
+            size: 16,
+            color: theme.colorScheme.primary,
+          ),
           const SizedBox(width: 4),
-          Text('${def['label']!.tr} · ${'discover_catalog_official'.tr}',
-              style: theme.textTheme.bodySmall),
+          Text(
+            '${def['label']!.tr} · ${'discover_catalog_official'.tr}',
+            style: theme.textTheme.bodySmall,
+          ),
           const Spacer(),
           TextButton.icon(
             onPressed: () => c.loadCatalog(),
@@ -374,13 +407,14 @@ class _DiscoverTab extends StatelessWidget {
     return Obx(() {
       final searchMode = c.mediaSearchKeyword.value.isNotEmpty;
       final bool catalog = c.catalogMode;
-      final List<Map<String, dynamic>> items =
-          catalog ? c.catalogItems : (searchMode ? c.mediaSearchResults : c.browseItems);
+      final List<Map<String, dynamic>> items = catalog
+          ? c.catalogItems
+          : (searchMode ? c.mediaSearchResults : c.browseItems);
       final bool loading = catalog
           ? c.catalogLoading.value
           : (searchMode
-              ? c.mediaSearching.value
-              : (c.browsing.value && c.browseItems.isEmpty));
+                ? c.mediaSearching.value
+                : (c.browsing.value && c.browseItems.isEmpty));
       // 滚到底部自动加载下一页（不再用「加载更多」按钮）
       return NotificationListener<ScrollNotification>(
         onNotification: (n) {
@@ -393,40 +427,41 @@ class _DiscoverTab extends StatelessWidget {
           return false;
         },
         child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(child: _DiscoverHeader(c)),
-          if (loading && items.isEmpty)
-            const SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (items.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Center(
-                  child: Text(
-                    searchMode
-                        ? 'discover_media_search_empty'.tr
-                        : (catalog ? 'discover_catalog_empty'.tr : 'discover_no_more'.tr),
-                    style: Theme.of(context).textTheme.bodySmall,
+          slivers: [
+            SliverToBoxAdapter(child: _DiscoverHeader(c)),
+            if (loading && items.isEmpty)
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (items.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: Text(
+                      searchMode
+                          ? 'discover_media_search_empty'.tr
+                          : (catalog
+                                ? 'discover_catalog_empty'.tr
+                                : 'discover_no_more'.tr),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
                 ),
-              ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 170,
-                  childAspectRatio: 0.58,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                ),
-                delegate: SliverChildBuilderDelegate(
-                  (ctx, i) {
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 170,
+                    childAspectRatio: 0.58,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                  ),
+                  delegate: SliverChildBuilderDelegate((ctx, i) {
                     final item = items[i];
                     final rawId = item['id'];
                     final mediaId = rawId is int ? rawId : null;
@@ -436,11 +471,15 @@ class _DiscoverTab extends StatelessWidget {
                       onTap: () => _showMediaDetail(ctx, c, item),
                       onToggleFav: () async {
                         if (!await _confirmOwnedMaybe(
-                            ctx, item, 'discover_subscribe'.tr)) {
+                          ctx,
+                          item,
+                          'discover_subscribe'.tr,
+                        )) {
                           return;
                         }
                         if (catalog || searchMode) {
-                          if (mediaId != null) c.toggleFavoriteByMediaId(mediaId);
+                          if (mediaId != null)
+                            c.toggleFavoriteByMediaId(mediaId);
                         } else {
                           c.toggleFavorite(i);
                         }
@@ -454,14 +493,19 @@ class _DiscoverTab extends StatelessWidget {
                               if (subId == null) {
                                 // 本地已有就不再闷头建一条重复订阅，先问一句
                                 if (!await _confirmOwnedMaybe(
-                                    ctx, item, 'discover_sub_add'.tr)) {
+                                  ctx,
+                                  item,
+                                  'discover_sub_add'.tr,
+                                )) {
                                   return;
                                 }
                                 final ok = await c.subscribe(mediaId);
                                 if (!ctx.mounted) return;
                                 NasSnack.show(
                                   ctx,
-                                  ok ? 'discover_saved'.tr : 'discover_save_failed'.tr,
+                                  ok
+                                      ? 'discover_saved'.tr
+                                      : 'discover_save_failed'.tr,
                                 );
                                 return;
                               }
@@ -469,34 +513,38 @@ class _DiscoverTab extends StatelessWidget {
                               if (!ctx.mounted) return;
                               NasSnack.show(
                                 ctx,
-                                ok ? 'discover_saved'.tr : 'discover_save_failed'.tr,
+                                ok
+                                    ? 'discover_saved'.tr
+                                    : 'discover_save_failed'.tr,
                               );
                             },
-                      onSearch:
-                          mediaId == null ? null : () => _showPtResults(ctx, c, mediaId: mediaId),
+                      onSearch: mediaId == null
+                          ? null
+                          : () => _showPtResults(ctx, c, mediaId: mediaId),
                     );
-                  },
-                  childCount: items.length,
+                  }, childCount: items.length),
                 ),
               ),
-            ),
-          if (!catalog && !searchMode && items.isNotEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 64),
-                child: Center(
-                  child: c.hasMore
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : Text('discover_no_more'.tr,
-                          style: Theme.of(context).textTheme.bodySmall),
+            if (!catalog && !searchMode && items.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 64),
+                  child: Center(
+                    child: c.hasMore
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(
+                            'discover_no_more'.tr,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                  ),
                 ),
               ),
-            ),
-        ],
-      ),
+          ],
+        ),
       );
     });
   }
@@ -524,21 +572,25 @@ class _DiscoverHeader extends StatelessWidget {
             child: Row(
               children: [
                 for (final d in c.availableCatalogs) ...[
-                  _pill(theme,
-                      dense: true,
-                      label: d['label']!.tr,
-                      selected: c.catalogCode.value == d['code'],
-                      icon: Icons.local_fire_department,
-                      onTap: () => c.openCatalog(d['code']!)),
+                  _pill(
+                    theme,
+                    dense: true,
+                    label: d['label']!.tr,
+                    selected: c.catalogCode.value == d['code'],
+                    icon: Icons.local_fire_department,
+                    onTap: () => c.openCatalog(d['code']!),
+                  ),
                   const SizedBox(width: 6),
                 ],
                 if (c.catalogMode)
-                  _pill(theme,
-                      dense: true,
-                      label: 'discover_catalog_back'.tr,
-                      selected: false,
-                      icon: Icons.grid_view,
-                      onTap: c.closeCatalog),
+                  _pill(
+                    theme,
+                    dense: true,
+                    label: 'discover_catalog_back'.tr,
+                    selected: false,
+                    icon: Icons.grid_view,
+                    onTap: c.closeCatalog,
+                  ),
               ],
             ),
           ),
@@ -548,20 +600,25 @@ class _DiscoverHeader extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _pill(theme,
-                    label: 'discover_movie'.tr,
-                    selected: c.mediaType.value == 'movie',
-                    onTap: () => c.setMediaType('movie')),
+                _pill(
+                  theme,
+                  label: 'discover_movie'.tr,
+                  selected: c.mediaType.value == 'movie',
+                  onTap: () => c.setMediaType('movie'),
+                ),
                 const SizedBox(width: 6),
-                _pill(theme,
-                    label: 'discover_tv'.tr,
-                    selected: c.mediaType.value == 'tv',
-                    onTap: () => c.setMediaType('tv')),
+                _pill(
+                  theme,
+                  label: 'discover_tv'.tr,
+                  selected: c.mediaType.value == 'tv',
+                  onTap: () => c.setMediaType('tv'),
+                ),
                 Container(
-                    width: 1,
-                    height: 16,
-                    margin: const EdgeInsets.symmetric(horizontal: 8),
-                    color: theme.dividerColor),
+                  width: 1,
+                  height: 16,
+                  margin: const EdgeInsets.symmetric(horizontal: 8),
+                  color: theme.dividerColor,
+                ),
                 // 排序：用触发控件的 context 定位，菜单才会贴着它弹出
                 Builder(
                   builder: (ctx) => _pill(
@@ -578,93 +635,101 @@ class _DiscoverHeader extends StatelessWidget {
           ),
           // 榜单模式下隐藏筛选（榜单是 TMDB 官方排序，筛选项不适用）
           if (!c.catalogMode) ...[
-          const SizedBox(height: 10),
-          // 风格（多选）
-          _titleRow(theme, 'discover_genre'),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: c.genres.map((g) {
-                final id = (g['id'] as num?)?.toInt() ?? 0;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: _pill(theme,
+            const SizedBox(height: 10),
+            // 风格（多选）
+            _titleRow(theme, 'discover_genre'),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: c.genres.map((g) {
+                  final id = (g['id'] as num?)?.toInt() ?? 0;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: _pill(
+                      theme,
                       dense: true,
                       label: (g['name'] ?? '').toString(),
                       selected: c.genreIds.contains(id),
-                      onTap: () => c.toggleGenre(id)),
-                );
-              }).toList(),
+                      onTap: () => c.toggleGenre(id),
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          // 年代（原语言栏改为年代）
-          _titleRow(theme, 'discover_year'),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: kDiscoverYears.map((y) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: _pill(theme,
+            const SizedBox(height: 10),
+            // 年代（原语言栏改为年代）
+            _titleRow(theme, 'discover_year'),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: kDiscoverYears.map((y) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: _pill(
+                      theme,
                       dense: true,
                       label: y['label']!.tr,
                       selected: c.yearCode.value == y['code'],
-                      onTap: () => c.setYear(y['code']!)),
-                );
-              }).toList(),
+                      onTap: () => c.setYear(y['code']!),
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
-          ),
-          // 国家/地区（跟在年代后面，四个档 + 不限）
-          _titleRow(theme, 'discover_country'),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: kDiscoverCountries.map((y) {
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: _pill(theme,
+            // 国家/地区（跟在年代后面，四个档 + 不限）
+            _titleRow(theme, 'discover_country'),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: kDiscoverCountries.map((y) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: _pill(
+                      theme,
                       dense: true,
                       label: y['label']!.tr,
                       selected: c.countryCode.value == y['code'],
-                      onTap: () => c.setCountry(y['code']!)),
-                );
-              }).toList(),
+                      onTap: () => c.setCountry(y['code']!),
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          // 评分下限
-          Row(
-            children: [
-              Text(
-                '${'discover_min_score'.tr}：${c.minVote.value.toStringAsFixed(1)} ${'discover_score_unit'.tr}',
-                style: theme.textTheme.bodyMedium,
-              ),
-              Expanded(
-                child: Slider(
-                  value: c.minVote.value,
-                  min: 0,
-                  max: 10,
-                  divisions: 20,
-                  label: c.minVote.value.toStringAsFixed(1),
-                  onChanged: c.setMinVote,
-                  onChangeEnd: (v) => c.loadBrowse(reset: true),
+            const SizedBox(height: 6),
+            // 评分下限
+            Row(
+              children: [
+                Text(
+                  '${'discover_min_score'.tr}：${c.minVote.value.toStringAsFixed(1)} ${'discover_score_unit'.tr}',
+                  style: theme.textTheme.bodyMedium,
                 ),
-              ),
-            ],
-          ),
-          Row(
-            children: [
-              Text('${'discover_total'.tr} ${c.totalResults.value}',
-                  style: theme.textTheme.bodySmall),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: c.resetFilters,
-                icon: const Icon(Icons.restart_alt, size: 16),
-                label: Text('discover_reset'.tr),
-              ),
-            ],
-          ),
+                Expanded(
+                  child: Slider(
+                    value: c.minVote.value,
+                    min: 0,
+                    max: 10,
+                    divisions: 20,
+                    label: c.minVote.value.toStringAsFixed(1),
+                    onChanged: c.setMinVote,
+                    onChangeEnd: (v) => c.loadBrowse(reset: true),
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Text(
+                  '${'discover_total'.tr} ${c.totalResults.value}',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: c.resetFilters,
+                  icon: const Icon(Icons.restart_alt, size: 16),
+                  label: Text('discover_reset'.tr),
+                ),
+              ],
+            ),
           ],
           if (c.catalogMode) _CatalogInfoBar(c),
         ],
@@ -684,9 +749,9 @@ Color _ratingColor(num v) {
 
 /// 小标题
 Widget _titleRow(ThemeData theme, String labelKey) => Padding(
-      padding: const EdgeInsets.only(left: 2, bottom: 6),
-      child: Text('${labelKey.tr}：', style: theme.textTheme.bodySmall),
-    );
+  padding: const EdgeInsets.only(left: 2, bottom: 6),
+  child: Text('${labelKey.tr}：', style: theme.textTheme.bodySmall),
+);
 
 /// 排序弹出菜单（胶囊样式触发）
 Future<void> _showSortMenu(BuildContext context, DiscoverController c) async {
@@ -706,7 +771,12 @@ Future<void> _showSortMenu(BuildContext context, DiscoverController c) async {
     context: context,
     position: position,
     items: c.sortOptions
-        .map((o) => PopupMenuItem<String>(value: o['value'], child: Text(o['label']!.tr)))
+        .map(
+          (o) => PopupMenuItem<String>(
+            value: o['value'],
+            child: Text(o['label']!.tr),
+          ),
+        )
         .toList(),
   );
   if (selected != null) c.setSort(selected);
@@ -731,8 +801,10 @@ class _BrowseCard extends StatelessWidget {
   final VoidCallback? onSubscribe;
   final VoidCallback? onSearch;
   final bool subscribed;
+
   /// 当前评分体系下的展示分（TMDB 或豆瓣，由 DiscoverController.ratingOf 决定）
   final double? rating;
+
   /// 紧凑版（待下载列表用）：更小的字号、只留海报角上的收藏星，去掉类型/评分角标
   final bool compact;
 
@@ -765,7 +837,9 @@ class _BrowseCard extends StatelessWidget {
                             errorBuilder: (_, __, ___) => Container(
                               color: Colors.black12,
                               child: const Icon(Icons.broken_image_outlined),
-                            ), headers: compatAuthHeaders,),
+                            ),
+                            headers: compatAuthHeaders,
+                          ),
                   ),
                 ),
                 // 左上：状态角标 —— 已在影视库打勾 / 下载中 / 已下载（删了文件也保留），
@@ -794,8 +868,12 @@ class _BrowseCard extends StatelessWidget {
                         ? const BoxConstraints.tightFor(width: 26, height: 26)
                         : null,
                     icon: Icon(
-                      item['favorited'] == true ? Icons.star : Icons.star_border,
-                      color: item['favorited'] == true ? Colors.amber : Colors.white,
+                      item['favorited'] == true
+                          ? Icons.star
+                          : Icons.star_border,
+                      color: item['favorited'] == true
+                          ? Colors.amber
+                          : Colors.white,
                     ),
                     onPressed: onToggleFav,
                   ),
@@ -820,7 +898,8 @@ class _BrowseCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: compact ? 10.5 : 12.5,
                 fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.92),
+                color: Theme.of(context).colorScheme.onSurface
+                    .withValues(alpha: 0.92),
               ),
             ),
         ],
@@ -830,7 +909,9 @@ class _BrowseCard extends StatelessWidget {
     if (!DeviceUtils.isDesktopOrWeb) return card;
     final entries = <ContextMenuEntry>[
       ColaContextMenuItem.create(
-        label: Text(subscribed ? 'discover_sub_added'.tr : 'discover_sub_add'.tr),
+        label: Text(
+          subscribed ? 'discover_sub_added'.tr : 'discover_sub_add'.tr,
+        ),
         icon: Icon(subscribed ? Icons.star : Icons.star_border, size: 18),
         value: 'subscribe',
         onSelected: (_) => onSubscribe?.call(),
@@ -880,7 +961,10 @@ class _BrowseCard extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 10)),
+      child: Text(
+        text,
+        style: const TextStyle(color: Colors.white, fontSize: 10),
+      ),
     );
   }
 }
@@ -903,8 +987,7 @@ Future<bool> _confirmOwnedMaybe(
     builder: (ctx) => AlertDialog(
       title: Text('discover_owned_confirm_title'.tr),
       content: Text(
-        'discover_owned_confirm_body'
-            .tr
+        'discover_owned_confirm_body'.tr
             .replaceAll('{title}', title)
             .replaceAll('{action}', action),
       ),
@@ -924,19 +1007,31 @@ Future<bool> _confirmOwnedMaybe(
 }
 
 Future<void> _showMediaDetail(
-    BuildContext context, DiscoverController c, Map<String, dynamic> item) async {
+  BuildContext context,
+  DiscoverController c,
+  Map<String, dynamic> item,
+) async {
   final mediaType = (item['media_type'] ?? 'movie') as String;
   final id = item['id'];
   if (id == null) return;
   await Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) => _MediaDetailPage(c: c, mediaType: mediaType, mediaId: id, preview: item),
+      builder: (_) => _MediaDetailPage(
+        c: c,
+        mediaType: mediaType,
+        mediaId: id,
+        preview: item,
+      ),
     ),
   );
 }
 
-Future<void> _showPtResults(BuildContext context, DiscoverController c,
-    {int? mediaId, String? keyword}) async {
+Future<void> _showPtResults(
+  BuildContext context,
+  DiscoverController c, {
+  int? mediaId,
+  String? keyword,
+}) async {
   await c.runSearch(mediaId: mediaId, keyword: keyword);
   if (!context.mounted) return;
   showModalBottomSheet<void>(
@@ -944,7 +1039,10 @@ Future<void> _showPtResults(BuildContext context, DiscoverController c,
     isScrollControlled: true,
     builder: (ctx) => Obx(() {
       if (c.searching.value) {
-        return const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()));
+        return const SizedBox(
+          height: 120,
+          child: Center(child: CircularProgressIndicator()),
+        );
       }
       return SizedBox(
         height: MediaQuery.of(ctx).size.height * 0.7,
@@ -952,22 +1050,30 @@ Future<void> _showPtResults(BuildContext context, DiscoverController c,
           children: [
             Padding(
               padding: const EdgeInsets.all(12),
-              child: Text('discover_pt_results'.tr,
-                  style: Theme.of(ctx).textTheme.titleMedium),
+              child: Text(
+                'discover_pt_results'.tr,
+                style: Theme.of(ctx).textTheme.titleMedium,
+              ),
             ),
-            ...c.searchResults.map((r) => ListTile(
-                  title: Text((r['title'] ?? '') as String, maxLines: 2,
-                      overflow: TextOverflow.ellipsis),
-                  subtitle: Text(
-                      '${r['site_name'] ?? ''} · ${r['resolution'] ?? '-'} · ${_fmtSize(r['size_bytes'])} · ↑${r['seeders'] ?? '-'}'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.download),
-                    onPressed: () async {
-                      final id = r['candidate_id'];
-                      if (id is int) await c.submitCandidate(id);
-                    },
-                  ),
-                )),
+            ...c.searchResults.map(
+              (r) => ListTile(
+                title: Text(
+                  (r['title'] ?? '') as String,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  '${r['site_name'] ?? ''} · ${r['resolution'] ?? '-'} · ${_fmtSize(r['size_bytes'])} · ↑${r['seeders'] ?? '-'}',
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.download),
+                  onPressed: () async {
+                    final id = r['candidate_id'];
+                    if (id is int) await c.submitCandidate(id);
+                  },
+                ),
+              ),
+            ),
             if (c.searchResults.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -1000,7 +1106,8 @@ class _ArchiveTargetRow extends StatelessWidget {
       'audio_langs': (f['audio_langs'] as List?) ?? const <dynamic>[],
       'max_size_bytes': f['max_size_bytes'] ?? 0,
       'min_seeders': f['min_seeders'] ?? 0,
-      'excluded_keywords': (f['excluded_keywords'] as List?) ?? const <dynamic>[],
+      'excluded_keywords':
+          (f['excluded_keywords'] as List?) ?? const <dynamic>[],
       'scan_interval_minutes': f['scan_interval_minutes'] ?? 60,
       'auto_download': f['auto_download'] ?? true,
     });
@@ -1022,8 +1129,13 @@ class _ArchiveTargetRow extends StatelessWidget {
     return out;
   }
 
-  Widget _dropdown(BuildContext context, String label, String value, String type,
-      ValueChanged<String> onChanged) {
+  Widget _dropdown(
+    BuildContext context,
+    String label,
+    String value,
+    String type,
+    ValueChanged<String> onChanged,
+  ) {
     final libs = _libsOf(type);
     final has = libs.any((l) => (l['libraryId'] ?? '').toString() == value);
     return InputDecorator(
@@ -1031,7 +1143,10 @@ class _ArchiveTargetRow extends StatelessWidget {
         labelText: label,
         isDense: true,
         border: const OutlineInputBorder(),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 10,
+        ),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
@@ -1041,8 +1156,10 @@ class _ArchiveTargetRow extends StatelessWidget {
           items: [
             DropdownMenuItem<String>(
               value: '',
-              child: Text('discover_download_dir_default'.tr,
-                  overflow: TextOverflow.ellipsis),
+              child: Text(
+                'discover_download_dir_default'.tr,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             for (final l in libs)
               DropdownMenuItem<String>(
@@ -1071,22 +1188,36 @@ class _ArchiveTargetRow extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('discover_archive_title'.tr,
-              style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'discover_archive_title'.tr,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 4),
-          Text('discover_archive_hint'.tr,
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            'discover_archive_hint'.tr,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 6),
           Row(
             children: [
               Expanded(
-                child: _dropdown(context, 'discover_archive_movie'.tr, movieId, 'movie',
-                    (v) => _save(movieId: v)),
+                child: _dropdown(
+                  context,
+                  'discover_archive_movie'.tr,
+                  movieId,
+                  'movie',
+                  (v) => _save(movieId: v),
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _dropdown(context, 'discover_archive_tv'.tr, tvId, 'tv',
-                    (v) => _save(tvId: v)),
+                child: _dropdown(
+                  context,
+                  'discover_archive_tv'.tr,
+                  tvId,
+                  'tv',
+                  (v) => _save(tvId: v),
+                ),
               ),
             ],
           ),
@@ -1126,71 +1257,90 @@ class _PtTabState extends State<_PtTab> {
       children: [
         Row(
           children: [
-            Expanded(child: Text('discover_pt_sites'.tr,
-                style: Theme.of(context).textTheme.titleMedium)),
+            Expanded(
+              child: Text(
+                'discover_pt_sites'.tr,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
             TextButton.icon(
               onPressed: () async {
                 await c.loadSites();
-                await showDialog<void>(context: context, builder: (_) => _AddSiteDialog(c));
+                await showDialog<void>(
+                  context: context,
+                  builder: (_) => _AddSiteDialog(c),
+                );
               },
               icon: const Icon(Icons.add),
               label: Text('discover_add'.tr),
             ),
           ],
         ),
-        Obx(() => Column(
-              children: c.sites
-                  .map((s) => Card(
-                        child: ListTile(
-                          title: Text((s['name'] ?? '') as String),
-                          subtitle: Text(
-                              '${s['adapter_type']} · ${s['last_test_status'] ?? '-'} · '
-                              '${(s['credential_configured'] == true) ? 'token ✓' : 'token ✗'}'),
-                          trailing: Wrap(children: [
-                            IconButton(
-                              tooltip: 'token',
-                              icon: const Icon(Icons.key),
-                              onPressed: () => showDialog<void>(
-                                  context: context,
-                                  builder: (_) => _SetTokenDialog(c, s)),
+        Obx(
+          () => Column(
+            children: c.sites
+                .map(
+                  (s) => Card(
+                    child: ListTile(
+                      title: Text((s['name'] ?? '') as String),
+                      subtitle: Text(
+                        '${s['adapter_type']} · ${s['last_test_status'] ?? '-'} · '
+                        '${(s['credential_configured'] == true) ? 'token ✓' : 'token ✗'}',
+                      ),
+                      trailing: Wrap(
+                        children: [
+                          IconButton(
+                            tooltip: 'token',
+                            icon: const Icon(Icons.key),
+                            onPressed: () => showDialog<void>(
+                              context: context,
+                              builder: (_) => _SetTokenDialog(c, s),
                             ),
-                            IconButton(
-                              tooltip: 'test',
-                              icon: const Icon(Icons.wifi_tethering),
-                              onPressed: () async {
-                                final id = s['id'];
-                                if (id is! int) return;
-                                // 测试要真打一次站点（最长 30s），给个进度提示，
-                                // 结果也说出来 —— 以前点完什么都不显示。
-                                final messenger = ScaffoldMessenger.of(context);
-                                messenger.showSnackBar(SnackBar(
+                          ),
+                          IconButton(
+                            tooltip: 'test',
+                            icon: const Icon(Icons.wifi_tethering),
+                            onPressed: () async {
+                              final id = s['id'];
+                              if (id is! int) return;
+                              // 测试要真打一次站点（最长 30s），给个进度提示，
+                              // 结果也说出来 —— 以前点完什么都不显示。
+                              final messenger = ScaffoldMessenger.of(context);
+                              messenger.showSnackBar(
+                                SnackBar(
                                   duration: const Duration(seconds: 40),
                                   content: Text('discover_pt_testing'.tr),
-                                ));
-                                final r = await c.testSite(id);
-                                messenger.hideCurrentSnackBar();
-                                final status = '${r?['status'] ?? 'fail'}';
-                                final msg = '${r?['message'] ?? ''}';
-                                messenger.showSnackBar(SnackBar(
+                                ),
+                              );
+                              final r = await c.testSite(id);
+                              messenger.hideCurrentSnackBar();
+                              final status = '${r?['status'] ?? 'fail'}';
+                              final msg = '${r?['message'] ?? ''}';
+                              messenger.showSnackBar(
+                                SnackBar(
                                   content: Text(
                                     '${'discover_pt_test_done'.tr}：$status'
                                     '${msg.isEmpty ? '' : ' · $msg'}',
                                   ),
-                                ));
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () async {
-                                final id = s['id'];
-                                if (id is int) await c.deleteSite(id);
-                              },
-                            ),
-                          ]),
-                        ),
-                      ))
-                  .toList(),
-            )),
+                                ),
+                              );
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () async {
+                              final id = s['id'];
+                              if (id is int) await c.deleteSite(id);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
         const SizedBox(height: 12),
         // ===== 归档目录（下载完成后自动同步进哪个影视库）=====
         _ArchiveTargetRow(c),
@@ -1199,8 +1349,11 @@ class _PtTabState extends State<_PtTab> {
         Row(
           children: [
             Expanded(
-                child: Text('discover_sub_title'.tr,
-                    style: Theme.of(context).textTheme.titleMedium)),
+              child: Text(
+                'discover_sub_title'.tr,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
             TextButton.icon(
               onPressed: () => c.loadSubscriptions(),
               icon: const Icon(Icons.refresh),
@@ -1212,8 +1365,10 @@ class _PtTabState extends State<_PtTab> {
           if (c.subscriptions.isEmpty) {
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text('discover_sub_empty'.tr,
-                  style: Theme.of(context).textTheme.bodySmall),
+              child: Text(
+                'discover_sub_empty'.tr,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             );
           }
           return Column(
@@ -1224,31 +1379,41 @@ class _PtTabState extends State<_PtTab> {
                 child: ListTile(
                   dense: true,
                   leading: _CoverThumb(f: s),
-                  title: Text('${s['title'] ?? s['media_id'] ?? ''}',
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  title: Text(
+                    '${s['title'] ?? s['media_id'] ?? ''}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   subtitle: Text(
-                      '${mediaTypeLabel((s['media_type'] ?? '').toString())} · ${subscriptionStatusLabel((s['status'] ?? '').toString())} · ${'discover_sub_rule'.tr} ${s['rule_id'] ?? '-'}'),
-                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Switch(
-                      value: enabled,
-                      onChanged: (v) async {
-                        if (id is int) await c.setSubscriptionEnabled(id, v);
-                      },
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () async {
-                        if (id is int) await c.unsubscribe(id);
-                      },
-                    ),
-                  ]),
+                    '${mediaTypeLabel((s['media_type'] ?? '').toString())} · ${subscriptionStatusLabel((s['status'] ?? '').toString())} · ${'discover_sub_rule'.tr} ${s['rule_id'] ?? '-'}',
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Switch(
+                        value: enabled,
+                        onChanged: (v) async {
+                          if (id is int) await c.setSubscriptionEnabled(id, v);
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () async {
+                          if (id is int) await c.unsubscribe(id);
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               );
             }).toList(),
           );
         }),
         const SizedBox(height: 12),
-        Text('discover_pt_search'.tr, style: Theme.of(context).textTheme.titleMedium),
+        Text(
+          'discover_pt_search'.tr,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
         _SearchBox(c: c),
         const SizedBox(height: 8),
         Obx(() {
@@ -1261,8 +1426,10 @@ class _PtTabState extends State<_PtTab> {
           if (c.searchResults.isEmpty) {
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text('discover_pt_empty'.tr,
-                  style: Theme.of(context).textTheme.bodySmall),
+              child: Text(
+                'discover_pt_empty'.tr,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             );
           }
           return GridView.builder(
@@ -1290,13 +1457,17 @@ class _PtTabState extends State<_PtTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('discover_pt_site_error'.tr,
-                    style: Theme.of(context).textTheme.titleSmall),
+                Text(
+                  'discover_pt_site_error'.tr,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
                 for (final s in errs)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text('· ${s['site_name'] ?? ''}: ${s['error'] ?? ''}',
-                        style: Theme.of(context).textTheme.bodySmall),
+                    child: Text(
+                      '· ${s['site_name'] ?? ''}: ${s['error'] ?? ''}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
               ],
             ),
@@ -1310,8 +1481,10 @@ class _PtTabState extends State<_PtTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${'discover_pt_excluded'.tr}（${c.excludedResults.length}）',
-                    style: Theme.of(context).textTheme.titleSmall),
+                Text(
+                  '${'discover_pt_excluded'.tr}（${c.excludedResults.length}）',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
                 for (final r in c.excludedResults.take(30))
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
@@ -1357,34 +1530,53 @@ class _PtResultCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                if (site.isNotEmpty) _pill(theme, dense: true, label: site, selected: false),
+                if (site.isNotEmpty)
+                  _pill(theme, dense: true, label: site, selected: false),
                 if (res.isNotEmpty) ...[
                   const SizedBox(width: 6),
                   _pill(theme, dense: true, label: res, selected: true),
                 ],
                 const Spacer(),
-                Text(_fmtSize(r['size_bytes']),
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(
+                  _fmtSize(r['size_bytes']),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 6),
-            Text((r['title'] ?? '').toString(),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, height: 1.3)),
+            Text(
+              (r['title'] ?? '').toString(),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, height: 1.3),
+            ),
             const SizedBox(height: 4),
             Row(
               children: [
                 Icon(Icons.arrow_upward, size: 13, color: seedColor),
                 const SizedBox(width: 2),
-                Text('$seeders',
-                    style: TextStyle(
-                        fontSize: 12, color: seedColor, fontWeight: FontWeight.w600)),
+                Text(
+                  '$seeders',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: seedColor,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(width: 10),
-                Icon(Icons.arrow_downward, size: 13, color: theme.disabledColor),
+                Icon(
+                  Icons.arrow_downward,
+                  size: 13,
+                  color: theme.disabledColor,
+                ),
                 const SizedBox(width: 2),
-                Text('$leechers',
-                    style: TextStyle(fontSize: 12, color: theme.disabledColor)),
+                Text(
+                  '$leechers',
+                  style: TextStyle(fontSize: 12, color: theme.disabledColor),
+                ),
                 const Spacer(),
                 if (detailUrl.isNotEmpty)
                   IconButton(
@@ -1426,8 +1618,10 @@ class _FavItemCard extends StatelessWidget {
 
   final Map<String, dynamic> f;
   final bool showDownloadInfo;
+
   /// 右侧自定义操作（任务卡用 ⋮ 菜单，避免一行两列里挤三个按钮）
   final Widget? action;
+
   /// 追加状态文本（任务卡显示 Downloading / Paused 等）
   final String? statusText;
 
@@ -1438,7 +1632,7 @@ class _FavItemCard extends StatelessWidget {
     // 没有影片信息时不留下孤零零的「 · 」（关键词搜索产生的任务就属于这种）
     final base = showDownloadInfo
         ? '${'discover_file_name'.tr}: ${f['torrent_name'] ?? '-'}\n'
-            '${'discover_download_time'.tr}: ${(f['task_updated_at'] ?? '-').toString().replaceFirst('T', ' ').split('.').first}'
+              '${'discover_download_time'.tr}: ${(f['task_updated_at'] ?? '-').toString().replaceFirst('T', ' ').split('.').first}'
         : [if (year.isNotEmpty) year, if (mt.isNotEmpty) mt].join(' · ');
     final st = (statusText ?? '').trim();
     final sub = [if (base.isNotEmpty) base, if (st.isNotEmpty) st].join(' · ');
@@ -1455,15 +1649,22 @@ class _FavItemCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text((f['title'] ?? '') as String,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  Text(
+                    (f['title'] ?? '') as String,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text(sub,
-                      maxLines: showDownloadInfo ? 2 : 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    sub,
+                    maxLines: showDownloadInfo ? 2 : 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
               ),
             ),
@@ -1491,12 +1692,19 @@ class _CoverThumb extends StatelessWidget {
         width: 54,
         height: 80,
         child: url.isEmpty
-            ? Container(color: bg, child: const Icon(Icons.movie_outlined, size: 20))
+            ? Container(
+                color: bg,
+                child: const Icon(Icons.movie_outlined, size: 20),
+              )
             : Image.network(
                 url,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    Container(color: bg, child: const Icon(Icons.broken_image_outlined, size: 20)), headers: compatAuthHeaders,),
+                errorBuilder: (_, __, ___) => Container(
+                  color: bg,
+                  child: const Icon(Icons.broken_image_outlined, size: 20),
+                ),
+                headers: compatAuthHeaders,
+              ),
       ),
     );
   }
@@ -1584,80 +1792,106 @@ class _AddSiteDialogState extends State<_AddSiteDialog> {
       content: SizedBox(
         width: 560,
         child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
                 controller: _name,
-                decoration: InputDecoration(labelText: 'discover_site_name'.tr)),
-            TextField(
+                decoration: InputDecoration(labelText: 'discover_site_name'.tr),
+              ),
+              TextField(
                 controller: _api,
                 keyboardType: TextInputType.url,
-                decoration: InputDecoration(labelText: 'discover_site_api'.tr)),
-            TextField(
+                decoration: InputDecoration(labelText: 'discover_site_api'.tr),
+              ),
+              TextField(
                 controller: _priority,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'discover_site_priority'.tr)),
-            TextField(
+                decoration: InputDecoration(
+                  labelText: 'discover_site_priority'.tr,
+                ),
+              ),
+              TextField(
                 controller: _timeout,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: 'discover_site_timeout'.tr)),
-            // 认证方式：API / COOKIE
-            Row(
-              children: [
-                Text('${'discover_site_auth_mode'.tr}：'),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: Text('discover_site_auth_api'.tr),
-                  selected: _authMode == 'api',
-                  onSelected: (_) => setState(() => _authMode = 'api'),
+                decoration: InputDecoration(
+                  labelText: 'discover_site_timeout'.tr,
                 ),
-                const SizedBox(width: 6),
-                ChoiceChip(
-                  label: Text('discover_site_auth_cookie'.tr),
-                  selected: _authMode == 'cookie',
-                  onSelected: (_) => setState(() => _authMode = 'cookie'),
-                ),
-              ],
-            ),
-            if (_authMode == 'api')
-              TextField(
+              ),
+              // 认证方式：API / COOKIE
+              Row(
+                children: [
+                  Text('${'discover_site_auth_mode'.tr}：'),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: Text('discover_site_auth_api'.tr),
+                    selected: _authMode == 'api',
+                    onSelected: (_) => setState(() => _authMode = 'api'),
+                  ),
+                  const SizedBox(width: 6),
+                  ChoiceChip(
+                    label: Text('discover_site_auth_cookie'.tr),
+                    selected: _authMode == 'cookie',
+                    onSelected: (_) => setState(() => _authMode = 'cookie'),
+                  ),
+                ],
+              ),
+              if (_authMode == 'api')
+                TextField(
                   controller: _token,
-                  decoration: InputDecoration(labelText: 'discover_site_token'.tr))
-            else
-              TextField(
+                  decoration: InputDecoration(
+                    labelText: 'discover_site_token'.tr,
+                  ),
+                )
+              else
+                TextField(
                   controller: _cookie,
                   maxLines: 3,
                   decoration: InputDecoration(
-                      labelText: 'discover_site_cookie'.tr,
-                      hintText: 'discover_site_cookie_hint'.tr)),
-            TextField(
+                    labelText: 'discover_site_cookie'.tr,
+                    hintText: 'discover_site_cookie_hint'.tr,
+                  ),
+                ),
+              TextField(
                 controller: _ua,
-                decoration: InputDecoration(labelText: 'discover_site_ua'.tr)),
-            SwitchListTile(
-              dense: true,
-              title: Text('discover_site_rate_limit'.tr, style: const TextStyle(fontSize: 13)),
-              value: _rateLimit,
-              onChanged: (v) => setState(() => _rateLimit = v),
-            ),
-            SwitchListTile(
-              dense: true,
-              title: Text('discover_site_proxy'.tr, style: const TextStyle(fontSize: 13)),
-              value: _proxy,
-              onChanged: (v) => setState(() => _proxy = v),
-            ),
-            SwitchListTile(
-              dense: true,
-              title: Text('discover_site_browser'.tr, style: const TextStyle(fontSize: 13)),
-              value: _browser,
-              onChanged: (v) => setState(() => _browser = v),
-            ),
-          ],
-        ),
+                decoration: InputDecoration(labelText: 'discover_site_ua'.tr),
+              ),
+              SwitchListTile(
+                dense: true,
+                title: Text(
+                  'discover_site_rate_limit'.tr,
+                  style: const TextStyle(fontSize: 13),
+                ),
+                value: _rateLimit,
+                onChanged: (v) => setState(() => _rateLimit = v),
+              ),
+              SwitchListTile(
+                dense: true,
+                title: Text(
+                  'discover_site_proxy'.tr,
+                  style: const TextStyle(fontSize: 13),
+                ),
+                value: _proxy,
+                onChanged: (v) => setState(() => _proxy = v),
+              ),
+              SwitchListTile(
+                dense: true,
+                title: Text(
+                  'discover_site_browser'.tr,
+                  style: const TextStyle(fontSize: 13),
+                ),
+                value: _browser,
+                onChanged: (v) => setState(() => _browser = v),
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('cancel'.tr)),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('cancel'.tr),
+        ),
         FilledButton(
           onPressed: () async {
             final name = _name.text.trim();
@@ -1693,9 +1927,8 @@ class _AddSiteDialogState extends State<_AddSiteDialog> {
               Navigator.pop(context);
             } else {
               // 失败必须说话：以前服务端 400 时只有控制台一行红字
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(err)),
-              );
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(err)));
             }
           },
           child: Text('discover_save'.tr),
@@ -1722,11 +1955,15 @@ class _SetTokenDialog extends StatelessWidget {
         decoration: InputDecoration(hintText: 'discover_site_token_hint'.tr),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('cancel'.tr)),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('cancel'.tr),
+        ),
         FilledButton(
           onPressed: () async {
             final id = site['id'];
-            if (id is int) await c.saveSiteToken(id: id, token: token.text.trim());
+            if (id is int)
+              await c.saveSiteToken(id: id, token: token.text.trim());
             if (context.mounted) Navigator.pop(context);
           },
           child: Text('discover_save'.tr),
@@ -1766,13 +2003,20 @@ class _RssTabState extends State<_RssTab> {
       children: [
         Row(
           children: [
-            Expanded(child: Text('discover_rss_feeds'.tr,
-                style: Theme.of(context).textTheme.titleMedium)),
+            Expanded(
+              child: Text(
+                'discover_rss_feeds'.tr,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
             TextButton.icon(
               onPressed: () async {
                 await c.loadFeeds();
                 if (context.mounted) {
-                  await showDialog<void>(context: context, builder: (_) => _AddFeedDialog(c));
+                  await showDialog<void>(
+                    context: context,
+                    builder: (_) => _AddFeedDialog(c),
+                  );
                 }
               },
               icon: const Icon(Icons.add),
@@ -1787,120 +2031,138 @@ class _RssTabState extends State<_RssTab> {
             ),
           ],
         ),
-        Obx(() => Column(
-              children: c.feeds
-                  .map((f) {
-                        final own = (f['save_path'] ?? '').toString();
-                        final fallback =
-                            (c.downloadFilter['movie_save_path'] ?? '').toString();
-                        final dir = own.isNotEmpty ? own : fallback;
-                        final auto = f['auto_download'] == 1 || f['auto_download'] == true;
-                        final immediate = f['immediate'] == 1 || f['immediate'] == true;
-                        final fid = f['id'] is int ? f['id'] as int : null;
-                        return Card(
-                          child: Column(
-                            children: [
-                              ListTile(
-                                title: Text((f['name'] ?? '') as String),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                        '${f['url_masked'] ?? ''} · ${f['last_fetch_status'] ?? '-'}'),
-                                    Text(
-                                      dir.isEmpty
-                                          ? 'discover_rss_no_dir'.tr
-                                          : '${'discover_rss_dir'.tr}：$dir',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 11),
-                                    ),
-                                  ],
-                                ),
-                                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.refresh),
-                                    tooltip: 'discover_rss_refresh_one'.tr,
-                                    onPressed: () async {
-                                      if (fid != null) await c.refreshFeed(fid);
-                                    },
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline),
-                                    onPressed: () async {
-                                      if (fid != null) await c.deleteFeed(fid);
-                                    },
-                                  ),
-                                ]),
-                              ),
-                              // 两个开关都是「改完立刻生效」：立刻开始还会把该源
-                              // 已在下载器里、还没下完的种子一起 start / stop。
-                              //
-                              // 一行一个：说明文字定宽 300，开关紧跟其后。两列并排时
-                              // 宽屏下文字贴最左、开关飘到屏幕中间，看着像是「左边文字
-                              // 配右边别人的开关」；分行后归属关系一眼可辨。
-                              Padding(
-                                padding: const EdgeInsets.only(
-                                  left: 12,
-                                  right: 8,
-                                  bottom: 4,
-                                ),
-                                child: Column(
-                                  children: [
-                                    _RssSwitchRow(
-                                      title: 'discover_rss_auto_download'.tr,
-                                      hint: 'discover_rss_auto_hint'.tr,
-                                      value: auto,
-                                      onChanged: fid == null
-                                          ? null
-                                          : (v) async {
-                                              final n = await c.setFeedSettings(fid,
-                                                  autoDownload: v);
-                                              if (!context.mounted) return;
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(
-                                                    content: Text(n > 0
-                                                        ? 'discover_feed_submitted'.tr
-                                                            .replaceAll('{n}', '$n')
-                                                        : 'discover_saved'.tr)),
-                                              );
-                                            },
-                                    ),
-                                    _RssSwitchRow(
-                                      title: 'discover_rss_immediate_short'.tr,
-                                      hint: 'discover_rss_immediate_short_hint'.tr,
-                                      value: immediate,
-                                      onChanged: fid == null
-                                          ? null
-                                          : (v) async {
-                                              final n = await c.setFeedSettings(fid,
-                                                  immediate: v);
-                                              if (!context.mounted) return;
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(
-                                                    content: Text(n > 0
-                                                        ? 'discover_feed_applied'.tr
-                                                            .replaceAll('{n}', '$n')
-                                                        : 'discover_saved'.tr)),
-                                              );
-                                            },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+        Obx(
+          () => Column(
+            children: c.feeds.map((f) {
+              final own = (f['save_path'] ?? '').toString();
+              final fallback = (c.downloadFilter['movie_save_path'] ?? '')
+                  .toString();
+              final dir = own.isNotEmpty ? own : fallback;
+              final auto =
+                  f['auto_download'] == 1 || f['auto_download'] == true;
+              final immediate = f['immediate'] == 1 || f['immediate'] == true;
+              final fid = f['id'] is int ? f['id'] as int : null;
+              return Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: Text((f['name'] ?? '') as String),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${f['url_masked'] ?? ''} · ${f['last_fetch_status'] ?? '-'}',
                           ),
-                        );
-                      })
-                  .toList(),
-            )),
+                          Text(
+                            dir.isEmpty
+                                ? 'discover_rss_no_dir'.tr
+                                : '${'discover_rss_dir'.tr}：$dir',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.refresh),
+                            tooltip: 'discover_rss_refresh_one'.tr,
+                            onPressed: () async {
+                              if (fid != null) await c.refreshFeed(fid);
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: () async {
+                              if (fid != null) await c.deleteFeed(fid);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    // 两个开关都是「改完立刻生效」：立刻开始还会把该源
+                    // 已在下载器里、还没下完的种子一起 start / stop。
+                    //
+                    // 一行一个：说明文字定宽 300，开关紧跟其后。两列并排时
+                    // 宽屏下文字贴最左、开关飘到屏幕中间，看着像是「左边文字
+                    // 配右边别人的开关」；分行后归属关系一眼可辨。
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: 12,
+                        right: 8,
+                        bottom: 4,
+                      ),
+                      child: Column(
+                        children: [
+                          _RssSwitchRow(
+                            title: 'discover_rss_auto_download'.tr,
+                            hint: 'discover_rss_auto_hint'.tr,
+                            value: auto,
+                            onChanged: fid == null
+                                ? null
+                                : (v) async {
+                                    final n = await c.setFeedSettings(
+                                      fid,
+                                      autoDownload: v,
+                                    );
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          n > 0
+                                              ? 'discover_feed_submitted'.tr
+                                                    .replaceAll('{n}', '$n')
+                                              : 'discover_saved'.tr,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                          ),
+                          _RssSwitchRow(
+                            title: 'discover_rss_immediate_short'.tr,
+                            hint: 'discover_rss_immediate_short_hint'.tr,
+                            value: immediate,
+                            onChanged: fid == null
+                                ? null
+                                : (v) async {
+                                    final n = await c.setFeedSettings(
+                                      fid,
+                                      immediate: v,
+                                    );
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          n > 0
+                                              ? 'discover_feed_applied'.tr
+                                                    .replaceAll('{n}', '$n')
+                                              : 'discover_saved'.tr,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
         const SizedBox(height: 16),
         // ===== 下载台账（永久记录：只要下过一次就不再重复下载）=====
         Row(
           children: [
             Expanded(
-                child: Text('discover_ledger_title'.tr,
-                    style: Theme.of(context).textTheme.titleMedium)),
+              child: Text(
+                'discover_ledger_title'.tr,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
             TextButton.icon(
               onPressed: () => c.loadLedger(),
               icon: const Icon(Icons.refresh),
@@ -1915,11 +2177,13 @@ class _RssTabState extends State<_RssTab> {
                     content: Text('discover_ledger_clear_confirm'.tr),
                     actions: [
                       TextButton(
-                          onPressed: () => Navigator.pop(dctx, false),
-                          child: Text('cancel'.tr)),
+                        onPressed: () => Navigator.pop(dctx, false),
+                        child: Text('cancel'.tr),
+                      ),
                       FilledButton(
-                          onPressed: () => Navigator.pop(dctx, true),
-                          child: Text('discover_ledger_clear_ok'.tr)),
+                        onPressed: () => Navigator.pop(dctx, true),
+                        child: Text('discover_ledger_clear_ok'.tr),
+                      ),
                     ],
                   ),
                 );
@@ -1934,31 +2198,42 @@ class _RssTabState extends State<_RssTab> {
           if (c.ledger.isEmpty) {
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text('discover_ledger_empty'.tr,
-                  style: Theme.of(context).textTheme.bodySmall),
+              child: Text(
+                'discover_ledger_empty'.tr,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             );
           }
           return Column(
             children: c.ledger.map((l) {
               final id = l['id'];
-              final t = (l['create_time'] ?? '').toString().replaceAll('T', ' ');
+              final t = (l['create_time'] ?? '').toString().replaceAll(
+                'T',
+                ' ',
+              );
               final hash = (l['info_hash'] ?? '').toString();
               return Card(
                 child: ListTile(
                   dense: true,
-                  title: Text((l['title'] ?? '') as String,
-                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                  title: Text(
+                    (l['title'] ?? '') as String,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                          '${_fmtSize(l['size_bytes'])} · #${l['download_task_id'] ?? '-'} · ${t.length > 16 ? t.substring(0, 16) : t}',
-                          style: const TextStyle(fontSize: 11)),
+                        '${_fmtSize(l['size_bytes'])} · #${l['download_task_id'] ?? '-'} · ${t.length > 16 ? t.substring(0, 16) : t}',
+                        style: const TextStyle(fontSize: 11),
+                      ),
                       if (hash.isNotEmpty)
-                        Text(hash,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 10)),
+                        Text(
+                          hash,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 10),
+                        ),
                     ],
                   ),
                   trailing: IconButton(
@@ -2022,10 +2297,7 @@ class _RssSwitchRow extends StatelessWidget {
             ),
           ),
         ),
-        Switch(
-          value: value,
-          onChanged: onChanged,
-        ),
+        Switch(value: value, onChanged: onChanged),
       ],
     );
   }
@@ -2065,28 +2337,35 @@ class _AddFeedDialogState extends State<_AddFeedDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           TextField(
-              controller: _url,
-              decoration: InputDecoration(labelText: 'discover_rss_url'.tr)),
+            controller: _url,
+            decoration: InputDecoration(labelText: 'discover_rss_url'.tr),
+          ),
           TextField(
-              controller: _name,
-              decoration: InputDecoration(labelText: 'discover_site_name'.tr)),
+            controller: _name,
+            decoration: InputDecoration(labelText: 'discover_site_name'.tr),
+          ),
           const SizedBox(height: 10),
           // 下载目录：选而不是填（服务端绝对路径，正好也是 transmission 的 download-dir）
           InputDecorator(
             decoration: InputDecoration(
               labelText: 'discover_rss_save_path'.tr,
-              helperText: widget.c.downloadFilter['movie_save_path'] == null ||
-                      (widget.c.downloadFilter['movie_save_path'] ?? '').toString().isEmpty
+              helperText:
+                  widget.c.downloadFilter['movie_save_path'] == null ||
+                      (widget.c.downloadFilter['movie_save_path'] ?? '')
+                          .toString()
+                          .isEmpty
                   ? 'discover_rss_save_path_hint'.tr
                   : '${'discover_rss_default_dir'.tr}：'
-                      '${widget.c.downloadFilter['movie_save_path']}',
+                        '${widget.c.downloadFilter['movie_save_path']}',
               isDense: true,
             ),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
-                    _savePath.isEmpty ? 'discover_rss_default_dir'.tr : _savePath,
+                    _savePath.isEmpty
+                        ? 'discover_rss_default_dir'.tr
+                        : _savePath,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -2113,15 +2392,20 @@ class _AddFeedDialogState extends State<_AddFeedDialog> {
             dense: true,
             contentPadding: EdgeInsets.zero,
             title: Text('discover_rss_immediate'.tr),
-            subtitle: Text('discover_rss_immediate_hint'.tr,
-                style: const TextStyle(fontSize: 11)),
+            subtitle: Text(
+              'discover_rss_immediate_hint'.tr,
+              style: const TextStyle(fontSize: 11),
+            ),
             value: _immediate,
             onChanged: (v) => setState(() => _immediate = v),
           ),
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('cancel'.tr)),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('cancel'.tr),
+        ),
         FilledButton(
           onPressed: () async {
             final ok = await widget.c.addFeed(
@@ -2174,8 +2458,12 @@ class _TasksTabState extends State<_TasksTab> {
           children: [
             // 这里只留「下载中」（待下载 / 已下载在下面两段）；
             // 完整任务（速度/分享率/做种）在左侧「下载器」栏里看
-            Expanded(child: Text('transmission.downloading'.tr,
-                style: Theme.of(context).textTheme.titleMedium)),
+            Expanded(
+              child: Text(
+                'transmission.downloading'.tr,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
             TextButton.icon(
               onPressed: () async {
                 await c.loadTasks();
@@ -2191,15 +2479,27 @@ class _TasksTabState extends State<_TasksTab> {
           // 删掉的（removed）/ 取消的（proposed 未提交）不再占位。
           // 以前按 `!= 'Completed'` 排除，一是大小写对不上（服务端是小写 completed），
           // 二是反了：删掉的记录（removed）反而一直留着，看起来像删不掉。
-          const alive = {'added', 'downloading', 'paused', 'failed', 'proposed'};
+          const alive = {
+            'added',
+            'downloading',
+            'paused',
+            'failed',
+            'proposed',
+          };
           final active = c.tasks
-              .where((t) => alive.contains((t['status'] ?? '').toString().toLowerCase()))
+              .where(
+                (t) => alive.contains(
+                  (t['status'] ?? '').toString().toLowerCase(),
+                ),
+              )
               .toList();
           if (active.isEmpty) {
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text('discover_tasks_empty'.tr,
-                  style: Theme.of(context).textTheme.bodySmall),
+              child: Text(
+                'discover_tasks_empty'.tr,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             );
           }
           // 与「待下载」一致的一行两列；显示影片图片 / 名字 / 年份 · 类型
@@ -2220,7 +2520,8 @@ class _TasksTabState extends State<_TasksTab> {
               final f = <String, dynamic>{
                 ...t,
                 if ((t['title'] ?? '').toString().isEmpty)
-                  'title': (t['candidate_title'] ?? t['torrent_name'] ?? '').toString(),
+                  'title': (t['candidate_title'] ?? t['torrent_name'] ?? '')
+                      .toString(),
               };
               return _FavItemCard(
                 f: f,
@@ -2237,10 +2538,22 @@ class _TasksTabState extends State<_TasksTab> {
                     }
                   },
                   itemBuilder: (_) => [
-                    PopupMenuItem(value: 'pause', child: Text('discover_task_pause'.tr)),
-                    PopupMenuItem(value: 'resume', child: Text('discover_task_resume'.tr)),
-                    PopupMenuItem(value: 'retry', child: Text('discover_task_retry'.tr)),
-                    PopupMenuItem(value: 'delete', child: Text('discover_task_delete'.tr)),
+                    PopupMenuItem(
+                      value: 'pause',
+                      child: Text('discover_task_pause'.tr),
+                    ),
+                    PopupMenuItem(
+                      value: 'resume',
+                      child: Text('discover_task_resume'.tr),
+                    ),
+                    PopupMenuItem(
+                      value: 'retry',
+                      child: Text('discover_task_retry'.tr),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text('discover_task_delete'.tr),
+                    ),
                   ],
                 ),
               );
@@ -2248,90 +2561,104 @@ class _TasksTabState extends State<_TasksTab> {
           );
         }),
         const SizedBox(height: 16),
-        Text('discover_fav_waiting'.tr, style: Theme.of(context).textTheme.titleMedium),
-        Obx(() => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (c.favWatching.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text('discover_fav_empty'.tr,
-                        style: Theme.of(context).textTheme.bodySmall),
+        Text(
+          'discover_fav_waiting'.tr,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        Obx(
+          () => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (c.favWatching.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'discover_fav_empty'.tr,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                // 和发现页同一套海报卡（紧凑版）：一行多列、点开影片详情就能搜种下载
-                if (c.favWatching.isNotEmpty)
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      // 比发现页的 170 小一档：一行能多放几张，列表更紧凑
-                      maxCrossAxisExtent: 124,
-                      childAspectRatio: 0.66,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                    ),
-                    itemCount: c.favWatching.length,
-                    itemBuilder: (_, i) {
-                      final f = c.favWatching[i];
-                      final mediaId = f['id'] is int ? f['id'] as int : null;
-                      final item = <String, dynamic>{...f, 'favorited': true};
-                      return _BrowseCard(
-                        compact: true,
-                        item: item,
-                        onTap: () => _showMediaDetail(context, c, item),
-                        onToggleFav: () async {
-                          if (mediaId != null) await c.unFavorite(mediaId);
-                        },
-                        // 右键：订阅 / 搜 PT（待下载里最常用的两个动作）
-                        subscribed: mediaId != null && c.isSubscribed(mediaId),
-                        onSubscribe: mediaId == null
-                            ? null
-                            : () {
-                                final subId = c.subscriptionIdOf(mediaId);
-                                if (subId != null) {
-                                  c.unsubscribe(subId);
-                                } else {
-                                  c.subscribe(mediaId);
-                                }
-                              },
-                        onSearch: mediaId == null
-                            ? null
-                            : () => _showPtResults(context, c, mediaId: mediaId),
-                      );
-                    },
+                ),
+              // 和发现页同一套海报卡（紧凑版）：一行多列、点开影片详情就能搜种下载
+              if (c.favWatching.isNotEmpty)
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    // 比发现页的 170 小一档：一行能多放几张，列表更紧凑
+                    maxCrossAxisExtent: 124,
+                    childAspectRatio: 0.66,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
                   ),
-              ],
-            )),
+                  itemCount: c.favWatching.length,
+                  itemBuilder: (_, i) {
+                    final f = c.favWatching[i];
+                    final mediaId = f['id'] is int ? f['id'] as int : null;
+                    final item = <String, dynamic>{...f, 'favorited': true};
+                    return _BrowseCard(
+                      compact: true,
+                      item: item,
+                      onTap: () => _showMediaDetail(context, c, item),
+                      onToggleFav: () async {
+                        if (mediaId != null) await c.unFavorite(mediaId);
+                      },
+                      // 右键：订阅 / 搜 PT（待下载里最常用的两个动作）
+                      subscribed: mediaId != null && c.isSubscribed(mediaId),
+                      onSubscribe: mediaId == null
+                          ? null
+                          : () {
+                              final subId = c.subscriptionIdOf(mediaId);
+                              if (subId != null) {
+                                c.unsubscribe(subId);
+                              } else {
+                                c.subscribe(mediaId);
+                              }
+                            },
+                      onSearch: mediaId == null
+                          ? null
+                          : () => _showPtResults(context, c, mediaId: mediaId),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
         const SizedBox(height: 16),
-        Text('discover_fav_downloaded'.tr, style: Theme.of(context).textTheme.titleMedium),
-        Obx(() => Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (c.favDownloaded.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text('discover_fav_empty'.tr,
-                        style: Theme.of(context).textTheme.bodySmall),
+        Text(
+          'discover_fav_downloaded'.tr,
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        Obx(
+          () => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (c.favDownloaded.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'discover_fav_empty'.tr,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
-                // 一行两列（按需求）
-                if (c.favDownloaded.isNotEmpty)
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisExtent: 104,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                    ),
-                    itemCount: c.favDownloaded.length,
-                    itemBuilder: (_, i) => _FavItemCard(
-                      f: c.favDownloaded[i],
-                      showDownloadInfo: true,
-                    ),
+                ),
+              // 一行两列（按需求）
+              if (c.favDownloaded.isNotEmpty)
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisExtent: 104,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
                   ),
-              ],
-            )),
+                  itemCount: c.favDownloaded.length,
+                  itemBuilder: (_, i) => _FavItemCard(
+                    f: c.favDownloaded[i],
+                    showDownloadInfo: true,
+                  ),
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -2364,6 +2691,7 @@ class _SettingsTabState extends State<_SettingsTab> {
   final _token = TextEditingController();
   final _apiUrl = TextEditingController();
   final _language = TextEditingController();
+
   /// 豆瓣 Cookie（可选，降低限流）
   final _doubanCookie = TextEditingController();
   // 原「择种规则」并入「下载筛选」后的三项
@@ -2381,20 +2709,24 @@ class _SettingsTabState extends State<_SettingsTab> {
   bool _doubanCookieOk = false;
   bool _doubanCookieNone = false;
   bool _doubanTesting = false;
+
   /// 缓存占用文案（图片 MB + 评分条数）
   String _cacheText = '';
   bool _autoDownload = false;
   double _interval = 60;
   String _quality = 'all';
   String _hdr = 'all';
+
   /// 评分体系：tmdb（默认）/ douban
   String _ratingProvider = 'tmdb';
+
   /// 下载保存目录（取自影视库源目录）
   String _moviePath = '';
   String _tvPath = '';
   final Set<String> _audio = <String>{};
   final Set<int> _siteIds = <int>{};
   bool _loaded = false;
+
   /// 「立即扫描」进行中：按钮置灰 + 转圈，扫完弹出「扫了几条 / 新增几条」
   bool _scanning = false;
 
@@ -2440,7 +2772,9 @@ class _SettingsTabState extends State<_SettingsTab> {
     _hdr = (f['hdr'] ?? 'all').toString();
     // 原择种规则并入的三项
     final maxBytes = (f['max_size_bytes'] as num?)?.toDouble() ?? 0;
-    _maxSizeGb.text = maxBytes > 0 ? (maxBytes / 1024 / 1024 / 1024).toStringAsFixed(1) : '';
+    _maxSizeGb.text = maxBytes > 0
+        ? (maxBytes / 1024 / 1024 / 1024).toStringAsFixed(1)
+        : '';
     _minSeeders.text = '${(f['min_seeders'] as num?)?.toInt() ?? 0}';
     _excludedKw.text = ((f['excluded_keywords'] as List?) ?? []).join(', ');
     _audio
@@ -2450,9 +2784,11 @@ class _SettingsTabState extends State<_SettingsTab> {
     // 这里直接吃 int，纯数字字符串也兼容（旧数据/直连接口时不会把勾选丢掉）。
     _siteIds
       ..clear()
-      ..addAll(((f['site_ids'] as List?) ?? [])
-          .map((e) => e is int ? e : (int.tryParse(e.toString()) ?? 0))
-          .where((e) => e > 0));
+      ..addAll(
+        ((f['site_ids'] as List?) ?? [])
+            .map((e) => e is int ? e : (int.tryParse(e.toString()) ?? 0))
+            .where((e) => e > 0),
+      );
     _loadCacheStats();
     if (mounted) setState(() => _loaded = true);
   }
@@ -2484,9 +2820,12 @@ class _SettingsTabState extends State<_SettingsTab> {
     final tmdbImg = (images['tmdb'] as Map?) ?? <String, dynamic>{};
     final doubanImg = (images['douban'] as Map?) ?? <String, dynamic>{};
     final ratings = (r['ratings'] as Map?) ?? <String, dynamic>{};
-    final bytes = ((tmdbImg['bytes'] as num?) ?? 0) + ((doubanImg['bytes'] as num?) ?? 0);
-    final files = ((tmdbImg['files'] as num?) ?? 0) + ((doubanImg['files'] as num?) ?? 0);
-    final txt = '${'discover_cache_usage'.tr}: ${(bytes / 1024 / 1024).toStringAsFixed(1)} MB ($files) · '
+    final bytes =
+        ((tmdbImg['bytes'] as num?) ?? 0) + ((doubanImg['bytes'] as num?) ?? 0);
+    final files =
+        ((tmdbImg['files'] as num?) ?? 0) + ((doubanImg['files'] as num?) ?? 0);
+    final txt =
+        '${'discover_cache_usage'.tr}: ${(bytes / 1024 / 1024).toStringAsFixed(1)} MB ($files) · '
         '${'discover_rating_douban'.tr} ${(ratings['douban'] as num?)?.toInt() ?? 0} / TMDB ${(ratings['tmdb'] as num?)?.toInt() ?? 0}';
     if (mounted) setState(() => _cacheText = txt);
   }
@@ -2517,7 +2856,8 @@ class _SettingsTabState extends State<_SettingsTab> {
       siteTxt += ' · ${sample['title'] ?? ''}★${sample['rating'] ?? '-'}';
     }
     if (tmdb != null && tmdb['total'] != null) {
-      siteTxt += ' · ${'discover_douban_match'.tr} ${tmdb['match_rate'] ?? '-'}%';
+      siteTxt +=
+          ' · ${'discover_douban_match'.tr} ${tmdb['match_rate'] ?? '-'}%';
     }
     if (!siteOk) siteTxt += ' · $siteCode';
 
@@ -2529,12 +2869,15 @@ class _SettingsTabState extends State<_SettingsTab> {
     final ckCode = ck == null ? '-' : (ck['code'] ?? '').toString();
     final String ckTxt;
     if (!provided) {
-      ckTxt = '${'discover_douban_cookie_check'.tr}：${'discover_douban_cookie_none'.tr}';
+      ckTxt =
+          '${'discover_douban_cookie_check'.tr}：${'discover_douban_cookie_none'.tr}';
     } else if (valid) {
-      ckTxt = '${'discover_douban_cookie_check'.tr}：${'discover_douban_cookie_ok'.tr}'
+      ckTxt =
+          '${'discover_douban_cookie_check'.tr}：${'discover_douban_cookie_ok'.tr}'
           '${user.isEmpty ? '' : ' $user'} · $ckMs';
     } else {
-      ckTxt = '${'discover_douban_cookie_check'.tr}：${'discover_douban_cookie_fail'.tr} · $ckCode';
+      ckTxt =
+          '${'discover_douban_cookie_check'.tr}：${'discover_douban_cookie_fail'.tr} · $ckCode';
     }
 
     setState(() {
@@ -2561,12 +2904,12 @@ class _SettingsTabState extends State<_SettingsTab> {
       final text = scanned == 0
           ? 'discover_scan_none'.tr
           : 'discover_scan_result'.tr
-              .replaceAll('{scanned}', '$scanned')
-              .replaceAll('{submitted}', '$submitted')
-              .replaceAll('{skipped}', '$skipped');
+                .replaceAll('{scanned}', '$scanned')
+                .replaceAll('{submitted}', '$submitted')
+                .replaceAll('{skipped}', '$skipped');
       messenger.showSnackBar(SnackBar(content: Text(text)));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(errorMessageOf(e))));
     } finally {
       if (mounted) setState(() => _scanning = false);
     }
@@ -2575,7 +2918,9 @@ class _SettingsTabState extends State<_SettingsTab> {
   String _defaultPathFor(bool isMovie) {
     for (final s in c.videoSources) {
       final mt = (s['media_type'] ?? '').toString();
-      if (isMovie ? (mt == 'movie' || mt == 'mixed') : (mt == 'tv' || mt == 'mixed')) {
+      if (isMovie
+          ? (mt == 'movie' || mt == 'mixed')
+          : (mt == 'tv' || mt == 'mixed')) {
         return (s['path'] ?? '').toString();
       }
     }
@@ -2586,27 +2931,37 @@ class _SettingsTabState extends State<_SettingsTab> {
   Widget _dirDropdown(BuildContext context, String labelKey, bool isMovie) {
     final items = c.videoSources.where((s) {
       final mt = (s['media_type'] ?? '').toString();
-      return isMovie ? (mt == 'movie' || mt == 'mixed') : (mt == 'tv' || mt == 'mixed');
+      return isMovie
+          ? (mt == 'movie' || mt == 'mixed')
+          : (mt == 'tv' || mt == 'mixed');
     }).toList();
     final cur = isMovie ? _moviePath : _tvPath;
-    final valid = items.any((s) => (s['path'] ?? '').toString() == cur) ? cur : '';
+    final valid = items.any((s) => (s['path'] ?? '').toString() == cur)
+        ? cur
+        : '';
     return DropdownButtonFormField<String>(
       initialValue: valid,
       isExpanded: true,
       decoration: InputDecoration(labelText: labelKey.tr),
       items: [
         DropdownMenuItem(
-            value: '',
-            child: Text('discover_download_dir_default'.tr,
-                overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12))),
-        ...items.map((s) => DropdownMenuItem(
-              value: (s['path'] ?? '').toString(),
-              child: Text(
-                '${s['library_name'] ?? ''} · ${s['path'] ?? ''}',
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12),
-              ),
-            )),
+          value: '',
+          child: Text(
+            'discover_download_dir_default'.tr,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12),
+          ),
+        ),
+        ...items.map(
+          (s) => DropdownMenuItem(
+            value: (s['path'] ?? '').toString(),
+            child: Text(
+              '${s['library_name'] ?? ''} · ${s['path'] ?? ''}',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+        ),
       ],
       onChanged: (v) => setState(() {
         if (isMovie) {
@@ -2619,9 +2974,9 @@ class _SettingsTabState extends State<_SettingsTab> {
   }
 
   Widget _sectionTitle(String key) => Padding(
-        padding: const EdgeInsets.only(top: 12, bottom: 4),
-        child: Text(key.tr, style: Theme.of(context).textTheme.titleMedium),
-      );
+    padding: const EdgeInsets.only(top: 12, bottom: 4),
+    child: Text(key.tr, style: Theme.of(context).textTheme.titleMedium),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -2637,28 +2992,33 @@ class _SettingsTabState extends State<_SettingsTab> {
             padding: const EdgeInsets.all(12),
             child: Column(
               children: [
-                Obx(() => TextField(
-                  controller: _token,
-                  decoration: InputDecoration(
-                    labelText: 'discover_tmdb_token'.tr,
-                    helperText: c.discoverSettings['token_configured'] == true
-                        ? 'discover_settings_token_set'.tr
-                        : 'discover_settings_token_unset'.tr,
-                    helperStyle: TextStyle(
-                      fontSize: 12,
-                      color: c.discoverSettings['token_configured'] == true
-                          ? Colors.green.shade600
-                          : Colors.orange.shade700,
+                Obx(
+                  () => TextField(
+                    controller: _token,
+                    decoration: InputDecoration(
+                      labelText: 'discover_tmdb_token'.tr,
+                      helperText: c.discoverSettings['token_configured'] == true
+                          ? 'discover_settings_token_set'.tr
+                          : 'discover_settings_token_unset'.tr,
+                      helperStyle: TextStyle(
+                        fontSize: 12,
+                        color: c.discoverSettings['token_configured'] == true
+                            ? Colors.green.shade600
+                            : Colors.orange.shade700,
+                      ),
                     ),
                   ),
-                )),
+                ),
                 Row(
                   children: [
                     OutlinedButton.icon(
                       onPressed: _testing ? null : _runTest,
                       icon: _testing
                           ? const SizedBox(
-                              width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                           : const Icon(Icons.network_check, size: 16),
                       label: Text('discover_settings_token_test'.tr),
                     ),
@@ -2670,18 +3030,24 @@ class _SettingsTabState extends State<_SettingsTab> {
                           fontSize: 12,
                           color: _testResult.isEmpty
                               ? Theme.of(context).disabledColor
-                              : (_testResult.startsWith('OK') ? Colors.green.shade600 : Colors.orange.shade700),
+                              : (_testResult.startsWith('OK')
+                                    ? Colors.green.shade600
+                                    : Colors.orange.shade700),
                         ),
                       ),
                     ),
                   ],
                 ),
                 TextField(
-                    controller: _apiUrl,
-                    decoration: InputDecoration(labelText: 'discover_tmdb_api_url'.tr)),
+                  controller: _apiUrl,
+                  decoration: InputDecoration(
+                    labelText: 'discover_tmdb_api_url'.tr,
+                  ),
+                ),
                 // 代理不再单独配置：这里只读回显「系统设置 → 网络代理」实际生效的地址
                 Obx(() {
-                  final proxy = (c.discoverSettings['proxy_effective'] ?? '').toString();
+                  final proxy = (c.discoverSettings['proxy_effective'] ?? '')
+                      .toString();
                   return Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
@@ -2691,8 +3057,11 @@ class _SettingsTabState extends State<_SettingsTab> {
                   );
                 }),
                 TextField(
-                    controller: _language,
-                    decoration: InputDecoration(labelText: 'discover_tmdb_language'.tr)),
+                  controller: _language,
+                  decoration: InputDecoration(
+                    labelText: 'discover_tmdb_language'.tr,
+                  ),
+                ),
               ],
             ),
           ),
@@ -2710,7 +3079,10 @@ class _SettingsTabState extends State<_SettingsTab> {
                   children: [
                     for (final p in const ['tmdb', 'douban'])
                       ChoiceChip(
-                        label: Text('discover_rating_$p'.tr, style: const TextStyle(fontSize: 12)),
+                        label: Text(
+                          'discover_rating_$p'.tr,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                         selected: _ratingProvider == p,
                         onSelected: (_) => setState(() => _ratingProvider = p),
                       ),
@@ -2718,8 +3090,10 @@ class _SettingsTabState extends State<_SettingsTab> {
                 ),
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: Text('discover_rating_hint'.tr,
-                      style: Theme.of(context).textTheme.bodySmall),
+                  child: Text(
+                    'discover_rating_hint'.tr,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -2738,7 +3112,10 @@ class _SettingsTabState extends State<_SettingsTab> {
                       onPressed: _doubanTesting ? null : _runDoubanTest,
                       icon: _doubanTesting
                           ? const SizedBox(
-                              width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                           : const Icon(Icons.network_check, size: 16),
                       label: Text('discover_douban_test'.tr),
                     ),
@@ -2755,8 +3132,8 @@ class _SettingsTabState extends State<_SettingsTab> {
                               color: _doubanSiteText.isEmpty
                                   ? Theme.of(context).disabledColor
                                   : (_doubanSiteOk
-                                      ? Colors.green.shade600
-                                      : Colors.orange.shade700),
+                                        ? Colors.green.shade600
+                                        : Colors.orange.shade700),
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -2765,11 +3142,13 @@ class _SettingsTabState extends State<_SettingsTab> {
                             _doubanCookieText,
                             style: TextStyle(
                               fontSize: 12,
-                              color: (_doubanCookieText.isEmpty || _doubanCookieNone)
+                              color:
+                                  (_doubanCookieText.isEmpty ||
+                                      _doubanCookieNone)
                                   ? Theme.of(context).disabledColor
                                   : (_doubanCookieOk
-                                      ? Colors.green.shade600
-                                      : Colors.orange.shade700),
+                                        ? Colors.green.shade600
+                                        : Colors.orange.shade700),
                             ),
                           ),
                         ],
@@ -2779,7 +3158,10 @@ class _SettingsTabState extends State<_SettingsTab> {
                 ),
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: Text(_cacheText, style: Theme.of(context).textTheme.bodySmall),
+                  child: Text(
+                    _cacheText,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
               ],
             ),
@@ -2789,15 +3171,27 @@ class _SettingsTabState extends State<_SettingsTab> {
         Card(
           child: Padding(
             padding: const EdgeInsets.all(12),
-            child: Obx(() => Row(
-                  children: [
-                    Expanded(
-                        child: _dirDropdown(context, 'discover_download_dir_movie', true)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: _dirDropdown(context, 'discover_download_dir_tv', false)),
-                  ],
-                )),
+            child: Obx(
+              () => Row(
+                children: [
+                  Expanded(
+                    child: _dirDropdown(
+                      context,
+                      'discover_download_dir_movie',
+                      true,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _dirDropdown(
+                      context,
+                      'discover_download_dir_tv',
+                      false,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
         _sectionTitle('discover_download_filter'),
@@ -2809,26 +3203,30 @@ class _SettingsTabState extends State<_SettingsTab> {
               children: [
                 // 参与自动下载的站点
                 Text('${'discover_filter_sites'.tr}：'),
-                Obx(() => Wrap(
-                      spacing: 6,
-                      runSpacing: 2,
-                      children: c.sites.map((s) {
-                        final id = s['id'];
-                        final sid = id is int ? id : 0;
-                        return FilterChip(
-                          label: Text((s['name'] ?? '') as String,
-                              style: const TextStyle(fontSize: 12)),
-                          selected: _siteIds.contains(sid),
-                          onSelected: (_) => setState(() {
-                            if (_siteIds.contains(sid)) {
-                              _siteIds.remove(sid);
-                            } else {
-                              _siteIds.add(sid);
-                            }
-                          }),
-                        );
-                      }).toList(),
-                    )),
+                Obx(
+                  () => Wrap(
+                    spacing: 6,
+                    runSpacing: 2,
+                    children: c.sites.map((s) {
+                      final id = s['id'];
+                      final sid = id is int ? id : 0;
+                      return FilterChip(
+                        label: Text(
+                          (s['name'] ?? '') as String,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        selected: _siteIds.contains(sid),
+                        onSelected: (_) => setState(() {
+                          if (_siteIds.contains(sid)) {
+                            _siteIds.remove(sid);
+                          } else {
+                            _siteIds.add(sid);
+                          }
+                        }),
+                      );
+                    }).toList(),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 // 画质
                 Text('${'discover_quality'.tr}：'),
@@ -2837,7 +3235,10 @@ class _SettingsTabState extends State<_SettingsTab> {
                   children: [
                     for (final q in const ['all', '1080p', '1440p', '4k'])
                       ChoiceChip(
-                        label: Text('discover_quality_$q'.tr, style: const TextStyle(fontSize: 12)),
+                        label: Text(
+                          'discover_quality_$q'.tr,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                         selected: _quality == q,
                         onSelected: (_) => setState(() => _quality = q),
                       ),
@@ -2849,9 +3250,18 @@ class _SettingsTabState extends State<_SettingsTab> {
                 Wrap(
                   spacing: 6,
                   children: [
-                    for (final h in const ['all', 'hdr', 'hdr10', 'hdr10plus', 'dolby'])
+                    for (final h in const [
+                      'all',
+                      'hdr',
+                      'hdr10',
+                      'hdr10plus',
+                      'dolby',
+                    ])
                       ChoiceChip(
-                        label: Text('discover_hdr_$h'.tr, style: const TextStyle(fontSize: 12)),
+                        label: Text(
+                          'discover_hdr_$h'.tr,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                         selected: _hdr == h,
                         onSelected: (_) => setState(() => _hdr = h),
                       ),
@@ -2865,7 +3275,10 @@ class _SettingsTabState extends State<_SettingsTab> {
                   children: [
                     for (final opt in kDiscoverAudioOptions)
                       FilterChip(
-                        label: Text(opt['label']!.tr, style: const TextStyle(fontSize: 12)),
+                        label: Text(
+                          opt['label']!.tr,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                         selected: _audio.contains(opt['code']),
                         onSelected: (_) => setState(() {
                           final code = opt['code']!;
@@ -2888,11 +3301,14 @@ class _SettingsTabState extends State<_SettingsTab> {
                     Expanded(
                       child: TextField(
                         controller: _maxSizeGb,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                         decoration: InputDecoration(
-                            labelText: 'discover_rule_max_size'.tr,
-                            helperText: 'discover_rule_max_size_hint'.tr,
-                            helperStyle: const TextStyle(fontSize: 11)),
+                          labelText: 'discover_rule_max_size'.tr,
+                          helperText: 'discover_rule_max_size_hint'.tr,
+                          helperStyle: const TextStyle(fontSize: 11),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -2914,15 +3330,18 @@ class _SettingsTabState extends State<_SettingsTab> {
                 TextField(
                   controller: _excludedKw,
                   decoration: InputDecoration(
-                      labelText: 'discover_rule_excluded'.tr,
-                      helperText: 'discover_rule_list_hint'.tr,
-                      helperStyle: const TextStyle(fontSize: 11)),
+                    labelText: 'discover_rule_excluded'.tr,
+                    helperText: 'discover_rule_list_hint'.tr,
+                    helperStyle: const TextStyle(fontSize: 11),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 // 扫描间隔 + 自动下载
                 Row(
                   children: [
-                    Text('${'discover_scan_interval'.tr}：${_interval.round()} ${'discover_minutes'.tr}'),
+                    Text(
+                      '${'discover_scan_interval'.tr}：${_interval.round()} ${'discover_minutes'.tr}',
+                    ),
                     Expanded(
                       child: Slider(
                         value: _interval,
@@ -2948,7 +3367,8 @@ class _SettingsTabState extends State<_SettingsTab> {
                       onPressed: () async {
                         // 1) TMDB 凭据
                         await c.saveDiscoverSettings({
-                          if (_token.text.trim().isNotEmpty) 'token': _token.text.trim(),
+                          if (_token.text.trim().isNotEmpty)
+                            'token': _token.text.trim(),
                           'api_url': _apiUrl.text.trim(),
                           'language': _language.text.trim(),
                           'rating_provider': _ratingProvider,
@@ -2966,15 +3386,24 @@ class _SettingsTabState extends State<_SettingsTab> {
                           'scan_interval_minutes': _interval.round(),
                           'auto_download': _autoDownload,
                           // 原择种规则并入的三项
-                          'max_size_bytes': (double.tryParse(_maxSizeGb.text.trim()) ?? 0) <= 0
+                          'max_size_bytes':
+                              (double.tryParse(_maxSizeGb.text.trim()) ?? 0) <=
+                                  0
                               ? 0
-                              : ((double.tryParse(_maxSizeGb.text.trim()) ?? 0) * 1024 * 1024 * 1024).round(),
-                          'min_seeders': int.tryParse(_minSeeders.text.trim()) ?? 0,
+                              : ((double.tryParse(_maxSizeGb.text.trim()) ??
+                                            0) *
+                                        1024 *
+                                        1024 *
+                                        1024)
+                                    .round(),
+                          'min_seeders':
+                              int.tryParse(_minSeeders.text.trim()) ?? 0,
                           'excluded_keywords': _splitList(_excludedKw.text),
                         });
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(SnackBar(content: Text('discover_saved'.tr)));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('discover_saved'.tr)),
+                          );
                         }
                       },
                       child: Text('discover_save'.tr),
@@ -2989,7 +3418,11 @@ class _SettingsTabState extends State<_SettingsTab> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.search, size: 16),
-                      label: Text(_scanning ? 'discover_scanning'.tr : 'discover_scan_now'.tr),
+                      label: Text(
+                        _scanning
+                            ? 'discover_scanning'.tr
+                            : 'discover_scan_now'.tr,
+                      ),
                     ),
                   ],
                 ),
@@ -3004,7 +3437,10 @@ class _SettingsTabState extends State<_SettingsTab> {
 
 /// 删除下载任务的三选弹窗：确认删除 / 移到待下载 / 取消
 Future<void> _confirmDeleteTask(
-    BuildContext context, DiscoverController c, int id) async {
+  BuildContext context,
+  DiscoverController c,
+  int id,
+) async {
   final choice = await showDialog<String>(
     context: context,
     builder: (dctx) => AlertDialog(
@@ -3012,14 +3448,17 @@ Future<void> _confirmDeleteTask(
       content: Text('discover_task_delete_confirm'.tr),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(dctx, 'cancel'),
-            child: Text('cancel'.tr)),
+          onPressed: () => Navigator.pop(dctx, 'cancel'),
+          child: Text('cancel'.tr),
+        ),
         TextButton(
-            onPressed: () => Navigator.pop(dctx, 'favorite'),
-            child: Text('discover_task_to_favorite'.tr)),
+          onPressed: () => Navigator.pop(dctx, 'favorite'),
+          child: Text('discover_task_to_favorite'.tr),
+        ),
         FilledButton(
-            onPressed: () => Navigator.pop(dctx, 'delete'),
-            child: Text('discover_task_delete_ok'.tr)),
+          onPressed: () => Navigator.pop(dctx, 'delete'),
+          child: Text('discover_task_delete_ok'.tr),
+        ),
       ],
     ),
   );
@@ -3103,6 +3542,7 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
 
   String get _title => (_d['title'] ?? '') as String;
   String get _poster => _posterOf(_d, size: 'w780');
+
   /// 详情页右侧「完整封面」用的中等尺寸（contain 展示，省流量也少占缓存）
   String get _posterSmall => _posterOf(_d, size: 'w500');
 
@@ -3160,14 +3600,23 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
         children: [
           _poster.isEmpty
               ? Container(color: theme.colorScheme.surfaceContainerHighest)
-              : Image.network(_poster, fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(color: theme.colorScheme.surfaceContainerHighest), headers: compatAuthHeaders,),
+              : Image.network(
+                  _poster,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: theme.colorScheme.surfaceContainerHighest,
+                  ),
+                  headers: compatAuthHeaders,
+                ),
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.black.withValues(alpha: 0.05), Colors.black.withValues(alpha: 0.82)],
+                colors: [
+                  Colors.black.withValues(alpha: 0.05),
+                  Colors.black.withValues(alpha: 0.82),
+                ],
               ),
             ),
           ),
@@ -3184,49 +3633,76 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                Text(
-                  _title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    height: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    if (_yearText.isNotEmpty)
-                      Text(_yearText,
-                          style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                    if (_runtimeText.isNotEmpty) ...[
-                      const SizedBox(width: 10),
-                      Text(_runtimeText,
-                          style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                    ],
-                    if (vote != null && vote > 0) ...[
-                      const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                            color: _ratingColor(vote), borderRadius: BorderRadius.circular(4)),
-                        child: Text('★ ${vote.toStringAsFixed(1)}',
-                            style: const TextStyle(color: Colors.white, fontSize: 12)),
+                      Text(
+                        _title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          if (_yearText.isNotEmpty)
+                            Text(
+                              _yearText,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                              ),
+                            ),
+                          if (_runtimeText.isNotEmpty) ...[
+                            const SizedBox(width: 10),
+                            Text(
+                              _runtimeText,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                          if (vote != null && vote > 0) ...[
+                            const SizedBox(width: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _ratingColor(vote),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '★ ${vote.toStringAsFixed(1)}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 2,
+                        children: ((_d['genres'] as List?) ?? [])
+                            .map(
+                              (g) => Text(
+                                (g ?? '').toString(),
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            )
+                            .toList(),
                       ),
                     ],
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 2,
-                  children: ((_d['genres'] as List?) ?? [])
-                      .map((g) => Text((g ?? '').toString(),
-                          style: const TextStyle(color: Colors.white70, fontSize: 12)))
-                      .toList(),
-                ),
-              ],
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -3238,8 +3714,13 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
                     height: 156,
                     child: _posterSmall.isEmpty
                         ? Container(color: Colors.black26)
-                        : Image.network(_posterSmall, fit: BoxFit.contain,
-                            errorBuilder: (_, __, ___) => Container(color: Colors.black26), headers: compatAuthHeaders,),
+                        : Image.network(
+                            _posterSmall,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) =>
+                                Container(color: Colors.black26),
+                            headers: compatAuthHeaders,
+                          ),
                   ),
                 ),
               ],
@@ -3260,7 +3741,8 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
       child: Row(
         children: [
           FilledButton.icon(
-            onPressed: () => _showPtResults(context, widget.c, mediaId: mediaId),
+            onPressed: () =>
+                _showPtResults(context, widget.c, mediaId: mediaId),
             icon: const Icon(Icons.download, size: 16),
             label: Text('discover_search_pt'.tr),
           ),
@@ -3272,40 +3754,50 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
               if (mediaId == null) return;
               final subId = widget.c.subscriptionIdOf(mediaId);
               if (subId == null) {
-                final go = await _confirmOwnedMaybe(
-                  context,
-                  {'owned': owned, 'title': _title},
-                  'discover_sub_add'.tr,
-                );
+                final go = await _confirmOwnedMaybe(context, {
+                  'owned': owned,
+                  'title': _title,
+                }, 'discover_sub_add'.tr);
                 if (!go || !mounted) return;
                 final ok = await widget.c.subscribe(mediaId);
                 if (!mounted) return;
                 setState(() {});
                 NasSnack.show(
-                    context, ok ? 'discover_saved'.tr : 'discover_save_failed'.tr);
+                  context,
+                  ok ? 'discover_saved'.tr : 'discover_save_failed'.tr,
+                );
                 return;
               }
               final ok = await widget.c.unsubscribe(subId);
               if (!mounted) return;
               setState(() {});
               NasSnack.show(
-                  context, ok ? 'discover_saved'.tr : 'discover_save_failed'.tr);
+                context,
+                ok ? 'discover_saved'.tr : 'discover_save_failed'.tr,
+              );
             },
-            icon: Icon(subscribed ? Icons.notifications_active : Icons.notifications_none,
-                size: 16),
-            label: Text(subscribed ? 'discover_sub_added'.tr : 'discover_sub_add'.tr),
+            icon: Icon(
+              subscribed
+                  ? Icons.notifications_active
+                  : Icons.notifications_none,
+              size: 16,
+            ),
+            label: Text(
+              subscribed ? 'discover_sub_added'.tr : 'discover_sub_add'.tr,
+            ),
           ),
           const SizedBox(width: 6),
           // 收藏（待下载）单独一个星标：它决定「待下载」队列，和订阅是两件事
           IconButton(
-            tooltip: favorited ? 'discover_favorited'.tr : 'discover_subscribe'.tr,
+            tooltip: favorited
+                ? 'discover_favorited'.tr
+                : 'discover_subscribe'.tr,
             onPressed: () async {
               if (mediaId == null) return;
-              final go = await _confirmOwnedMaybe(
-                context,
-                {'owned': owned, 'title': _title},
-                'discover_subscribe'.tr,
-              );
+              final go = await _confirmOwnedMaybe(context, {
+                'owned': owned,
+                'title': _title,
+              }, 'discover_subscribe'.tr);
               if (!go || !mounted) return;
               await widget.c.toggleFavoriteByMediaId(mediaId);
               if (!mounted) return;
@@ -3319,30 +3811,40 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
           ),
           const Spacer(),
           if (owned)
-            Text('discover_owned'.tr, style: TextStyle(color: Colors.green.shade700, fontSize: 12)),
+            Text(
+              'discover_owned'.tr,
+              style: TextStyle(color: Colors.green.shade700, fontSize: 12),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildOverview(ThemeData theme) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('discover_detail_overview'.tr,
-                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            Text(
-              ((_d['overview'] ?? '') as String).trim().isEmpty ? '-' : (_d['overview'] as String),
-              style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
-            ),
-          ],
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'discover_detail_overview'.tr,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
         ),
-      );
+        const SizedBox(height: 6),
+        Text(
+          ((_d['overview'] ?? '') as String).trim().isEmpty
+              ? '-'
+              : (_d['overview'] as String),
+          style: theme.textTheme.bodyMedium?.copyWith(height: 1.5),
+        ),
+      ],
+    ),
+  );
 
   Widget _buildSeasons(ThemeData theme) {
-    final seasons = ((_d['seasons'] as List?) ?? []).cast<Map<String, dynamic>>();
+    final seasons = ((_d['seasons'] as List?) ?? [])
+        .cast<Map<String, dynamic>>();
     if (seasons.isEmpty) return const SizedBox.shrink();
     final idx = _seasonIndex.clamp(0, seasons.length - 1);
     final cur = seasons[idx];
@@ -3351,8 +3853,12 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('discover_detail_seasons'.tr,
-              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            'discover_detail_seasons'.tr,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 6),
           SizedBox(
             height: 34,
@@ -3364,7 +3870,9 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
                 child: _pill(
                   theme,
                   dense: true,
-                  label: (seasons[i]['name'] ?? 'S${seasons[i]['season_number']}').toString(),
+                  label:
+                      (seasons[i]['name'] ?? 'S${seasons[i]['season_number']}')
+                          .toString(),
                   selected: i == idx,
                   onTap: () => setState(() => _seasonIndex = i),
                 ),
@@ -3391,13 +3899,20 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
         children: [
           SizedBox(
             width: 96,
-            child: Text(label,
-                style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
           ),
           Expanded(
-            child: Text(value,
-                maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodyMedium),
+            child: Text(
+              value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium,
+            ),
           ),
         ],
       ),
@@ -3411,17 +3926,44 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('discover_detail_info'.tr,
-              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            'discover_detail_info'.tr,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 4),
-          _kv(theme, 'discover_release_date'.tr, (_d['release_date'] ?? '').toString()),
-          _kv(theme, 'discover_detail_status'.tr,
-              tmdbStatusLabel((_d['status'] ?? '').toString())),
+          _kv(
+            theme,
+            'discover_release_date'.tr,
+            (_d['release_date'] ?? '').toString(),
+          ),
+          _kv(
+            theme,
+            'discover_detail_status'.tr,
+            tmdbStatusLabel((_d['status'] ?? '').toString()),
+          ),
           _kv(theme, 'discover_detail_language'.tr, langs),
-          _kv(theme, 'discover_detail_country'.tr, ((_d['countries'] as List?) ?? []).join(' / ')),
-          _kv(theme, 'discover_detail_network'.tr, ((_d['networks'] as List?) ?? []).join(' / ')),
-          _kv(theme, 'discover_detail_company'.tr, ((_d['companies'] as List?) ?? []).join(' / ')),
-          _kv(theme, 'discover_detail_creator'.tr, ((_d['created_by'] as List?) ?? []).join(' / ')),
+          _kv(
+            theme,
+            'discover_detail_country'.tr,
+            ((_d['countries'] as List?) ?? []).join(' / '),
+          ),
+          _kv(
+            theme,
+            'discover_detail_network'.tr,
+            ((_d['networks'] as List?) ?? []).join(' / '),
+          ),
+          _kv(
+            theme,
+            'discover_detail_company'.tr,
+            ((_d['companies'] as List?) ?? []).join(' / '),
+          ),
+          _kv(
+            theme,
+            'discover_detail_creator'.tr,
+            ((_d['created_by'] as List?) ?? []).join(' / '),
+          ),
           _buildLinks(theme),
         ],
       ),
@@ -3431,19 +3973,24 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
   Widget _buildLinks(ThemeData theme) {
     final links = (_d['links'] as Map?) ?? const {};
     final entries = <MapEntry<String, String>>[];
-    if ((links['tmdb'] ?? '').toString().isNotEmpty) entries.add(MapEntry('TMDB', links['tmdb'].toString()));
-    if ((links['imdb'] ?? '').toString().isNotEmpty) entries.add(MapEntry('IMDb', links['imdb'].toString()));
-    if ((links['douban'] ?? '').toString().isNotEmpty) entries.add(MapEntry('豆瓣', links['douban'].toString()));
+    if ((links['tmdb'] ?? '').toString().isNotEmpty)
+      entries.add(MapEntry('TMDB', links['tmdb'].toString()));
+    if ((links['imdb'] ?? '').toString().isNotEmpty)
+      entries.add(MapEntry('IMDb', links['imdb'].toString()));
+    if ((links['douban'] ?? '').toString().isNotEmpty)
+      entries.add(MapEntry('豆瓣', links['douban'].toString()));
     if (entries.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Wrap(
         spacing: 8,
         children: entries
-            .map((e) => ActionChip(
-                  label: Text(e.key, style: const TextStyle(fontSize: 12)),
-                  onPressed: () => _openUrl(e.value),
-                ))
+            .map(
+              (e) => ActionChip(
+                label: Text(e.key, style: const TextStyle(fontSize: 12)),
+                onPressed: () => _openUrl(e.value),
+              ),
+            )
             .toList(),
       ),
     );
@@ -3457,8 +4004,12 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('discover_detail_cast'.tr,
-              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+          Text(
+            'discover_detail_cast'.tr,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           const SizedBox(height: 8),
           SizedBox(
             height: 132,
@@ -3468,7 +4019,10 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
               separatorBuilder: (_, __) => const SizedBox(width: 10),
               itemBuilder: (_, i) {
                 final p = cast[i];
-                final url = _proxiedImage((p['profile_url'] ?? '').toString(), size: 'w185');
+                final url = _proxiedImage(
+                  (p['profile_url'] ?? '').toString(),
+                  size: 'w185',
+                );
                 return SizedBox(
                   width: 84,
                   child: Column(
@@ -3477,20 +4031,41 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
                         borderRadius: BorderRadius.circular(8),
                         child: url.isEmpty
                             ? Container(
-                                width: 84, height: 84, color: theme.colorScheme.surfaceContainerHighest)
-                            : Image.network(url, width: 84, height: 84, fit: BoxFit.cover,
+                                width: 84,
+                                height: 84,
+                                color:
+                                    theme.colorScheme.surfaceContainerHighest,
+                              )
+                            : Image.network(
+                                url,
+                                width: 84,
+                                height: 84,
+                                fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) => Container(
-                                    width: 84,
-                                    height: 84,
-                                    color: theme.colorScheme.surfaceContainerHighest), headers: compatAuthHeaders,),
+                                  width: 84,
+                                  height: 84,
+                                  color:
+                                      theme.colorScheme.surfaceContainerHighest,
+                                ),
+                                headers: compatAuthHeaders,
+                              ),
                       ),
                       const SizedBox(height: 4),
-                      Text((p['name'] ?? '') as String,
-                          maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-                      Text((p['character'] ?? '') as String,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 11, color: theme.disabledColor)),
+                      Text(
+                        (p['name'] ?? '') as String,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      Text(
+                        (p['character'] ?? '') as String,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: theme.disabledColor,
+                        ),
+                      ),
                     ],
                   ),
                 );

@@ -19,6 +19,8 @@ void main() {
       'nav.more': '更多',
       'nav.home': '工作台',
       'ui.photo.041': '照片',
+      'ui.photo.056': '时间线',
+      'ui.photo.021': '足迹',
     });
   });
 
@@ -28,6 +30,8 @@ void main() {
     String appId = 'photo',
     String defaultKey = 'timeline',
     double height = 844,
+    NavSelection? selection,
+    void Function(String key)? onReselect,
   }) async {
     tester.view.devicePixelRatio = 1.0;
     tester.view.physicalSize = Size(width, height);
@@ -38,6 +42,8 @@ void main() {
           body: AppNavShell(
             appId: appId,
             defaultKey: defaultKey,
+            selection: selection,
+            onReselect: onReselect,
             content: (key) => Center(child: Text('content:$key')),
           ),
         ),
@@ -113,6 +119,31 @@ void main() {
     // 选中 lib:7 时，高亮的是「库」tab（索引 0），不是退回最后一个
     expect(bar.currentIndex, 0);
     expect(find.text('content:lib:7'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('重复点当前项才触发 onReselect（影视库「点库名回根目录」靠它）', (tester) async {
+    final selection = NavSelection('timeline');
+    final hits = <String>[];
+    await pumpShell(
+      tester,
+      width: 1280,
+      height: 900,
+      selection: selection,
+      onReselect: hits.add,
+    );
+
+    // 换一项：内容本来就会重建，不算「重选」，不该回调
+    final footprint = find.byKey(NasSideNav.keyOf('photo', 'footprint'));
+    await tester.tap(footprint);
+    await tester.pump();
+    expect(selection.key, 'footprint');
+    expect(hits, isEmpty);
+
+    // 再点一次同一个库 / 菜单项：外壳无法靠换 key 重建，交给 onReselect
+    await tester.tap(footprint);
+    await tester.pump();
+    expect(hits, <String>['footprint']);
     expect(tester.takeException(), isNull);
   });
 }

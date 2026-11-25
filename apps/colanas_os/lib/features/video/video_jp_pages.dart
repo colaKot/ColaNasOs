@@ -110,48 +110,39 @@ class _VideoJpRankPageState extends State<VideoJpRankPage> {
         children: [
           Padding(
             padding: const EdgeInsets.all(NasTokens.spaceMd),
-            child: Row(
+            child: Wrap(
+              spacing: NasTokens.spaceMd,
+              runSpacing: NasTokens.spaceSm,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                SegmentedButton<String>(
-                  segments: [
-                    ButtonSegment(
-                      value: 'movie',
-                      label: Text(tr('video.jp.movie')),
-                    ),
-                    ButtonSegment(
-                      value: 'actor',
-                      label: Text(tr('video.jp.actor')),
-                    ),
+                NasPillTabs(
+                  labels: [
+                    tr('video.jp.movie'),
+                    tr('video.jp.actor'),
                   ],
-                  selected: {_kind},
-                  onSelectionChanged: (v) {
-                    setState(() => _kind = v.first);
+                  selectedIndex: _kind == 'actor' ? 1 : 0,
+                  onSelect: (i) {
+                    final v = i == 1 ? 'actor' : 'movie';
+                    if (v == _kind) return;
+                    setState(() => _kind = v);
                     _reload();
                   },
                 ),
-                const SizedBox(width: NasTokens.spaceSm),
-                SegmentedButton<String>(
-                  segments: [
-                    ButtonSegment(
-                      value: 'daily',
-                      label: Text(tr('video.jp.daily')),
-                    ),
-                    ButtonSegment(
-                      value: 'weekly',
-                      label: Text(tr('video.jp.weekly')),
-                    ),
-                    ButtonSegment(
-                      value: 'monthly',
-                      label: Text(tr('video.jp.monthly')),
-                    ),
+                NasPillTabs(
+                  labels: [
+                    tr('video.jp.daily'),
+                    tr('video.jp.weekly'),
+                    tr('video.jp.monthly'),
                   ],
-                  selected: {_period},
-                  onSelectionChanged: (v) {
-                    setState(() => _period = v.first);
+                  selectedIndex:
+                      const ['daily', 'weekly', 'monthly'].indexOf(_period),
+                  onSelect: (i) {
+                    const periods = ['daily', 'weekly', 'monthly'];
+                    if (periods[i] == _period) return;
+                    setState(() => _period = periods[i]);
                     _reload();
                   },
                 ),
-                const Spacer(),
                 NasRefreshButton(onPressed: _reload),
               ],
             ),

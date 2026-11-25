@@ -6,6 +6,7 @@ import '../../shell/app_widgets.dart';
 import '../../core/display_labels.dart';
 import '../../core/session.dart';
 import '../../shell/app_nav_shell.dart';
+import '../video/video_jp_pages.dart';
 import 'discover_page.dart';
 
 /// 发现页：与其它模块同一套左侧二级导航（`contracts/apps.json#nav`）。
@@ -23,6 +24,27 @@ class _DiscoverShellPageState extends State<DiscoverShellPage> {
   /// 全局刷新：换 key 让当前栏目的内容页重建（含重新请求）
   int _reloadTick = 0;
 
+  /// 是否存在日本片库：「日本榜单」只在有日本片库时出现
+  bool _hasJpLibrary = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLibraries();
+  }
+
+  Future<void> _loadLibraries() async {
+    try {
+      final res = await ApiSession.instance.client.videoLibraryList();
+      if (!mounted) return;
+      setState(() {
+        _hasJpLibrary = res.items.any((l) => l.libType == 'jp_movie');
+      });
+    } catch (_) {
+      // 库列表读不到：不显示日本榜单入口，不影响发现其它栏目
+    }
+  }
+
   static const _doubanTags = <(String, String)>[
     ('热门', 'discover.doubanHot'), // i18n-ignore 豆瓣接口 tag（协议值）
     ('选电影', 'discover.doubanMovie'), // i18n-ignore 豆瓣接口 tag（协议值）
@@ -33,6 +55,8 @@ class _DiscoverShellPageState extends State<DiscoverShellPage> {
 
   Widget _content(String key) {
     switch (key) {
+      case 'jp_rank':
+        return const VideoJpRankPage(embedded: true);
       case 'pt':
         return const _PtTab();
       case 'rss':
@@ -53,6 +77,9 @@ class _DiscoverShellPageState extends State<DiscoverShellPage> {
     return AppNavShell(
       appId: 'discover',
       defaultKey: 'discover',
+      conditions: {
+        if (_hasJpLibrary) 'hasJpLibrary',
+      },
       content: (key) => Column(
         children: [
           // 内容区右上角的刷新：以前在顶部胶囊页签那一行，页签改成左侧栏后单独留一条

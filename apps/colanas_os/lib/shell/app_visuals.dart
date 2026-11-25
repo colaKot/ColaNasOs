@@ -58,6 +58,7 @@ class AppVisuals {
     'music': Icons.library_music_outlined,
     'music_note_outlined': Icons.music_note_outlined,
     'note': Icons.sticky_note_2_outlined,
+    'info_outline': Icons.info_outline,
     'people_outline': Icons.people_outline,
     'people_outlined': Icons.people_outlined,
     'photo': Icons.photo_library_outlined,
