@@ -45,8 +45,10 @@ export default [
       'apps/**/.dart_tool/**',
       // Flutter Web 引导模板：`{{flutter_js}}` 等占位符由构建期替换，不是合法 JS
       'apps/colanas_os/web/flutter_bootstrap.js',
-      // 鸿蒙端工程由 DevEco / hvigor 维护（hvigorfile.ts 依赖 @ohos/hvigor-ohos-plugin）
-      'apps/colanas_os/ohos/**',
+      // 鸿蒙端工程由 DevEco / hvigor 维护（hvigorfile.ts 依赖 @ohos/hvigor-ohos-plugin）；
+      // flutter_ohos 的 pub get / 打包还会生成 ohos_photo 等副本与 flutter_assets 静态资源，
+      // 统一按 `ohos*` 目录忽略，避免把第三方 minify JS 扫进 lint。
+      'apps/**/ohos*/**',
       'vendor/**',
     ],
   },

@@ -30,9 +30,13 @@ dist_installer/
 dist_*/
 # 鸿蒙端（flutter_ohos）构建中间物与 SDK 拷入的 har，只保留工程骨架
 apps/colanas_os/ohos/entry/har/
-apps/colanas_os/ohos/**/oh_modules/
-apps/colanas_os/ohos/**/.hvigor/
-apps/colanas_os/ohos/**/oh-package-lock.json5
+apps/colanas_os/ohos/har/
+apps/colanas_os/ohos/entry/libs/
+apps/colanas_os/ohos/entry/src/main/resources/rawfile/
+apps/colanas_os/ohos*/**/oh_modules/
+apps/colanas_os/ohos*/**/.hvigor/
+apps/colanas_os/ohos*/**/oh-package-lock.json5
+apps/colanas_os/ohos*/local.properties
 
 # 本机施工过程稿，仅供本地留档，不随仓库发布。
 docs/12-影视与发现差距核对.md

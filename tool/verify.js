@@ -241,6 +241,27 @@ function changedFiles() {
   return [...out];
 }
 
+/**
+ * package.json 只改了 version 字段？
+ *
+ * `package.json` 进 FULL_TRIGGERS 是因为它登记所有门禁 / 构建脚本，
+ * 改脚本确实要全量。但发版时只改一行 version 也退全量属于误伤：
+ * 版本一致性已有 `version:check` 兜底，不必跑满 82 步。
+ * 这里用 `-U0` 看真实变更行，只有 version 行才算「仅版本号」。
+ */
+function packageJsonVersionOnly() {
+  const out =
+    spawnSync('git', ['-c', 'core.quotepath=false', 'diff', '-U0', base, '--', 'package.json'], {
+      cwd: root,
+      encoding: 'utf-8',
+    }).stdout || '';
+  const changed = out
+    .split('\n')
+    .filter((l) => /^[+-]/.test(l) && !/^(\+\+\+|---)/.test(l));
+  if (changed.length === 0) return false;
+  return changed.every((l) => /^[+-]\s*"version"\s*:/.test(l));
+}
+
 function selectSteps(files) {
   const pick = new Set(['build', 'lint', 'test']);
   const domains = new Set();
@@ -300,6 +321,12 @@ function selectSteps(files) {
         continue;
       }
       hits.forEach((s) => pick.add(s));
+      continue;
+    }
+    // package.json 只改版本号（发版日常）：走契约层即可，别把整条门禁推成全量。
+    // 改 scripts / dependencies 仍然落到下面的 FULL_TRIGGERS。
+    if (p === 'package.json' && packageJsonVersionOnly()) {
+      CONTRACT_STEPS.forEach((s) => pick.add(s));
       continue;
     }
     if (FULL_TRIGGERS.some((re) => re.test(p))) {
