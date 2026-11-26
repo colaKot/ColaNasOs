@@ -162,14 +162,15 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
   Widget _buildPage(BuildContext context) {
     if (_loading) return const NasLoading();
     if (_error != null) return NasErrorState(message: _error!, onRetry: _loadRoots);
-    return Column(
-      children: [
-        _toolbar(),
-        const Divider(height: 1),
-        // 多选条紧贴工具栏（与电视剧列表 / 相册时间轴同一落点）
-        if (_selecting) _selectBar(),
-        Expanded(child: _source == null ? _rootsView() : _dirView()),
-      ],
+    return NasSelectionOverlay(
+      bar: _selecting ? _selectBar() : null,
+      child: Column(
+        children: [
+          _toolbar(),
+          const Divider(height: 1),
+          Expanded(child: _source == null ? _rootsView() : _dirView()),
+        ],
+      ),
     );
   }
 
@@ -403,7 +404,7 @@ class _PhotoFoldersPageState extends State<PhotoFoldersPage> {
 
   Widget _selectBar() {
     final ids = (_list?.fileItems ?? const <PhotoItem>[]).map((e) => e.id);
-    return NasSelectionBar(
+    return NasSelectionFloatingBar(
       title: tr(
         'photo.timeline.selected',
       ).replaceAll('{n}', '${_selected.length}'),

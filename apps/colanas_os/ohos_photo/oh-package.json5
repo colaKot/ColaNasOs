@@ -1,0 +1,12 @@
+{
+  "modelVersion": "6.0.2",
+  "description": "ColaNasOs HarmonyOS shell (flutter_ohos). Flutter 代码见同级 ../lib。",
+  "dependencies": {},
+  "devDependencies": {},
+  "dynamicDependencies": {},
+  "overrides": {
+    "photo_manager": "file:./har/photo_manager.har",
+    "@ohos/flutter_module": "file:./entry",
+    "@ohos/flutter_ohos": "file:./har/flutter.har"
+  }
+}

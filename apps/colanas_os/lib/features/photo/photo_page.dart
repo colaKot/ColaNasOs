@@ -883,7 +883,7 @@ if (ok != true) return;
   Widget _selectBar() {
     final ids = _visibleItems.map((p) => p.id);
     final any = _selected.isNotEmpty;
-    return NasSelectionBar(
+    return NasSelectionFloatingBar(
       title: tr(
         'photo.timeline.selected',
       ).replaceAll('{n}', '${_selected.length}'),
@@ -1430,8 +1430,10 @@ if (ok != true) return;
   Widget _timelinePane() {
     final stats = _stats;
     final visible = _visibleItems;
-    return Column(
-      children: [
+    return NasSelectionOverlay(
+      bar: _selecting && !isCompactWidth(context) ? _selectBar() : null,
+      child: Column(
+        children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(
             NasTokens.spaceSm,
@@ -1547,57 +1549,71 @@ if (ok != true) return;
             ],
           ),
         ),
-        // 多选条紧贴工具栏（与电视剧列表同一落点）；手机端由外壳底部工具条接管
-        if (_selecting && !isCompactWidth(context)) _selectBar(),
+        // 多选条统一改为浮层（右下角），手机端由外壳底部工具条接管
         if (_filter != null || _mediaType != _PhotoMediaType.all) _filterChips(),
         if (_query.isNotEmpty && _hybridTags.isNotEmpty) _hybridInfoBar(),
         if (_query.isNotEmpty && _hybridTags.isEmpty && _hybridUnmatched.isNotEmpty)
           _hybridInfoBar(),
-        Expanded(
-          child: _loading
-              ? const NasLoading()
-              : _error != null
-              ? NasErrorState(message: _error!, onRetry: _bootstrap)
-              : visible.isEmpty
-              ? NasEmptyState(
-                  title: _query.isEmpty
-                      ? tr('ui.photo.058')
-                      : tr('ui.photo.059'),
-                  message: _libraries.isEmpty
-                      ? tr('ui.photo.h7ed401')
-                      : tr('ui.photo.h02e23f'),
-                  icon: Icons.photo_library_outlined,
-                )
-              : LayoutBuilder(
-                  builder: (context, c) {
-                    // 手机端固定 3 列（2026-11-04 用户要求：一行 3 个、就用这个大小）。
-                    // 桌面沿用「160 基准 → 6 列」的缩放换算。
-                    final compactGrid =
-                        layoutFor(c.maxWidth) == LayoutMode.compact;
-                    return GridView.builder(
-                      controller: _scroll,
-                      padding: const EdgeInsets.all(NasTokens.spaceSm),
-                      // 默认 6 列；缩放档位按 160 / _thumbExtent 换算列数
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: compactGrid
-                            ? 3
-                            : (6 * 160 / _thumbExtent).round().clamp(2, 12),
-                        crossAxisSpacing: 3,
-                        mainAxisSpacing: 3,
-                      ),
-                      itemCount: visible.length + (_loadingMore ? 1 : 0),
-                      itemBuilder: (context, i) {
-                        if (i >= visible.length) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-                        final item = visible[i];
-                        if (_selecting) {
-                          final picked = _selected.contains(item.id);
-                          // 选择态视觉与电视剧列表一致：封面原样，左上角圆勾
-                          return NasSelectionCover(
-                            selected: picked,
+          Expanded(
+            child: _loading
+                ? const NasLoading()
+                : _error != null
+                ? NasErrorState(message: _error!, onRetry: _bootstrap)
+                : visible.isEmpty
+                ? NasEmptyState(
+                    title: _query.isEmpty
+                        ? tr('ui.photo.058')
+                        : tr('ui.photo.059'),
+                    message: _libraries.isEmpty
+                        ? tr('ui.photo.h7ed401')
+                        : tr('ui.photo.h02e23f'),
+                    icon: Icons.photo_library_outlined,
+                  )
+                : LayoutBuilder(
+                    builder: (context, c) {
+                      // 手机端固定 3 列（2026-11-04 用户要求：一行 3 个、就用这个大小）。
+                      // 桌面沿用「160 基准 → 6 列」的缩放换算。
+                      final compactGrid =
+                          layoutFor(c.maxWidth) == LayoutMode.compact;
+                      return GridView.builder(
+                        controller: _scroll,
+                        padding: const EdgeInsets.all(NasTokens.spaceSm),
+                        // 默认 6 列；缩放档位按 160 / _thumbExtent 换算列数
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: compactGrid
+                              ? 3
+                              : (6 * 160 / _thumbExtent).round().clamp(2, 12),
+                          crossAxisSpacing: 3,
+                          mainAxisSpacing: 3,
+                        ),
+                        itemCount: visible.length + (_loadingMore ? 1 : 0),
+                        itemBuilder: (context, i) {
+                          if (i >= visible.length) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                          final item = visible[i];
+                          if (_selecting) {
+                            final picked = _selected.contains(item.id);
+                            // 选择态视觉与电视剧列表一致：封面原样，左上角圆勾
+                            return NasSelectionCover(
+                              selected: picked,
+                              child: _PhotoTile(
+                                item: item,
+                                url: _thumbUrlOf(item),
+                                headers: _imageHeaders,
+                                favorite: _isFavorite(item),
+                                onToggleFavorite: () => _toggleFavorite(item),
+                                showFavorite: false,
+                                // 键盘 / D-pad 的 Enter 也走选择逻辑
+                                onTap: () => _selection.toggle(item.id),
+                              ),
+                            );
+                          }
+                          // 桌面 / Web 右键：与长按同一批动作（多选态下不弹）
+                          return NasContextMenuRegion(
+                            entries: _photoMenuEntries(item, i),
                             child: _PhotoTile(
                               item: item,
                               url: _thumbUrlOf(item),
@@ -1605,31 +1621,17 @@ if (ok != true) return;
                               favorite: _isFavorite(item),
                               onToggleFavorite: () => _toggleFavorite(item),
                               showFavorite: false,
-                              // 键盘 / D-pad 的 Enter 也走选择逻辑
-                              onTap: () => _selection.toggle(item.id),
+                              onTap: () => _openViewer(i),
+                              onLongPress: () => _longPressPhoto(i),
                             ),
                           );
-                        }
-                        // 桌面 / Web 右键：与长按同一批动作（多选态下不弹）
-                        return NasContextMenuRegion(
-                          entries: _photoMenuEntries(item, i),
-                          child: _PhotoTile(
-                            item: item,
-                            url: _thumbUrlOf(item),
-                            headers: _imageHeaders,
-                            favorite: _isFavorite(item),
-                            onToggleFavorite: () => _toggleFavorite(item),
-                            showFavorite: false,
-                            onTap: () => _openViewer(i),
-                            onLongPress: () => _longPressPhoto(i),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-        ),
-      ],
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 

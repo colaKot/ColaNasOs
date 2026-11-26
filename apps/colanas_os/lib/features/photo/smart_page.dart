@@ -1885,7 +1885,6 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
 
   /// 人脸区顶栏：多选 / 候选合并 / 撤消 / 显示已隐藏（比藏在长按里好找）
   Widget _faceToolbar() {
-    if (_clusterMulti) return _clusterMultiBar();
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         NasTokens.spaceMd,
@@ -1948,7 +1947,7 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
   Widget _clusterMultiBar() {
     final ids = [for (final c in _clusters) c.id];
     final empty = _clusterMultiSel.isEmpty;
-    return NasSelectionBar(
+    return NasSelectionFloatingBar(
       title: tr('photo.face.clusterSelected', {
         'count': '${_clusterMultiSel.length}',
       }),
@@ -2112,58 +2111,59 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
         : _photos;
     if (visible.isEmpty) return Center(child: Text(tr('ui.photo.066')));
     final selectable = [for (final p in visible) if (p.faceId != null) p.faceId!];
-    return Column(
-      children: [
-        // 右上角「多选照片」：长按 / 右键也能进，但手机上没人会去试长按
-        if (_activeCluster != null && !_clusterSelecting)
-          Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.only(right: NasTokens.spaceSm, top: 2),
-              child: TextButton.icon(
-                onPressed: () => setState(() => _clusterSelecting = true),
-                icon: const Icon(Icons.checklist, size: 18),
-                label: Text(tr('photo.face.selectPhotos')),
+    return NasSelectionOverlay(
+      bar: (_clusterSelecting && _activeCluster != null)
+          ? NasSelectionFloatingBar(
+              title: tr('photo.face.batchSelected', {'count': '${_clusterSelected.length}'}),
+              allSelected: selectable.isNotEmpty && _clusterSelected.length >= selectable.length,
+              onToggleAll: () => setState(() {
+                if (_clusterSelected.length >= selectable.length) {
+                  _clusterSelected.clear();
+                } else {
+                  _clusterSelected.addAll(selectable);
+                }
+              }),
+              onClose: () => setState(() {
+                _clusterSelecting = false;
+                _clusterSelected.clear();
+              }),
+              actions: [
+                NasSelectionAction(
+                  label: tr('photo.face.batchMoveOut'),
+                  icon: Icons.person_off_outlined,
+                  danger: true,
+                  onPressed: () => _batchClusterAction('out'),
+                ),
+                NasSelectionAction(
+                  label: tr('photo.face.batchMoveTo'),
+                  icon: Icons.person_add_outlined,
+                  onPressed: () => _batchClusterAction('to'),
+                ),
+                NasSelectionAction(
+                  label: tr('photo.face.batchDelete'),
+                  icon: Icons.delete_outline,
+                  danger: true,
+                  onPressed: () => _batchClusterAction('delete'),
+                ),
+              ],
+            )
+          : null,
+      child: Column(
+        children: [
+          // 右上角「多选照片」：长按 / 右键也能进，但手机上没人会去试长按
+          if (_activeCluster != null && !_clusterSelecting)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: NasTokens.spaceSm, top: 2),
+                child: TextButton.icon(
+                  onPressed: () => setState(() => _clusterSelecting = true),
+                  icon: const Icon(Icons.checklist, size: 18),
+                  label: Text(tr('photo.face.selectPhotos')),
+                ),
               ),
             ),
-          ),
-        // 簇详情多选条：右键 / 长按菜单里的「多选」进入
-        if (_clusterSelecting && _activeCluster != null)
-          NasSelectionBar(
-            title: tr('photo.face.batchSelected', {'count': '${_clusterSelected.length}'}),
-            allSelected: selectable.isNotEmpty && _clusterSelected.length >= selectable.length,
-            onToggleAll: () => setState(() {
-              if (_clusterSelected.length >= selectable.length) {
-                _clusterSelected.clear();
-              } else {
-                _clusterSelected.addAll(selectable);
-              }
-            }),
-            onClose: () => setState(() {
-              _clusterSelecting = false;
-              _clusterSelected.clear();
-            }),
-            actions: [
-              NasSelectionAction(
-                label: tr('photo.face.batchMoveOut'),
-                icon: Icons.person_off_outlined,
-                danger: true,
-                onPressed: () => _batchClusterAction('out'),
-              ),
-              NasSelectionAction(
-                label: tr('photo.face.batchMoveTo'),
-                icon: Icons.person_add_outlined,
-                onPressed: () => _batchClusterAction('to'),
-              ),
-              NasSelectionAction(
-                label: tr('photo.face.batchDelete'),
-                icon: Icons.delete_outline,
-                danger: true,
-                onPressed: () => _batchClusterAction('delete'),
-              ),
-            ],
-          ),
-        if (sceneMode)
+          if (sceneMode)
           Padding(
             padding: const EdgeInsets.fromLTRB(
               NasTokens.spaceMd,
@@ -2294,7 +2294,8 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
             },
           ),
         ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -2423,11 +2424,14 @@ class _PhotoSmartPageState extends State<PhotoSmartPage> {
                 ], tr('ui.photo.h6a8cef')),
               'rules' => _rulesPane(),
               'search' => _searchPane(),
-              _ => Column(
-                  children: [
-                    if (_clusters.isNotEmpty) _faceToolbar(),
-                    Expanded(child: _faceGrid()),
-                  ],
+              _ => NasSelectionOverlay(
+                  bar: _clusterMulti ? _clusterMultiBar() : null,
+                  child: Column(
+                    children: [
+                      if (_clusters.isNotEmpty) _faceToolbar(),
+                      Expanded(child: _faceGrid()),
+                    ],
+                  ),
                 ),
             },
     );

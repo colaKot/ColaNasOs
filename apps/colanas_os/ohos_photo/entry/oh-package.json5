@@ -1,0 +1,13 @@
+{
+  "name": "entry",
+  "version": "1.5.11",
+  "description": "ColaNasOs entry module (flutter_ohos).",
+  "main": "",
+  "author": "colanas",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@ohos/flutter_ohos": "har/flutter.har",
+    "photo_manager": "file:../har/photo_manager.har"
+  },
+  "devDependencies": {}
+}
