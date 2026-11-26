@@ -306,6 +306,7 @@ const Map<String, AppNavSpec> kAppNavSpecs = <String, AppNavSpec>{
         ],
       ),
     ],
+    mobileTabs: <String>['aiNews', 'localBlog', 'blogCollections'],
   ),
   'sync': AppNavSpec(
     appId: 'sync',

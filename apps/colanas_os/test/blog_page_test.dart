@@ -4,9 +4,11 @@ import 'dart:io';
 import 'package:colanas_os/core/session.dart';
 import 'package:colanas_os/features/blog/ai_news_page.dart';
 import 'package:colanas_os/features/blog/blog_player_page.dart';
+import 'package:colanas_os/features/blog/blog_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nas_core/nas_core.dart';
+import 'package:nas_ui/nas_ui.dart';
 
 /// AI 新闻页的**带数据**渲染测试。
 ///
@@ -377,5 +379,37 @@ void main() {
       final ids = (d.items ?? const []).map((i) => i.value).toSet();
       expect(d.value == null || ids.contains(d.value), isTrue);
     }
+  });
+
+  testWidgets('手机端：底部三个 tab = AI 新闻 / 本地博客 / 博客合集', (tester) async {
+    // 2026-11-26 用户反馈：播客在手机上只有内容、没有下面这条导航栏，
+    // 三个入口只能靠桌面侧栏切换。根因是契约 `apps.json#blog.nav.mobile` 没写。
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    ApiSession.instance.client = ApiClient(
+      baseUrl: 'http://127.0.0.1:9',
+      transport: _FakeTransport(),
+      tokenProvider: () async => 'test-token',
+    );
+    await tester.pumpWidget(const MaterialApp(home: BlogShellPage()));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(NasBottomTabBar), findsOneWidget);
+    expect(find.text('本地博客'), findsOneWidget);
+    expect(find.text('博客合集'), findsOneWidget);
+    // 顶栏标题 + 底部 tab 都会出现「AI 新闻」
+    expect(find.text('AI 新闻'), findsWidgets);
+
+    await tester.tap(find.text('本地博客'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('本地博客'), findsWidgets);
+
+    await tester.tap(find.text('博客合集'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 }

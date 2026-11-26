@@ -611,7 +611,14 @@
               }
             ]
           }
-        ]
+        ],
+        "mobile": {
+          "tabs": [
+            "aiNews",
+            "localBlog",
+            "blogCollections"
+          ]
+        }
       }
     },
     {
