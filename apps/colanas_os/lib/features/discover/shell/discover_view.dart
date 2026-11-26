@@ -478,8 +478,9 @@ class _DiscoverTab extends StatelessWidget {
                           return;
                         }
                         if (catalog || searchMode) {
-                          if (mediaId != null)
+                          if (mediaId != null) {
                             c.toggleFavoriteByMediaId(mediaId);
+                          }
                         } else {
                           c.toggleFavorite(i);
                         }
@@ -1962,8 +1963,9 @@ class _SetTokenDialog extends StatelessWidget {
         FilledButton(
           onPressed: () async {
             final id = site['id'];
-            if (id is int)
+            if (id is int) {
               await c.saveSiteToken(id: id, token: token.text.trim());
+            }
             if (context.mounted) Navigator.pop(context);
           },
           child: Text('discover_save'.tr),
@@ -3973,12 +3975,15 @@ class _MediaDetailPageState extends State<_MediaDetailPage> {
   Widget _buildLinks(ThemeData theme) {
     final links = (_d['links'] as Map?) ?? const {};
     final entries = <MapEntry<String, String>>[];
-    if ((links['tmdb'] ?? '').toString().isNotEmpty)
+    if ((links['tmdb'] ?? '').toString().isNotEmpty) {
       entries.add(MapEntry('TMDB', links['tmdb'].toString()));
-    if ((links['imdb'] ?? '').toString().isNotEmpty)
+    }
+    if ((links['imdb'] ?? '').toString().isNotEmpty) {
       entries.add(MapEntry('IMDb', links['imdb'].toString()));
-    if ((links['douban'] ?? '').toString().isNotEmpty)
+    }
+    if ((links['douban'] ?? '').toString().isNotEmpty) {
       entries.add(MapEntry('豆瓣', links['douban'].toString()));
+    }
     if (entries.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 6),

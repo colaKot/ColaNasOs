@@ -296,76 +296,51 @@ class _TransmissionPageState extends State<TransmissionPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _batchBar(),
-          Expanded(child: body),
-        ],
+      body: NasSelectionOverlay(
+        bar: _selected.isEmpty ? null : _batchBar(),
+        child: body,
       ),
     );
   }
 
   /// 批量操作栏：有选中才出现，暂停 / 开始 / 删除一次打给服务端（单条 RPC 带多个 ids）。
   Widget _batchBar() {
-    if (_selected.isEmpty) return const SizedBox.shrink();
-    return Material(
-      color: Theme.of(context).colorScheme.primaryContainer,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: NasTokens.spaceMd,
-            vertical: 4,
-          ),
-          child: Row(
-            children: [
-              Text(
-                '${tr('transmission.selectedCount')} ${_selected.length}',
-                style: TextStyle(fontSize: NasTokens.fontCaption),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.select_all, size: 20),
-                tooltip: tr('transmission.selectAll'),
-                onPressed: _selectAll,
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, size: 20),
-                tooltip: tr('transmission.cancelSelect'),
-                onPressed: () => setState(_selected.clear),
-              ),
-              IconButton(
-                icon: const Icon(Icons.pause, size: 20),
-                tooltip: tr('transmission.batchPause'),
-                onPressed: () => _runAction(_selected.toList(), 'pause'),
-              ),
-              IconButton(
-                icon: const Icon(Icons.play_arrow, size: 20),
-                tooltip: tr('transmission.batchStart'),
-                onPressed: () => _runAction(_selected.toList(), 'resume'),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20),
-                tooltip: tr('transmission.batchRemove'),
-                onPressed: () => _confirmRemove(_selected.toList()),
-              ),
-            ],
-          ),
+    final all = _items
+        .map((t) => (t['hash'] ?? '').toString())
+        .where((h) => h.isNotEmpty)
+        .toList(growable: false);
+    return NasSelectionFloatingBar(
+      title: '${tr('transmission.selectedCount')} ${_selected.length}',
+      allSelected: all.isNotEmpty && all.every(_selected.contains),
+      onToggleAll: () => setState(() {
+        if (all.isNotEmpty && all.every(_selected.contains)) {
+          _selected.clear();
+        } else {
+          _selected
+            ..clear()
+            ..addAll(all);
+        }
+      }),
+      onClose: () => setState(_selected.clear),
+      actions: [
+        NasSelectionAction(
+          label: tr('transmission.batchPause'),
+          icon: Icons.pause,
+          onPressed: () => _runAction(_selected.toList(), 'pause'),
         ),
-      ),
+        NasSelectionAction(
+          label: tr('transmission.batchStart'),
+          icon: Icons.play_arrow,
+          onPressed: () => _runAction(_selected.toList(), 'resume'),
+        ),
+        NasSelectionAction(
+          label: tr('transmission.batchRemove'),
+          icon: Icons.delete_outline,
+          danger: true,
+          onPressed: () => _confirmRemove(_selected.toList()),
+        ),
+      ],
     );
-  }
-
-  void _selectAll() {
-    setState(() {
-      _selected
-        ..clear()
-        ..addAll(
-          _items
-              .map((t) => (t['hash'] ?? '').toString())
-              .where((h) => h.isNotEmpty),
-        );
-    });
   }
 
   Future<void> _runAction(

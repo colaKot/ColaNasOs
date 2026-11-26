@@ -13,7 +13,10 @@ import '../../core/session.dart';
 /// - 内容查询：stdio sidecar（随安装包分发），需要只读令牌，页内一键生成；
 /// - 工程台：stdio 源码工具（tool/mcp-dev），查工程信息 / 做诊断，无需令牌。
 class McpSettingsPage extends StatefulWidget {
-  const McpSettingsPage({super.key});
+  const McpSettingsPage({super.key, this.embedded = false});
+
+  /// true 时作为设置二级栏目内嵌展示（不再自带 Scaffold / AppBar）
+  final bool embedded;
 
   @override
   State<McpSettingsPage> createState() => _McpSettingsPageState();
@@ -157,11 +160,13 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
     final canGen = ApiSession.instance.isAdminFromServer;
     final tools = _tab == 0 ? _contentTools : _devTools;
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Scaffold(
-      appBar: AppBar(title: Text(tr('settings.mcp.title'))),
-      body: ListView(
-        padding: const EdgeInsets.all(NasTokens.spaceLg),
-        children: [
+    final body = ListView(
+      shrinkWrap: widget.embedded,
+      physics: widget.embedded
+          ? const NeverScrollableScrollPhysics()
+          : null,
+      padding: const EdgeInsets.all(NasTokens.spaceLg),
+      children: [
           Text(tr('settings.mcp.subtitle'), style: TextStyle(color: muted)),
           const SizedBox(height: NasTokens.spaceLg),
           Row(
@@ -210,7 +215,11 @@ class _McpSettingsPageState extends State<McpSettingsPage> {
           const SizedBox(height: NasTokens.spaceSm),
           _toolList(tools),
         ],
-      ),
+    );
+    if (widget.embedded) return body;
+    return Scaffold(
+      appBar: AppBar(title: Text(tr('settings.mcp.title'))),
+      body: body,
     );
   }
 }

@@ -82,7 +82,7 @@ class _SettingsPageState extends State<SettingsPage> {
   /// 二级导航当前分组：server / account / appearance / logs / other / about
   String _tab = _initialTab();
 
-  static const _tabs = {'server', 'account', 'appearance', 'logs', 'other', 'about'};
+  static const _tabs = {'server', 'account', 'appearance', 'logs', 'mcp', 'other', 'about'};
 
   /// 能不能看「服务端」相关分组（服务器配置 / 日志）。
   ///
@@ -1184,41 +1184,16 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  /// 「MCP」入口：把内容 / 工程信息接给 AI IDE（Trae / WorkBuddy 等）。
-  Widget _mcpRow() {
-    return InkWell(
-      borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const McpSettingsPage()),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: NasTokens.spaceSm),
-        child: Row(
-          children: [
-            const Icon(Icons.hub_outlined, size: 20),
-            const SizedBox(width: NasTokens.spaceSm),
-            Expanded(child: Text(tr('settings.mcp.title'))),
-            Icon(Icons.chevron_right, size: 18, color: context.nasTextSecondary),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _maintenance() {
     // 缓存清理 / 数据库整理 / 重启都要 `system:write`：没有权限的账号只留帮助，
     // 免得点一下弹一条 403。
     if (!_canSystemWrite) {
       return _section(tr('ui.settings.h59156f'), [
         _helpRow(),
-        const Divider(height: 1),
-        _mcpRow(),
       ]);
     }
     return _section(tr('ui.settings.h59156f'), [
       _helpRow(),
-      const Divider(height: 1),
-      _mcpRow(),
       const Divider(height: 1),
       Row(
         children: [
@@ -1725,6 +1700,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     if (_tab == 'appearance') return;
     if (_tab == 'about') return;
+    if (_tab == 'mcp') return;
     if (_tab == 'account') {
       // 账号分组只读会话快照；顺手刷新一次授权（改了权限不用重登就能看到）
       unawaited(ApiSession.instance.refreshAccess());
@@ -1750,6 +1726,8 @@ class _SettingsPageState extends State<SettingsPage> {
         ];
       case 'logs':
         return [_logsSection(), const SizedBox(height: NasTokens.spaceLg)];
+      case 'mcp':
+        return [const McpSettingsPage(embedded: true)];
       case 'about':
         return [_about(), const SizedBox(height: NasTokens.spaceLg)];
       case 'other':
@@ -1798,6 +1776,11 @@ class _SettingsPageState extends State<SettingsPage> {
           label: tr('settings.nav.logs'),
           icon: Icons.receipt_long_outlined,
         ),
+      NasTabItem(
+        id: 'mcp',
+        label: tr('settings.mcp.title'),
+        icon: Icons.hub_outlined,
+      ),
       NasTabItem(
         id: 'other',
         label: tr('settings.nav.other'),
@@ -1868,6 +1851,11 @@ class _SettingsPageState extends State<SettingsPage> {
                       label: tr('settings.nav.logs'),
                       icon: Icons.receipt_long_outlined,
                     ),
+                  NasNavEntry(
+                    id: 'mcp',
+                    label: tr('settings.mcp.title'),
+                    icon: Icons.hub_outlined,
+                  ),
                   NasNavEntry(
                     id: 'other',
                     label: tr('settings.nav.other'),
