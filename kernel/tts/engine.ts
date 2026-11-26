@@ -83,6 +83,8 @@ const BYTES_PER_SEC = SAMPLE_RATE * 2; // 16-bit 单声道
 /** 声码器帧率：Qwen3-TTS-**12Hz** 系列每帧 2000 采样点（24000 / 12） */
 const FRAME_RATE = 12;
 const GAP_SEC = 0.18;
+/** 段落之间（AI 新闻里就是「换一条新闻」）的静音：比块间停顿长，听感上是明确的分条 */
+const PARA_GAP_SEC = 0.45;
 const CHUNK_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
@@ -146,7 +148,7 @@ export function hanCount(s: string): number {
  * 不切块的后果不是慢，而是**质量差**：一条 2000 字的 prompt 会让模型越读越飘。
  */
 export function splitText(text: string, limit = 300): string[] {
-  const clean = text.replace(/[ \t\r\f\v]+/g, ' ').replace(/\n{2,}/g, '\n').trim();
+  const clean = text.replace(/[ \t\r\f\v]+/g, ' ').replace(/\s*\n+\s*/g, '\n').trim();
   if (!clean) return [];
 
   const sentences: string[] = [];
@@ -188,6 +190,22 @@ export function splitText(text: string, limit = 300): string[] {
   }
   if (cur) merged.push(cur);
   return merged.filter((p) => p.trim().length > 0);
+}
+
+/**
+ * 按「段 → 块」两级切分：先按空行分段，再在每段内部切块。
+ *
+ * AI 新闻稿件是一段一条（`renderScript` 每条 push 一个段落），段与段之间
+ * **绝不合并**：否则两条新闻会被并进同一个 300 字块，模型一口气念两条、
+ * 条目分界消失，听感上就是「播到一半断流」。段内仍按句末标点切，不会丢字。
+ */
+export function splitParagraphs(text: string, limit = 300): string[][] {
+  const clean = String(text || '').replace(/\r\n?/g, '\n').trim();
+  if (!clean) return [];
+  return clean
+    .split(/\n{2,}/)
+    .map((p) => splitText(p, limit))
+    .filter((chunks) => chunks.length > 0);
 }
 
 /** 读 wav 的 data 块大小：比 ffprobe 快，也不用依赖 ffprobe 是否随包 */
@@ -379,6 +397,28 @@ export class TtsEngine {
     return { files: [out], bytes, split: false };
   }
 
+  /** 生成一段纯静音 wav（16-bit 单声道，块间 / 段间拼接用） */
+  private async makeSilence(file: string, seconds: number): Promise<void> {
+    await exec(this.opts.ffmpeg, [
+      '-y',
+      '-loglevel',
+      'error',
+      '-f',
+      'lavfi',
+      '-i',
+      `anullsrc=r=${SAMPLE_RATE}:cl=mono`,
+      '-t',
+      String(seconds),
+      '-ar',
+      String(SAMPLE_RATE),
+      '-ac',
+      '1',
+      '-c:a',
+      'pcm_s16le',
+      file,
+    ]);
+  }
+
   /**
    * 块首尾各 12ms 淡入淡出。
    *
@@ -430,55 +470,52 @@ export class TtsEngine {
     if (!text) throw new Error('text 不能为空');
     if (!path.isAbsolute(p.wav)) throw new Error('wav 必须是绝对路径');
 
-    const chunks = splitText(text, this.chunkChars);
-    if (!chunks.length) throw new Error('没有可合成的文本');
+    // 段 → 块两级切分：段（AI 新闻里就是一条新闻）之间不合并，段尾换成更长的静音。
+    const plan: Array<{ text: string; paraEnd: boolean }> = [];
+    for (const para of splitParagraphs(text, this.chunkChars)) {
+      para.forEach((chunk, i) => plan.push({ text: chunk, paraEnd: i === para.length - 1 }));
+    }
+    if (!plan.length) throw new Error('没有可合成的文本');
 
     fs.mkdirSync(path.dirname(p.wav), { recursive: true });
     const partDir = path.join(this.opts.workDir, `p-${Date.now()}`);
     fs.mkdirSync(partDir, { recursive: true });
 
     const parts: string[] = [];
+    /** 与 parts 一一对应：每块后面补哪种静音（段尾长、段内短） */
+    const gapAfter: string[] = [];
     let pcmBytes = 0;
     try {
-      for (let i = 0; i < chunks.length; i += 1) {
+      // 块间补静音：模型自带的首尾留白不足，直接拼会黏在一起
+      const silence = path.join(partDir, '_gap.wav');
+      const paraSilence = path.join(partDir, '_pgap.wav');
+      await this.makeSilence(silence, GAP_SEC);
+      await this.makeSilence(paraSilence, PARA_GAP_SEC);
+
+      for (let i = 0; i < plan.length; i += 1) {
         if (this.closed || p.isCancelled?.()) throw new Error('已取消');
         const tag = `part${String(i).padStart(4, '0')}`;
-        const one = await this.synthGuarded(chunks[i], p.voicePath, partDir, tag, 0);
-        parts.push(...one.files);
+        const one = await this.synthGuarded(plan[i].text, p.voicePath, partDir, tag, 0);
+        // 对半重切时一块会产出多个文件：只有最后一个文件算这一块的结尾
+        one.files.forEach((f, j) => {
+          parts.push(f);
+          const last = j === one.files.length - 1;
+          gapAfter.push(last && plan[i].paraEnd ? paraSilence : silence);
+        });
         pcmBytes += one.bytes;
-        p.onProgress?.(i + 1, chunks.length);
+        p.onProgress?.(i + 1, plan.length);
         this.opts.log?.(
           'debug',
-          `[tts] ${i + 1}/${chunks.length} ${chunks[i].length} 字${one.split ? '（顶到上限，已对半重切）' : ''}`,
+          `[tts] ${i + 1}/${plan.length} ${plan[i].text.length} 字` +
+            `${plan[i].paraEnd ? '（段尾）' : ''}${one.split ? '（顶到上限，已对半重切）' : ''}`,
         );
       }
 
-      // 块间补静音：模型自带的首尾留白不足，直接拼会黏在一起
-      const silence = path.join(partDir, '_gap.wav');
-      await exec(this.opts.ffmpeg, [
-        '-y',
-        '-loglevel',
-        'error',
-        '-f',
-        'lavfi',
-        '-i',
-        `anullsrc=r=${SAMPLE_RATE}:cl=mono`,
-        '-t',
-        String(GAP_SEC),
-        '-ar',
-        String(SAMPLE_RATE),
-        '-ac',
-        '1',
-        '-c:a',
-        'pcm_s16le',
-        silence,
-      ]);
-
       const listFile = path.join(partDir, 'concat.txt');
       const lines: string[] = [];
-      for (const f of parts) {
-        lines.push(`file '${f.replace(/\\/g, '/')}'`);
-        lines.push(`file '${silence.replace(/\\/g, '/')}'`);
+      for (let i = 0; i < parts.length; i += 1) {
+        lines.push(`file '${parts[i].replace(/\\/g, '/')}'`);
+        lines.push(`file '${gapAfter[i].replace(/\\/g, '/')}'`);
       }
       fs.writeFileSync(listFile, lines.join('\n'), 'utf8');
 
@@ -540,7 +577,7 @@ export class TtsEngine {
       return {
         durationSec: Math.round(durationSec * 1000) / 1000,
         sampleRate: SAMPLE_RATE,
-        parts: chunks.length,
+        parts: plan.length,
         han: hanCount(text),
         wav: p.wav,
         wavBytes: fs.existsSync(p.wav) ? fs.statSync(p.wav).size : 0,
