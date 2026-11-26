@@ -452,25 +452,26 @@ class _VideoDuplicatesPageState extends State<VideoDuplicatesPage> {
           NasRefreshButton(onPressed: _busy ? null : _load),
         ],
       ),
-      body: Column(
-        children: [
-          // 多选操作走统一选择条：手机窄屏会自动把动作收成图标，不再挤爆 AppBar。
-          if (_selected.isNotEmpty) _selectionBar(context),
-          Expanded(
-            child: _loading
-                ? const NasLoading()
-                : _error != null
-                    ? NasErrorState(message: _error!, onRetry: _load)
-                    : _body(context),
-          ),
-        ],
+      body: NasSelectionOverlay(
+        bar: _selected.isNotEmpty ? _selectionBar(context) : null,
+        child: Column(
+          children: [
+            Expanded(
+              child: _loading
+                  ? const NasLoading()
+                  : _error != null
+                      ? NasErrorState(message: _error!, onRetry: _load)
+                      : _body(context),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  /// 多选操作条：复用 `nas_ui` 的 NasSelectionBar，窄屏自动收成图标。
+  /// 多选操作条：复用 `nas_ui` 的统一浮层多选条。
   Widget _selectionBar(BuildContext context) {
-    return NasSelectionBar(
+    return NasSelectionFloatingBar(
       title: tr('video.list.selected', {'count': '${_selected.length}'}),
       onClose: () => setState(_selected.clear),
       actions: [

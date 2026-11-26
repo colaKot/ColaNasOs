@@ -1481,7 +1481,7 @@ class _VideoListViewState extends State<VideoListView> {
   Widget _selectionBar(BuildContext context) {
     final ids = _items.map((e) => e.id);
     final empty = _selected.isEmpty;
-    return NasSelectionBar(
+    return NasSelectionFloatingBar(
       title: tr('video.list.selected', {'count': '${_selected.length}'}),
       allSelected: _selection.allSelected(ids),
       onToggleAll: () => _selection.toggleAll(ids),
@@ -1512,12 +1512,13 @@ class _VideoListViewState extends State<VideoListView> {
 
   @override
   Widget build(BuildContext context) {
-    final body = Column(
-      children: [
-        _toolbar(context),
-        // 所有库：筛选全在顶栏按钮里，也不显示「已刮削 N 部」，高度留给网格。
-        if (_selectionMode) _selectionBar(context),
-        Expanded(
+    final body = NasSelectionOverlay(
+      bar: _selectionMode ? _selectionBar(context) : null,
+      child: Column(
+        children: [
+          _toolbar(context),
+          // 所有库：筛选全在顶栏按钮里，也不显示「已刮削 N 部」，高度留给网格。
+          Expanded(
           child: _loading
               ? const NasLoading()
               : _error != null
@@ -1550,7 +1551,8 @@ class _VideoListViewState extends State<VideoListView> {
             padding: EdgeInsets.all(NasTokens.spaceSm),
             child: LinearProgressIndicator(minHeight: 2),
           ),
-      ],
+        ],
+      ),
     );
     if (widget.embedded) {
       final header = widget.embeddedHeader;

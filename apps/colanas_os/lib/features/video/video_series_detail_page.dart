@@ -451,67 +451,55 @@ class _VideoSeriesDetailPageState extends State<VideoSeriesDetailPage> {
     SeriesBundle b,
     Map<int, List<VideoItem>> seasons,
   ) {
-    final scheme = Theme.of(context).colorScheme;
+    final all = seasons.keys.toList(growable: false);
     final ids = <String>[
       for (final s in _seasonSel)
         for (final e in seasons[s] ?? const <VideoItem>[]) e.id,
     ];
     final empty = ids.isEmpty;
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: Row(
-        children: [
-          Text(
-            tr('video.list.selected', {'count': '${_seasonSel.length}'}),
-            style: const TextStyle(fontSize: NasTokens.fontCaption),
+    return NasSelectionFloatingBar(
+      margin: EdgeInsets.zero,
+      title: tr('video.list.selected', {'count': '${_seasonSel.length}'}),
+      allSelected: all.isNotEmpty && all.every(_seasonSel.contains),
+      onToggleAll: () => setState(() {
+        if (all.isNotEmpty && all.every(_seasonSel.contains)) {
+          _seasonSel.clear();
+        } else {
+          _seasonSel
+            ..clear()
+            ..addAll(all);
+        }
+      }),
+      onClose: () => setState(() {
+        _seasonSelection = false;
+        _seasonSel.clear();
+      }),
+      actions: [
+        NasSelectionAction(
+          label: tr('video.action.markWatched'),
+          icon: Icons.done_all,
+          enabled: !empty,
+          onPressed: () => markVideos(
+            context,
+            ids,
+            watched: true,
+            count: ids.length,
+            onChanged: () => _load(silent: true),
           ),
-          const Spacer(),
-          TextButton(
-            onPressed: () => setState(() {
-              _seasonSel
-                ..clear()
-                ..addAll(seasons.keys);
-            }),
-            child: Text(tr('video.list.filter.all')),
+        ),
+        NasSelectionAction(
+          label: tr('video.action.markUnwatched'),
+          icon: Icons.remove_done,
+          enabled: !empty,
+          onPressed: () => markVideos(
+            context,
+            ids,
+            watched: false,
+            count: ids.length,
+            onChanged: () => _load(silent: true),
           ),
-          TextButton(
-            onPressed: empty
-                ? null
-                : () => markVideos(
-                      context,
-                      ids,
-                      watched: true,
-                      count: ids.length,
-                      onChanged: () => _load(silent: true),
-                    ),
-            child: Text(tr('video.action.markWatched')),
-          ),
-          TextButton(
-            onPressed: empty
-                ? null
-                : () => markVideos(
-                      context,
-                      ids,
-                      watched: false,
-                      count: ids.length,
-                      onChanged: () => _load(silent: true),
-                    ),
-            child: Text(tr('video.action.markUnwatched')),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 18),
-            tooltip: tr('common.cancel'),
-            onPressed: () => setState(() {
-              _seasonSelection = false;
-              _seasonSel.clear();
-            }),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

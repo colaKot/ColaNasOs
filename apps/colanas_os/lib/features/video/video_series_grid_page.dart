@@ -147,12 +147,14 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
 
   @override
   Widget build(BuildContext context) {
-    final body = Column(
-      children: [
-        _toolbar(context),
-        if (_selectionMode) _selectionBar(context),
-        Expanded(child: _body(context)),
-      ],
+    final body = NasSelectionOverlay(
+      bar: _selectionMode ? _selectionBar(context) : null,
+      child: Column(
+        children: [
+          _toolbar(context),
+          Expanded(child: _body(context)),
+        ],
+      ),
     );
     if (widget.embedded) return body;
     return Scaffold(
@@ -471,7 +473,7 @@ class _VideoSeriesGridPageState extends State<VideoSeriesGridPage> {
   Widget _selectionBar(BuildContext context) {
     final names = _items.map((e) => e.name);
     final empty = _selected.isEmpty || _busy;
-    return NasSelectionBar(
+    return NasSelectionFloatingBar(
       title: tr('video.list.selected', {'count': '${_selected.length}'}),
       allSelected: _selection.allSelected(names),
       onToggleAll: () => _selection.toggleAll(names),

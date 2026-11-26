@@ -1268,63 +1268,51 @@ class VideoDetailPageState extends State<VideoDetailPage> {
   /// 集层多选条：标记已看 / 未看 / 全选 / 关闭
   /// （「加入合集」只在剧库那一层给 —— 那里才是「整部剧」）
   Widget _episodeSelectionBar(BuildContext context, List<VideoItem> eps) {
-    final scheme = Theme.of(context).colorScheme;
+    final all = eps.map((e) => e.id).toList(growable: false);
     final ids = _epSel.toList();
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(NasTokens.radiusSm),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: Row(
-        children: [
-          Text(
-            tr('video.list.selected', {'count': '${_epSel.length}'}),
-            style: const TextStyle(fontSize: NasTokens.fontCaption),
+    return NasSelectionFloatingBar(
+      margin: EdgeInsets.zero,
+      title: tr('video.list.selected', {'count': '${_epSel.length}'}),
+      allSelected: all.isNotEmpty && all.every(_epSel.contains),
+      onToggleAll: () => setState(() {
+        if (all.isNotEmpty && all.every(_epSel.contains)) {
+          _epSel.clear();
+        } else {
+          _epSel
+            ..clear()
+            ..addAll(all);
+        }
+      }),
+      onClose: () => setState(() {
+        _epSelection = false;
+        _epSel.clear();
+      }),
+      actions: [
+        NasSelectionAction(
+          label: tr('video.action.markWatched'),
+          icon: Icons.done_all,
+          enabled: ids.isNotEmpty,
+          onPressed: () => markVideos(
+            context,
+            ids,
+            watched: true,
+            count: ids.length,
+            onChanged: () => _reloadEpisodes(),
           ),
-          const Spacer(),
-          TextButton(
-            onPressed: () => setState(() {
-              _epSel
-                ..clear()
-                ..addAll(eps.map((e) => e.id));
-            }),
-            child: Text(tr('video.list.filter.all')),
+        ),
+        NasSelectionAction(
+          label: tr('video.action.markUnwatched'),
+          icon: Icons.remove_done,
+          enabled: ids.isNotEmpty,
+          onPressed: () => markVideos(
+            context,
+            ids,
+            watched: false,
+            count: ids.length,
+            onChanged: () => _reloadEpisodes(),
           ),
-          TextButton(
-            onPressed: ids.isEmpty
-                ? null
-                : () => markVideos(
-                    context,
-                    ids,
-                    watched: true,
-                    count: ids.length,
-                    onChanged: () => _reloadEpisodes(),
-                  ),
-            child: Text(tr('video.action.markWatched')),
-          ),
-          TextButton(
-            onPressed: ids.isEmpty
-                ? null
-                : () => markVideos(
-                    context,
-                    ids,
-                    watched: false,
-                    count: ids.length,
-                    onChanged: () => _reloadEpisodes(),
-                  ),
-            child: Text(tr('video.action.markUnwatched')),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 18),
-            tooltip: tr('common.cancel'),
-            onPressed: () => setState(() {
-              _epSelection = false;
-              _epSel.clear();
-            }),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

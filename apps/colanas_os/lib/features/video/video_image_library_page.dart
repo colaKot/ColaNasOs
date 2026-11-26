@@ -522,7 +522,7 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
     final ids = _items.map((e) => e.id);
     final empty = _selection.isEmpty;
     final hasVideo = _pickedVideoIds.isNotEmpty;
-    return NasSelectionBar(
+    return NasSelectionFloatingBar(
       title: tr('video.list.selected', {'count': '${_selection.count}'}),
       allSelected: _selection.allSelected(ids),
       onToggleAll: () => _selection.toggleAll(ids),
@@ -737,26 +737,28 @@ class _VideoImageLibraryPageState extends State<VideoImageLibraryPage> {
   }
 
   Widget _buildPage(BuildContext context) {
-    final body = Column(
-      children: [
-        _toolbar(context),
-        if (_selectionMode) _selectionBar(context),
-        if (_refreshing)
-          const SizedBox(
-            height: 2,
-            child: LinearProgressIndicator(minHeight: 2),
+    final body = NasSelectionOverlay(
+      bar: _selectionMode ? _selectionBar(context) : null,
+      child: Column(
+        children: [
+          _toolbar(context),
+          if (_refreshing)
+            const SizedBox(
+              height: 2,
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+          Expanded(
+            child: _loading
+                ? const NasLoading()
+                : _error != null && _items.isEmpty && _folders.isEmpty
+                ? NasErrorState(
+                    message: _error!,
+                    onRetry: () => _load(reset: true, force: true),
+                  )
+                : _content(context),
           ),
-        Expanded(
-          child: _loading
-              ? const NasLoading()
-              : _error != null && _items.isEmpty && _folders.isEmpty
-              ? NasErrorState(
-                  message: _error!,
-                  onRetry: () => _load(reset: true, force: true),
-                )
-              : _content(context),
-        ),
-      ],
+        ],
+      ),
     );
     if (widget.embedded) return body;
     return Scaffold(

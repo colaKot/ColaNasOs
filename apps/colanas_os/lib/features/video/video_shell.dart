@@ -535,9 +535,31 @@ class _VideoFavoritesPageState extends State<VideoFavoritesPage> {
   /// 剧集级收藏（按 series 聚合）
   List<VideoSeriesFavoriteItem> _series = const [];
 
+  /// 收藏也按库分开看：和首页底部快捷栏同一套交互，选「全部」才混在一起。
+  List<VideoLibraryItem> _libs = const [];
+  String? _libraryId;
+
   @override
   void initState() {
     super.initState();
+    _loadLibraries();
+    _load();
+  }
+
+  Future<void> _loadLibraries() async {
+    try {
+      final res = await ApiSession.instance.client.videoLibraryList();
+      if (!mounted) return;
+      setState(() => _libs = res.items);
+    } catch (_) {
+      // 库列表拿不到就不显示切库条，收藏照常看全部
+    }
+  }
+
+  void _selectLibrary(int index) {
+    final next = index <= 0 ? null : _libs[index - 1].id;
+    if (next == _libraryId) return;
+    setState(() => _libraryId = next);
     _load();
   }
 
@@ -547,11 +569,16 @@ class _VideoFavoritesPageState extends State<VideoFavoritesPage> {
       _error = null;
     });
     try {
-      final res = await ApiSession.instance.client.videoFavorites(limit: 200);
+      final res = await ApiSession.instance.client.videoFavorites(
+        limit: 200,
+        libraryId: _libraryId,
+      );
       List<VideoSeriesFavoriteItem> series = const [];
       try {
         final fav = await ApiSession.instance.client.videoSeriesFavorites();
-        series = fav.items;
+        series = _libraryId == null
+            ? fav.items
+            : fav.items.where((e) => e.libraryId == _libraryId).toList();
       } catch (_) {
         // 剧集收藏读取失败不影响影片收藏列表
       }
@@ -596,6 +623,38 @@ class _VideoFavoritesPageState extends State<VideoFavoritesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final body = _body(context);
+    if (_libs.isEmpty) return body;
+    // 底部库快捷栏：和首页同一套交互，收藏按库分开看，不再全部混在一起
+    final labels = [tr('video.filter.all'), for (final l in _libs) l.name];
+    final index = _libraryId == null
+        ? 0
+        : _libs.indexWhere((l) => l.id == _libraryId) + 1;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Padding(
+            // 底部留出胶囊高度：最后一行卡片不被浮动条压住
+            padding: const EdgeInsets.only(bottom: 56),
+            child: body,
+          ),
+        ),
+        Positioned(
+          left: NasTokens.spaceMd,
+          right: NasTokens.spaceMd,
+          bottom: 8,
+          child: NasFloatingChips(
+            scrollable: true,
+            labels: labels,
+            selectedIndex: index.clamp(0, labels.length - 1),
+            onSelect: _selectLibrary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _body(BuildContext context) {
     if (_loading) return const NasLoading();
     if (_error != null) return NasErrorState(message: _error!, onRetry: _load);
     if (_items.isEmpty && _series.isEmpty) {

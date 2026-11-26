@@ -31,6 +31,7 @@ import '../../core/video_subtitle_prefs.dart';
 import 'player_screen.dart';
 import 'tv_player_controls.dart';
 import 'video_card.dart';
+import 'video_collection_picker.dart';
 import 'video_item_actions.dart';
 import 'tv_media3_player.dart';
 
@@ -268,6 +269,13 @@ class _PlayerPageState extends State<PlayerPage>
   /// 真正解出第一帧 / 出错 / 超时后就撤掉，露出下面的视频画面。
   late bool _showOpeningFrame = widget.previewItem != null;
   Timer? _openingFrameGuard;
+
+  /// 本次 open 已经开始（收到过 firstFrameMs 为空的缓冲态）。
+  ///
+  /// 切集时原生层会先把上一条的状态（firstFrameMs 非空）再吐一遍，直接拿它
+  /// 撤图会让「稍微大点的片子」在新画面出来前先黑一段。必须等本轮 open 的
+  /// 缓冲态之后出现的首帧才算数。
+  bool _openingFrameArmed = false;
 
   /// 撤掉换集占位图（首帧已出 / 出错 / 兜底超时）。
   void _dropOpeningFrame() {
@@ -918,8 +926,9 @@ class _PlayerPageState extends State<PlayerPage>
     // - 安卓原生 Media3 链路由 [_onTvMedia3State] 的首帧回调撤图；
     // - 桌面 / Web 的 media_kit 纹理链路在这里等第一帧解出来（videoParams）。
     // 12 秒还没出帧就兜底撤掉，绝不能让一张图把画面永久盖住。
+    // 大文件 / SMB / 要现起转码的片子首帧可能更慢，给到 45 秒。
     if (widget.previewItem != null) {
-      _openingFrameGuard = Timer(const Duration(seconds: 12), _dropOpeningFrame);
+      _openingFrameGuard = Timer(const Duration(seconds: 45), _dropOpeningFrame);
       _logSubs.add(
         _player.stream.videoParams.listen((p) {
           if (_nativeTvActive) return;
@@ -1141,8 +1150,14 @@ class _PlayerPageState extends State<PlayerPage>
         route: 'player.decode/${_sessionId ?? 'direct'}',
       );
     }
-    // 第一帧已经上屏：把换集时铺着的抽帧撤掉，让视频从占位图同一个位置接着播
-    if (state.firstFrameMs != null && _showOpeningFrame) _dropOpeningFrame();
+    // 换集占位图的撤图时机：
+    // - `firstFrameMs == null` 是 open() 发出的缓冲态，说明新一轮播放开始了；
+    // - 之后第一次首帧到位才撤图，不能拿上一轮残留的首帧状态误撤。
+    if (state.firstFrameMs == null) {
+      _openingFrameArmed = true;
+    } else if (_openingFrameArmed && _showOpeningFrame) {
+      _dropOpeningFrame();
+    }
     final error = state.error;
     if (_nativeTvActive && error != null && error.isNotEmpty) {
       unawaited(_handleTvMedia3Error(error));
@@ -4339,7 +4354,9 @@ class _PlayerPageState extends State<PlayerPage>
       },
       icon: Icon(icon, size: 20, color: active ? scheme.primary : Colors.white),
       tooltip: tip,
-      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+      // 混合库一排要放「列表 / 删除 / 收藏 / 合集」等更多按钮，间距收紧一点，
+      // 手机上才不至于挤成横向滚动。
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 36),
       padding: EdgeInsets.zero,
       visualDensity: VisualDensity.compact,
     );
@@ -5233,30 +5250,26 @@ class _PlayerPageState extends State<PlayerPage>
     );
   }
 
-  /// 「删除当前影片」的二次确认是否已被本次登录跳过，以及当时选的回收站设置。
+  /// 「删除当前影片」的二次确认是否已被本次登录跳过。
   /// 只存在内存里：重启 App / 重新登录就重新弹。
   static bool _deleteSkipConfirm = false;
-  static bool _deleteToTrash = false;
 
   Future<void> _deleteCurrent() async {
     final id = widget.itemId;
     if (id == null) return;
-    var toTrash = _deleteToTrash;
     if (!_deleteSkipConfirm) {
-      final picked = await showDialog<({bool toTrash, bool dontAsk})>(
+      final dontAsk = await showDialog<bool>(
         context: context,
         builder: (_) => _DeleteCurrentDialog(title: widget.title),
       );
-      if (picked == null || !mounted) return;
-      toTrash = picked.toTrash;
-      if (picked.dontAsk) {
-        _deleteSkipConfirm = true;
-        _deleteToTrash = picked.toTrash;
-      }
+      if (dontAsk == null || !mounted) return;
+      if (dontAsk) _deleteSkipConfirm = true;
     }
     if (!mounted) return;
-    final ok = await deleteVideoItemsNow(context, [id], toTrash: toTrash);
-    if (!ok || !mounted) return;
+    // 删除丢到后台：大文件 / SMB 上删文件也可能要等，不能卡住播放
+    // （用户反馈「点完删除像服务器崩了一样」）。先把下一条接上，结果用提示告知。
+    // 一律直接删，不进回收站、不复制（服务端删不掉时会同卷挪到「待删除」）。
+    unawaited(deleteVideoItemsNow(context, [id], toTrash: false));
     final index = _playlist.indexWhere((e) => e.id == id);
     final rest = [..._playlist]..removeWhere((e) => e.id == id);
     setState(() => _playlist = rest);
@@ -5267,6 +5280,50 @@ class _PlayerPageState extends State<PlayerPage>
     // 删掉当前这条后紧接着播下一条：删除后原位置就是原来的下一条
     final next = rest[(index < 0 ? 0 : index).clamp(0, rest.length - 1)];
     await _playOther(next, popSheet: false);
+  }
+
+  /// 当前正在播的这条（播放列表里按 id 找；切集进来的新页面用 previewItem）。
+  VideoItem? get _currentItem {
+    final id = widget.itemId;
+    if (id == null) return null;
+    for (final e in _playlist) {
+      if (e.id == id) return e;
+    }
+    final p = widget.previewItem;
+    return p != null && p.id == id ? p : null;
+  }
+
+  /// 收藏状态以本地这次操作为准：条目的 favorite 是列表快照，切换后可能过期。
+  bool? _favoriteOverride;
+  bool get _favorite => _favoriteOverride ?? _currentItem?.favorite ?? false;
+
+  Future<void> _toggleFavorite() async {
+    final id = widget.itemId;
+    if (id == null) return;
+    final next = !_favorite;
+    setState(() => _favoriteOverride = next);
+    try {
+      await ApiSession.instance.client.videoFavoriteSet(
+        body: VideoFavoriteBody(ids: [id], favorite: next),
+      );
+      if (!mounted) return;
+      NasSnack.show(
+        context,
+        tr(next ? 'video.action.favorite' : 'video.action.unfavorite'),
+        // 收藏/取消收藏的结果一眼就知道，别让提示在下面挂 4 秒
+        duration: const Duration(seconds: 1),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _favoriteOverride = !next);
+      NasSnack.show(context, e.toString());
+    }
+  }
+
+  Future<void> _addCurrentToCollection() async {
+    final id = widget.itemId;
+    if (id == null) return;
+    await showAddToCollectionDialog(context, itemIds: [id]);
   }
 
   Widget _progressRow() => StreamBuilder<Duration>(
@@ -5412,13 +5469,27 @@ class _PlayerPageState extends State<PlayerPage>
               ),
             ],
           ),
-          // 混合库：删除当前影片紧跟在「播放顺序」后面
-          if (widget.mixedLibrary && widget.itemId != null)
+          // 混合库：删除 / 收藏 / 加入合集紧跟「播放顺序」后面
+          if (widget.mixedLibrary && widget.itemId != null) ...[
             _btn(
               Icons.delete_outline,
               tr('player.deleteCurrent'),
               _deleteCurrent,
             ),
+            _btn(
+              _favorite ? Icons.favorite : Icons.favorite_border,
+              tr(
+                _favorite ? 'video.action.unfavorite' : 'video.action.favorite',
+              ),
+              _toggleFavorite,
+              active: _favorite,
+            ),
+            _btn(
+              Icons.playlist_add,
+              tr('video.collection.addTo'),
+              _addCurrentToCollection,
+            ),
+          ],
         ],
       );
     },
@@ -6947,7 +7018,6 @@ class _DeleteCurrentDialog extends StatefulWidget {
 }
 
 class _DeleteCurrentDialogState extends State<_DeleteCurrentDialog> {
-  bool _toTrash = false;
   bool _dontAsk = false;
 
   @override
@@ -6963,23 +7033,16 @@ class _DeleteCurrentDialogState extends State<_DeleteCurrentDialog> {
             Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 6),
           ],
-          CheckboxListTile(
-            value: _toTrash,
-            onChanged: (v) => setState(() => _toTrash = v ?? false),
-            title: Text(tr('video.dup.toTrash')),
-            subtitle: Text(tr('video.dup.toTrashHint')),
-            controlAffinity: ListTileControlAffinity.leading,
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-          ),
-          if (!_toTrash)
-            Text(
-              tr('video.delete.permanentHint'),
-              style: TextStyle(
-                fontSize: NasTokens.fontCaption,
-                color: Theme.of(context).colorScheme.error,
-              ),
+          // 播放页删除一律直接删文件：不提供「放入回收站」。
+          // 回收站要先把片子搬一遍，大文件 / SMB 上就是无谓的等待和占空间；
+          // 真删不掉（文件被占用等）由服务端同卷挪到「待删除」目录兜底。
+          Text(
+            tr('video.delete.permanentHint'),
+            style: TextStyle(
+              fontSize: NasTokens.fontCaption,
+              color: Theme.of(context).colorScheme.error,
             ),
+          ),
           CheckboxListTile(
             value: _dontAsk,
             onChanged: (v) => setState(() => _dontAsk = v ?? false),
@@ -6997,10 +7060,7 @@ class _DeleteCurrentDialogState extends State<_DeleteCurrentDialog> {
           child: Text(tr('common.cancel')),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(
-            context,
-            (toTrash: _toTrash, dontAsk: _dontAsk),
-          ),
+          onPressed: () => Navigator.pop(context, _dontAsk),
           child: Text(tr('common.delete')),
         ),
       ],

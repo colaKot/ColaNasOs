@@ -7,7 +7,7 @@ import { secured } from '../../../../kernel/route';
 import { TAG } from '../util';
 import { filesRoot, httpError, resolveAnyPath } from '../../files/fs-root';
 import { TRASH_DIR, movePath } from '../../files/ops';
-import { normAbs, sidecarsOf, type ArtRefRow } from '../sidecars';
+import { normAbs, resolveArtRef, sidecarsOf, type ArtRefRow } from '../sidecars';
 import { offlineCond, offlineSmbPrefixes } from '../sources';
 import { parseActorNames } from '../jp-links';
 import { actorKey } from '../jp-actor';
@@ -269,6 +269,9 @@ interface FullRow {
 
 /** 「LTX」标记：文件名里独立出现（不是某个单词的一部分） */
 const LTX_RE = /(^|[._\-\s])ltx([._\-\s]|$)/i;
+
+/** 永久删除失败时的落点目录名（与文件同卷，rename 进去，绝不复制） */
+const PENDING_DELETE_DIR = '.colanas-pending-delete';
 
 /** 重复视频：四钥匙并查集分组，只返回 >= 2 条的分组 */
 export async function registerVideoDuplicates(
@@ -839,21 +842,11 @@ export async function deleteVideoItems(
     const vol = underRoot ? root : path.parse(abs).root || root;
     const cached = trashDirs.get(vol);
     if (cached) return cached;
-    // 卷根可能不可写（只读盘 / 系统盘根目录），退回到 files 根下的回收站
-    for (const dir of [
-      path.join(vol, TRASH_DIR, batch),
-      path.join(root, TRASH_DIR, batch),
-    ]) {
-      try {
-        fs.mkdirSync(dir, { recursive: true });
-        trashDirs.set(vol, dir);
-        return dir;
-      } catch {
-        /* 这个卷建不了目录，试下一个 */
-      }
-    }
-    trashDirs.set(vol, path.join(root, TRASH_DIR, batch));
-    return path.join(root, TRASH_DIR, batch);
+    // 卷根建不了回收站目录时，**不再**退回到 files 根（那多半是另一块盘，
+    // 等于把整部片子复制一份到系统盘 —— 用户明确不要这种操作）。
+    // 直接返回同卷路径让后面的 rename 失败，按「删不掉」上报。
+    trashDirs.set(vol, path.join(vol, TRASH_DIR, batch));
+    return path.join(vol, TRASH_DIR, batch);
   };
 
   const uniqueDest = (abs: string): string => {
@@ -868,6 +861,62 @@ export async function deleteVideoItems(
       n += 1;
     }
     return dest;
+  };
+
+  /**
+   * 「待删除」目录：永久删除失败时的落点（Windows 上文件被占用、SMB 没权限等）。
+   *
+   * 只做**同卷 rename**，绝不复制：大文件复制到别的盘既慢，又会把盘占满。
+   * rename 也不行时才报失败，不做任何降级搬运。
+   */
+  const pendingDirs = new Map<string, string>();
+  const pendingDirOf = (abs: string): string => {
+    const vol = path.parse(abs).root || root;
+    const cached = pendingDirs.get(vol);
+    if (cached) return cached;
+    for (const dir of [
+      path.join(vol, PENDING_DELETE_DIR),
+      path.join(path.dirname(abs), PENDING_DELETE_DIR),
+    ]) {
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+        pendingDirs.set(vol, dir);
+        return dir;
+      } catch {
+        /* 卷根不可写（只读 / 权限），退回文件所在目录 */
+      }
+    }
+    const fallback = path.join(path.dirname(abs), PENDING_DELETE_DIR);
+    pendingDirs.set(vol, fallback);
+    return fallback;
+  };
+
+  const moveToPending = async (abs: string): Promise<string> => {
+    const dir = pendingDirOf(abs);
+    const base = path.basename(abs);
+    let dest = path.join(dir, base);
+    let n = 1;
+    while (fs.existsSync(dest)) {
+      const ext = path.extname(base);
+      const stem = path.basename(base, ext);
+      dest = path.join(dir, `${stem}-${n}${ext}`);
+      n += 1;
+    }
+    await fsp.rename(abs, dest);
+    return dest;
+  };
+
+  /** 永久删除单个文件；删不掉就同卷挪到「待删除」，绝不复制。 */
+  const discardPermanently = async (abs: string): Promise<void> => {
+    try {
+      await fsp.rm(abs, { force: true });
+    } catch (err) {
+      const dest = await moveToPending(abs);
+      k.log.warn(
+        { path: path.basename(abs), dest, err: String(err) },
+        'video.items.delete: remove failed, moved to pending-delete',
+      );
+    }
   };
 
   // ---- 保护集合：保留下来的条目也引用的侧车不能删 -------------------------
@@ -890,6 +939,16 @@ export async function deleteVideoItems(
       const sameDir = targetDirs.has(dirOf(r.rel_path));
       const hasArt = !!(r.nfo_poster || r.nfo_fanart || r.nfo_thumb);
       if (!sameDir && !hasArt) continue;
+      // 别的目录只需要保护它**显式登记**的图片：真正可能和我们要删的文件重名的
+      // 只有这些。以前这里对全库每条都跑 sidecarsOf（每次都是一次 readdirSync），
+      // SMB 库几千条就是 75 秒，客户端 30s 超时看起来像「删不掉」。
+      if (hasArt) {
+        for (const ref of [r.nfo_poster, r.nfo_fanart, r.nfo_thumb]) {
+          const p = resolveArtRef(ref);
+          if (p) protectedSet.add(normAbs(p));
+        }
+      }
+      if (!sameDir) continue;
       try {
         protectedSet.add(normAbs(resolveAnyPath(root, r.rel_path)));
       } catch {
@@ -925,8 +984,9 @@ export async function deleteVideoItems(
       const abs = resolveAnyPath(root, row.rel_path);
       if (moved.has(normAbs(abs))) continue;
       if (permanent) {
-        // 永久删除：force 让「文件已经不在」也算成功（断电重跑时不会卡在幽灵条目）
-        await fsp.rm(abs, { force: true });
+        // 永久删除：force 让「文件已经不在」也算成功（断电重跑时不会卡在幽灵条目）；
+        // 删不掉（占用 / 权限）就同卷挪到「待删除」，绝不放回收站、绝不复制。
+        await discardPermanently(abs);
         moved.add(normAbs(abs));
         done.push(row.id);
         k.log.info({ name: path.basename(abs) }, 'video.items.delete: removed permanently');
@@ -976,7 +1036,7 @@ export async function deleteVideoItems(
         continue;
       }
       if (permanent) {
-        await fsp.rm(abs, { force: true });
+        await discardPermanently(abs);
         moved.add(normAbs(abs));
         done.push(row.id);
         k.log.info({ name: path.basename(abs) }, 'video.items.delete: removed permanently');

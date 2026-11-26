@@ -80,39 +80,43 @@ class _VideoOfflinePageState extends State<VideoOfflinePage> {
         .where((t) => t.active || t.state == OfflineTaskState.failed)
         .toList();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _header(context, store, tasks),
-        if (_sel.active)
-          NasSelectionBar(
-            title: tr('video.offline.selectedSpace', {
-              'n': '${_sel.count}',
-              'size': formatBytes(_selectedBytes(store).round()),
-            }),
-            allSelected: _sel.allSelected(groups.map((g) => g.id)),
-            onToggleAll: () => setState(() => _sel.toggleAll(groups.map((g) => g.id))),
-            onClose: () => setState(_sel.exit),
-            actions: [
-              NasSelectionAction(
-                label: tr('video.offline.deleteSelected', {'n': '${_sel.count}'}),
-                icon: Icons.delete_outline,
-                danger: true,
-                enabled: _sel.isNotEmpty,
-                onPressed: () => _deleteGroups(store),
-              ),
-            ],
+    return NasSelectionOverlay(
+      bar: _sel.active
+          ? NasSelectionFloatingBar(
+              title: tr('video.offline.selectedSpace', {
+                'n': '${_sel.count}',
+                'size': formatBytes(_selectedBytes(store).round()),
+              }),
+              allSelected: _sel.allSelected(groups.map((g) => g.id)),
+              onToggleAll: () =>
+                  setState(() => _sel.toggleAll(groups.map((g) => g.id))),
+              onClose: () => setState(_sel.exit),
+              actions: [
+                NasSelectionAction(
+                  label: tr('video.offline.deleteSelected', {'n': '${_sel.count}'}),
+                  icon: Icons.delete_outline,
+                  danger: true,
+                  enabled: _sel.isNotEmpty,
+                  onPressed: () => _deleteGroups(store),
+                ),
+              ],
+            )
+          : null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _header(context, store, tasks),
+          if (libraries.length > 1)
+            _libraryChips(context, libraries)
+          else
+            const SizedBox(height: 4),
+          Expanded(
+            child: groups.isEmpty
+                ? _empty(context)
+                : _grid(context, store, groups),
           ),
-        if (libraries.length > 1)
-          _libraryChips(context, libraries)
-        else
-          const SizedBox(height: 4),
-        Expanded(
-          child: groups.isEmpty
-              ? _empty(context)
-              : _grid(context, store, groups),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
