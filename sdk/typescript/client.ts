@@ -117,7 +117,7 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/blog/audio-url', params, 'query');
   }
 
-  /** 把本地音频加入合集（同合集内按路径去重） */
+  /** 把本地音频（或目录下所有层级的音频）加入合集 */
   async blogCollectionAdd(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/blog/collections/add', params, 'body');
   }
@@ -167,7 +167,7 @@ export class ColanasClient {
     return this.request('POST', '/api/v1/blog/generate', params, 'body');
   }
 
-  /** 本地音频流（支持 Range / ETag） */
+  /** 本地音频流（支持 Range / ETag；format=auto 时 Web 不支持格式实时转 PCM 推流） */
   async blogLocalAudio(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/blog/local/audio', params, 'query');
   }
@@ -187,9 +187,14 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/blog/local/cover', params, 'query');
   }
 
-  /** 删除本地音频文件（只删音频，不动同名封面） */
+  /** 删除本地音频文件或整个目录（目录递归删除） */
   async blogLocalDelete(params: Record<string, any> = {}): Promise<any> {
     return this.request('POST', '/api/v1/blog/local/delete', params, 'body');
+  }
+
+  /** 上报本地音频播放进度（≥90% 记为已听，之后不再回落） */
+  async blogLocalProgress(params: Record<string, any> = {}): Promise<any> {
+    return this.request('POST', '/api/v1/blog/local/progress', params, 'body');
   }
 
   /** 添加本地目录源（只存配置，不搬文件） */
@@ -692,12 +697,12 @@ export class ColanasClient {
     return this.request('GET', '/api/v1/music/stats', params, 'query');
   }
 
-  /** 播放 / 下载（支持 Range / ETag；format=transcoded 读 AAC 缓存） */
+  /** 播放 / 下载（支持 Range / ETag；format=transcoded 时实时转 PCM 推流） */
   async musicStream(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/music/stream', params, 'query');
   }
 
-  /** 生成带短期令牌的播放地址（format=auto 时 Web 端按需转 AAC） */
+  /** 生成带短期令牌的播放地址（format=auto 时 Web 端不支持的格式实时转 PCM 推流） */
   async musicStreamUrl(params: Record<string, any> = {}): Promise<any> {
     return this.request('GET', '/api/v1/music/stream-url', params, 'query');
   }

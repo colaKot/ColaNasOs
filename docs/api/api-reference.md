@@ -1,13 +1,13 @@
 # API 参考
 
 > 由 `tool/gen-api-doc.js` 从 `contracts/openapi.json` 生成，**请勿手改**；改契约后执行 `npm run api:doc`。
-> 当前：**452 个路径 / 483 个操作 / 19 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
+> 当前：**453 个路径 / 484 个操作 / 19 个域**。鉴权统一为 `Authorization: Bearer <jwt>`，媒体直链另支持 `?token=`（5 分钟）。
 
 ## 域索引
 
 - **子账号与权限**（`accounts`）· 25 个操作 · [跳转](#accounts)
 - **认证与账号**（`auth`）· 1 个操作 · [跳转](#auth)
-- **blog**（`blog`）· 39 个操作 · [跳转](#blog)
+- **blog**（`blog`）· 40 个操作 · [跳转](#blog)
 - **discover**（`discover`）· 23 个操作 · [跳转](#discover)
 - **events**（`events`）· 1 个操作 · [跳转](#events)
 - **文件**（`files`）· 18 个操作 · [跳转](#files)
@@ -244,7 +244,7 @@ IP 黑名单 · `securityIpList`
 
 #### `POST /api/v1/blog/collections/add`
 
-把本地音频加入合集（同合集内按路径去重） · `blogCollectionAdd`
+把本地音频（或目录下所有层级的音频）加入合集 · `blogCollectionAdd`
 
 - 请求体：（空对象）
 - 响应：200 `BlogCollectionAddResponse` · 错误 404
@@ -300,16 +300,16 @@ IP 黑名单 · `securityIpList`
 
 #### `GET /api/v1/blog/local/audio`
 
-本地音频流（支持 Range / ETag） · `blogLocalAudio`
+本地音频流（支持 Range / ETag；format=auto 时 Web 不支持格式实时转 PCM 推流） · `blogLocalAudio`
 
-- 参数：`path` · 查询 · string · **必填**
+- 参数：`path` · 查询 · string · **必填**<br>`format` · 查询 · string · 可选
 - 响应：200 - · 错误 404
 
 #### `GET /api/v1/blog/local/audio-url`
 
 本地音频的带令牌播放地址 · `blogLocalAudioUrl`
 
-- 参数：`path` · 查询 · string · **必填**
+- 参数：`path` · 查询 · string · **必填**<br>`format` · 查询 · string · 可选
 - 响应：200 `BlogLocalAudioUrlResponse` · 错误 404
 
 #### `GET /api/v1/blog/local/browse`
@@ -323,15 +323,22 @@ IP 黑名单 · `securityIpList`
 
 本地音频的同名封面（没有同名图片时 404） · `blogLocalCover`
 
-- 参数：`path` · 查询 · string · **必填**
+- 参数：`path` · 查询 · string · **必填**<br>`format` · 查询 · string · 可选
 - 响应：200 - · 错误 404
 
 #### `POST /api/v1/blog/local/delete`
 
-删除本地音频文件（只删音频，不动同名封面） · `blogLocalDelete`
+删除本地音频文件或整个目录（目录递归删除） · `blogLocalDelete`
 
 - 请求体：（空对象）
 - 响应：200 `BlogLocalDeleteResponse`
+
+#### `POST /api/v1/blog/local/progress`
+
+上报本地音频播放进度（≥90% 记为已听，之后不再回落） · `blogLocalProgress`
+
+- 请求体：（空对象）
+- 响应：200 `BlogOkResponse` · 错误 400
 
 #### `GET /api/v1/blog/local/sources`
 
@@ -1053,14 +1060,14 @@ Webhook 列表（不含 secret） · `webhookList`
 
 #### `GET /api/v1/music/stream`
 
-播放 / 下载（支持 Range / ETag；format=transcoded 读 AAC 缓存） · `musicStream`
+播放 / 下载（支持 Range / ETag；format=transcoded 时实时转 PCM 推流） · `musicStream`
 
 - 参数：`id` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选<br>`format` · 查询 · string · 可选
 - 响应：200 -
 
 #### `GET /api/v1/music/stream-url`
 
-生成带短期令牌的播放地址（format=auto 时 Web 端按需转 AAC） · `musicStreamUrl`
+生成带短期令牌的播放地址（format=auto 时 Web 端不支持的格式实时转 PCM 推流） · `musicStreamUrl`
 
 - 参数：`id` · 查询 · string · **必填**<br>`token` · 查询 · string · 可选<br>`format` · 查询 · string · 可选
 - 响应：200 `MusicStreamUrlResponse` · 错误 404

@@ -104,7 +104,7 @@ class ColanasClient:
         return self._request("GET", "/api/v1/blog/audio-url", params, "query")
 
     def blog_collection_add(self, **params):
-        """把本地音频加入合集（同合集内按路径去重）"""
+        """把本地音频（或目录下所有层级的音频）加入合集"""
         return self._request("POST", "/api/v1/blog/collections/add", params, "body")
 
     def blog_collection_create(self, **params):
@@ -144,7 +144,7 @@ class ColanasClient:
         return self._request("POST", "/api/v1/blog/generate", params, "body")
 
     def blog_local_audio(self, **params):
-        """本地音频流（支持 Range / ETag）"""
+        """本地音频流（支持 Range / ETag；format=auto 时 Web 不支持格式实时转 PCM 推流）"""
         return self._request("GET", "/api/v1/blog/local/audio", params, "query")
 
     def blog_local_audio_url(self, **params):
@@ -160,8 +160,12 @@ class ColanasClient:
         return self._request("GET", "/api/v1/blog/local/cover", params, "query")
 
     def blog_local_delete(self, **params):
-        """删除本地音频文件（只删音频，不动同名封面）"""
+        """删除本地音频文件或整个目录（目录递归删除）"""
         return self._request("POST", "/api/v1/blog/local/delete", params, "body")
+
+    def blog_local_progress(self, **params):
+        """上报本地音频播放进度（≥90% 记为已听，之后不再回落）"""
+        return self._request("POST", "/api/v1/blog/local/progress", params, "body")
 
     def blog_local_source_add(self, **params):
         """添加本地目录源（只存配置，不搬文件）"""
@@ -564,11 +568,11 @@ class ColanasClient:
         return self._request("GET", "/api/v1/music/stats", params, "query")
 
     def music_stream(self, **params):
-        """播放 / 下载（支持 Range / ETag；format=transcoded 读 AAC 缓存）"""
+        """播放 / 下载（支持 Range / ETag；format=transcoded 时实时转 PCM 推流）"""
         return self._request("GET", "/api/v1/music/stream", params, "query")
 
     def music_stream_url(self, **params):
-        """生成带短期令牌的播放地址（format=auto 时 Web 端按需转 AAC）"""
+        """生成带短期令牌的播放地址（format=auto 时 Web 端不支持的格式实时转 PCM 推流）"""
         return self._request("GET", "/api/v1/music/stream-url", params, "query")
 
     def offline_artifact_delete(self, **params):

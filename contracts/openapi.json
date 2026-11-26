@@ -952,7 +952,9 @@
           "title",
           "path",
           "size",
-          "coverUrl"
+          "coverUrl",
+          "listened",
+          "positionMs"
         ],
         "properties": {
           "name": {
@@ -974,6 +976,14 @@
             "description": "同名封面图地址（带令牌）；没有同名图片时为 null",
             "type": "string",
             "nullable": true
+          },
+          "listened": {
+            "description": "听到 ≥90% 后置为已听，重听也不会回落",
+            "type": "boolean"
+          },
+          "positionMs": {
+            "description": "上次播放位置（毫秒）；没听过为 0",
+            "type": "integer"
           }
         }
       },
@@ -1034,6 +1044,11 @@
           "path": {
             "minLength": 1,
             "type": "string"
+          },
+          "format": {
+            "maxLength": 16,
+            "description": "auto = Web 端播放：浏览器不支持的格式实时转 PCM 推流",
+            "type": "string"
           }
         }
       },
@@ -1079,6 +1094,28 @@
             "type": "boolean"
           },
           "deleted": {
+            "type": "integer"
+          }
+        }
+      },
+      "BlogLocalProgressBody": {
+        "type": "object",
+        "required": [
+          "path",
+          "positionMs",
+          "durationMs"
+        ],
+        "properties": {
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "positionMs": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "durationMs": {
+            "minimum": 0,
             "type": "integer"
           }
         }
@@ -1191,7 +1228,10 @@
           "path",
           "title",
           "size",
-          "coverUrl"
+          "coverUrl",
+          "listened",
+          "positionMs",
+          "playedAt"
         ],
         "properties": {
           "id": {
@@ -1210,6 +1250,18 @@
           "coverUrl": {
             "type": "string",
             "nullable": true
+          },
+          "listened": {
+            "description": "听到 ≥90% 后置为已听，重听也不会回落",
+            "type": "boolean"
+          },
+          "positionMs": {
+            "description": "上次播放位置（毫秒）；没听过为 0",
+            "type": "integer"
+          },
+          "playedAt": {
+            "description": "最后一次播放时间戳；没听过为 0",
+            "type": "integer"
           }
         }
       },
@@ -3552,7 +3604,7 @@
           },
           "format": {
             "maxLength": 16,
-            "description": "auto = Web 不支持时按需转 AAC；缺省 original",
+            "description": "auto = Web 不支持时按需实时转 PCM 推流；缺省 original",
             "type": "string"
           }
         }
@@ -3573,7 +3625,7 @@
           },
           "format": {
             "maxLength": 16,
-            "description": "transcoded = 读取 AAC 转码缓存",
+            "description": "transcoded = 实时转 PCM 推流",
             "type": "string"
           }
         }
@@ -3594,7 +3646,7 @@
             "type": "integer"
           },
           "transcoded": {
-            "description": "true 表示返回的是按需转码后的 AAC 缓存",
+            "description": "true 表示该播放地址会实时转 PCM 推流",
             "type": "boolean"
           }
         }
@@ -19872,6 +19924,52 @@
         }
       }
     },
+    "/api/v1/blog/local/progress": {
+      "post": {
+        "operationId": "blogLocalProgress",
+        "summary": "上报本地音频播放进度（≥90% 记为已听，之后不再回落）",
+        "tags": [
+          "blog"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlogLocalProgressBody"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogOkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlogErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/blog/local/audio-url": {
       "get": {
         "operationId": "blogLocalAudioUrl",
@@ -19888,6 +19986,16 @@
             "in": "query",
             "name": "path",
             "required": true
+          },
+          {
+            "schema": {
+              "maxLength": 16,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "description": "auto = Web 端播放：浏览器不支持的格式实时转 PCM 推流"
           }
         ],
         "security": [
@@ -19922,7 +20030,7 @@
     "/api/v1/blog/local/audio": {
       "get": {
         "operationId": "blogLocalAudio",
-        "summary": "本地音频流（支持 Range / ETag）",
+        "summary": "本地音频流（支持 Range / ETag；format=auto 时 Web 不支持格式实时转 PCM 推流）",
         "tags": [
           "blog"
         ],
@@ -19935,6 +20043,16 @@
             "in": "query",
             "name": "path",
             "required": true
+          },
+          {
+            "schema": {
+              "maxLength": 16,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "description": "auto = Web 端播放：浏览器不支持的格式实时转 PCM 推流"
           }
         ],
         "security": [
@@ -19972,6 +20090,16 @@
             "in": "query",
             "name": "path",
             "required": true
+          },
+          {
+            "schema": {
+              "maxLength": 16,
+              "type": "string"
+            },
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "description": "auto = Web 端播放：浏览器不支持的格式实时转 PCM 推流"
           }
         ],
         "security": [
@@ -19996,7 +20124,7 @@
     "/api/v1/blog/local/delete": {
       "post": {
         "operationId": "blogLocalDelete",
-        "summary": "删除本地音频文件（只删音频，不动同名封面）",
+        "summary": "删除本地音频文件或整个目录（目录递归删除）",
         "tags": [
           "blog"
         ],
@@ -20231,7 +20359,7 @@
     "/api/v1/blog/collections/add": {
       "post": {
         "operationId": "blogCollectionAdd",
-        "summary": "把本地音频加入合集（同合集内按路径去重）",
+        "summary": "把本地音频（或目录下所有层级的音频）加入合集",
         "tags": [
           "blog"
         ],
@@ -25388,7 +25516,7 @@
     "/api/v1/music/stream-url": {
       "get": {
         "operationId": "musicStreamUrl",
-        "summary": "生成带短期令牌的播放地址（format=auto 时 Web 端按需转 AAC）",
+        "summary": "生成带短期令牌的播放地址（format=auto 时 Web 端不支持的格式实时转 PCM 推流）",
         "tags": [
           "music"
         ],
@@ -25419,7 +25547,7 @@
             "in": "query",
             "name": "format",
             "required": false,
-            "description": "auto = Web 不支持时按需转 AAC；缺省 original"
+            "description": "auto = Web 不支持时按需实时转 PCM 推流；缺省 original"
           }
         ],
         "security": [
@@ -25454,7 +25582,7 @@
     "/api/v1/music/stream": {
       "get": {
         "operationId": "musicStream",
-        "summary": "播放 / 下载（支持 Range / ETag；format=transcoded 读 AAC 缓存）",
+        "summary": "播放 / 下载（支持 Range / ETag；format=transcoded 时实时转 PCM 推流）",
         "tags": [
           "music"
         ],
@@ -25485,7 +25613,7 @@
             "in": "query",
             "name": "format",
             "required": false,
-            "description": "transcoded = 读取 AAC 转码缓存"
+            "description": "transcoded = 实时转 PCM 推流"
           }
         ],
         "security": [

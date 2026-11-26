@@ -241,6 +241,8 @@ export const MIGRATION_ORDER: readonly string[] = Object.freeze([
   '190_video_actor_cover',
   // 本地博客：目录源 + 博客合集（用户自建的本地音频播放列表）
   '191_blog_local',
+  // 本地博客播放进度 / 已听标记（按用户 + 绝对路径）
+  '192_blog_local_progress',
 ]);
 
 export interface OrderCheck {

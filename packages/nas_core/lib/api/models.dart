@@ -968,6 +968,8 @@ class BlogLocalAudio {
   final String path;
   final int size;
   final String? coverUrl;
+  final bool listened;
+  final int positionMs;
 
   const BlogLocalAudio({
     required this.name,
@@ -975,6 +977,8 @@ class BlogLocalAudio {
     required this.path,
     required this.size,
     required this.coverUrl,
+    required this.listened,
+    required this.positionMs,
   });
 
   factory BlogLocalAudio.fromJson(Map<String, dynamic> json) => BlogLocalAudio(
@@ -983,6 +987,8 @@ class BlogLocalAudio {
         path: json['path'] as String,
         size: json['size'] as int,
         coverUrl: json['coverUrl'] as String?,
+        listened: json['listened'] as bool,
+        positionMs: json['positionMs'] as int,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -991,6 +997,8 @@ class BlogLocalAudio {
         'path': path,
         'size': size,
         'coverUrl': coverUrl,
+        'listened': listened,
+        'positionMs': positionMs,
       };
 }
 
@@ -1075,6 +1083,30 @@ class BlogLocalDeleteResponse {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'ok': ok,
         'deleted': deleted,
+      };
+}
+
+class BlogLocalProgressBody {
+  final String path;
+  final int positionMs;
+  final int durationMs;
+
+  const BlogLocalProgressBody({
+    required this.path,
+    required this.positionMs,
+    required this.durationMs,
+  });
+
+  factory BlogLocalProgressBody.fromJson(Map<String, dynamic> json) => BlogLocalProgressBody(
+        path: json['path'] as String,
+        positionMs: json['positionMs'] as int,
+        durationMs: json['durationMs'] as int,
+      );
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'path': path,
+        'positionMs': positionMs,
+        'durationMs': durationMs,
       };
 }
 
@@ -1200,6 +1232,9 @@ class BlogCollectionItem {
   final String title;
   final int size;
   final String? coverUrl;
+  final bool listened;
+  final int positionMs;
+  final int playedAt;
 
   const BlogCollectionItem({
     required this.id,
@@ -1207,6 +1242,9 @@ class BlogCollectionItem {
     required this.title,
     required this.size,
     required this.coverUrl,
+    required this.listened,
+    required this.positionMs,
+    required this.playedAt,
   });
 
   factory BlogCollectionItem.fromJson(Map<String, dynamic> json) => BlogCollectionItem(
@@ -1215,6 +1253,9 @@ class BlogCollectionItem {
         title: json['title'] as String,
         size: json['size'] as int,
         coverUrl: json['coverUrl'] as String?,
+        listened: json['listened'] as bool,
+        positionMs: json['positionMs'] as int,
+        playedAt: json['playedAt'] as int,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -1223,6 +1264,9 @@ class BlogCollectionItem {
         'title': title,
         'size': size,
         'coverUrl': coverUrl,
+        'listened': listened,
+        'positionMs': positionMs,
+        'playedAt': playedAt,
       };
 }
 

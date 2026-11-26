@@ -260,6 +260,8 @@ export type BlogLocalAudio = {
   "path": string;
   "size": number;
   "coverUrl": string;
+  "listened": boolean;
+  "positionMs": number;
 };
 
 export type BlogLocalBrowseQuery = {
@@ -276,6 +278,7 @@ export type BlogLocalBrowseResponse = {
 
 export type BlogLocalPathQuery = {
   "path": string;
+  "format"?: string;
 };
 
 export type BlogLocalAudioUrlResponse = {
@@ -290,6 +293,12 @@ export type BlogLocalDeleteBody = {
 export type BlogLocalDeleteResponse = {
   "ok": boolean;
   "deleted": number;
+};
+
+export type BlogLocalProgressBody = {
+  "path": string;
+  "positionMs": number;
+  "durationMs": number;
 };
 
 export type BlogCollection = {
@@ -327,6 +336,9 @@ export type BlogCollectionItem = {
   "title": string;
   "size": number;
   "coverUrl": string;
+  "listened": boolean;
+  "positionMs": number;
+  "playedAt": number;
 };
 
 export type BlogCollectionItemsQuery = {

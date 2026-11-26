@@ -312,34 +312,43 @@ class ApiClient {
     return BlogLocalBrowseResponse.fromJson(_asMap(_decode(res)));
   }
 
+  /// 上报本地音频播放进度（≥90% 记为已听，之后不再回落）
+  Future<BlogOkResponse> blogLocalProgress({required BlogLocalProgressBody body}) async {
+    final res = await transport.send('POST', _uri('/api/v1/blog/local/progress'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
+    return BlogOkResponse.fromJson(_asMap(_decode(res)));
+  }
+
   /// 本地音频的带令牌播放地址
-  Future<BlogLocalAudioUrlResponse> blogLocalAudioUrl({required String path}) async {
+  Future<BlogLocalAudioUrlResponse> blogLocalAudioUrl({required String path, String? format}) async {
     final query = <String, String>{
       'path': path,
+      if (format != null) 'format': format,
     };
     final res = await transport.send('GET', _uri('/api/v1/blog/local/audio-url', query), headers: await _headers());
     return BlogLocalAudioUrlResponse.fromJson(_asMap(_decode(res)));
   }
 
-  /// 本地音频流（支持 Range / ETag）
-  Future<Map<String, dynamic>> blogLocalAudio({required String path}) async {
+  /// 本地音频流（支持 Range / ETag；format=auto 时 Web 不支持格式实时转 PCM 推流）
+  Future<Map<String, dynamic>> blogLocalAudio({required String path, String? format}) async {
     final query = <String, String>{
       'path': path,
+      if (format != null) 'format': format,
     };
     final res = await transport.send('GET', _uri('/api/v1/blog/local/audio', query), headers: await _headers());
     return _asMap(_decode(res));
   }
 
   /// 本地音频的同名封面（没有同名图片时 404）
-  Future<Map<String, dynamic>> blogLocalCover({required String path}) async {
+  Future<Map<String, dynamic>> blogLocalCover({required String path, String? format}) async {
     final query = <String, String>{
       'path': path,
+      if (format != null) 'format': format,
     };
     final res = await transport.send('GET', _uri('/api/v1/blog/local/cover', query), headers: await _headers());
     return _asMap(_decode(res));
   }
 
-  /// 删除本地音频文件（只删音频，不动同名封面）
+  /// 删除本地音频文件或整个目录（目录递归删除）
   Future<BlogLocalDeleteResponse> blogLocalDelete({required BlogLocalDeleteBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/blog/local/delete'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
     return BlogLocalDeleteResponse.fromJson(_asMap(_decode(res)));
@@ -378,7 +387,7 @@ class ApiClient {
     return BlogCollectionItemsResponse.fromJson(_asMap(_decode(res)));
   }
 
-  /// 把本地音频加入合集（同合集内按路径去重）
+  /// 把本地音频（或目录下所有层级的音频）加入合集
   Future<BlogCollectionAddResponse> blogCollectionAdd({required BlogCollectionAddBody body}) async {
     final res = await transport.send('POST', _uri('/api/v1/blog/collections/add'), headers: await _headers(jsonBody: true), body: utf8.encode(jsonEncode(body.toJson())));
     return BlogCollectionAddResponse.fromJson(_asMap(_decode(res)));
@@ -1088,7 +1097,7 @@ class ApiClient {
     return _asMap(_decode(res));
   }
 
-  /// 生成带短期令牌的播放地址（format=auto 时 Web 端按需转 AAC）
+  /// 生成带短期令牌的播放地址（format=auto 时 Web 端不支持的格式实时转 PCM 推流）
   Future<MusicStreamUrlResponse> musicStreamUrl({required String id, String? token, String? format}) async {
     final query = <String, String>{
       'id': id,
@@ -1099,7 +1108,7 @@ class ApiClient {
     return MusicStreamUrlResponse.fromJson(_asMap(_decode(res)));
   }
 
-  /// 播放 / 下载（支持 Range / ETag；format=transcoded 读 AAC 缓存）
+  /// 播放 / 下载（支持 Range / ETag；format=transcoded 时实时转 PCM 推流）
   Future<Map<String, dynamic>> musicStream({required String id, String? token, String? format}) async {
     final query = <String, String>{
       'id': id,
