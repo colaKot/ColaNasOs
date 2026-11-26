@@ -1,7 +1,7 @@
 name: photo_client
 description: ColaNasOs 相册独立端（历史脚手架，仅保留 path 依赖复用与门禁检查；正式出包用根目录 build-photo.bat，从 apps/colanas_os 以 -PnasApp=photo 构建）
 publish_to: 'none'
-version: 1.5.7+74
+version: 1.5.11+78
 
 environment:
   sdk: ^3.13.7

@@ -1,11 +1,11 @@
 /// 产品版本号（单一真源：`package.json.version`，由 `tool/version.js` 同步，勿手改）。
-const String kAppVersion = '1.5.7';
+const String kAppVersion = '1.5.11';
 
 /// 客户端构建号（`pubspec.yaml` 里 `version: X.Y.Z+B` 的 B，同样由 `tool/version.js` 同步）。
 ///
 /// 安卓比较版本**必须用它**，不能比 semver 字符串：同一次发布里 `1.4.0+35`
 /// 与 `1.4.0+36` 是两次不同的安装包，semver 一样但版本号不同。
-const int kAppVersionCode = 78;
+const int kAppVersionCode = 82;
 
 /// 项目主页（源码 / 更新日志 / Releases）。
 ///
