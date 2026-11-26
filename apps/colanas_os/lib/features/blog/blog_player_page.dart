@@ -167,6 +167,10 @@ class _BlogPlayerPageState extends State<BlogPlayerPage> {
         ? p.duration.inMilliseconds
         : (ep == null ? 0 : (ep.durationSec * 1000).round());
     final pos = p.position.inMilliseconds.clamp(0, total == 0 ? 0 : total);
+    // 拖动时左侧时间跟着滑块走，松手后再回到真实播放位置
+    final shown = _dragValue != null && total > 0
+        ? (_dragValue! * total).round()
+        : pos;
     final scheme = Theme.of(context).colorScheme;
 
     if (!local && _blocks.isNotEmpty) {
@@ -284,7 +288,7 @@ class _BlogPlayerPageState extends State<BlogPlayerPage> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(formatDurationMs(pos)),
+                              Text(formatDurationMs(shown)),
                               Text(formatDurationMs(total)),
                             ],
                           ),

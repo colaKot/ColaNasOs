@@ -11,6 +11,7 @@ import { activeProxyInfo } from '../../../kernel/proxy-fetch';
 import { cleanVoice, DEFAULT_VOICE } from './settings';
 import { fetchNews, type NewsItem } from './news';
 import { composeScript, todayLabel } from './script';
+import { fillGapsByWebSearch } from './web-fill';
 import { translateNews } from './translate';
 import { CATEGORIES } from './news';
 import type { BlogCounts } from './settings';
@@ -161,6 +162,43 @@ async function setStatus(
   `.execute(k.db);
 }
 
+/**
+ * 最近几天稿件里已经播过的素材。
+ *
+ * 以前去重只在单期内部做（`fetchNews` 里的 seenGlobal），跨天完全不设防：
+ * 只要 RSS 还在 2 天窗口里挂着同一条，昨天的稿子今天会再播一遍，
+ * 今天手动再生成一期又会播第三遍（2026-11-25 用户反馈「弹药厂爆炸」）。
+ */
+async function recentNews(k: KernelApi, days: number): Promise<{ title: string; link: string }[]> {
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+  let rows: Array<{ news_json: string | null }>;
+  try {
+    const res = await sql<{ news_json: string | null }>`
+      select news_json from blog_episodes where created_at >= ${since}
+    `.execute(k.db);
+    rows = res.rows;
+  } catch {
+    // 老库还没跑迁移时会没有这一列：退化成「不做跨天去重」，不影响出稿
+    return [];
+  }
+  const out: { title: string; link: string }[] = [];
+  for (const row of rows) {
+    try {
+      const arr = JSON.parse(row.news_json || '[]');
+      if (!Array.isArray(arr)) continue;
+      for (const it of arr) {
+        if (!it || typeof it !== 'object') continue;
+        const title = String((it as { title?: unknown }).title ?? '').trim();
+        if (!title) continue;
+        out.push({ title, link: String((it as { link?: unknown }).link ?? '') });
+      }
+    } catch {
+      /* 单条坏数据不影响其它期 */
+    }
+  }
+  return out;
+}
+
 async function run(k: KernelApi, id: string, params: GenerateParams): Promise<void> {
   try {
     await setStatus(k, id, { status: 'running' });
@@ -178,18 +216,50 @@ async function run(k: KernelApi, id: string, params: GenerateParams): Promise<vo
       }`,
     );
     // 有模型就多抓一倍素材让它筛，没有就按条数抓（拼接稿用不上备选）
-    const { items, failed } = await fetchNews(
+    const recent = await recentNews(k, 7);
+    if (recent.length) k.log.info(`[blog] 近 7 天已播素材 ${recent.length} 条，本期自动跳过`);
+    const { items: fetchedItems, failed } = await fetchNews(
       params.counts,
       (m) => k.log.info(m),
       useLlm ? 3 : 1,
+      recent,
     );
-    if (items.length === 0 && !(useLlm && cfg.webSearch)) {
-      throw new Error(
-        `一条新闻都没抓到：${failed.slice(0, 3).join('；') || '检查网络 / 代理设置'}`,
+    let items = fetchedItems;
+    const rssCount = items.length;
+
+    // 联网补缺：RSS 抓不全时，只对「缺口类别」用 DeepSeek 内置联网搜索补素材。
+    // 服务端搜索工具不计费（2026-11-18 起），只按 Token 计；缺几类搜几次，token 增量最小。
+    let fillUsage: {
+      calls: number;
+      promptTokens: number;
+      completionTokens: number;
+      searchCalls: number;
+    } | null = null;
+    if (useLlm && cfg.webSearch && cfg.apiKey) {
+      const fill = await fillGapsByWebSearch(
+        items,
+        params.counts,
+        { apiKey: cfg.apiKey, apiBase: cfg.apiBase, apiModel: cfg.apiModel },
+        (m) => k.log.info(m),
       );
+      items = fill.items;
+      if (fill.usage.calls > 0) fillUsage = fill.usage;
+      if (fill.warnings.length) {
+        k.log.warn(`[blog] 联网补缺提示：${fill.warnings.slice(0, 3).join('；')}`);
+      }
+      if (fillUsage) {
+        k.log.info(
+          `[blog] 联网补缺用量：素材 ${rssCount} → ${items.length} 条 · ` +
+            `${fillUsage.promptTokens + fillUsage.completionTokens} token · ${fillUsage.calls} 次调用`,
+        );
+      }
     }
     if (items.length === 0) {
-      k.log.warn('[blog] RSS 素材为空，改为让模型联网检索（enable_search）');
+      throw new Error(
+        `一条新闻都没抓到（RSS 与联网补缺均无结果）：${
+          failed.slice(0, 3).join('；') || '检查网络 / 代理 / 模型配置'
+        }`,
+      );
     }
     if (failed.length) k.log.warn(`[blog] 部分源不可用：${failed.slice(0, 5).join('；')}`);
 
@@ -216,16 +286,21 @@ async function run(k: KernelApi, id: string, params: GenerateParams): Promise<vo
     const merged = { ...settings, ...cfg, voice: params.voice, speed: params.speed };
     const script = await composeScript(items, params.counts, merged, (m) => k.log.info(m));
     const text = script.text;
-    // 用量落库：出账后按 episode_id 就能查到这一期烧了多少 token、几次调用
+    // 用量落库：出账后按 episode_id 就能查到这一期烧了多少 token、几次调用。
+    // 联网补缺的用量一并计入（搜索次数累加；model 列仍记改写模型）。
     const u = script.stats.usage;
-    if (u?.calls) {
+    const totalCalls = u.calls + (fillUsage?.calls || 0);
+    const totalPrompt = u.promptTokens + (fillUsage?.promptTokens || 0);
+    const totalCompletion = u.completionTokens + (fillUsage?.completionTokens || 0);
+    const totalSearch = u.searchCalls + (fillUsage?.searchCalls || 0);
+    if (totalCalls > 0) {
       await sql`
         insert or replace into blog_llm_usage
           (episode_id, model, calls, prompt_tokens, completion_tokens, total_tokens,
            search_calls, compat_retries, created_at)
-        values (${id}, ${String(merged.apiModel || '')}, ${u.calls}, ${u.promptTokens},
-                ${u.completionTokens}, ${u.promptTokens + u.completionTokens},
-                ${u.searchCalls}, ${u.compatRetries}, ${Math.floor(Date.now() / 1000)})
+        values (${id}, ${String(merged.apiModel || '')}, ${totalCalls}, ${totalPrompt},
+                ${totalCompletion}, ${totalPrompt + totalCompletion},
+                ${totalSearch}, ${u.compatRetries}, ${Math.floor(Date.now() / 1000)})
       `
         .execute(k.db)
         .catch(() => undefined);

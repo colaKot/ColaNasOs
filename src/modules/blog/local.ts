@@ -6,6 +6,7 @@ import { secured } from '../../../kernel/route';
 import { Err } from '../../../kernel/errors';
 import { absoluteInput, toPosix } from '../files/fs-root';
 import { contentTypeOf, etagOf, matchesEtag, parseRange } from '../files/download';
+import { streamWav } from '../media/audio-stream';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { KernelApi } from '../../../kernel/types';
 
@@ -64,6 +65,14 @@ interface ItemRow {
   title: string;
   position: number;
   created_at: number;
+}
+
+interface ProgressRow {
+  path: string;
+  position_ms: number;
+  duration_ms: number;
+  listened: number;
+  updated_at: number;
 }
 
 function newId(): string {
@@ -126,6 +135,81 @@ function coversOf(audios: string[]): (string | null)[] {
     }
     return index.get(baseNameLower(abs)) ?? null;
   });
+}
+
+/** 同 [imageIndexOfDir]，但走异步 readdir，便于按目录并发扫描 */
+async function imageIndexOfDirAsync(dir: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  const files = entries
+    .filter((e) => e.isFile() && IMAGE_EXT_SET.has(extOf(e.name)))
+    .sort((a, b) => IMAGE_EXTS.indexOf(extOf(a.name)) - IMAGE_EXTS.indexOf(extOf(b.name)));
+  for (const f of files) {
+    const key = baseNameLower(f.name);
+    if (!out.has(key)) out.set(key, path.join(dir, f.name));
+  }
+  return out;
+}
+
+/** 有并发上限的 map：SMB / 机械盘上逐条 stat 会很慢，并发能把延迟摊薄 */
+async function mapLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const i = next;
+      next += 1;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+/** Web 端浏览器打不开的音频扩展名（与音乐模块同一口径） */
+const WEB_UNSAFE_AUDIO_EXTS = new Set(['.ape', '.wma', '.aiff', '.aif', '.alac']);
+
+function needsWebAudioTranscode(abs: string): boolean {
+  return WEB_UNSAFE_AUDIO_EXTS.has(path.extname(abs).toLowerCase());
+}
+
+/**
+ * 递归收集目录下的音频文件（POSIX 绝对路径）。
+ * 限制层级与数量，避免把整块磁盘拖进合集时卡住接口。
+ */
+function audioFilesUnder(dirAbs: string, max = 5000, maxDepth = 32): string[] {
+  const out: string[] = [];
+  const walk = (dir: string, depth: number): void => {
+    if (out.length >= max || depth > maxDepth) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    for (const e of entries) {
+      if (out.length >= max) return;
+      const abs = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        walk(abs, depth + 1);
+      } else if (e.isFile() && isAudioName(e.name)) {
+        out.push(toPosix(abs));
+      }
+    }
+  };
+  walk(dirAbs, 0);
+  return out;
 }
 
 /** 把绝对路径流给客户端（Range / ETag 与 files 下载同口径，但不受 filesRoot 限制） */
@@ -200,6 +284,23 @@ export async function registerLocalBlog(app: FastifyInstance, k: KernelApi): Pro
   };
 
   const underAny = (roots: string[], abs: string): boolean => roots.some((r) => isUnder(r, abs));
+
+  /** 一次读出这批路径的播放进度（分块规避 SQLite 变量上限） */
+  const progressFor = async (owner: string, paths: string[]): Promise<Map<string, ProgressRow>> => {
+    const map = new Map<string, ProgressRow>();
+    for (let i = 0; i < paths.length; i += 400) {
+      const chunk = paths.slice(i, i + 400);
+      if (chunk.length === 0) continue;
+      const rows = await sql<ProgressRow>`
+        select path, position_ms, duration_ms, listened, updated_at
+          from blog_local_progress
+         where owner_id = ${owner}
+           and path in (${sql.join(chunk.map((p) => sql`${p}`), sql`, `)})
+      `.execute(k.db);
+      for (const r of rows.rows) map.set(r.path, r);
+    }
+    return map;
+  };
 
   const mediaToken = () => k.auth.sign({ sub: 'blog-local', scopes: ['blog:read'] }, MEDIA_TOKEN_TTL);
 
@@ -395,12 +496,69 @@ export async function registerLocalBlog(app: FastifyInstance, k: KernelApi): Pro
         })
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
+      const progress = await progressFor(owner, audios.map((a) => a.path));
+      const audiosWithProgress = audios.map((a) => {
+        const p = progress.get(a.path);
+        return {
+          ...a,
+          listened: Boolean(p?.listened),
+          positionMs: p?.position_ms ?? 0,
+        };
+      });
+
       return {
         path: toPosix(dirAbs),
         parent: toPosix(dirAbs) === sourceAbs ? null : toPosix(path.dirname(dirAbs)),
         dirs,
-        audios,
+        audios: audiosWithProgress,
       };
+    },
+  );
+
+  app.post(
+    '/api/v1/blog/local/progress',
+    secured('blog:read', {
+      schema: {
+        operationId: 'blogLocalProgress',
+        tags: TAG,
+        summary: '上报本地音频播放进度（≥90% 记为已听，之后不再回落）',
+        body: { $ref: 'BlogLocalProgressBody#' },
+        response: {
+          200: { $ref: 'BlogOkResponse#' },
+          400: { $ref: 'BlogErrorResponse#' },
+        },
+      },
+    }),
+    async (req, reply) => {
+      const owner = req.user?.sub || '';
+      const body = (req.body || {}) as { path?: string; positionMs?: number; durationMs?: number };
+      const abs = normalizeAbs(String(body.path || ''));
+      if (!abs || !isAudioName(abs) || !underAny(await ownerRoots(owner), abs)) {
+        return reply.code(400).send({ error: Err.badRequest, message: 'invalid path' });
+      }
+      const duration = Math.max(0, Math.floor(Number(body.durationMs) || 0));
+      let position = Math.max(0, Math.floor(Number(body.positionMs) || 0));
+      if (duration > 0 && position > duration) position = duration;
+      const prev = (
+        await sql<Pick<ProgressRow, 'listened'>>`
+          select listened from blog_local_progress
+           where owner_id = ${owner} and path = ${abs}
+        `.execute(k.db)
+      ).rows[0];
+      // 已听是单向标记：重听从 0 开始也不会把标签摘掉
+      const listened = Boolean(prev?.listened) || (duration > 0 && position / duration >= 0.9);
+      const now = Math.floor(Date.now() / 1000);
+      await sql`
+        insert into blog_local_progress
+          (owner_id, path, position_ms, duration_ms, listened, updated_at)
+        values (${owner}, ${abs}, ${position}, ${duration}, ${listened ? 1 : 0}, ${now})
+        on conflict (owner_id, path) do update set
+          position_ms = excluded.position_ms,
+          duration_ms = excluded.duration_ms,
+          listened = excluded.listened,
+          updated_at = excluded.updated_at
+      `.execute(k.db);
+      return { ok: true };
     },
   );
 
@@ -419,7 +577,7 @@ export async function registerLocalBlog(app: FastifyInstance, k: KernelApi): Pro
       },
     }),
     async (req, reply) => {
-      const q = (req.query || {}) as { path?: string };
+      const q = (req.query || {}) as { path?: string; format?: string };
       const raw = String(q.path || '');
       if (!raw) return reply.code(404).send({ error: Err.notFound, message: 'audio missing' });
       const abs = normalizeAbs(raw);
@@ -427,8 +585,9 @@ export async function registerLocalBlog(app: FastifyInstance, k: KernelApi): Pro
         return reply.code(404).send({ error: Err.notFound, message: 'audio missing' });
       }
       const token = mediaToken();
+      const format = q.format === 'auto' ? '&format=auto' : '';
       return {
-        url: `/api/v1/blog/local/audio?path=${encodeURIComponent(toPosix(abs))}&token=${encodeURIComponent(token)}`,
+        url: `/api/v1/blog/local/audio?path=${encodeURIComponent(toPosix(abs))}&token=${encodeURIComponent(token)}${format}`,
         expiresInSec: MEDIA_TOKEN_TTL,
       };
     },
@@ -440,20 +599,26 @@ export async function registerLocalBlog(app: FastifyInstance, k: KernelApi): Pro
       schema: {
         operationId: 'blogLocalAudio',
         tags: TAG,
-        summary: '本地音频流（支持 Range / ETag）',
+        summary: '本地音频流（支持 Range / ETag；format=auto 时 Web 不支持格式实时转 PCM 推流）',
         querystring: { $ref: 'BlogLocalPathQuery#' },
         response: { 404: { $ref: 'BlogErrorResponse#' } },
       },
     }),
     async (req, reply) => {
-      const q = (req.query || {}) as { path?: string };
+      const q = (req.query || {}) as { path?: string; format?: string };
       const raw = String(q.path || '');
       if (!raw) return reply.code(404).send({ error: Err.notFound, message: 'audio missing' });
       const abs = normalizeAbs(raw);
       if (!isAudioName(abs) || !underAny(await allRoots(), abs)) {
         return reply.code(404).send({ error: Err.notFound, message: 'audio missing' });
       }
-      return streamAbsoluteFile(req, reply, path.resolve(absoluteInput(abs)));
+      const src = path.resolve(absoluteInput(abs));
+      // 浏览器解不了的格式：边解码边推 PCM（WAV），首字节几百毫秒就能出声；
+      // 探测失败 / 没有 ffmpeg 时退回原始文件，不阻断桌面端播放
+      if (q.format === 'auto' && needsWebAudioTranscode(abs)) {
+        if (await streamWav(req, reply, src)) return;
+      }
+      return streamAbsoluteFile(req, reply, src);
     },
   );
 
@@ -489,7 +654,7 @@ export async function registerLocalBlog(app: FastifyInstance, k: KernelApi): Pro
       schema: {
         operationId: 'blogLocalDelete',
         tags: TAG,
-        summary: '删除本地音频文件（只删音频，不动同名封面）',
+        summary: '删除本地音频文件或整个目录（目录递归删除）',
         body: { $ref: 'BlogLocalDeleteBody#' },
         response: { 200: { $ref: 'BlogLocalDeleteResponse#' } },
       },
@@ -501,17 +666,48 @@ export async function registerLocalBlog(app: FastifyInstance, k: KernelApi): Pro
       let deleted = 0;
       for (const raw of paths) {
         const abs = normalizeAbs(String(raw || ''));
-        if (!abs || !isAudioName(abs) || !underAny(roots, abs)) continue;
+        if (!abs || !underAny(roots, abs)) continue;
+        // 目录源根本身不许删：那是用户的入口，误删会把整库一起带走
+        if (roots.some((r) => r === abs)) continue;
+        const target = path.resolve(absoluteInput(abs));
+        let st: fs.Stats;
         try {
-          fs.rmSync(path.resolve(absoluteInput(abs)), { force: true });
+          st = fs.statSync(target);
+        } catch {
+          continue;
+        }
+        const isDir = st.isDirectory();
+        const isAudio = !isDir && isAudioName(abs);
+        if (!isDir && !isAudio) continue;
+        try {
+          // 目录连同子目录 / 封面等一起删；文件只删自身
+          fs.rmSync(target, { recursive: isDir, force: true });
           deleted += 1;
-          // 文件没了，合集里的同路径条目也一并清掉，避免留下点开就 404 的死条目
+        } catch {
+          // 文件被占用 / 已消失：跳过，不让批量删除整体失败
+          continue;
+        }
+        // 文件没了，合集里的同路径条目也一并清掉，避免留下点开就 404 的死条目
+        if (isDir) {
+          await sql`
+            delete from blog_collection_items
+             where owner_id = ${owner}
+               and (path = ${abs} or substr(path, 1, ${abs.length + 1}) = ${`${abs}/`})
+          `.execute(k.db);
+          await sql`
+            delete from blog_local_progress
+             where owner_id = ${owner}
+               and (path = ${abs} or substr(path, 1, ${abs.length + 1}) = ${`${abs}/`})
+          `.execute(k.db);
+        } else {
           await sql`
             delete from blog_collection_items
              where owner_id = ${owner} and path = ${abs}
           `.execute(k.db);
-        } catch {
-          // 文件被占用 / 已消失：跳过，不让批量删除整体失败
+          await sql`
+            delete from blog_local_progress
+             where owner_id = ${owner} and path = ${abs}
+          `.execute(k.db);
         }
       }
       return { ok: true, deleted };
@@ -716,25 +912,36 @@ export async function registerLocalBlog(app: FastifyInstance, k: KernelApi): Pro
            limit 1000
         `.execute(k.db)
       ).rows;
-      const covers = coversOf(items.map((i) => i.path));
+      // 封面 / 体积在 SMB、机械盘上逐个读很慢：目录去重后并发扫，
+      // 文件也并发 stat，把「打开合集」的首屏延迟摊薄（上限 16 并发）。
+      const dirs = Array.from(new Set(items.map((i) => path.dirname(i.path))));
+      const dirIndexes = await mapLimit(dirs, 8, (d) => imageIndexOfDirAsync(d));
+      const coverIndex = new Map(dirs.map((d, i) => [d, dirIndexes[i]] as const));
+      const sizes = await mapLimit(items, 16, async (i) => {
+        try {
+          return (await fs.promises.stat(path.resolve(absoluteInput(i.path)))).size;
+        } catch {
+          return 0; // 文件被移走：仍然列出，播放时再报 404
+        }
+      });
+      const progress = await progressFor(owner, items.map((i) => i.path));
       const token = mediaToken();
       return {
         id: row.id,
         name: row.name,
         description: row.description || '',
         items: items.map((i, idx) => {
-          let size = 0;
-          try {
-            size = fs.statSync(path.resolve(absoluteInput(i.path))).size;
-          } catch {
-            /* 文件被移走：仍然列出，播放时再报 404 */
-          }
+          const cover = coverIndex.get(path.dirname(i.path))?.get(baseNameLower(i.path));
+          const p = progress.get(i.path);
           return {
             id: i.id,
             path: i.path,
             title: i.title,
-            size,
-            coverUrl: covers[idx] ? coverUrlOf(i.path, token) : null,
+            size: sizes[idx],
+            coverUrl: cover ? coverUrlOf(i.path, token) : null,
+            listened: Boolean(p?.listened),
+            positionMs: p?.position_ms ?? 0,
+            playedAt: p?.updated_at ?? 0,
           };
         }),
       };
@@ -747,7 +954,7 @@ export async function registerLocalBlog(app: FastifyInstance, k: KernelApi): Pro
       schema: {
         operationId: 'blogCollectionAdd',
         tags: TAG,
-        summary: '把本地音频加入合集（同合集内按路径去重）',
+        summary: '把本地音频（或目录下所有层级的音频）加入合集',
         body: { $ref: 'BlogCollectionAddBody#' },
         response: {
           200: { $ref: 'BlogCollectionAddResponse#' },
@@ -782,7 +989,7 @@ export async function registerLocalBlog(app: FastifyInstance, k: KernelApi): Pro
       let skipped = 0;
       for (const raw of body.paths || []) {
         const abs = normalizeAbs(String(raw || ''));
-        if (!abs || !isAudioName(abs)) {
+        if (!abs) {
           skipped += 1;
           continue;
         }
@@ -791,26 +998,51 @@ export async function registerLocalBlog(app: FastifyInstance, k: KernelApi): Pro
           skipped += 1;
           continue;
         }
-        // 扫描后文件可能已被删：不把死条目写进合集
-        if (!fs.existsSync(path.resolve(absoluteInput(abs)))) {
+        const target = path.resolve(absoluteInput(abs));
+        let st: fs.Stats;
+        try {
+          st = fs.statSync(target);
+        } catch {
+          // 扫描后文件可能已被删：不把死条目写进合集
           skipped += 1;
           continue;
         }
-        if (existing.has(abs)) {
+        // 目录：把其下所有层级的音频都收进合集；文件：只收自身
+        let targets: string[];
+        if (st.isDirectory()) {
+          targets = audioFilesUnder(target);
+        } else if (isAudioName(abs)) {
+          targets = [abs];
+        } else {
           skipped += 1;
           continue;
         }
-        existing.add(abs);
-        await sql`
-          insert into blog_collection_items
-            (id, collection_id, owner_id, path, title, position, created_at)
-          values (
-            ${newId()}, ${row.id}, ${owner}, ${abs},
-            ${path.basename(abs, path.extname(abs))}, ${pos}, ${now}
-          )
-        `.execute(k.db);
-        pos += 1;
-        added += 1;
+        if (targets.length === 0) {
+          skipped += 1;
+          continue;
+        }
+        for (const fileAbs of targets) {
+          // 扫描后文件可能已被删：不把死条目写进合集
+          if (!fs.existsSync(path.resolve(absoluteInput(fileAbs)))) {
+            skipped += 1;
+            continue;
+          }
+          if (existing.has(fileAbs)) {
+            skipped += 1;
+            continue;
+          }
+          existing.add(fileAbs);
+          await sql`
+            insert into blog_collection_items
+              (id, collection_id, owner_id, path, title, position, created_at)
+            values (
+              ${newId()}, ${row.id}, ${owner}, ${fileAbs},
+              ${path.basename(fileAbs, path.extname(fileAbs))}, ${pos}, ${now}
+            )
+          `.execute(k.db);
+          pos += 1;
+          added += 1;
+        }
       }
       if (added > 0) {
         await sql`

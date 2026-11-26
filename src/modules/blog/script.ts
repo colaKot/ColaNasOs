@@ -151,15 +151,8 @@ const SYSTEM_PROMPT = `你是一名资深新闻主编、播客朗读稿撰稿人
 2. 百分比读"百分之 X"；大额数字加"约"；日期读"11月5日"而不是"11.5"。
 3. 播客口播语气，句子短、能一口气读完。
 
-【输出格式】
-只输出一个 JSON 对象（不要 markdown 代码块、不要解释）：
-{
-  "articles": [
-    { "index": 1, "summary": "一句话总结", "text": "带//停顿标记的正文", "char_count": 248, "source": "素材里的媒体名", "event_date": "YYYY-MM-DD" }
-  ],
-  "gaps": ["素材不足的说明，没有就空数组"],
-  "notes": ""
-}`;
+【输出】
+严格按用户消息里指定的 JSON 格式输出：只输出 JSON，不要 markdown 代码块、不要解释。`;
 
 /**
  * 进 prompt 的素材：只给模型用得上的字段。
@@ -609,9 +602,11 @@ export function composeFallbackScript(items: NewsItem[], now = new Date()): stri
       parts.push(`下面是${item.spoken}。`);
     }
     no += 1;
-    parts.push(`第${cnNumber(no)}，${item.title.replace(/[。！？；，、\s]+$/g, '')}。`);
     const summary = item.summary.replace(/\s+/g, ' ').slice(0, 220);
-    if (summary) parts.push(summary);
+    // 与正式稿件一致：一条一个自然段，避免多条被 TTS 并进同一合成块
+    parts.push(
+      `第${cnNumber(no)}，${item.title.replace(/[。！？；，、\s]+$/g, '')}。${summary}`,
+    );
   }
   parts.push('以上就是今天的全部内容，感谢收听，我们明天见。');
   return parts.join('\n\n');
@@ -667,8 +662,10 @@ export function renderScript(
     parts.push(`下面是${cat.spoken}。`);
     for (const a of cat.articles) {
       no += 1;
-      parts.push(leadOf(no, a.summary));
-      parts.push(speakable(a.text));
+      // 一条新闻 = 一个自然段：播报头与正文不拆开。
+      // 以前拆成两段，TTS 会把相邻两条并进同一个合成块（300 字上限），
+      // 条目分界消失，听感上像「播到一半断流」。现在段就是合成单元。
+      parts.push(`${leadOf(no, a.summary)}${speakable(a.text)}`);
     }
   }
   if (commentary) {
@@ -713,6 +710,142 @@ function windowFor(
     if (day && day < from) from = day;
   }
   return { from, to: base.to };
+}
+
+/**
+ * 改写分组：把 8 个分类按「综合 / 科技AI / 财经」合并成 3 次调用。
+ *
+ * 为什么合并：原来 8 类各调一次，同一份 SYSTEM_PROMPT（约 1.5k token）重复 8 份。
+ * 合并成 3 组后 system prompt 只发 3 份，实测能省 7~8k 输入 token，而输出总量不变。
+ * 为什么是这 3 组：组内是"同源同口径"的类别（综合互为兜底、科技与 AI 相邻、
+ * 财经两类同一逻辑），让模型一次判断，分类排他更稳，也不至于一次输出太多被截断。
+ */
+const REWRITE_GROUPS: CountKey[][] = [
+  ['domesticGeneral', 'worldGeneral'],
+  ['domesticTech', 'worldTech', 'domesticAi', 'worldAi'],
+  ['domesticFinance', 'worldFinance'],
+];
+
+/** 一组的总输出预算：合并后条数变多，比单类放宽，但仍有上限防烧 token */
+function groupOutputBudget(totalWant: number): number {
+  return Math.min(8000, 1800 + totalWant * 700);
+}
+
+/** 一组里各分类的素材 / 条数 / 时间窗口，拼成一个 prompt */
+function groupPrompt(
+  buckets: Array<{
+    spoken: string;
+    want: number;
+    items: NewsItem[];
+    win: { from: string; to: string };
+  }>,
+  target: string,
+): string {
+  const lines: string[] = [];
+  lines.push(`目标日期：${target}（时区 Asia/Shanghai）`);
+  lines.push('');
+  lines.push(`本次需要生成以下 ${buckets.length} 个分类，请按每个分类各自的要求与条数分别产出：`);
+  for (const b of buckets) {
+    lines.push('');
+    lines.push(`【${b.spoken}】条数要求：${b.want} 条（素材不足按 gaps 说明，不要编造、不要跨类复用）`);
+    lines.push(`时间窗口：${b.win.from} 00:00 至 ${b.win.to} 23:59`);
+    if (b.items.length === 0) {
+      lines.push('素材：（本类无预抓素材，按规则返回空数组并在 gaps 说明）');
+    } else {
+      lines.push('素材（唯一事实来源）：' + materialOf(b.items));
+    }
+  }
+  lines.push('');
+  lines.push('【输出】只输出 JSON（不要 markdown 代码块、不要解释）：');
+  lines.push(
+    '{"categories":[{"category":"分类名","articles":[{"index":1,"summary":"一句话总结","text":"正文","char_count":248,"source":"媒体名","event_date":"YYYY-MM-DD"}],"gaps":[]}]}',
+  );
+  lines.push(
+    '每个分类条数不超过其要求；summary 15—25 字，summary 与 text 合计 230—270 字，用"//"标停顿。category 必须与上面的分类名完全一致。',
+  );
+  return lines.join('\n');
+}
+
+/** 解析分组输出：category 名 -> { articles, gaps } */
+function parseGroups(raw: unknown): Map<string, { articles: Article[]; gaps: string[] }> {
+  const out = new Map<string, { articles: Article[]; gaps: string[] }>();
+  const obj = (raw || {}) as { categories?: unknown };
+  const list = Array.isArray(obj.categories) ? obj.categories : [];
+  for (const item of list) {
+    const c = (item || {}) as Record<string, unknown>;
+    const name = String(c.category ?? '').trim();
+    if (!name) continue;
+    out.set(name, parseArticles({ articles: c.articles, gaps: c.gaps }));
+  }
+  return out;
+}
+
+/**
+ * 一次调用改写一组分类，再按类拆回 CategoryResult 并逐类校验。
+ * 只有「调用失败 / 截断 / JSON 解析失败」才整组放弃，字数等偏差一律接受（与单类策略一致）。
+ */
+async function composeGroup(
+  settings: BlogSettings,
+  buckets: Array<{
+    key: CountKey;
+    spoken: string;
+    want: number;
+    items: NewsItem[];
+    win: { from: string; to: string };
+  }>,
+  target: string,
+  usage: TokenUsage,
+  log?: (msg: string) => void,
+): Promise<{ results: CategoryResult[]; retries: number; warnings: string[] }> {
+  const warnings: string[] = [];
+  const totalWant = buckets.reduce((s, b) => s + b.want, 0);
+  const emptyResults = (reason: string): CategoryResult[] =>
+    buckets.map((b) => ({ key: b.key, spoken: b.spoken, articles: [], gaps: [reason] }));
+
+  let chat: ChatResult;
+  try {
+    chat = await callChat(
+      settings,
+      SYSTEM_PROMPT,
+      groupPrompt(buckets, target),
+      groupOutputBudget(totalWant),
+      false,
+      usage,
+    );
+  } catch (e) {
+    warnings.push(`合并改写调用失败 ${String((e as Error).message || e).slice(0, 160)}`);
+    return { results: emptyResults('调用失败'), retries: 0, warnings };
+  }
+  if (chat.truncated) {
+    warnings.push(
+      `合并改写被 max_tokens(${groupOutputBudget(totalWant)}) 截断，本组跳过（不重试以省 token）`,
+    );
+    return { results: emptyResults('输出被截断'), retries: 0, warnings };
+  }
+
+  let parsed: Map<string, { articles: Article[]; gaps: string[] }>;
+  try {
+    parsed = parseGroups(extractJson(chat.content));
+  } catch (e) {
+    warnings.push(`合并改写 JSON 解析失败：${String((e as Error).message || e).slice(0, 160)}`);
+    return { results: emptyResults('JSON 解析失败'), retries: 0, warnings };
+  }
+
+  const results = buckets.map((b) => {
+    const p = parsed.get(b.spoken) || { articles: [] as Article[], gaps: [] as string[] };
+    const articles = p.articles.slice(0, b.want);
+    const gaps = [...p.gaps];
+    if (articles.length < b.want && gaps.length === 0) {
+      gaps.push(`仅返回 ${articles.length}/${b.want} 条`);
+    }
+    const errors = validateCategory(articles, b.want, b.win, gaps);
+    if (errors.length > 0) {
+      log?.(`[blog] ${b.spoken} 校验未过但已接受：${errors.slice(0, 3).join('；')}`);
+      warnings.push(`${b.spoken}：${errors.slice(0, 3).join('；')}（已接受，未重发）`);
+    }
+    return { key: b.key, spoken: b.spoken, articles, gaps };
+  });
+  return { results, retries: 0, warnings };
 }
 
 export async function composeScript(
@@ -761,30 +894,29 @@ export async function composeScript(
 
   log?.(`[blog] 开始改写：${buckets.length} 个分类，模型 ${settings.apiModel}`);
 
-  const results = await mapLimit(buckets, 3, async (bucket) => {
+  // 8 类按「综合 / 科技AI / 财经」合并成 3 组改写：SYSTEM_PROMPT 由 8 份降到 3 份
+  const bucketByKey = new Map(buckets.map((b) => [b.key, b] as const));
+  const activeGroups = REWRITE_GROUPS.map((keys) =>
+    keys.map((k2) => bucketByKey.get(k2)).filter((b): b is (typeof buckets)[number] => Boolean(b)),
+  ).filter((g) => g.length > 0);
+
+  const groupResults = await mapLimit(activeGroups, 3, async (group) => {
     try {
-      return await composeCategory(
-        settings,
-        bucket,
-        bucket.items,
-        bucket.want,
-        bucket.win,
-        target,
-        usage,
-        log,
-      );
+      return await composeGroup(settings, group, target, usage, log);
     } catch (e) {
       return {
-        result: { key: bucket.key, spoken: bucket.spoken, articles: [], gaps: [] } as CategoryResult,
+        results: group.map(
+          (b): CategoryResult => ({ key: b.key, spoken: b.spoken, articles: [], gaps: [] }),
+        ),
         retries: 0,
-        warnings: [`${bucket.spoken}：调用失败 ${String((e as Error).message || e).slice(0, 160)}`],
+        warnings: [`合并改写失败 ${String((e as Error).message || e).slice(0, 160)}`],
       };
     }
   });
 
-  const categories = results.map((r) => r.result);
-  for (const r of results) warnings.push(...r.warnings);
-  const retries = results.reduce((n, r) => n + r.retries, 0);
+  const categories = groupResults.flatMap((r) => r.results);
+  for (const r of groupResults) warnings.push(...r.warnings);
+  const retries = groupResults.reduce((n, r) => n + r.retries, 0);
 
   const produced = categories.reduce((n, c) => n + c.articles.length, 0);
   if (produced === 0) {

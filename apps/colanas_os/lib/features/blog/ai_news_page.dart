@@ -2096,6 +2096,17 @@ class _ScriptDialogState extends State<_ScriptDialog> {
   BlogScriptResponse? _data;
   String? _error;
 
+  /// 分类头 / 点评头 / 结尾：这几段单独做小标题
+  static final RegExp _headerRe = RegExp(r'^(下面是|最后是|以上就是)');
+
+  /// 稿件按空行切段。服务端「一条新闻一个段落」，逐段渲染才能真正一条一块，
+  /// 而不是像以前那样整篇塞进一个 SelectableText 里连成一片。
+  static List<String> _paragraphs(String script) => script
+      .split(RegExp(r'\n{2,}'))
+      .map((p) => p.trim())
+      .where((p) => p.isNotEmpty)
+      .toList(growable: false);
+
   @override
   void initState() {
     super.initState();
@@ -2153,10 +2164,21 @@ class _ScriptDialogState extends State<_ScriptDialog> {
                   if (data.script.trim().isEmpty)
                     Text(tr('blog.script.empty'))
                   else
-                    SelectableText(
-                      data.script,
-                      style: const TextStyle(fontSize: 14, height: 1.6),
-                    ),
+                    for (final p in _paragraphs(data.script))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: NasTokens.spaceSm),
+                        child: SelectableText(
+                          p,
+                          style: _headerRe.hasMatch(p)
+                              ? TextStyle(
+                                  fontSize: 15,
+                                  height: 1.6,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.nasTextSecondary,
+                                )
+                              : const TextStyle(fontSize: 14, height: 1.6),
+                        ),
+                      ),
                   const SizedBox(height: NasTokens.spaceLg),
                   const Divider(height: 1),
                   const SizedBox(height: NasTokens.spaceMd),

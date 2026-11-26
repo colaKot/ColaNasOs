@@ -442,6 +442,10 @@ class _BlogCollectionDetailPageState extends State<BlogCollectionDetailPage> {
   String? _error;
   BlogCollectionItemsResponse? _res;
 
+  /// 多选：只在打开多选后显示勾选框
+  bool _selecting = false;
+  final Set<String> _selected = <String>{};
+
   @override
   void initState() {
     super.initState();
@@ -471,7 +475,7 @@ class _BlogCollectionDetailPageState extends State<BlogCollectionDetailPage> {
     }
   }
 
-  Future<void> _playAt(int index) async {
+  Future<void> _playAt(int index, {Duration? startAt}) async {
     final items = _res?.items ?? const <BlogCollectionItem>[];
     if (index < 0 || index >= items.length) return;
     final queue = items.map(_toEpisode).toList(growable: false);
@@ -479,11 +483,36 @@ class _BlogCollectionDetailPageState extends State<BlogCollectionDetailPage> {
       queue[index],
       queue,
       kind: BlogPlaybackKind.localBlog,
+      startAt: startAt,
     );
     if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const BlogPlayerPage()),
     );
+    // 回来刷新：已听标记 / 断点都会变
+    if (mounted) await _load();
+  }
+
+  /// 最近一条有断点的音频（「继续播放」用）
+  BlogCollectionItem? _resumeItem(List<BlogCollectionItem> items) {
+    BlogCollectionItem? best;
+    for (final i in items) {
+      if (i.positionMs <= 0) continue;
+      if (best == null || i.playedAt > best.playedAt) best = i;
+    }
+    return best;
+  }
+
+  Future<void> _continuePlay() async {
+    final items = _res?.items ?? const <BlogCollectionItem>[];
+    final item = _resumeItem(items);
+    if (item == null) return;
+    final index = items.indexOf(item);
+    // 已听（听到 ≥90%）的条目再「继续」没有意义，从头开始
+    final startAt = item.listened
+        ? null
+        : Duration(milliseconds: item.positionMs);
+    await _playAt(index, startAt: startAt);
   }
 
   static BlogEpisodeItem _toEpisode(BlogCollectionItem i) => BlogEpisodeItem(
@@ -544,6 +573,56 @@ class _BlogCollectionDetailPageState extends State<BlogCollectionDetailPage> {
     }
   }
 
+  Future<void> _removeSelected() async {
+    final ids = _selected.toList(growable: false);
+    if (ids.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(tr('blog.collection.removeItem')),
+        content: Text(
+          tr('blog.collection.removeSelectedConfirm', {
+            'count': '${ids.length}',
+          }),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tr('common.cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tr('common.confirm')),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      for (final itemId in ids) {
+        await ApiSession.instance.client.blogCollectionRemoveItem(
+          body: BlogCollectionRemoveItemBody(
+            id: widget.collection.id,
+            itemId: itemId,
+          ),
+        );
+      }
+      NasSnack.showOn(messenger, tr('blog.collection.removeDone'));
+      setState(() {
+        _selecting = false;
+        _selected.clear();
+      });
+      await _load();
+    } catch (e) {
+      NasSnack.showOn(
+        messenger,
+        tr('blog.collection.removeFailed', {'error': '$e'}),
+        error: true,
+      );
+    }
+  }
+
   Future<void> _move(int index, int delta) async {
     final res = _res;
     if (res == null) return;
@@ -586,23 +665,65 @@ class _BlogCollectionDetailPageState extends State<BlogCollectionDetailPage> {
       appBar: AppBar(
         title: Text(res?.name ?? widget.collection.name),
         actions: [
-          IconButton(
-            tooltip: tr('blog.collection.playAll'),
-            icon: const Icon(Icons.play_circle_outline),
-            onPressed: items.isEmpty ? null : () => _playAt(0),
-          ),
+          if (items.isNotEmpty)
+            NasSelectionToggleButton(
+              active: _selecting,
+              onPressed: () => setState(() {
+                _selecting = !_selecting;
+                if (!_selecting) _selected.clear();
+              }),
+            ),
+          if (!_selecting)
+            IconButton(
+              tooltip: tr('blog.collection.playAll'),
+              icon: const Icon(Icons.play_circle_outline),
+              onPressed: items.isEmpty ? null : () => _playAt(0),
+            ),
         ],
       ),
       body: _loading
           ? const NasLoading()
           : _error != null
               ? NasErrorState(message: _error!, onRetry: _load)
-              : Column(
-                  children: [
-                    _infoCard(context, res),
-                    Expanded(child: _list(items)),
-                  ],
+              : NasSelectionOverlay(
+                  bar: _selecting && _selected.isNotEmpty
+                      ? _selectionBar(items)
+                      : null,
+                  child: Column(
+                    children: [
+                      _infoCard(context, res),
+                      Expanded(child: _list(items)),
+                    ],
+                  ),
                 ),
+    );
+  }
+
+  Widget _selectionBar(List<BlogCollectionItem> items) {
+    final all = items.map((e) => e.id).toList(growable: false);
+    return NasSelectionFloatingBar(
+      title: tr('blog.collection.selected', {'count': '${_selected.length}'}),
+      allSelected: all.isNotEmpty && all.every(_selected.contains),
+      onToggleAll: () => setState(() {
+        if (all.isNotEmpty && all.every(_selected.contains)) {
+          _selected.clear();
+        } else {
+          _selected
+            ..clear()
+            ..addAll(all);
+        }
+      }),
+      onClose: () => setState(() {
+        _selecting = false;
+        _selected.clear();
+      }),
+      actions: [
+        NasSelectionAction(
+          label: tr('blog.collection.removeItem'),
+          icon: Icons.playlist_remove,
+          onPressed: _removeSelected,
+        ),
+      ],
     );
   }
 
@@ -612,49 +733,56 @@ class _BlogCollectionDetailPageState extends State<BlogCollectionDetailPage> {
     return Padding(
       padding: const EdgeInsets.all(NasTokens.spaceLg),
       child: NasCard(
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    res?.name ?? widget.collection.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: NasTokens.fontSubtitle,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (description.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: NasTokens.fontCaption,
-                        color: context.nasTextSecondary,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 6),
-                  Text(
-                    tr('blog.collection.tracks', {'count': '${items.length}'}),
-                    style: TextStyle(
-                      fontSize: NasTokens.fontCaption,
-                      color: context.nasTextSecondary,
-                    ),
-                  ),
-                ],
+            Text(
+              res?.name ?? widget.collection.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: NasTokens.fontSubtitle,
+                fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(width: NasTokens.spaceMd),
-            FilledButton.icon(
-              onPressed: items.isEmpty ? null : () => _playAt(0),
-              icon: const Icon(Icons.play_arrow),
-              label: Text(tr('blog.collection.playAll')),
+            if (description.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: NasTokens.fontCaption,
+                  color: context.nasTextSecondary,
+                ),
+              ),
+            ],
+            const SizedBox(height: 6),
+            Text(
+              tr('blog.collection.tracks', {'count': '${items.length}'}),
+              style: TextStyle(
+                fontSize: NasTokens.fontCaption,
+                color: context.nasTextSecondary,
+              ),
+            ),
+            const SizedBox(height: 10),
+            // 播放全部在左，继续播放紧跟其后，同一行
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                FilledButton.icon(
+                  onPressed: items.isEmpty ? null : () => _playAt(0),
+                  icon: const Icon(Icons.play_arrow),
+                  label: Text(tr('blog.collection.playAll')),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _resumeItem(items) == null ? null : _continuePlay,
+                  icon: const Icon(Icons.play_circle_outline, size: 18),
+                  label: Text(tr('blog.collection.continuePlay')),
+                ),
+              ],
             ),
           ],
         ),
@@ -671,16 +799,17 @@ class _BlogCollectionDetailPageState extends State<BlogCollectionDetailPage> {
       );
     }
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         NasTokens.spaceLg,
         0,
         NasTokens.spaceLg,
-        NasTokens.spaceLg,
+        _selecting ? 96 : NasTokens.spaceLg,
       ),
       itemCount: items.length,
       separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (context, i) {
         final item = items[i];
+        final checked = _selected.contains(item.id);
         return ListTile(
           contentPadding: EdgeInsets.zero,
           leading: SizedBox(
@@ -689,34 +818,86 @@ class _BlogCollectionDetailPageState extends State<BlogCollectionDetailPage> {
             child: _thumb(context, item.coverUrl),
           ),
           title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(
-            _sizeText(item.size),
-            style: TextStyle(
-              fontSize: NasTokens.fontCaption,
-              color: context.nasTextSecondary,
-            ),
-          ),
-          onTap: () => _playAt(i),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
+          subtitle: Row(
             children: [
-              IconButton(
-                tooltip: tr('blog.collection.moveUp'),
-                onPressed: i == 0 ? null : () => _move(i, -1),
-                icon: const Icon(Icons.arrow_upward, size: 18),
+              Text(
+                _sizeText(item.size),
+                style: TextStyle(
+                  fontSize: NasTokens.fontCaption,
+                  color: context.nasTextSecondary,
+                ),
               ),
-              IconButton(
-                tooltip: tr('blog.collection.moveDown'),
-                onPressed: i == items.length - 1 ? null : () => _move(i, 1),
-                icon: const Icon(Icons.arrow_downward, size: 18),
-              ),
-              IconButton(
-                tooltip: tr('blog.collection.removeItem'),
-                onPressed: () => _remove(item),
-                icon: const Icon(Icons.remove_circle_outline, size: 18),
-              ),
+              if (item.listened) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    tr('blog.local.listened'),
+                    style: TextStyle(
+                      fontSize: NasTokens.fontCaption - 1,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
+          onTap: () {
+            if (!_selecting) {
+              _playAt(i);
+              return;
+            }
+            setState(() {
+              if (!checked) {
+                _selected.add(item.id);
+              } else {
+                _selected.remove(item.id);
+              }
+            });
+          },
+          onLongPress: () => setState(() {
+            _selecting = true;
+            if (!checked) {
+              _selected.add(item.id);
+            } else {
+              _selected.remove(item.id);
+            }
+          }),
+          trailing: _selecting
+              ? Checkbox(
+                  value: checked,
+                  onChanged: (v) => setState(() {
+                    if (v == true) {
+                      _selected.add(item.id);
+                    } else {
+                      _selected.remove(item.id);
+                    }
+                  }),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: tr('blog.collection.moveUp'),
+                      onPressed: i == 0 ? null : () => _move(i, -1),
+                      icon: const Icon(Icons.arrow_upward, size: 18),
+                    ),
+                    IconButton(
+                      tooltip: tr('blog.collection.moveDown'),
+                      onPressed: i == items.length - 1 ? null : () => _move(i, 1),
+                      icon: const Icon(Icons.arrow_downward, size: 18),
+                    ),
+                    IconButton(
+                      tooltip: tr('blog.collection.removeItem'),
+                      onPressed: () => _remove(item),
+                      icon: const Icon(Icons.remove_circle_outline, size: 18),
+                    ),
+                  ],
+                ),
         );
       },
     );

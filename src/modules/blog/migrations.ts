@@ -13,6 +13,28 @@ import type { Migration } from '../../../kernel/migrator';
  */
 export const BLOG_MIGRATIONS: Migration[] = [
   {
+    id: '192_blog_local_progress',
+    async up(db) {
+      // 本地博客播放进度：按「用户 + 绝对路径」存一条。
+      // listened 到 90% 置 1 后不再回落（重听也不会丢「已听」标记）。
+      await sql`
+        create table if not exists blog_local_progress (
+          owner_id text not null,
+          path text not null,
+          position_ms integer not null default 0,
+          duration_ms integer not null default 0,
+          listened integer not null default 0,
+          updated_at integer not null default 0,
+          primary key (owner_id, path)
+        )
+      `.execute(db);
+      await sql`
+        create index if not exists idx_blog_local_progress_owner
+          on blog_local_progress (owner_id, updated_at desc)
+      `.execute(db);
+    },
+  },
+  {
     id: '191_blog_local',
     async up(db) {
       // 本地博客目录源：用户添加的本地文件夹（只存配置，不搬文件）

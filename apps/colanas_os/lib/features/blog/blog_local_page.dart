@@ -29,6 +29,9 @@ class _LocalBlogPageState extends State<LocalBlogPage> {
   BlogLocalBrowseResponse? _browse;
   bool _browseLoading = false;
 
+  /// 多选模式：只有打开后才显示勾选框，避免平时误触选中
+  bool _selecting = false;
+
   final Set<String> _selected = <String>{};
 
   @override
@@ -111,6 +114,7 @@ class _LocalBlogPageState extends State<LocalBlogPage> {
         setState(() {
           _source = null;
           _browse = null;
+          _selecting = false;
           _selected.clear();
         });
       }
@@ -124,6 +128,7 @@ class _LocalBlogPageState extends State<LocalBlogPage> {
     setState(() {
       _source = source;
       _browse = null;
+      _selecting = false;
       _selected.clear();
     });
     await _browseDir(null);
@@ -134,6 +139,7 @@ class _LocalBlogPageState extends State<LocalBlogPage> {
     if (source == null) return;
     setState(() {
       _browseLoading = true;
+      _selecting = false;
       _selected.clear();
     });
     try {
@@ -161,6 +167,7 @@ class _LocalBlogPageState extends State<LocalBlogPage> {
       setState(() {
         _source = null;
         _browse = null;
+        _selecting = false;
         _selected.clear();
       });
       return;
@@ -181,6 +188,8 @@ class _LocalBlogPageState extends State<LocalBlogPage> {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const BlogPlayerPage()),
     );
+    // 播放页回来时刷新当前目录：拿到「已听」标记与最新断点
+    if (mounted) await _browseDir(_browse?.path);
   }
 
   static BlogEpisodeItem _toEpisode(BlogLocalAudio a) => BlogEpisodeItem(
@@ -316,6 +325,14 @@ class _LocalBlogPageState extends State<LocalBlogPage> {
               icon: const Icon(Icons.create_new_folder_outlined, size: 18),
               label: Text(tr('blog.local.addSource')),
             ),
+          if (source != null)
+            NasSelectionToggleButton(
+              active: _selecting,
+              onPressed: () => setState(() {
+                _selecting = !_selecting;
+                if (!_selecting) _selected.clear();
+              }),
+            ),
           IconButton(
             tooltip: tr('blog.refresh'),
             onPressed: source == null ? _loadSources : () => _browseDir(_browse?.path),
@@ -406,47 +423,36 @@ class _LocalBlogPageState extends State<LocalBlogPage> {
         icon: Icons.podcasts_outlined,
       );
     }
-    return Stack(
-      children: [
-        ListView(
-          padding: const EdgeInsets.fromLTRB(
-            NasTokens.spaceLg,
-            NasTokens.spaceSm,
-            NasTokens.spaceLg,
-            96,
-          ),
-          children: [
-            _breadcrumb(context, res),
-            const SizedBox(height: NasTokens.spaceXs),
-            for (final d in res.dirs)
-              ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.folder_outlined),
-                title: Text(d.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _browseDir(d.path),
-              ),
-            if (res.dirs.isNotEmpty && res.audios.isNotEmpty)
-              const Divider(height: NasTokens.spaceLg),
-            for (var i = 0; i < res.audios.length; i += 1)
-              _audioTile(context, res.audios[i], i),
-            if (res.audios.isEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: NasTokens.spaceMd),
-                child: Text(
-                  tr('blog.local.browseEmpty'),
-                  style: TextStyle(
-                    fontSize: NasTokens.fontCaption,
-                    color: context.nasTextSecondary,
-                  ),
+    return NasSelectionOverlay(
+      bar: _selecting && _selected.isNotEmpty ? _selectionBar() : null,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(
+          NasTokens.spaceLg,
+          NasTokens.spaceSm,
+          NasTokens.spaceLg,
+          96,
+        ),
+        children: [
+          _breadcrumb(context, res),
+          const SizedBox(height: NasTokens.spaceXs),
+          for (final d in res.dirs) _dirTile(context, d),
+          if (res.dirs.isNotEmpty && res.audios.isNotEmpty)
+            const Divider(height: NasTokens.spaceLg),
+          for (var i = 0; i < res.audios.length; i += 1)
+            _audioTile(context, res.audios[i], i),
+          if (res.audios.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: NasTokens.spaceMd),
+              child: Text(
+                tr('blog.local.browseEmpty'),
+                style: TextStyle(
+                  fontSize: NasTokens.fontCaption,
+                  color: context.nasTextSecondary,
                 ),
               ),
-          ],
-        ),
-        if (_selected.isNotEmpty)
-          Positioned(right: NasTokens.spaceLg, bottom: NasTokens.spaceLg, child: _selectionBar()),
-      ],
+            ),
+        ],
+      ),
     );
   }
 
@@ -484,6 +490,49 @@ class _LocalBlogPageState extends State<LocalBlogPage> {
     );
   }
 
+  Widget _dirTile(BuildContext context, BlogLocalDir d) {
+    final checked = _selected.contains(d.path);
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: const Icon(Icons.folder_outlined),
+      title: Text(d.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: _selecting
+          ? Checkbox(
+              value: checked,
+              onChanged: (v) => setState(() {
+                if (v == true) {
+                  _selected.add(d.path);
+                } else {
+                  _selected.remove(d.path);
+                }
+              }),
+            )
+          : const Icon(Icons.chevron_right),
+      onTap: () {
+        if (!_selecting) {
+          _browseDir(d.path);
+          return;
+        }
+        setState(() {
+          if (!checked) {
+            _selected.add(d.path);
+          } else {
+            _selected.remove(d.path);
+          }
+        });
+      },
+      onLongPress: () => setState(() {
+        _selecting = true;
+        if (!checked) {
+          _selected.add(d.path);
+        } else {
+          _selected.remove(d.path);
+        }
+      }),
+    );
+  }
+
   Widget _audioTile(BuildContext context, BlogLocalAudio a, int index) {
     final checked = _selected.contains(a.path);
     return ListTile(
@@ -498,22 +547,58 @@ class _LocalBlogPageState extends State<LocalBlogPage> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: Text(
-        _sizeText(a.size),
-        style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+      subtitle: Row(
+        children: [
+          Text(
+            _sizeText(a.size),
+            style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
+          ),
+          if (a.listened) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                tr('blog.local.listened'),
+                style: TextStyle(
+                  fontSize: NasTokens.fontCaption - 1,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
-      trailing: Checkbox(
-        value: checked,
-        onChanged: (v) => setState(() {
-          if (v == true) {
+      trailing: _selecting
+          ? Checkbox(
+              value: checked,
+              onChanged: (v) => setState(() {
+                if (v == true) {
+                  _selected.add(a.path);
+                } else {
+                  _selected.remove(a.path);
+                }
+              }),
+            )
+          : null,
+      onTap: () {
+        if (!_selecting) {
+          _playAt(index);
+          return;
+        }
+        setState(() {
+          if (!checked) {
             _selected.add(a.path);
           } else {
             _selected.remove(a.path);
           }
-        }),
-      ),
-      onTap: () => _playAt(index),
+        });
+      },
       onLongPress: () => setState(() {
+        _selecting = true;
         if (!checked) {
           _selected.add(a.path);
         } else {
@@ -542,44 +627,40 @@ class _LocalBlogPageState extends State<LocalBlogPage> {
   }
 
   Widget _selectionBar() {
-    return Material(
-      color: context.nasStyle.panelColor,
-      elevation: 6,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(NasTokens.radiusLg),
-        side: BorderSide(color: context.nasStyle.panelBorderColor),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: NasTokens.spaceMd,
-          vertical: NasTokens.spaceSm,
+    final res = _browse;
+    final all = <String>[
+      for (final d in res?.dirs ?? const <BlogLocalDir>[]) d.path,
+      for (final a in res?.audios ?? const <BlogLocalAudio>[]) a.path,
+    ];
+    return NasSelectionFloatingBar(
+      title: tr('blog.local.selected', {'count': '${_selected.length}'}),
+      allSelected: all.isNotEmpty && all.every(_selected.contains),
+      onToggleAll: () => setState(() {
+        if (all.isNotEmpty && all.every(_selected.contains)) {
+          _selected.clear();
+        } else {
+          _selected
+            ..clear()
+            ..addAll(all);
+        }
+      }),
+      onClose: () => setState(() {
+        _selecting = false;
+        _selected.clear();
+      }),
+      actions: [
+        NasSelectionAction(
+          label: tr('blog.local.addToCollection'),
+          icon: Icons.playlist_add,
+          onPressed: _addSelectedToCollection,
         ),
-        child: Wrap(
-          spacing: NasTokens.spaceSm,
-          runSpacing: NasTokens.spaceXs,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              tr('blog.local.selected', {'count': '${_selected.length}'}),
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            FilledButton.tonalIcon(
-              onPressed: _addSelectedToCollection,
-              icon: const Icon(Icons.playlist_add, size: 18),
-              label: Text(tr('blog.local.addToCollection')),
-            ),
-            FilledButton.icon(
-              onPressed: _deleteSelected,
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Theme.of(context).colorScheme.onError,
-              ),
-              icon: const Icon(Icons.delete_outline, size: 18),
-              label: Text(tr('blog.local.delete')),
-            ),
-          ],
+        NasSelectionAction(
+          label: tr('blog.local.delete'),
+          icon: Icons.delete_outline,
+          danger: true,
+          onPressed: _deleteSelected,
         ),
-      ),
+      ],
     );
   }
 

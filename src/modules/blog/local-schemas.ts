@@ -56,6 +56,8 @@ export const BlogLocalAudio = Type.Object(
     coverUrl: Type.Union([Type.String(), Type.Null()], {
       description: '同名封面图地址（带令牌）；没有同名图片时为 null',
     }),
+    listened: Type.Boolean({ description: '听到 ≥90% 后置为已听，重听也不会回落' }),
+    positionMs: Type.Integer({ description: '上次播放位置（毫秒）；没听过为 0' }),
   },
   { $id: 'BlogLocalAudio' },
 );
@@ -82,7 +84,15 @@ export const BlogLocalBrowseResponse = Type.Object(
 
 /** 本地音频播放地址 / 流地址共用：path 为音频绝对路径 */
 export const BlogLocalPathQuery = Type.Object(
-  { path: Type.String({ minLength: 1 }) },
+  {
+    path: Type.String({ minLength: 1 }),
+    format: Type.Optional(
+      Type.String({
+        maxLength: 16,
+        description: 'auto = Web 端播放：浏览器不支持的格式实时转 PCM 推流',
+      }),
+    ),
+  },
   { $id: 'BlogLocalPathQuery' },
 );
 
@@ -99,6 +109,16 @@ export const BlogLocalDeleteBody = Type.Object(
 export const BlogLocalDeleteResponse = Type.Object(
   { ok: Type.Boolean(), deleted: Type.Integer() },
   { $id: 'BlogLocalDeleteResponse' },
+);
+
+/** 上报本地音频播放进度（前端节流上报；90% 由服务端判定已听） */
+export const BlogLocalProgressBody = Type.Object(
+  {
+    path: Type.String({ minLength: 1 }),
+    positionMs: Type.Integer({ minimum: 0 }),
+    durationMs: Type.Integer({ minimum: 0 }),
+  },
+  { $id: 'BlogLocalProgressBody' },
 );
 
 /** 博客合集（列表卡） */
@@ -151,6 +171,9 @@ export const BlogCollectionItem = Type.Object(
     title: Type.String(),
     size: Type.Integer(),
     coverUrl: Type.Union([Type.String(), Type.Null()]),
+    listened: Type.Boolean({ description: '听到 ≥90% 后置为已听，重听也不会回落' }),
+    positionMs: Type.Integer({ description: '上次播放位置（毫秒）；没听过为 0' }),
+    playedAt: Type.Integer({ description: '最后一次播放时间戳；没听过为 0' }),
   },
   { $id: 'BlogCollectionItem' },
 );
@@ -212,6 +235,7 @@ export const BLOG_LOCAL_SCHEMAS = [
   BlogLocalAudioUrlResponse,
   BlogLocalDeleteBody,
   BlogLocalDeleteResponse,
+  BlogLocalProgressBody,
   BlogCollection,
   BlogCollectionListResponse,
   BlogCollectionBody,

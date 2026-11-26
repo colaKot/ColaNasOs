@@ -108,6 +108,13 @@ class BlogPlayer extends ChangeNotifier {
   double get volume => _volume;
   bool get muted => _volume <= 0;
 
+  /// 本地博客进度上报节流：位置 / 时间任一维度走够 15s 才上报一次
+  static const Duration _progressReportInterval = Duration(seconds: 15);
+  DateTime? _lastReportAt;
+  int _lastReportPosMs = -1;
+  bool _reportedListened = false;
+  String? _progressEpisodeId;
+
   List<BlogEpisodeItem> get queue => _queue;
   List<BlogEpisodeItem> get library => _library;
   int get index => _index;
@@ -144,6 +151,8 @@ class BlogPlayer extends ChangeNotifier {
           _syncMediaSession();
         }
       }
+      // 本地博客：把断点报给服务端，90% 由服务端标记为已听
+      _reportProgress();
       notifyListeners();
     }));
     _subs.add(p.stream.duration.listen((v) {
@@ -160,7 +169,11 @@ class BlogPlayer extends ChangeNotifier {
       notifyListeners();
     }));
     _subs.add(p.stream.completed.listen((done) {
-      if (done) unawaited(next());
+      if (done) {
+        // 播完也算听到 100%：先把进度落库，再切下一期
+        _reportProgress(force: true, at: duration);
+        unawaited(next());
+      }
     }));
     _subs.add(p.stream.error.listen(_handleStreamError));
     _player = p;
@@ -261,6 +274,46 @@ class BlogPlayer extends ChangeNotifier {
     }
   }
 
+  /// 上报本地博客播放进度（只对本地博客；AI 新闻有自己的服务端记录）。
+  ///
+  /// 节流口径：位置 / 墙钟任一走够 15s 才发一次；跨过 90% 时强制立刻发一次，
+  /// 保证「听完」标签及时落库。上报失败静默重试（下一次节流点还会再报）。
+  void _reportProgress({bool force = false, Duration? at}) {
+    if (_kind != BlogPlaybackKind.localBlog) return;
+    final source = episode?.sourcePath;
+    if (source == null || source.isEmpty) return;
+    final total = duration.inMilliseconds;
+    if (total <= 0) return;
+    final pos = (at ?? position).inMilliseconds.clamp(0, total);
+    final ratio = pos / total;
+    final crossed = ratio >= 0.9 && !_reportedListened;
+    if (crossed) _reportedListened = true;
+    final now = DateTime.now();
+    final last = _lastReportAt;
+    if (!force &&
+        !crossed &&
+        last != null &&
+        now.difference(last) < _progressReportInterval &&
+        (pos - _lastReportPosMs).abs() < _progressReportInterval.inMilliseconds) {
+      return;
+    }
+    _lastReportAt = now;
+    _lastReportPosMs = pos;
+    unawaited(() async {
+      try {
+        await ApiSession.instance.client.blogLocalProgress(
+          body: BlogLocalProgressBody(
+            path: source,
+            positionMs: pos,
+            durationMs: total,
+          ),
+        );
+      } catch (_) {
+        // 断网 / 服务端忙碌：不打扰播放，下一次节流点再报
+      }
+    }());
+  }
+
   /// 只暂停，不释放资源：交给 AudioFocus 在别的音源开播时调用。
   ///
   /// 先淡出再暂停：直接硬切会在切换音源时留下一声爆音（用户听感像打碟）。
@@ -273,22 +326,27 @@ class BlogPlayer extends ChangeNotifier {
     }
     playing = false;
     notifyListeners();
+    _reportProgress(force: true);
   }
 
   /// 播放某一期：默认把列表里的全部已完成期次当成队列（自动连播）。
   /// [queue] 同时进 `_library`，播放列表弹层可以再把其它期次加进来。
+  /// [startAt] 用于「继续播放」：从上次断点起播。
   Future<void> play(
     BlogEpisodeItem target,
     List<BlogEpisodeItem> queue, {
     BlogPlaybackKind kind = BlogPlaybackKind.aiNews,
+    Duration? startAt,
   }) async {
     final playable = queue.where((e) => e.status == 'done').toList(growable: false);
     if (playable.isEmpty) return;
+    // 换期前把上一期听到哪了落库（否则用户点另一条就丢了断点）
+    if (episode != null) _reportProgress(force: true);
     _kind = kind;
     _library = playable;
     _queue = playable;
     _index = playable.indexWhere((e) => e.id == target.id).clamp(0, playable.length - 1);
-    await _load();
+    await _load(resumeAt: startAt);
   }
 
   /// 追加到队尾；队列空时直接开播，不冲掉已有的 `_library`。
@@ -325,6 +383,7 @@ class BlogPlayer extends ChangeNotifier {
 
   Future<void> jumpTo(int i) async {
     if (i < 0 || i >= _queue.length) return;
+    if (i != _index) _reportProgress(force: true);
     _index = i;
     await _load();
   }
@@ -351,6 +410,7 @@ class BlogPlayer extends ChangeNotifier {
   }
 
   Future<void> clearQueue() async {
+    _reportProgress(force: true);
     await _player?.stop();
     _queue = const [];
     _index = -1;
@@ -400,6 +460,13 @@ class BlogPlayer extends ChangeNotifier {
   Future<void> _load({Duration? resumeAt}) async {
     final current = episode;
     if (current == null) return;
+    // 换了一期：进度上报的节流状态清零；同一期重试则保留
+    if (_progressEpisodeId != current.id) {
+      _progressEpisodeId = current.id;
+      _reportedListened = false;
+      _lastReportPosMs = -1;
+      _lastReportAt = null;
+    }
     _stopped = false;
     // 开播前先让音乐 / 音色试听让路，避免两路声音叠在一起
     await AudioFocus.instance.request(this, pause);
@@ -434,7 +501,11 @@ class BlogPlayer extends ChangeNotifier {
         if (source == null || source.isEmpty) {
           throw StateError('local blog item missing sourcePath');
         }
-        final res = await ApiSession.instance.client.blogLocalAudioUrl(path: source);
+        final res = await ApiSession.instance.client.blogLocalAudioUrl(
+          path: source,
+          // Web 端浏览器解不了 WMA / APE：让服务端转 AAC 缓存后再播
+          format: kIsWeb ? 'auto' : null,
+        );
         url = '${ApiSession.instance.baseUrl}${res.url}';
       } else {
         final res = await ApiSession.instance.client.blogAudioUrl(id: current.id);
@@ -494,18 +565,21 @@ class BlogPlayer extends ChangeNotifier {
 
   Future<void> next() async {
     if (_queue.isEmpty) return;
+    _reportProgress(force: true);
     _index = (_index + 1) % _queue.length;
     await _load();
   }
 
   Future<void> prev() async {
     if (_queue.isEmpty) return;
+    _reportProgress(force: true);
     _index = (_index - 1 + _queue.length) % _queue.length;
     await _load();
   }
 
   Future<void> stop() async {
     final held = AudioFocus.instance.holds(this);
+    _reportProgress(force: true);
     await _player?.stop();
     playing = false;
     _stopped = true;

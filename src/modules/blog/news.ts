@@ -63,7 +63,16 @@ export const CATEGORIES: CategoryDef[] = [
     key: 'worldGeneral',
     spoken: '国际综合新闻',
     sources: [
-      { name: 'ABC News', url: 'https://abcnews.go.com/abcnews/topstories' },
+      // 以前这里有 ABC News topstories：那是**美国国内**头条流，会把「某州弹药厂
+      // 爆炸」这类美国地方事故当成国际新闻播（2026-11-25 用户反馈），已移除。
+      // 现在按「真正跑国际新闻的通讯社 / 公共广播」组源，避免整段都是美国视角。
+      { name: 'BBC World', url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
+      // 亚洲视角：以前只有欧美源，国际综合听着像欧美台
+      { name: 'CNA Asia', url: 'https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml' },
+      { name: 'The Japan Times', url: 'https://www.japantimes.co.jp/feed/' },
+      { name: 'Al Jazeera', url: 'https://www.aljazeera.com/xml/rss/all.xml' },
+      { name: 'DW World', url: 'https://rss.dw.com/rdf/rss-en-world' },
+      { name: 'France 24', url: 'https://www.france24.com/en/rss' },
       { name: 'NPR World', url: 'https://feeds.npr.org/1004/rss.xml' },
       // 修复：/rss/world 是 403，订阅页的真实 XML 在 subscribe/rss/section/
       { name: 'CGTN World', url: 'https://www.cgtn.com/subscribe/rss/section/world.xml' },
@@ -88,6 +97,9 @@ export const CATEGORIES: CategoryDef[] = [
       // 修复：feedburner 那份现在是空壳，官方源在 feeds.arstechnica.com
       { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index' },
       { name: 'Wired', url: 'https://www.wired.com/feed/rss' },
+      // 补两个非美国视角的科技源：上面四家全是美国媒体，只靠它们会「整段美国科技」
+      { name: 'BBC Technology', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml' },
+      { name: 'The Register', url: 'https://www.theregister.com/headlines.atom' },
     ],
   },
   {
@@ -133,6 +145,8 @@ export const CATEGORIES: CategoryDef[] = [
       { name: 'MarketWatch', url: 'https://feeds.marketwatch.com/marketwatch/topstories/' },
       { name: 'CNBC', url: 'https://www.cnbc.com/id/100003114/device/rss/rss.html' },
       { name: 'CGTN Business', url: 'https://www.cgtn.com/subscribe/rss/section/business.xml' },
+      // 非美国视角：BBC 商业覆盖欧洲 / 亚洲，避免整段都是美股美股
+      { name: 'BBC Business', url: 'https://feeds.bbci.co.uk/news/business/rss.xml' },
       // 保留原地址：hbr.org/feed 是 404
       { name: 'HBR', url: 'https://hbr.org/feed', optional: true },
     ],
@@ -203,7 +217,14 @@ export interface ParsedEntry {
 /** 同时认 RSS 2.0 `<item>` 与 Atom `<entry>`（The Verge 是 Atom） */
 export function parseFeed(xml: string): ParsedEntry[] {
   const blocks: string[] = [];
-  for (const re of [/<item[^>]*>([\s\S]*?)<\/item>/gi, /<entry[^>]*>([\s\S]*?)<\/entry>/gi]) {
+  // 注意 `<item[^>]*>` 会把 RDF 的 `<items>` 容器也匹配进来（DW 就是 RDF），
+  // 截到的是「容器开头 … 第一条真实 item 结尾」，标题取到的是 channel 图片的
+  // `<title>DW</title>` —— 2026-11-26 「国际综合」里出现一条标题就叫「DW」的
+  // 新闻就是它。必须要求 `<item` 后面紧跟空白或直接结束，不能是 `<items>`。
+  for (const re of [
+    /<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/gi,
+    /<entry(?:\s[^>]*)?>([\s\S]*?)<\/entry>/gi,
+  ]) {
     let m: RegExpExecArray | null;
     while ((m = re.exec(xml)) !== null) blocks.push(m[1]);
   }
@@ -312,9 +333,29 @@ const PROMO_TITLE =
 const TECH_TOKEN =
   /(芯片|半导体|光模块|算力|数据中心|服务器|GPU|CPU|NPU|内存|存储|操作系统|数据库|编程|编码|开源|代码|漏洞|安全|通信|5G|6G|卫星|航天|火箭|发射|量子|机器人|无人机|自动化|自动驾驶|传感器|电池|光伏|核聚变|新材料|算法|软件|硬件|云计算|边缘计算|浏览器|手机|电脑|笔记本|耳机|相机|显示|屏幕|显卡|制程|晶圆|封装|技术|研发|专利|互联网|平台|大模型|模型|训练|推理|系统|设备|App|收购|初创|人工智能|智能)/i;
 
+/**
+ * 美国地方新闻：标题点了 50 州里的某个州，又没有全球性关键词。
+ *
+ * 2026-11-25 用户反馈「国际综合」里播了美国某州弹药厂爆炸，这种本地事故
+ * 对境外听众没有信息量。Georgia / Washington / New York 不列进来 ——
+ * 它们要么是别的国家，要么常出现在全球政治 / 金融新闻里。
+ */
+const US_LOCAL_STATE =
+  /\b(Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|Ohio|Oklahoma|Oregon|Pennsylvania|Tennessee|Texas|Utah|Vermont|Virginia|West Virginia|Wisconsin|Wyoming|North Carolina|South Carolina|North Dakota|South Dakota|Rhode Island|New Hampshire|New Jersey|New Mexico)\b/;
+
+/** 出现这些词说明是全球性议题（或全球性公司），即使带州名也该保留 */
+const WORLD_ANCHOR =
+  /\b(China|Chinese|Russia|Russian|Ukraine|Europe|European|EU|NATO|UN|United Nations|Israel|Gaza|Palestin\w*|Iran|Iraq|Syria|India|Japan|Korea|Taiwan|Trump|White House|Congress|Senate|Pentagon|Fed|Federal Reserve|tariff|sanction|election|nuclear|AI|chip|semiconductor|SpaceX|NASA|OpenAI|Google|Apple|Microsoft|Meta|Amazon|Tesla|Nvidia|Texas Instruments|iPhone|Android|satellite|economy|inflation|market|trade)\b/i;
+
 /** AI 类的内容相关性：一篇文章里没提到 AI / 模型 / 算力，就不是 AI 新闻（钛媒体的民生稿都在此列） */
 const AI_TOKEN =
   /(人工智能|大模型|模型|算法|智能体|Agent|机器学习|深度学习|神经网络|算力|推理|训练|多模态|具身|机器人|语音|视觉|芯片|智能|\bAI\b|\bLLM\b|\bGPT|Gemini|Claude|Copilot|\bGPU\b)/i;
+
+/** 国际类里的美国地方新闻：没有全球锚点就丢 */
+function usLocalStory(key: CountKey, title: string): boolean {
+  if (!key.startsWith('world')) return false;
+  return US_LOCAL_STATE.test(title) && !WORLD_ANCHOR.test(title);
+}
 
 function domesticCandidate(title: string, summary: string): boolean {
   const head = title.slice(0, 80);
@@ -326,7 +367,7 @@ function domesticCandidate(title: string, summary: string): boolean {
   return true;
 }
 
-export type ScreenReason = 'roundup' | 'promo' | 'irrelevant' | 'foreign';
+export type ScreenReason = 'roundup' | 'promo' | 'irrelevant' | 'foreign' | 'usLocal';
 
 /**
  * 单条素材能不能进本类的素材池。纯函数、只读标题与摘要，方便离线核规则。
@@ -346,6 +387,7 @@ export function screenItem(
   // 只看标题：摘要是整篇文章的节选，聚合稿的摘要里什么都有，拿它判相关性等于没判
   if (isTech && !TECH_TOKEN.test(title)) return 'irrelevant';
   if (isAi && !AI_TOKEN.test(title)) return 'irrelevant';
+  if (usLocalStory(key, title)) return 'usLocal';
   if (key.startsWith('domestic') && !domesticCandidate(title, summary)) return 'foreign';
   return null;
 }
@@ -362,19 +404,74 @@ function bigrams(key: string): Set<string> {
   return out;
 }
 
+/** 英文虚词：判断「是不是同一件事」时不该算分 */
+const STOP_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'but', 'of', 'for', 'to', 'in', 'on', 'at', 'by',
+  'with', 'from', 'as', 'is', 'are', 'was', 'were', 'be', 'been', 'it', 'its',
+  'this', 'that', 'these', 'those', 'after', 'before', 'over', 'under', 'new',
+  'says', 'say', 'said', 'amid', 'into', 'about', 'up', 'down', 'out', 'will',
+  'would', 'can', 'could', 'has', 'have', 'had', 'more', 'than', 'one', 'two',
+  'not', 'no', 'you', 'your', 'we', 'our', 'they', 'their', 'he', 'she', 'his',
+  'her', 'us', 'who', 'what', 'when', 'where', 'why', 'how',
+]);
+
+/**
+ * 英文标题的实词集合。
+ *
+ * 中文用 2-gram 足够，但英文经过 `titleKey` 去掉空格后只剩一长串字母，
+ * 两家美国媒体写同一起事故（标题措辞不同）几乎不可能有 70% 的 2-gram 重合 ——
+ * 这是「弹药厂爆炸」同一天播两次的直接原因之一。
+ */
+function wordsOf(title: string): Set<string> {
+  const out = new Set<string>();
+  for (const w of title.toLowerCase().match(/[a-z][a-z0-9'-]{2,}/g) ?? []) {
+    if (!STOP_WORDS.has(w)) out.add(w);
+  }
+  return out;
+}
+
+/** 两条标题的实词重合率（只看英文实词，中文标题这里是空集） */
+function sameWords(a: Set<string>, b: Set<string>): boolean {
+  if (a.size < 3 || b.size < 3) return false;
+  let hit = 0;
+  for (const w of a) if (b.has(w)) hit += 1;
+  return hit / Math.min(a.size, b.size) >= 0.6;
+}
+
 /**
  * 两条标题是不是同一件事。
  *
  * `titleKey` 只认一模一样的标题，压不住「同一事件不同标题」：
  * 中新网《第一批新车次列车车票 今起陆续发售》和 IT之家
  * 《铁路车次改革落地：…第一批新车次列车车票今起陆续发售》在稿件里各播了一遍
- * （2026-11-11 反馈）。用 2-gram 包含率兜住这种情况。
+ * （2026-11-11 反馈）。用 2-gram 包含率兜住这种情况；英文再叠一层实词重合率。
  */
-function sameEvent(a: Set<string>, b: Set<string>): boolean {
-  if (a.size === 0 || b.size === 0) return false;
+function sameEvent(
+  aGrams: Set<string>,
+  bGrams: Set<string>,
+  aWords: Set<string>,
+  bWords: Set<string>,
+): boolean {
+  if (sameWords(aWords, bWords)) return true;
+  if (aGrams.size === 0 || bGrams.size === 0) return false;
   let hit = 0;
-  for (const g of a) if (b.has(g)) hit += 1;
-  return hit / Math.min(a.size, b.size) >= 0.7;
+  for (const g of aGrams) if (bGrams.has(g)) hit += 1;
+  return hit / Math.min(aGrams.size, bGrams.size) >= 0.7;
+}
+
+/** 链接指纹：同一条新闻在不同源里的链接可能带 utm / 尾斜杠 */
+function linkKey(link: string): string {
+  return String(link || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[?#].*$/, '')
+    .replace(/\/+$/, '');
+}
+
+/** 近几天已经播过的素材（由调用方从往期稿件里读出来） */
+export interface RecentNewsItem {
+  title: string;
+  link: string;
 }
 
 /**
@@ -439,6 +536,8 @@ export async function fetchNews(
   log?: (msg: string) => void,
   /** 抓取倍数：大模型改写时多抓一些让它挑，兜底拼接时 1 倍即可 */
   multiplier = 1,
+  /** 最近几天已经播过的素材：同一条新闻不再重复播 */
+  recent: RecentNewsItem[] = [],
 ): Promise<{ items: NewsItem[]; failed: string[] }> {
   const failed: string[] = [];
   const items: NewsItem[] = [];
@@ -446,9 +545,28 @@ export async function fetchNews(
   // CGTN 也同时供国际综合 / 国外财经），只做类内去重会让同一条新闻在稿件里播两次。
   // 共享 seen 放在循环外；被跳过的条目由该类后续素材补足，不影响 want 条数。
   const seenGlobal = new Set<string>();
-  // 已收录条目的 2-gram：用来识别「同一事件、不同标题」的重复
+  // 已收录条目的 2-gram / 实词：用来识别「同一事件、不同标题」的重复
   const seenGlobalGrams: Array<Set<string>> = [];
+  const seenGlobalWords: Array<Set<string>> = [];
   let dropped = 0;
+
+  // 近几天（默认 7 天）播过的素材：链接 / 标题都做成指纹。
+  // 以前去重只在「本期内部」做，昨天的稿子重播、今天手动再生成一遍又把同样几条
+  // 播一次，都是这么来的（2026-11-25 用户反馈「弹药厂爆炸播了好几次」）。
+  const recentLinks = new Set<string>();
+  const recentKeys = new Set<string>();
+  const recentGrams: Array<Set<string>> = [];
+  const recentWords: Array<Set<string>> = [];
+  for (const r of recent) {
+    const lk = linkKey(r.link);
+    if (lk) recentLinks.add(lk);
+    const key = titleKey(r.title || '');
+    if (!key) continue;
+    recentKeys.add(key);
+    recentGrams.push(bigrams(key));
+    recentWords.push(wordsOf(r.title));
+  }
+  let recentDropped = 0;
 
   for (const cat of CATEGORIES) {
     const need = counts[cat.key] || 0;
@@ -469,7 +587,7 @@ export async function fetchNews(
     //      发的，但不是科技新闻；
     //   3. 国内类的**地域**——微软 / Anthropic / CoreWeave 的稿子不能播进「国内科技」。
     const rank = (entries: PoolEntry[], report: boolean): PoolEntry[] => {
-      const reasons = { roundup: 0, promo: 0, irrelevant: 0, foreign: 0 };
+      const reasons = { roundup: 0, promo: 0, irrelevant: 0, foreign: 0, usLocal: 0 };
       const screened = entries.filter((e) => {
         const why = screenItem(cat.key, e.title, e.summary);
         if (why) {
@@ -491,6 +609,9 @@ export async function fetchNews(
         if (reasons.foreign > 0) {
           log?.(`[blog] ${cat.spoken} 剔除 ${reasons.foreign} 条境外素材`);
         }
+        if (reasons.usLocal > 0) {
+          log?.(`[blog] ${cat.spoken} 剔除 ${reasons.usLocal} 条美国地方新闻`);
+        }
       }
       // 发布时间缺失的排在最后（不要因为没 pubDate 就丢掉）
       screened.sort((a, b) => (b.published ?? 0) - (a.published ?? 0));
@@ -505,15 +626,30 @@ export async function fetchNews(
         if (taken >= want) break;
         const key = titleKey(e.title);
         if (!key || takenKeys.has(key)) continue;
-        // 同一条新闻不同媒体的写法不同（标题对不上），用 2-gram 包含率再兜一层
+        const lk = linkKey(e.link);
+        // 近几天已播过：链接相同，或标题归一化后相同，直接跳过
+        if ((lk && recentLinks.has(lk)) || recentKeys.has(key)) {
+          recentDropped += 1;
+          continue;
+        }
+        // 同一条新闻不同媒体的写法不同（标题对不上），用 2-gram / 实词重合率再兜一层
         const grams = bigrams(key);
-        if (seenGlobal.has(key) || seenGlobalGrams.some((g) => sameEvent(grams, g))) {
+        const words = wordsOf(e.title);
+        if (
+          seenGlobal.has(key) ||
+          seenGlobalGrams.some((g, i) => sameEvent(grams, g, words, seenGlobalWords[i]))
+        ) {
           dropped += 1;
+          continue;
+        }
+        if (recentGrams.some((g, i) => sameEvent(grams, g, words, recentWords[i]))) {
+          recentDropped += 1;
           continue;
         }
         seenGlobal.add(key);
         takenKeys.add(key);
         seenGlobalGrams.push(grams);
+        seenGlobalWords.push(words);
         items.push({
           key: cat.key,
           spoken: cat.spoken,
@@ -525,6 +661,32 @@ export async function fetchNews(
         });
         taken += 1;
       }
+    };
+
+    /**
+     * 按来源轮流取：先按时间排，再跨源轮转。
+     *
+     * 以前是纯时间倒序，美国媒体发得勤就整段都是美国新闻
+     * （2026-11-25 用户反馈「国外新闻全是美国的」）。轮转后每个源最多占 1/N，
+     * 只有一个源可用时仍能取满，不影响兜底。
+     */
+    const interleave = (entries: PoolEntry[]): PoolEntry[] => {
+      if (entries.length <= 1) return entries;
+      const buckets = new Map<string, PoolEntry[]>();
+      for (const e of entries) {
+        const list = buckets.get(e.source);
+        if (list) list.push(e);
+        else buckets.set(e.source, [e]);
+      }
+      if (buckets.size <= 1) return entries;
+      const queues = [...buckets.values()];
+      const out: PoolEntry[] = [];
+      for (let i = 0; queues.some((q) => q.length > 0); i += 1) {
+        const q = queues[i % queues.length];
+        const next = q.shift();
+        if (next) out.push(next);
+      }
+      return out;
     };
 
     // 时效窗口从紧到松逐级试：[2, 5, 10] 天。
@@ -544,7 +706,7 @@ export async function fetchNews(
           const undated = pool.filter((e) => e.published === null);
           if (undated.length) list = [...list, ...undated];
         }
-        take(rank(list, i === 0));
+        take(interleave(rank(list, i === 0)));
         if (taken >= want) return;
       }
     };
@@ -583,5 +745,8 @@ export async function fetchNews(
   }
 
   if (dropped > 0) log?.(`[blog] 全局去重：丢弃 ${dropped} 条重复素材`);
+  if (recentDropped > 0) {
+    log?.(`[blog] 近几天已播过：跳过 ${recentDropped} 条重复素材（不重复播旧闻）`);
+  }
   return { items, failed };
 }
