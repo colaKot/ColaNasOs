@@ -310,7 +310,14 @@
     "blog.collection.removeFailed": {
       "error": {}
     },
+    "blog.collection.continuePlay": {},
     "blog.collection.removeItem": {},
+    "blog.collection.removeSelectedConfirm": {
+      "count": {}
+    },
+    "blog.collection.selected": {
+      "count": {}
+    },
     "blog.collection.saveFailed": {
       "error": {}
     },
@@ -322,6 +329,7 @@
     "blog.local.addFailed": {
       "error": {}
     },
+    "blog.local.listened": {},
     "blog.local.addSource": {},
     "blog.local.addSourceFailed": {
       "error": {}

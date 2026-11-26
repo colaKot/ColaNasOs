@@ -274,12 +274,16 @@ class I18nKeys {
   static const blogCollectionRemoveConfirm = 'blog.collection.removeConfirm';
   static const blogCollectionRemoveDone = 'blog.collection.removeDone';
   static const blogCollectionRemoveFailed = 'blog.collection.removeFailed';
+  static const blogCollectionContinuePlay = 'blog.collection.continuePlay';
   static const blogCollectionRemoveItem = 'blog.collection.removeItem';
+  static const blogCollectionRemoveSelectedConfirm = 'blog.collection.removeSelectedConfirm';
+  static const blogCollectionSelected = 'blog.collection.selected';
   static const blogCollectionSaveFailed = 'blog.collection.saveFailed';
   static const blogCollectionSubtitle = 'blog.collection.subtitle';
   static const blogCollectionTitle = 'blog.collection.title';
   static const blogCollectionTracks = 'blog.collection.tracks';
   static const blogLocalAddFailed = 'blog.local.addFailed';
+  static const blogLocalListened = 'blog.local.listened';
   static const blogLocalAddSource = 'blog.local.addSource';
   static const blogLocalAddSourceFailed = 'blog.local.addSourceFailed';
   static const blogLocalAddSourceTitle = 'blog.local.addSourceTitle';
@@ -3278,4 +3282,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 3226;
+const int i18nKeyCount = 3230;
