@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:colanas_os/core/session.dart';
 import 'package:colanas_os/features/blog/ai_news_page.dart';
+import 'package:colanas_os/features/blog/blog_collections_page.dart';
+import 'package:colanas_os/features/blog/blog_local_page.dart';
 import 'package:colanas_os/features/blog/blog_player_page.dart';
 import 'package:colanas_os/features/blog/blog_shell.dart';
 import 'package:flutter/material.dart';
@@ -170,6 +172,68 @@ class _FakeTransport implements Transport {
         'error': null,
         'message': '',
       };
+    } else if (path.endsWith('/blog/local/sources')) {
+      payload = {
+        'items': [
+          {
+            'id': 'src1',
+            'name': '得到',
+            'path': 'E:/Abook',
+            'createdAt': 1794000000,
+            'updatedAt': 1794000000,
+          },
+        ],
+      };
+    } else if (path.endsWith('/blog/local/browse')) {
+      // **1.5.x 服务端**的响应：没有 listened / positionMs。
+      // 1.6.0 客户端把这两个字段当必填解析过，整页直接抛 TypeError
+      // （2026-11-26 用户反馈「点开本地博客就报错」的真因）。
+      payload = {
+        'path': 'E:/Abook',
+        'parent': null,
+        'dirs': [
+          {'name': '合集一', 'path': 'E:/Abook/合集一'},
+        ],
+        'audios': [
+          {
+            'name': 'a.mp3',
+            'title': 'a',
+            'path': 'E:/Abook/a.mp3',
+            'size': 1024,
+            'coverUrl': null,
+          },
+        ],
+      };
+    } else if (path.endsWith('/blog/collections')) {
+      payload = {
+        'items': [
+          {
+            'id': 'col1',
+            'name': '通史精读',
+            'description': '',
+            'tracks': 1,
+            'coverUrl': null,
+            'createdAt': 1794000000,
+            'updatedAt': 1794000000,
+          },
+        ],
+      };
+    } else if (path.endsWith('/blog/collections/items')) {
+      // 同样是 1.5.x 形状：没有 listened / positionMs / playedAt
+      payload = {
+        'id': 'col1',
+        'name': '通史精读',
+        'description': '',
+        'items': [
+          {
+            'id': 'it1',
+            'path': 'E:/Abook/a.mp3',
+            'title': 'a',
+            'size': 1024,
+            'coverUrl': null,
+          },
+        ],
+      };
     } else {
       return ApiResponse(
         statusCode: 404,
@@ -192,6 +256,7 @@ Future<void> _pumpPage(
   WidgetTester tester, {
   double width = 1280,
   bool modelInstalled = true,
+  Widget page = const AiNewsPage(),
 }) async {
   tester.view.physicalSize = Size(width, 1800);
   tester.view.devicePixelRatio = 1.0;
@@ -203,7 +268,7 @@ Future<void> _pumpPage(
     tokenProvider: () async => 'test-token',
   );
   await tester.pumpWidget(
-    const MaterialApp(home: Scaffold(body: AiNewsPage())),
+    MaterialApp(home: Scaffold(body: page)),
   );
   await tester.pumpAndSettle();
 }
@@ -411,5 +476,33 @@ void main() {
     await tester.tap(find.text('博客合集'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('本地博客：老服务端缺 listened/positionMs 也能正常打开', (tester) async {
+    // 2026-11-26：服务端还是 1.5.11、客户端已经是 1.6.0，进「本地博客」
+    // 点任意目录都报错。原因是 BlogLocalAudio 把 listened/positionMs 当必填，
+    // `null as bool` 直接抛 TypeError，页面进错误态。
+    await _pumpPage(tester, width: 420, page: const LocalBlogPage());
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('得到'), findsOneWidget);
+
+    await tester.tap(find.text('得到'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    // 目录与音频都渲染出列表，说明 browse 响应解析成功（老形状不再抛 TypeError）
+    expect(find.text('合集一'), findsOneWidget);
+  });
+
+  testWidgets('博客合集：老服务端缺进度字段也能正常打开', (tester) async {
+    await _pumpPage(tester, width: 420, page: const BlogCollectionsPage());
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('通史精读'), findsOneWidget);
+
+    await tester.tap(find.text('通史精读'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('a'), findsWidgets);
   });
 }

@@ -260,8 +260,8 @@ export type BlogLocalAudio = {
   "path": string;
   "size": number;
   "coverUrl": string;
-  "listened": boolean;
-  "positionMs": number;
+  "listened"?: boolean;
+  "positionMs"?: number;
 };
 
 export type BlogLocalBrowseQuery = {
@@ -336,9 +336,9 @@ export type BlogCollectionItem = {
   "title": string;
   "size": number;
   "coverUrl": string;
-  "listened": boolean;
-  "positionMs": number;
-  "playedAt": number;
+  "listened"?: boolean;
+  "positionMs"?: number;
+  "playedAt"?: number;
 };
 
 export type BlogCollectionItemsQuery = {

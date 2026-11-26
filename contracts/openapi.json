@@ -952,9 +952,7 @@
           "title",
           "path",
           "size",
-          "coverUrl",
-          "listened",
-          "positionMs"
+          "coverUrl"
         ],
         "properties": {
           "name": {
@@ -978,11 +976,11 @@
             "nullable": true
           },
           "listened": {
-            "description": "听到 ≥90% 后置为已听，重听也不会回落",
+            "description": "听到 ≥90% 后置为已听，重听也不会回落；1.5.x 服务端不返回（按未听处理）",
             "type": "boolean"
           },
           "positionMs": {
-            "description": "上次播放位置（毫秒）；没听过为 0",
+            "description": "上次播放位置（毫秒）；没听过为 0；1.5.x 服务端不返回（按 0 处理）",
             "type": "integer"
           }
         }
@@ -1228,10 +1226,7 @@
           "path",
           "title",
           "size",
-          "coverUrl",
-          "listened",
-          "positionMs",
-          "playedAt"
+          "coverUrl"
         ],
         "properties": {
           "id": {
@@ -1252,15 +1247,15 @@
             "nullable": true
           },
           "listened": {
-            "description": "听到 ≥90% 后置为已听，重听也不会回落",
+            "description": "听到 ≥90% 后置为已听，重听也不会回落；1.5.x 服务端不返回（按未听处理）",
             "type": "boolean"
           },
           "positionMs": {
-            "description": "上次播放位置（毫秒）；没听过为 0",
+            "description": "上次播放位置（毫秒）；没听过为 0；1.5.x 服务端不返回（按 0 处理）",
             "type": "integer"
           },
           "playedAt": {
-            "description": "最后一次播放时间戳；没听过为 0",
+            "description": "最后一次播放时间戳；没听过为 0；1.5.x 服务端不返回（按 0 处理）",
             "type": "integer"
           }
         }

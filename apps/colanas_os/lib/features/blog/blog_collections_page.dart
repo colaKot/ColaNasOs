@@ -497,8 +497,9 @@ class _BlogCollectionDetailPageState extends State<BlogCollectionDetailPage> {
   BlogCollectionItem? _resumeItem(List<BlogCollectionItem> items) {
     BlogCollectionItem? best;
     for (final i in items) {
-      if (i.positionMs <= 0) continue;
-      if (best == null || i.playedAt > best.playedAt) best = i;
+      // 1.5.x 服务端不返回进度字段：当作「没听过」，不参与续播
+      if ((i.positionMs ?? 0) <= 0) continue;
+      if (best == null || (i.playedAt ?? 0) > (best.playedAt ?? 0)) best = i;
     }
     return best;
   }
@@ -509,9 +510,9 @@ class _BlogCollectionDetailPageState extends State<BlogCollectionDetailPage> {
     if (item == null) return;
     final index = items.indexOf(item);
     // 已听（听到 ≥90%）的条目再「继续」没有意义，从头开始
-    final startAt = item.listened
+    final startAt = (item.listened ?? false)
         ? null
-        : Duration(milliseconds: item.positionMs);
+        : Duration(milliseconds: item.positionMs ?? 0);
     await _playAt(index, startAt: startAt);
   }
 
@@ -827,7 +828,7 @@ class _BlogCollectionDetailPageState extends State<BlogCollectionDetailPage> {
                   color: context.nasTextSecondary,
                 ),
               ),
-              if (item.listened) ...[
+              if (item.listened ?? false) ...[
                 const SizedBox(width: 6),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),

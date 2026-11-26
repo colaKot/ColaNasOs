@@ -553,7 +553,7 @@ class _LocalBlogPageState extends State<LocalBlogPage> {
             _sizeText(a.size),
             style: TextStyle(fontSize: NasTokens.fontCaption, color: context.nasTextSecondary),
           ),
-          if (a.listened) ...[
+          if (a.listened ?? false) ...[
             const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),

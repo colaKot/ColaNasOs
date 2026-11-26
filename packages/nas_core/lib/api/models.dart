@@ -968,8 +968,8 @@ class BlogLocalAudio {
   final String path;
   final int size;
   final String? coverUrl;
-  final bool listened;
-  final int positionMs;
+  final bool? listened;
+  final int? positionMs;
 
   const BlogLocalAudio({
     required this.name,
@@ -977,8 +977,8 @@ class BlogLocalAudio {
     required this.path,
     required this.size,
     required this.coverUrl,
-    required this.listened,
-    required this.positionMs,
+    this.listened,
+    this.positionMs,
   });
 
   factory BlogLocalAudio.fromJson(Map<String, dynamic> json) => BlogLocalAudio(
@@ -987,8 +987,8 @@ class BlogLocalAudio {
         path: json['path'] as String,
         size: json['size'] as int,
         coverUrl: json['coverUrl'] as String?,
-        listened: json['listened'] as bool,
-        positionMs: json['positionMs'] as int,
+        listened: json['listened'] == null ? null : json['listened'] as bool,
+        positionMs: json['positionMs'] == null ? null : json['positionMs'] as int,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -997,8 +997,8 @@ class BlogLocalAudio {
         'path': path,
         'size': size,
         'coverUrl': coverUrl,
-        'listened': listened,
-        'positionMs': positionMs,
+        if (listened != null) 'listened': listened!,
+        if (positionMs != null) 'positionMs': positionMs!,
       };
 }
 
@@ -1232,9 +1232,9 @@ class BlogCollectionItem {
   final String title;
   final int size;
   final String? coverUrl;
-  final bool listened;
-  final int positionMs;
-  final int playedAt;
+  final bool? listened;
+  final int? positionMs;
+  final int? playedAt;
 
   const BlogCollectionItem({
     required this.id,
@@ -1242,9 +1242,9 @@ class BlogCollectionItem {
     required this.title,
     required this.size,
     required this.coverUrl,
-    required this.listened,
-    required this.positionMs,
-    required this.playedAt,
+    this.listened,
+    this.positionMs,
+    this.playedAt,
   });
 
   factory BlogCollectionItem.fromJson(Map<String, dynamic> json) => BlogCollectionItem(
@@ -1253,9 +1253,9 @@ class BlogCollectionItem {
         title: json['title'] as String,
         size: json['size'] as int,
         coverUrl: json['coverUrl'] as String?,
-        listened: json['listened'] as bool,
-        positionMs: json['positionMs'] as int,
-        playedAt: json['playedAt'] as int,
+        listened: json['listened'] == null ? null : json['listened'] as bool,
+        positionMs: json['positionMs'] == null ? null : json['positionMs'] as int,
+        playedAt: json['playedAt'] == null ? null : json['playedAt'] as int,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -1264,9 +1264,9 @@ class BlogCollectionItem {
         'title': title,
         'size': size,
         'coverUrl': coverUrl,
-        'listened': listened,
-        'positionMs': positionMs,
-        'playedAt': playedAt,
+        if (listened != null) 'listened': listened!,
+        if (positionMs != null) 'positionMs': positionMs!,
+        if (playedAt != null) 'playedAt': playedAt!,
       };
 }
 
