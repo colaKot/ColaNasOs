@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "channel": "stable",
-  "releasedAt": "2026-11-26T11:40:08.318Z",
+  "releasedAt": "2026-11-26T12:32:51.700Z",
   "keyId": "k2026a",
   "notes": {
     "zh": "新增博客联网补缺与三组合并改写；本地博客播放进度/已听标记、合集多选移除；设置页内嵌 MCP 栏目，传输页统一多选浮层；相册端独立发布。"
@@ -105,16 +105,16 @@
       "versionCode": 83,
       "assets": {
         "setup": {
-          "size": 30754856,
-          "sha256": "7a000d3b6d11fe5f847b49a36e7c10ef26ba34f7095407eff872c1f1d231b08d",
+          "size": 30757693,
+          "sha256": "0529dc06ab52d4a4569b985fc039667521445b7cffaba38d495d160db13aa51d",
           "urls": [
             "https://gitcode.com/cocacola23/ColaNasOs/releases/download/v1.6.0/ColaNasOs-Client-1.6.0-Setup.exe",
             "https://github.com/colaKot/ColaNasOs/releases/download/v1.6.0/ColaNasOs-Client-1.6.0-Setup.exe"
           ]
         },
         "portable": {
-          "size": 40694922,
-          "sha256": "eef4e1824253fce3b5db8bf98ba1806238ba1b72a1e0ee16b153104897df54e8",
+          "size": 40694906,
+          "sha256": "976068e46256c50b2aa6eb131714aa549a53bb38c0b1a2f46025022e2bb940b3",
           "urls": [
             "https://gitcode.com/cocacola23/ColaNasOs/releases/download/v1.6.0/ColaNasOs-Client-1.6.0-windows-x64.zip",
             "https://github.com/colaKot/ColaNasOs/releases/download/v1.6.0/ColaNasOs-Client-1.6.0-windows-x64.zip"
@@ -129,7 +129,7 @@
       "assets": {
         "apk": {
           "size": 47278934,
-          "sha256": "451d32f12ec9df11696bf0b6b7fa1e75bf7c31b7b7b17c2e25d189ee7703f646",
+          "sha256": "b4619791180c1354f18b668758c25d5385bde382356316c3815ca6b0ebcbd46c",
           "urls": [
             "https://gitcode.com/cocacola23/ColaNasOs/releases/download/v1.6.0/ColaNasOs-Client-1.6.0-android-arm64.apk",
             "https://github.com/colaKot/ColaNasOs/releases/download/v1.6.0/ColaNasOs-Client-1.6.0-android-arm64.apk"
