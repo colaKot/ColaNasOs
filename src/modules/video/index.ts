@@ -545,6 +545,9 @@ export const video: ServerModule = {
       accept: (name) => isVideoFile(name) || isImageFile(name) || /\.nfo$/i.test(name),
       remoteRootOf: (lib) => uncPathOf(lib),
     });
+    // 同 photo：bindLibraryWatch 只建空壳，订阅要 refresh() 才建立。
+    // 不调的话内核重启后往库目录丢新片不会触发增量扫描，要等人工改一次库配置。
+    await libWatch.refresh();
     await registerJpRoutes(app, k);
     const h = makeVideoHelpers(k, libWatch);
     await registerVideoLibrary(app, k, h);

@@ -83,6 +83,12 @@ export const photo: ServerModule = {
       accept: (name) => isMediaFile(name) && !shouldSkipName(k, name),
       policy: () => watchPolicyOf(k),
     });
+    // 订阅关系要 refresh() 才建立，bindLibraryWatch 只建空壳 + 定时校验。
+    // 不调的话：fs.watch 根本不会订阅相册根目录，6 小时周期校验遍历的 libs
+    // 也是空的 —— 两条路一起断，往相册目录拷照片永远不会被索引，只有手动点
+    // 「扫描」才刷新（2026-11-26 用户反馈：好几天前传的照片一直不出现在相册里）。
+    // music 早就补过这一步，photo / video 当时漏了。
+    await libWatch.refresh();
     await registerPhotoAi(app, k);
     await registerPhotoMap(app, k);
     await registerPhotoRetrieval(app, k);
