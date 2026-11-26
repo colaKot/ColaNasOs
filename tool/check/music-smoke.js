@@ -355,14 +355,18 @@ function makeAudio(out, opts) {
       ? await app.inject({ method: 'GET', url: auto.url, headers: { range: 'bytes=0-9' } })
       : { statusCode: 0, headers: {} };
     const type = String(played.headers['content-type'] || '');
+    // Web 不支持的格式现在走「边解码边推 PCM」：WAV 头 + 精确 Content-Range
+    const body = String(played.payload || '');
     check(
       'transcode_auto',
       auto.transcoded === true
         ? auto.url.includes('format=transcoded') &&
             played.statusCode === 206 &&
-            /^audio\/(mp4|aac)/.test(type)
+            /^audio\/wav/.test(type) &&
+            body.startsWith('RIFF') &&
+            /^bytes 0-9\/\d+$/.test(String(played.headers['content-range'] || ''))
         : !auto.url.includes('format=transcoded') && played.statusCode === 206,
-      `transcoded=${auto.transcoded} play=${played.statusCode} type=${type}`,
+      `transcoded=${auto.transcoded} play=${played.statusCode} type=${type} range=${played.headers['content-range']}`,
     );
 
     const plain = (

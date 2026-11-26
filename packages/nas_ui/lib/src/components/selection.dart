@@ -6,8 +6,9 @@
 ///    （或在同一按钮上再点一次），退出即清空选中。
 /// 2. **卡片选中视觉**：封面左上角 20px 圆形勾选标记（[NasSelectChip]），
 ///    选中态封面加一圈主色描边 + 主色薄蒙层（[NasSelectionCover]）。
-/// 3. **操作条**：主色 8% 底色的内联条（[NasSelectionBar]），左侧「已选 N」，
-///    右侧「全选 / 取消全选」+ 业务动作 + 关闭；窄屏 / 底部工具条自动收成图标。
+/// 3. **操作条**：全站统一用浮层条 [NasSelectionFloatingBar] —— 悬浮在内容
+///    右下角的面板色胶囊，左侧「已选 N」，随后「全选 / 取消全选」+ 业务动作
+///    + 关闭。用 [NasSelectionOverlay] 把它叠在列表 / 网格之上即可。
 ///
 /// 特殊形态（相似清理的逐组勾选、文件的拖拽、音乐框选）只复用
 /// [NasSelectChip] 做视觉标记，不强行套用整条操作条 —— 见各页说明。
@@ -18,6 +19,7 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 
 import '../i18n.dart';
+import '../style.dart';
 import '../tokens.dart';
 
 /// 选择态状态机：页面只持有一个实例，不要各自维护 `bool + Set`。
@@ -190,144 +192,129 @@ class NasSelectionAction {
   final bool danger;
 }
 
-/// 统一的多选操作条（内联在列表上方，或放进底部工具条容器）。
+/// 全站统一的多选浮层操作条（悬浮在内容右下角）。
 ///
-/// - 左侧：选中计数（各域名沿用已有的「已选 N」文案键）
-/// - 右侧：全选 / 取消全选 + 业务动作 + 关闭
-/// - 宽度 < 560 或 [dense] 时动作收成图标（tooltip 保留），避免手机端溢出
-class NasSelectionBar extends StatelessWidget {
-  const NasSelectionBar({
+/// 口径来自「本地博客目录」：面板色胶囊 + 已选计数 + 全选 / 取消全选 +
+/// 业务动作（普通动作 tonal、删除类动作错误色）+ 可选关闭。
+/// 窄屏不做图标收折 —— 用 [Wrap] 自然换行，保证按钮文字始终可读。
+class NasSelectionFloatingBar extends StatelessWidget {
+  const NasSelectionFloatingBar({
     super.key,
     required this.title,
-    required this.actions,
-    this.onClose,
+    this.actions = const <NasSelectionAction>[],
     this.onToggleAll,
     this.allSelected = false,
-    this.dense = false,
-    this.padding,
+    this.onClose,
+    this.margin = const EdgeInsets.all(NasTokens.spaceLg),
   });
 
+  /// 左侧计数文案（各域沿用已有的「已选 N」文案键）
   final String title;
   final List<NasSelectionAction> actions;
-  final VoidCallback? onClose;
 
-  /// 全选 / 取消全选。传 null 则该按钮不显示（如相似清理的逐组勾选）。
+  /// 全选 / 取消全选。传 null 则该按钮不显示
   final VoidCallback? onToggleAll;
   final bool allSelected;
-  final bool dense;
-  final EdgeInsetsGeometry? padding;
+  final VoidCallback? onClose;
+
+  /// 浮层与容器右下角的间距
+  final EdgeInsetsGeometry margin;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final iconsOnly = dense || constraints.maxWidth < 560;
-        final allLabel = allSelected
-            ? tr('ui.selection.none')
-            : tr('ui.selection.all');
-        return Container(
-          color: scheme.primary.withValues(alpha: 0.08),
-          padding:
-              padding ??
-              const EdgeInsets.symmetric(
-                horizontal: NasTokens.spaceMd,
-                vertical: 4,
-              ),
-          child: Row(
-            children: [
-              Expanded(
+    final style = context.nasStyle;
+    return Material(
+      color: style.panelColor,
+      elevation: 6,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(NasTokens.radiusLg),
+        side: BorderSide(color: style.panelBorderColor),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: NasTokens.spaceMd,
+          vertical: NasTokens.spaceSm,
+        ),
+        child: Wrap(
+          spacing: NasTokens.spaceSm,
+          runSpacing: NasTokens.spaceXs,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            if (onToggleAll != null)
+              TextButton(
+                onPressed: onToggleAll,
                 child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: NasTokens.fontBody,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  allSelected
+                      ? tr('ui.selection.none')
+                      : tr('ui.selection.all'),
                 ),
               ),
-              if (onToggleAll != null)
-                iconsOnly
-                    ? _BarIcon(
-                        icon: allSelected
-                            ? Icons.deselect
-                            : Icons.select_all,
-                        tooltip: allLabel,
-                        onPressed: onToggleAll,
-                      )
-                    : TextButton(
-                        onPressed: onToggleAll,
-                        child: Text(allLabel),
+            for (final a in actions)
+              a.danger
+                  ? FilledButton.icon(
+                      onPressed: a.enabled ? a.onPressed : null,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: scheme.error,
+                        foregroundColor: scheme.onError,
                       ),
-              for (final a in actions)
-                iconsOnly
-                    ? _BarIcon(
-                        icon: a.icon,
-                        tooltip: a.label,
-                        onPressed: a.enabled ? a.onPressed : null,
-                        danger: a.danger,
-                      )
-                    : TextButton(
-                        onPressed: a.enabled ? a.onPressed : null,
-                        style: a.danger
-                            ? TextButton.styleFrom(
-                                foregroundColor: scheme.error,
-                              )
-                            : null,
-                        child: Text(a.label),
-                      ),
-              if (onClose != null)
-                IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  tooltip: tr('common.cancel'),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onClose,
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _BarIcon extends StatelessWidget {
-  const _BarIcon({
-    required this.icon,
-    required this.tooltip,
-    required this.onPressed,
-    this.danger = false,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onPressed;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Tooltip(
-      message: tooltip,
-      child: InkResponse(
-        onTap: onPressed,
-        radius: 20,
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Icon(
-            icon,
-            size: 19,
-            color: onPressed == null
-                ? scheme.onSurface.withValues(alpha: 0.38)
-                : (danger ? scheme.error : null),
-          ),
+                      icon: Icon(a.icon, size: 18),
+                      label: Text(a.label),
+                    )
+                  : FilledButton.tonalIcon(
+                      onPressed: a.enabled ? a.onPressed : null,
+                      icon: Icon(a.icon, size: 18),
+                      label: Text(a.label),
+                    ),
+            if (onClose != null)
+              IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                tooltip: tr('common.cancel'),
+                visualDensity: VisualDensity.compact,
+                onPressed: onClose,
+              ),
+          ],
         ),
       ),
     );
   }
 }
+
+/// 把 [NasSelectionFloatingBar] 叠在内容右下角的容器。
+///
+/// 内容是普通 widget（滚动列表 / 网格都可以），操作条 `null` 时不占位。
+class NasSelectionOverlay extends StatelessWidget {
+  const NasSelectionOverlay({
+    super.key,
+    required this.child,
+    this.bar,
+    this.margin = const EdgeInsets.all(NasTokens.spaceLg),
+  });
+
+  final Widget child;
+  final Widget? bar;
+  final EdgeInsetsGeometry margin;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = bar;
+    if (current == null) return child;
+    return Stack(
+      children: [
+        Positioned.fill(child: child),
+        Align(
+          alignment: Alignment.bottomRight,
+          child: Padding(padding: margin, child: current),
+        ),
+      ],
+    );
+  }
+}
+
 
 /// 工具栏上的「多选」入口：非选择态显示 checklist，选择态变成关闭。
 class NasSelectionToggleButton extends StatelessWidget {

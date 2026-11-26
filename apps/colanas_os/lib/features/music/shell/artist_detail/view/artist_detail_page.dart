@@ -112,7 +112,6 @@ class _ArtistDetailPageState extends State<ArtistDetailPage> {
                   // 多选工具条：贴底（不要固定 112 —— 那是给播放条的，播放条没出来时
                   // 就变成一条大缝，看起来像「浮在半空」）
                   Positioned(
-                    left: 0,
                     right: 0,
                     bottom: 0,
                     child: MusicDetailSelectionBar(controller: tracks),

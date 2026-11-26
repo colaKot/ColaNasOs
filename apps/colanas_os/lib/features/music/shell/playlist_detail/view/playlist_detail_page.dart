@@ -100,7 +100,6 @@ class _PlaylistDetailPageState extends State<PlaylistDetailPage> {
                   children: <Widget>[
                     Positioned.fill(child: body),
                     Positioned(
-                      left: 0,
                       right: 0,
                       bottom: 0,
                       // 歌单页只说「移出歌单」，不给删文件的入口

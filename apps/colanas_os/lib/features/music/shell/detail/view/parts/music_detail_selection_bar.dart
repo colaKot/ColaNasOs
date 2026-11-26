@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:nas_ui/nas_ui.dart' show NasStyleContext;
+import 'package:nas_ui/nas_ui.dart' show NasTokens;
 
-import '../../../compat/cola_custom_colors.dart';
 import '../../../compat/getx.dart';
 import '../../../list/view/parts/cola_list_multi_select_bottom_bar.dart';
 import '../../../music_main/controller/cola_main_controller.dart';
@@ -62,20 +61,17 @@ class _MusicDetailSelectionBarState extends State<MusicDetailSelectionBar> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final barColor =
-        theme.extension<CustomColors>()?.oprationBarBgColor ??
-        context.nasStyle.panelColor;
     return Obx(() {
       final selecting = widget.controller.isMultiSelectMode.value;
       _syncPlayerBar(selecting);
       if (!selecting) return const SizedBox.shrink();
-      return ColoredBox(
-        color: barColor,
-        child: SafeArea(
-          top: false,
-          child: MusicListMultiSelectBottomBar(controller: widget.controller),
+      // 统一浮层：只占右下角，不再整行铺底遮住内容
+      return Padding(
+        padding: const EdgeInsets.only(
+          right: NasTokens.spaceLg,
+          bottom: NasTokens.spaceLg,
         ),
+        child: MusicListMultiSelectBottomBar(controller: widget.controller),
       );
     });
   }

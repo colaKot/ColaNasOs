@@ -249,7 +249,7 @@ export const StreamUrlQuery = Type.Object(
     format: Type.Optional(
       Type.String({
         maxLength: 16,
-        description: 'auto = Web 不支持时按需转 AAC；缺省 original',
+        description: 'auto = Web 不支持时按需实时转 PCM 推流；缺省 original',
       }),
     ),
   },
@@ -263,7 +263,7 @@ export const StreamQuery = Type.Object(
       Type.String({ description: '短期令牌（仅外部播放器使用，见 /music/stream-url）' }),
     ),
     format: Type.Optional(
-      Type.String({ maxLength: 16, description: 'transcoded = 读取 AAC 转码缓存' }),
+      Type.String({ maxLength: 16, description: 'transcoded = 实时转 PCM 推流' }),
     ),
   },
   { $id: 'MusicStreamQuery' },
@@ -273,7 +273,7 @@ export const StreamUrlResponse = Type.Object(
   {
     url: Type.String({ description: '带短期令牌的播放地址，可直接交给外部播放器' }),
     expiresInSec: Type.Integer(),
-    transcoded: Type.Boolean({ description: 'true 表示返回的是按需转码后的 AAC 缓存' }),
+    transcoded: Type.Boolean({ description: 'true 表示该播放地址会实时转 PCM 推流' }),
   },
   { $id: 'MusicStreamUrlResponse' },
 );

@@ -5,6 +5,7 @@ import { secured } from '../../../../kernel/route';
 import { downloadHandler } from '../../files/download';
 import { filesRoot, resolveAnyPath } from '../../files/fs-root';
 import { writeCover, isAudioFile } from '../ffmpeg';
+import { streamWav } from '../../media/audio-stream';
 import { readLyrics } from '../lyrics';
 import { ensureTranscoded, needsAudioTranscode } from '../transcode';
 import { Err } from '../../../../kernel/errors';
@@ -108,7 +109,7 @@ export async function registerMusicPlayback(app: FastifyInstance, k: KernelApi, 
         schema: {
           operationId: 'musicStreamUrl',
           tags: TAG,
-          summary: '生成带短期令牌的播放地址（format=auto 时 Web 端按需转 AAC）',
+          summary: '生成带短期令牌的播放地址（format=auto 时 Web 端不支持的格式实时转 PCM 推流）',
           querystring: h.ref('MusicStreamUrlQuery'),
           response: { 200: h.ref('MusicStreamUrlResponse'), 404: h.ref('MusicErrorResponse') },
         },
@@ -125,10 +126,9 @@ export async function registerMusicPlayback(app: FastifyInstance, k: KernelApi, 
         let transcoded = false;
         if (q.format === 'auto' && needsAudioTranscode(row)) {
           try {
-            const abs = resolveAnyPath(filesRoot(), row.rel_path);
-            if (fs.existsSync(abs)) transcoded = (await ensureTranscoded(k, abs, row)) !== null;
+            transcoded = fs.existsSync(resolveAnyPath(filesRoot(), row.rel_path));
           } catch {
-            // 源文件不可读 / 缺 ffmpeg：回退原始地址，不阻断播放
+            // 源文件不可读：回退原始地址，不阻断播放
           }
         }
         return {
@@ -147,7 +147,7 @@ export async function registerMusicPlayback(app: FastifyInstance, k: KernelApi, 
         schema: {
           operationId: 'musicStream',
           tags: TAG,
-          summary: '播放 / 下载（支持 Range / ETag；format=transcoded 读 AAC 缓存）',
+          summary: '播放 / 下载（支持 Range / ETag；format=transcoded 时实时转 PCM 推流）',
           querystring: h.ref('MusicStreamQuery'),
         },
       }),
@@ -166,6 +166,8 @@ export async function registerMusicPlayback(app: FastifyInstance, k: KernelApi, 
           if (!fs.existsSync(abs)) {
             return reply.code(404).send({ error: Err.notFound, message: 'source missing' });
           }
+          // 先尝试「边解码边推 PCM」：首字节几百毫秒，不用等整首转码完
+          if (needsAudioTranscode(row) && (await streamWav(req, reply, abs))) return;
           const out = await ensureTranscoded(k, abs, row);
           if (!out) {
             return reply.code(404).send({ error: Err.notFound, message: 'transcode unavailable' });

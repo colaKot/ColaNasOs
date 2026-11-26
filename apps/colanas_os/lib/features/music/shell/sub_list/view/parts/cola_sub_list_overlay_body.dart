@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nas_ui/nas_ui.dart' show NasTokens;
 
 import '../../../compat/getx.dart';
 import '../../../list/view/parts/cola_list_multi_select_bottom_bar.dart';
@@ -56,11 +57,10 @@ class _MusicSubListOverlayBodyState extends State<MusicSubListOverlayBody> {
         : 0.0;
   }
 
-  /// 多选模式下的底部操作栏。
+  /// 多选模式下的底部操作栏（统一浮层，贴右下角）
   Widget _multiSelectBottomBar(double extraSpace) => Positioned(
-    right: 0.0,
-    left: 0.0,
-    bottom: extraSpace,
+    right: NasTokens.spaceLg,
+    bottom: extraSpace + NasTokens.spaceLg,
     child: MusicListMultiSelectBottomBar(controller: _ctrl),
   );
 

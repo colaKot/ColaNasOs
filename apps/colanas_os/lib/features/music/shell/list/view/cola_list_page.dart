@@ -8,6 +8,7 @@ import '../../compat/cola_custom_colors.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nas_ui/nas_ui.dart' show NasTokens;
 
 import '../../compat/getx.dart';
 import '../../compat/cola_device_utils.dart';
@@ -382,9 +383,8 @@ class _MusicListPageState extends State<MusicListPage> {
             ),
             if (multi)
               Positioned(
-                right: 0.0,
-                left: 0.0,
-                bottom: playerSpace,
+                right: NasTokens.spaceLg,
+                bottom: playerSpace + NasTokens.spaceLg,
                 child: MusicListMultiSelectBottomBar(controller: list),
               ),
           ],

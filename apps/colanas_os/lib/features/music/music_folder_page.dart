@@ -222,12 +222,14 @@ class _MusicFolderPageState extends State<MusicFolderPage> {
     return SubPageScope(
       active: _stack.isNotEmpty,
       onBack: _back,
-      child: Column(
-        children: [
-          _toolbar(context),
-          Expanded(child: _body()),
-          if (_selecting && _selected.isNotEmpty) _selectBar(),
-        ],
+      child: NasSelectionOverlay(
+        bar: _selecting && _selected.isNotEmpty ? _selectBar() : null,
+        child: Column(
+          children: [
+            _toolbar(context),
+            Expanded(child: _body()),
+          ],
+        ),
       ),
     );
   }
@@ -374,34 +376,18 @@ class _MusicFolderPageState extends State<MusicFolderPage> {
   }
 
   Widget _selectBar() {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: NasTokens.spaceMd,
-          vertical: NasTokens.spaceSm,
+    return NasSelectionFloatingBar(
+      title: tr('music.folder.selected', {'count': '${_selected.length}'}),
+      allSelected: _files.isNotEmpty && _selected.length == _files.length,
+      onToggleAll: _selectAll,
+      onClose: _toggleSelectMode,
+      actions: [
+        NasSelectionAction(
+          label: tr('music.folder.addToPlaylist'),
+          icon: Icons.playlist_add,
+          onPressed: _addToPlaylist,
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                tr('music.folder.selected', {'count': '${_selected.length}'}),
-                style: const TextStyle(fontSize: NasTokens.fontBody),
-              ),
-            ),
-            TextButton(
-              onPressed: _selectAll,
-              child: Text(tr('common.selectAll')),
-            ),
-            const SizedBox(width: NasTokens.spaceXs),
-            FilledButton.icon(
-              onPressed: _addToPlaylist,
-              icon: const Icon(Icons.playlist_add, size: 18),
-              label: Text(tr('music.folder.addToPlaylist')),
-            ),
-          ],
-        ),
-      ),
+      ],
     );
   }
 

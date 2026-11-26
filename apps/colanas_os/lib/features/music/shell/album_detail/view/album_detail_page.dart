@@ -113,7 +113,6 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
                   Positioned.fill(child: body),
                   // 多选工具条：贴底（内部自己判断显示与否，并在多选时让播放条让位）
                   Positioned(
-                    left: 0,
                     right: 0,
                     bottom: 0,
                     child: MusicDetailSelectionBar(controller: tracks),

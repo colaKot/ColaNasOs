@@ -43,7 +43,7 @@ import { registerMusicCompat } from './routes/compat';
  *   GET  /api/v1/music/auto-playlist    自动歌单曲目（服务端实时计算，不写用户数据）
  *
  * 二期：客户端常驻播放服务（后台播放 + Web Media Session）、桌面端均衡器、
- * Web 端按需 AAC 转码（stream-url?format=auto）。
+ * Web 端按需实时转 PCM 推流（stream-url?format=auto），浏览器不支持的格式边解码边播。
  */
 /**
  * 启动时把「开了启动扫描」的来源各入队一次。
