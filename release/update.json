@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "channel": "stable",
-  "releasedAt": "2026-11-26T12:32:51.700Z",
+  "releasedAt": "2026-11-26T14:02:18.710Z",
   "keyId": "k2026a",
   "notes": {
-    "zh": "新增博客联网补缺与三组合并改写；本地博客播放进度/已听标记、合集多选移除；设置页内嵌 MCP 栏目，传输页统一多选浮层；相册端独立发布。"
+    "zh": "补发：修复相册/影视启动后不订阅库目录导致文件监控与 6 小时周期校验全部失效（新照片不自动入库）；博客本地/合集兼容旧服务端缺进度字段。"
   },
   "components": {
     "server": {
@@ -17,23 +17,23 @@
         "files": [
           {
             "path": "web/main.dart.js",
-            "size": 6293132,
-            "sha256": "2525d974485ff6d901ea34d561ecae7940fba3c5df5ec46f4384fc901a017144",
+            "size": 6293695,
+            "sha256": "015c972e960ea8292c55e84547990e37a4cc409cb6f217945d52df7caddd7647",
             "br": {
-              "size": 1309649,
-              "sha256": "bc33184d03359537bc952d53c415bf3fdf33fe30617aec0a082b18f396c51174"
+              "size": 1310178,
+              "sha256": "5dd31f921129b25b6d3ff160da60fd38702c99d693eaca7d9b1b2a29db44dc49"
             },
             "urls": [
-              "https://gitcode.com/cocacola23/ColaNasOs/releases/download/v1.6.0/0-2525d974485f-main.dart.js.br",
-              "https://github.com/colaKot/ColaNasOs/releases/download/v1.6.0/0-2525d974485f-main.dart.js.br"
+              "https://gitcode.com/cocacola23/ColaNasOs/releases/download/v1.6.0/0-015c972e960e-main.dart.js.br",
+              "https://github.com/colaKot/ColaNasOs/releases/download/v1.6.0/0-015c972e960e-main.dart.js.br"
             ]
           }
         ],
         "bundles": [
           {
-            "name": "smallfiles-7ac06fdd51b6.brb",
-            "size": 252476,
-            "sha256": "7ac06fdd51b68c8c26f032021ba0ab7e40beb2aaaa9a37d3eddea9f3e56ec491",
+            "name": "smallfiles-5df7b293f7ec.brb",
+            "size": 259484,
+            "sha256": "5df7b293f7ec5c3974ab44626fc44f0e9a16f8f212686f0058e8a80284bf3585",
             "members": [
               "kernel/access-policy.js",
               "kernel/index.js",
@@ -55,8 +55,10 @@
               "src/modules/music/routes/playback.js",
               "src/modules/music/schemas.js",
               "src/modules/music/transcode.js",
+              "src/modules/photo/index.js",
               "src/modules/system/update.js",
               "src/modules/video/image-scope.js",
+              "src/modules/video/index.js",
               "src/modules/video/routes/browse.js",
               "src/modules/video/routes/duplicates.js",
               "src/modules/video/routes/image-folders.js",
@@ -72,8 +74,8 @@
               "web/version.json"
             ],
             "urls": [
-              "https://gitcode.com/cocacola23/ColaNasOs/releases/download/v1.6.0/smallfiles-7ac06fdd51b6.brb",
-              "https://github.com/colaKot/ColaNasOs/releases/download/v1.6.0/smallfiles-7ac06fdd51b6.brb"
+              "https://gitcode.com/cocacola23/ColaNasOs/releases/download/v1.6.0/smallfiles-5df7b293f7ec.brb",
+              "https://github.com/colaKot/ColaNasOs/releases/download/v1.6.0/smallfiles-5df7b293f7ec.brb"
             ]
           }
         ],
@@ -83,16 +85,16 @@
         ],
         "manifest": {
           "size": 65389,
-          "sha256": "1977dd310543e1b074e1a41761a80a32d673b6563c2aca450c640037138b827a",
+          "sha256": "fed074d33223988135d7a7d31b8a0ffefc8074d9706ecdfb42669996ba9e3b3d",
           "urls": [
-            "https://gitcode.com/cocacola23/ColaNasOs/releases/download/v1.6.0/manifest-D10600-1977dd310543.json",
-            "https://github.com/colaKot/ColaNasOs/releases/download/v1.6.0/manifest-D10600-1977dd310543.json"
+            "https://gitcode.com/cocacola23/ColaNasOs/releases/download/v1.6.0/manifest-D10600-fed074d33223.json",
+            "https://github.com/colaKot/ColaNasOs/releases/download/v1.6.0/manifest-D10600-fed074d33223.json"
           ]
         }
       },
       "full": {
-        "size": 577637041,
-        "sha256": "99d357a43e1e3c8df49cb32c80cecdfb6716912b9b7328fba69d258c50aa55a4",
+        "size": 577637668,
+        "sha256": "7ffbd300cf35925917cdfd8f21076f9e8047857ee7c14bd87e2dadfc2621ee2b",
         "urls": [
           "https://gitcode.com/cocacola23/ColaNasOs/releases/download/v1.6.0/ColaNasOs-Server-1.6.0-Setup.exe",
           "https://github.com/colaKot/ColaNasOs/releases/download/v1.6.0/ColaNasOs-Server-1.6.0-Setup.exe"
