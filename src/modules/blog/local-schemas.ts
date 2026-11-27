@@ -56,8 +56,16 @@ export const BlogLocalAudio = Type.Object(
     coverUrl: Type.Union([Type.String(), Type.Null()], {
       description: '同名封面图地址（带令牌）；没有同名图片时为 null',
     }),
-    listened: Type.Boolean({ description: '听到 ≥90% 后置为已听，重听也不会回落' }),
-    positionMs: Type.Integer({ description: '上次播放位置（毫秒）；没听过为 0' }),
+    // 进度三件套标 Optional：新服务端一定返回，但 1.5.x 不返回，
+    // 客户端要按「没听过」处理而不是整页报错（2026-11-26 反馈）。
+    // 标 required 会让生成的 Dart 模型变非空，`json['listened'] as bool`
+    // 在旧服务端上直接抛异常。
+    listened: Type.Optional(
+      Type.Boolean({ description: '听到 ≥90% 后置为已听，重听也不会回落；1.5.x 服务端不返回（按未听处理）' }),
+    ),
+    positionMs: Type.Optional(
+      Type.Integer({ description: '上次播放位置（毫秒）；没听过为 0；1.5.x 服务端不返回（按 0 处理）' }),
+    ),
   },
   { $id: 'BlogLocalAudio' },
 );
@@ -171,9 +179,16 @@ export const BlogCollectionItem = Type.Object(
     title: Type.String(),
     size: Type.Integer(),
     coverUrl: Type.Union([Type.String(), Type.Null()]),
-    listened: Type.Boolean({ description: '听到 ≥90% 后置为已听，重听也不会回落' }),
-    positionMs: Type.Integer({ description: '上次播放位置（毫秒）；没听过为 0' }),
-    playedAt: Type.Integer({ description: '最后一次播放时间戳；没听过为 0' }),
+    // 同 BlogLocalAudio：兼容 1.5.x 服务端不返回进度字段
+    listened: Type.Optional(
+      Type.Boolean({ description: '听到 ≥90% 后置为已听，重听也不会回落；1.5.x 服务端不返回（按未听处理）' }),
+    ),
+    positionMs: Type.Optional(
+      Type.Integer({ description: '上次播放位置（毫秒）；没听过为 0；1.5.x 服务端不返回（按 0 处理）' }),
+    ),
+    playedAt: Type.Optional(
+      Type.Integer({ description: '最后一次播放时间戳；没听过为 0；1.5.x 服务端不返回（按 0 处理）' }),
+    ),
   },
   { $id: 'BlogCollectionItem' },
 );
