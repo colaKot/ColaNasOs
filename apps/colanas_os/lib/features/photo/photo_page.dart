@@ -1918,7 +1918,8 @@ class _PhotoTile extends StatelessWidget {
               ),
               if (formatDurationMs(item.durationMs ?? 0).isNotEmpty)
                 Positioned(
-                  right: 4,
+                  // 日期占右下角了，时长挪到左下角，两者不再叠在一起
+                  left: 4,
                   bottom: 4,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -1937,33 +1938,27 @@ class _PhotoTile extends StatelessWidget {
                   ),
                 ),
             ],
-            // 动态照片：左上角「动态」角标（在收藏按钮左边，不抢位置）
+            // 动态照片：左下角只放一个图标（2026-11-27 要求：不要文字）
             if (isLiveItem(item))
               Positioned(
-                top: 4,
                 left: 4,
+                bottom: 4,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.45),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.motion_photos_on, size: 10, color: Colors.white),
-                      const SizedBox(width: 2),
-                      Text(
-                        tr('photo.media.live'),
-                        style: const TextStyle(fontSize: 9, height: 1.1, color: Colors.white),
-                      ),
-                    ],
+                  child: const Icon(
+                    Icons.motion_photos_on,
+                    size: 12,
+                    color: Colors.white,
                   ),
                 ),
               ),
-            // 日期只留左下角「月-日」，不铺整条暗灰底
+            // 日期放右下角（用户要求）；视频时长已挪到左下角避让
             Positioned(
-              left: 4,
+              right: 4,
               bottom: 4,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),

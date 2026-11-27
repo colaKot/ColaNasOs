@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_media/nas_media.dart';
 import 'package:nas_ui/nas_ui.dart';
@@ -118,6 +122,20 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
   final Set<int> _original = <int>{};
   bool _zoomed = false;
 
+  /// 动态照片的「就地播放」：覆盖在照片上播那段视频，播完自动回到照片，
+  /// 不再跳到独立的播放页（2026-11-27 用户要求）。
+  Player? _livePlayer;
+  VideoController? _liveCtl;
+  StreamSubscription<bool>? _liveSub;
+  StreamSubscription<int?>? _liveSizeSub;
+  StreamSubscription<Duration>? _livePosSub;
+  Timer? _liveReadyTimer;
+  String? _liveId;
+  Future<void>? _liveOpening;
+  /// 首帧已解码才把播放层盖上来 —— 没就绪时用户看到的是照片，不是黑屏。
+  bool _liveReady = false;
+  bool _liveVisible = false;
+
   MediaUrls get _media => MediaUrls(ApiSession.instance.baseUrl);
 
   @override
@@ -130,11 +148,21 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
     );
     _index = widget.initialIndex.clamp(0, _items.length - 1);
     _controller = PageController(initialPage: _index);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _precacheNeighbors());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _precacheNeighbors();
+      // 当前就是动态照片：后台先把视频打开，点播放几乎零等待
+      final first = _items[_index];
+      if (first.isLive) unawaited(_ensureLive(first));
+    });
   }
 
   @override
   void dispose() {
+    _liveSub?.cancel();
+    _liveSizeSub?.cancel();
+    _livePosSub?.cancel();
+    _liveReadyTimer?.cancel();
+    _livePlayer?.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -144,10 +172,14 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
 
   String _originalUrl(ViewerPhoto item) => _media.file(item.path);
 
-  /// 播放：视频放原文件，动态照片放服务端从 JPEG 尾部取出的那段视频
+  /// 视频：跳独立播放页（有倍速 / 播放列表 / 媒体信息）。
+  ///
+  /// 动态照片**不走这里** —— 以前它也走这条路，还顺手把「同批次视频」当播放
+  /// 列表传进去，结果 `initialIndex=0` 让播放器从头播了别的视频，用户看到
+  /// 「播的不是我点开的那张」（2026-11-27）。现在动态照片就地播，见 [_playLive]。
   void _play(ViewerPhoto item) {
-    if (!item.isVideo && !item.isLive) return;
-    final url = item.isVideo ? _media.file(item.path) : _media.livePhoto(item.id);
+    if (!item.isVideo) return;
+    final url = _media.file(item.path);
     // 播放列表：同批次的视频（图片跳过）。混合库里左右翻到视频时，
     // 播放器里就能直接上下切，不用退出来再点下一张。
     final videos = <PhotoVideoEntry>[
@@ -162,23 +194,110 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
           ),
     ];
     var startIndex = 0;
-    if (item.isVideo) {
-      final i = videos.indexWhere((v) => v.url == url);
-      if (i >= 0) startIndex = i;
-    }
+    final i = videos.indexWhere((v) => v.url == url);
+    if (i >= 0) startIndex = i;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PhotoVideoPage(
           url: url,
           title: item.path.split('/').last,
-          subtitle: item.isVideo
-              ? '${formatDurationMs(item.durationMs ?? 0)}  ·  ${item.width ?? '?'}×${item.height ?? '?'}'
-              : tr('photo.media.live'),
+          subtitle:
+              '${formatDurationMs(item.durationMs ?? 0)}  ·  ${item.width ?? '?'}×${item.height ?? '?'}',
           entries: videos.length > 1 ? videos : null,
           initialIndex: startIndex,
         ),
       ),
     );
+  }
+
+  /// 动态照片：点左上角图标就在当前页面播，播完自动回到照片。
+  Future<void> _playLive(ViewerPhoto item) async {
+    await _ensureLive(item);
+    if (!mounted) return;
+    final player = _livePlayer;
+    if (player == null || _liveId != item.id) {
+      setState(() => _liveVisible = false);
+      return;
+    }
+    setState(() => _liveVisible = true);
+    await player.play();
+  }
+
+  /// 预加载 / 复用：切到动态照片那一页就把视频在后台打开（不播）。
+  ///
+  /// 这样点播放时几乎没有等待；没就绪时 `_liveReady` 还是 false，
+  /// 播放层不显示，用户看到的一直是那张照片（不是黑屏）。
+  Future<void> _ensureLive(ViewerPhoto item) {
+    if (_livePlayer != null && _liveId == item.id) {
+      return _liveOpening ?? Future<void>.value();
+    }
+    // 同步摘掉上一张的 player：以前 `unawaited(_stopLive())` 的清理落在
+    // microtask 里，会把刚建好的新 player 字段又清空，于是「点第二张还是播
+    // 第一张 / 干脆不播」（2026-11-27 反馈）。
+    _detachLive();
+    final player = Player();
+    final ctl = VideoController(player);
+    _livePlayer = player;
+    _liveCtl = ctl;
+    _liveId = item.id;
+    _liveReady = false;
+    _liveSub = player.stream.completed.listen((done) {
+      if (done) unawaited(_stopLive());
+    });
+    // 首帧信号：不同平台/解码器给的不一样，宽度、播放位置任一先到就算就绪
+    _liveSizeSub = player.stream.width.listen((w) {
+      if ((w ?? 0) > 0) _markLiveReady();
+    });
+    _livePosSub = player.stream.position.listen((p) {
+      if (p > Duration.zero) _markLiveReady();
+    });
+    // 兜底：某些平台两个信号都不发，2.5 秒后照样把画面交出去
+    _liveReadyTimer = Timer(const Duration(milliseconds: 2500), _markLiveReady);
+    _liveOpening = player
+        .open(
+          Media(
+            _media.livePhoto(item.id),
+            httpHeaders: ApiSession.instance.authHeaders,
+          ),
+          play: false,
+        )
+        .catchError((Object _) {
+          unawaited(_stopLive());
+        });
+    return _liveOpening!;
+  }
+
+  void _markLiveReady() {
+    if (!mounted || _liveReady) return;
+    _liveReadyTimer?.cancel();
+    setState(() => _liveReady = true);
+  }
+
+  /// 同步摘掉播放器：字段立刻失效，销毁延后到下一帧（避免 Texture 还在用）。
+  void _detachLive() {
+    final player = _livePlayer;
+    _liveSub?.cancel();
+    _liveSizeSub?.cancel();
+    _livePosSub?.cancel();
+    _liveReadyTimer?.cancel();
+    _liveSub = null;
+    _liveSizeSub = null;
+    _livePosSub = null;
+    _liveReadyTimer = null;
+    _liveOpening = null;
+    _livePlayer = null;
+    _liveCtl = null;
+    _liveId = null;
+    _liveReady = false;
+    _liveVisible = false;
+    if (player != null) {
+      Future<void>.delayed(const Duration(milliseconds: 100), () => player.dispose());
+    }
+  }
+
+  Future<void> _stopLive() async {
+    _detachLive();
+    if (mounted) setState(() {});
   }
 
   void _precacheNeighbors() {
@@ -434,10 +553,11 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
           ],
         ),
         actions: [
-          if (item.isVideo || item.isLive)
+          // 动态照片的入口在左上角那个图标上，这里只留视频的
+          if (item.isVideo)
             IconButton(
-              tooltip: item.isVideo ? tr('photo.media.playVideo') : tr('photo.media.playLive'),
-              icon: Icon(item.isVideo ? Icons.play_circle_outline : Icons.motion_photos_on),
+              tooltip: tr('photo.media.playVideo'),
+              icon: const Icon(Icons.play_circle_outline),
               onPressed: () => _play(item),
             ),
           IconButton(
@@ -515,11 +635,16 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                 controller: _controller,
                 itemCount: _items.length,
                 onPageChanged: (i) {
+                  // 翻页就停掉上一张的动态播放，别让视频盖在新照片上；
+                  // 新一页若是动态照片，顺便后台预加载
+                  if (_livePlayer != null) unawaited(_stopLive());
                   setState(() {
                     _index = i;
                     _zoomed = false;
                   });
                   _precacheNeighbors();
+                  final next = _items[i];
+                  if (next.isLive) unawaited(_ensureLive(next));
                 },
                 itemBuilder: (context, i) {
                   final current = _items[i];
@@ -551,23 +676,48 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                     ),
                   );
                   final zoomed = i == _index && _zoomed;
-                  // 视频 / 动态照片：缩略图当海报，中间给一个明确的播放入口。
-                  // 视频不能靠双击缩放看，直接盖按钮更符合预期。
-                  final playable = current.isVideo || current.isLive;
+                  // 视频不能靠双击缩放看，直接盖播放按钮；动态照片是照片，
+                  // 中央那个大图标已经去掉（2026-11-27：点击入口只留左上角）。
+                  final zoomable = !current.isVideo;
                   return GestureDetector(
-                    onDoubleTap: playable ? null : () => setState(() => _zoomed = !_zoomed),
+                    onDoubleTap: zoomable ? () => setState(() => _zoomed = !_zoomed) : null,
                     child: Center(
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          zoomed && !playable
+                          zoomed && zoomable
                               ? InteractiveViewer(
                                   minScale: 1,
                                   maxScale: 5,
                                   child: image,
                                 )
                               : image,
-                          if (playable)
+                          // 动态照片：左上角一个图标按钮，点一下就地播那段视频
+                          if (current.isLive)
+                            Positioned(
+                              left: 12,
+                              top: 12,
+                              child: Material(
+                                color: Colors.black45,
+                                borderRadius: BorderRadius.circular(27),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(27),
+                                  onTap: () => _playLive(current),
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 11,
+                                    ),
+                                    child: Icon(
+                                      Icons.motion_photos_on,
+                                      size: 24,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (current.isVideo)
                             Material(
                               color: Colors.transparent,
                               child: InkWell(
@@ -580,8 +730,8 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                                     color: Colors.black45,
                                     shape: BoxShape.circle,
                                   ),
-                                  child: Icon(
-                                    current.isVideo ? Icons.play_arrow : Icons.motion_photos_on,
+                                  child: const Icon(
+                                    Icons.play_arrow,
                                     color: Colors.white,
                                     size: 38,
                                   ),
@@ -635,6 +785,22 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                   ),
                 ),
               ),
+              // 动态照片就地播放层：首帧就绪才盖上来（之前是黑屏等加载），
+              // 尺寸跟照片一样铺满可视区（之前是 16:9 小窗，很割裂）
+              if (_liveVisible && _liveReady && _liveCtl != null)
+                Positioned.fill(
+                  child: GestureDetector(
+                    onTap: () => unawaited(_stopLive()),
+                    child: ColoredBox(
+                      color: Colors.black,
+                      child: Video(
+                        controller: _liveCtl!,
+                        controls: NoVideoControls,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -664,23 +830,29 @@ class _ArrowButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return IgnorePointer(
       ignoring: !enabled,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 64,
-          alignment: Alignment.center,
-          color: Colors.transparent,
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 150),
-            opacity: enabled ? 0.7 : 0,
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: const BoxDecoration(
-                color: Colors.black45,
-                shape: BoxShape.circle,
+      // 点击范围必须**只有按钮本身**：以前整条 64px 宽、上下拉满的边缘都能点，
+      // 手机上左上角的动态照片图标正好落在这条带子里，点它变成了「上一张」
+      // （2026-11-27 反馈）。这里居中放一个 44×44 的点击区，其余区域透传。
+      child: Center(
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            color: Colors.transparent,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 150),
+              opacity: enabled ? 0.7 : 0,
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: const BoxDecoration(
+                  color: Colors.black45,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: Colors.white, size: 24),
               ),
-              child: Icon(icon, color: Colors.white, size: 24),
             ),
           ),
         ),
