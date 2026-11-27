@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import '../../shell/app_widgets.dart';
 import 'package:nas_core/nas_core.dart';
 import 'package:nas_ui/nas_ui.dart';
 
+import '../../core/display_labels.dart';
 import '../../core/photo_upload.dart';
 import '../../core/session.dart';
+import '../../core/task_poll.dart';
 import 'folder_picker.dart';
 
 /// 相册来源：一个用户一个相册库，但**可以有多个来源目录**。
@@ -23,6 +27,9 @@ class PhotoSourcePage extends StatefulWidget {
 class _PhotoSourcePageState extends State<PhotoSourcePage> {
   bool _loading = true;
   bool _busy = false;
+  /// 扫描任务进行中。与 [_busy] 分开：扫描几分钟起，不能把上传 / 删除
+  /// 一起锁死，只需要挡住「再点一次扫描」。
+  bool _scanning = false;
   String? _error;
   List<PhotoLibraryItem> _sources = const [];
 
@@ -58,22 +65,43 @@ class _PhotoSourcePageState extends State<PhotoSourcePage> {
   }
 
   Future<void> _scan({String? libraryId}) async {
-    if (_busy) return;
-    setState(() => _busy = true);
+    if (_scanning) return;
+    setState(() => _scanning = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      // 用户主动点重扫 = 重建：忽略 size/mtime，重读 EXIF（修正坏拍摄时间）
-      final res = await ApiSession.instance.client.photoScan(
-        body: PhotoScanBody(libraryId: libraryId, force: true),
+      // 必须走异步任务（/photo/scan/task）：全库扫描几分钟起，同步接口
+      // 必然撞传输层的 30s 超时 —— 用户只看到「超时」，服务端其实还在跑，
+      // 于是再点一次（2026-11-27 反馈：点「全部扫描」只有超时、没进度）。
+      //
+      // 不带 force：这个按钮的语义是「扫出新增 / 变更的照片」。已索引且
+      // size/mtime 没变的文件直接跳过；全量重读 EXIF 属于重建索引，
+      // 不该由日常扫描承担（那正是它以前慢到超时的原因）。
+      final queued = await ApiSession.instance.client.photoScanTask(
+        body: PhotoScanBody(libraryId: libraryId),
       );
-      NasSnack.showOn(messenger, 
-            '${tr('common.scanAll')}: +${res.added} / ${res.skipped}',
-          );
+      if (!mounted) return;
+      NasSnack.showOn(messenger, tr('photo.scanQueued'));
+
+      final task = await waitTask(queued.taskId);
+      if (!mounted) return;
+      if (task == null) {
+        NasSnack.showOn(messenger, tr('photo.scanTimeout'));
+        return;
+      }
+      if ('${task['state']}' != 'done') {
+        NasSnack.showOn(
+          messenger,
+          errorMessageOf(task['error'] ?? task['state']),
+        );
+        return;
+      }
       await _load();
+      if (!mounted) return;
+      NasSnack.showOn(messenger, tr('photo.scanFinished'));
     } catch (e) {
-      NasSnack.showOn(messenger, e.toString());
+      NasSnack.showOn(messenger, tr('common.scanFailed', {'error': '$e'}));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _scanning = false);
     }
   }
 
@@ -96,7 +124,8 @@ class _PhotoSourcePageState extends State<PhotoSourcePage> {
         tr(created.shared ? 'photo.source.sharedAdded' : 'photo.source.added'),
       );
       await _load();
-      if (!created.shared) await _scan(libraryId: created.id);
+      // 不 await：新库首次扫描可能要几分钟，别把「添加来源」卡在这里
+      if (!created.shared) unawaited(_scan(libraryId: created.id));
     } catch (e) {
       if (!mounted) return;
       final text = e.toString();
@@ -318,8 +347,14 @@ class _PhotoSourcePageState extends State<PhotoSourcePage> {
                 label: Text(tr('photo.upload.button')),
               ),
               TextButton.icon(
-                onPressed: _busy ? null : () => _scan(),
-                icon: const Icon(Icons.sync, size: 18),
+                onPressed: _busy || _scanning ? null : () => _scan(),
+                icon: _scanning
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync, size: 18),
                 label: Text(tr('common.scanAll')),
               ),
             ],
@@ -405,7 +440,7 @@ class _PhotoSourcePageState extends State<PhotoSourcePage> {
                         NasRefreshButton(
                           size: 18,
                           tooltip: tr('photo.source.refresh'),
-                          onPressed: _busy
+                          onPressed: _busy || _scanning
                               ? null
                               : () => _scan(libraryId: item.id),
                         ),

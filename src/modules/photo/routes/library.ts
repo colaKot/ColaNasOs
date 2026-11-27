@@ -60,6 +60,7 @@ export async function runPhotoScan(k: KernelApi, body: PhotoScanInput, uid: stri
     pruned: 0,
   };
   for (const lib of libs) {
+    const started = Date.now();
     const r = await scanLibrary(k.db, lib, body.limit, undefined, {
       prune: body.prune === true,
       force: body.force === true,
@@ -70,6 +71,16 @@ export async function runPhotoScan(k: KernelApi, body: PhotoScanInput, uid: stri
     total.skipped += r.skipped;
     total.missing += r.missing;
     total.pruned += r.pruned;
+    // 手动 / 任务扫描不走 library-watch，没人替它发 `scan.done`；不发的话
+    // 时间轴还停在旧列表上，用户看到的就是「点了扫描但没变化」（2026-11-27）。
+    k.events.emit('scan.done', {
+      domain: 'photo',
+      libraryId: lib.id,
+      scope: 'full',
+      ms: Date.now() - started,
+      result: r,
+      at: Date.now(),
+    });
   }
   k.log.info(total, 'photo.scan');
   // 扫描会新增记录（真实库一次重扫就多了 1138 条），新行的 content_md5 是 NULL。
