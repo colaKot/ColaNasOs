@@ -122,19 +122,30 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
   final Set<int> _original = <int>{};
   bool _zoomed = false;
 
-  /// 动态照片的「就地播放」：覆盖在照片上播那段视频，播完自动回到照片，
-  /// 不再跳到独立的播放页（2026-11-27 用户要求）。
-  Player? _livePlayer;
-  VideoController? _liveCtl;
-  StreamSubscription<bool>? _liveSub;
-  StreamSubscription<int?>? _liveSizeSub;
-  StreamSubscription<Duration>? _livePosSub;
-  Timer? _liveReadyTimer;
-  String? _liveId;
-  Future<void>? _liveOpening;
-  /// 首帧已解码才把播放层盖上来 —— 没就绪时用户看到的是照片，不是黑屏。
-  bool _liveReady = false;
-  bool _liveVisible = false;
+  /// 查看器里的「就地播放器」：动态照片那段小视频和普通视频共用同一套。
+  ///
+  /// 普通视频以前点一下就往独立播放页 push，播完还得返回一次 —— 体验上很割裂。
+  /// 现在视频和动态照片一样，就在**当前这张的画框里**播，播完自动回到封面；
+  /// 需要倍速 / 播放列表 / 媒体信息时再点「全屏」进播放页。
+  Player? _inlinePlayer;
+  VideoController? _inlineCtl;
+  StreamSubscription<bool>? _inlinePlaySub;
+  StreamSubscription<bool>? _inlineDoneSub;
+  StreamSubscription<int?>? _inlineSizeSub;
+  StreamSubscription<Duration>? _inlinePosSub;
+  StreamSubscription<Duration>? _inlineDurSub;
+  Timer? _inlineReadyTimer;
+  String? _inlineId;
+  Future<void>? _inlineOpening;
+  /// 首帧已解码才把画面交出去（没就绪时先转圈，别给一秒黑屏）
+  bool _inlineReady = false;
+  bool _inlineVisible = false;
+
+  /// 当前就地播的是普通视频（要有进度条 / 暂停）；动态照片只是一小段，不要控件
+  bool _inlineIsVideo = false;
+  bool _inlinePlaying = false;
+  Duration _inlinePos = Duration.zero;
+  Duration _inlineDur = Duration.zero;
 
   MediaUrls get _media => MediaUrls(ApiSession.instance.baseUrl);
 
@@ -150,19 +161,21 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
     _controller = PageController(initialPage: _index);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _precacheNeighbors();
-      // 当前就是动态照片：后台先把视频打开，点播放几乎零等待
+      // 当前这张要能就地播（动态照片 / 视频）：后台先把流打开，点播放几乎零等待
       final first = _items[_index];
-      if (first.isLive) unawaited(_ensureLive(first));
+      if (first.isLive || first.isVideo) unawaited(_ensureInline(first));
     });
   }
 
   @override
   void dispose() {
-    _liveSub?.cancel();
-    _liveSizeSub?.cancel();
-    _livePosSub?.cancel();
-    _liveReadyTimer?.cancel();
-    _livePlayer?.dispose();
+    _inlinePlaySub?.cancel();
+    _inlineDoneSub?.cancel();
+    _inlineSizeSub?.cancel();
+    _inlinePosSub?.cancel();
+    _inlineDurSub?.cancel();
+    _inlineReadyTimer?.cancel();
+    _inlinePlayer?.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -172,13 +185,13 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
 
   String _originalUrl(ViewerPhoto item) => _media.file(item.path);
 
-  /// 视频：跳独立播放页（有倍速 / 播放列表 / 媒体信息）。
+  /// 全屏播放页（倍速 / 音量 / 播放列表 / 媒体信息）。
   ///
-  /// 动态照片**不走这里** —— 以前它也走这条路，还顺手把「同批次视频」当播放
-  /// 列表传进去，结果 `initialIndex=0` 让播放器从头播了别的视频，用户看到
-  /// 「播的不是我点开的那张」（2026-11-27）。现在动态照片就地播，见 [_playLive]。
-  void _play(ViewerPhoto item) {
+  /// 只是「更多能力」的入口，不再是看视频的必经之路 —— 默认路径是就地播
+  /// （[_playInline]），播完自动回封面，不用退出一次。
+  void _playFullscreen(ViewerPhoto item) {
     if (!item.isVideo) return;
+    unawaited(_stopInline());
     final url = _media.file(item.path);
     // 播放列表：同批次的视频（图片跳过）。混合库里左右翻到视频时，
     // 播放器里就能直接上下切，不用退出来再点下一张。
@@ -210,94 +223,130 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
     );
   }
 
-  /// 动态照片：点左上角图标就在当前页面播，播完自动回到照片。
-  Future<void> _playLive(ViewerPhoto item) async {
-    await _ensureLive(item);
+  /// 当前项要播的流：动态照片走 `/photo/live/{id}`，普通视频走原文件。
+  String _inlineUrl(ViewerPhoto item) =>
+      item.isLive ? _media.livePhoto(item.id) : _media.file(item.path);
+
+  /// 就地播放：视频 / 动态照片都在当前画框里播，播完自动回到封面。
+  Future<void> _playInline(ViewerPhoto item) async {
+    await _ensureInline(item);
     if (!mounted) return;
-    final player = _livePlayer;
-    if (player == null || _liveId != item.id) {
-      setState(() => _liveVisible = false);
+    final player = _inlinePlayer;
+    if (player == null || _inlineId != item.id) {
+      setState(() => _inlineVisible = false);
       return;
     }
-    setState(() => _liveVisible = true);
+    setState(() {
+      _inlineVisible = true;
+      _inlineIsVideo = item.isVideo;
+    });
     await player.play();
   }
 
-  /// 预加载 / 复用：切到动态照片那一页就把视频在后台打开（不播）。
+  /// 预加载 / 复用：切到这一页就把流在后台打开（不播）。
   ///
-  /// 这样点播放时几乎没有等待；没就绪时 `_liveReady` 还是 false，
-  /// 播放层不显示，用户看到的一直是那张照片（不是黑屏）。
-  Future<void> _ensureLive(ViewerPhoto item) {
-    if (_livePlayer != null && _liveId == item.id) {
-      return _liveOpening ?? Future<void>.value();
+  /// 这样点播放时几乎没有等待；没就绪时画面先转圈，
+  /// 不会出现「点了没反应」或者整块黑屏。
+  Future<void> _ensureInline(ViewerPhoto item) {
+    if (_inlinePlayer != null && _inlineId == item.id) {
+      return _inlineOpening ?? Future<void>.value();
     }
-    // 同步摘掉上一张的 player：以前 `unawaited(_stopLive())` 的清理落在
+    // 同步摘掉上一个 player：以前 `unawaited(_stopLive())` 的清理落在
     // microtask 里，会把刚建好的新 player 字段又清空，于是「点第二张还是播
     // 第一张 / 干脆不播」（2026-11-27 反馈）。
-    _detachLive();
+    _detachInline();
     final player = Player();
     final ctl = VideoController(player);
-    _livePlayer = player;
-    _liveCtl = ctl;
-    _liveId = item.id;
-    _liveReady = false;
-    _liveSub = player.stream.completed.listen((done) {
-      if (done) unawaited(_stopLive());
+    _inlinePlayer = player;
+    _inlineCtl = ctl;
+    _inlineId = item.id;
+    _inlineReady = false;
+    _inlineDoneSub = player.stream.completed.listen((done) {
+      // 播完就退回封面：用户不用再按一次返回（视频播完停在黑屏最割裂）
+      if (done) unawaited(_stopInline());
+    });
+    _inlinePlaySub = player.stream.playing.listen((v) {
+      if (!mounted) return;
+      setState(() => _inlinePlaying = v);
+    });
+    _inlineDurSub = player.stream.duration.listen((d) {
+      if (!mounted) return;
+      setState(() => _inlineDur = d);
     });
     // 首帧信号：不同平台/解码器给的不一样，宽度、播放位置任一先到就算就绪
-    _liveSizeSub = player.stream.width.listen((w) {
-      if ((w ?? 0) > 0) _markLiveReady();
+    _inlineSizeSub = player.stream.width.listen((w) {
+      if ((w ?? 0) > 0) _markInlineReady();
     });
-    _livePosSub = player.stream.position.listen((p) {
-      if (p > Duration.zero) _markLiveReady();
+    _inlinePosSub = player.stream.position.listen((p) {
+      if (!mounted) return;
+      if (p > Duration.zero) _markInlineReady();
+      if (_inlineVisible) setState(() => _inlinePos = p);
     });
     // 兜底：某些平台两个信号都不发，2.5 秒后照样把画面交出去
-    _liveReadyTimer = Timer(const Duration(milliseconds: 2500), _markLiveReady);
-    _liveOpening = player
+    _inlineReadyTimer = Timer(const Duration(milliseconds: 2500), _markInlineReady);
+    _inlineOpening = player
         .open(
           Media(
-            _media.livePhoto(item.id),
+            _inlineUrl(item),
             httpHeaders: ApiSession.instance.authHeaders,
           ),
           play: false,
         )
         .catchError((Object _) {
-          unawaited(_stopLive());
+          unawaited(_stopInline());
         });
-    return _liveOpening!;
+    return _inlineOpening!;
   }
 
-  void _markLiveReady() {
-    if (!mounted || _liveReady) return;
-    _liveReadyTimer?.cancel();
-    setState(() => _liveReady = true);
+  void _markInlineReady() {
+    if (!mounted || _inlineReady) return;
+    _inlineReadyTimer?.cancel();
+    setState(() => _inlineReady = true);
   }
 
   /// 同步摘掉播放器：字段立刻失效，销毁延后到下一帧（避免 Texture 还在用）。
-  void _detachLive() {
-    final player = _livePlayer;
-    _liveSub?.cancel();
-    _liveSizeSub?.cancel();
-    _livePosSub?.cancel();
-    _liveReadyTimer?.cancel();
-    _liveSub = null;
-    _liveSizeSub = null;
-    _livePosSub = null;
-    _liveReadyTimer = null;
-    _liveOpening = null;
-    _livePlayer = null;
-    _liveCtl = null;
-    _liveId = null;
-    _liveReady = false;
-    _liveVisible = false;
+  void _detachInline() {
+    final player = _inlinePlayer;
+    _inlinePlaySub?.cancel();
+    _inlineDoneSub?.cancel();
+    _inlineSizeSub?.cancel();
+    _inlinePosSub?.cancel();
+    _inlineDurSub?.cancel();
+    _inlineReadyTimer?.cancel();
+    _inlinePlaySub = null;
+    _inlineDoneSub = null;
+    _inlineSizeSub = null;
+    _inlinePosSub = null;
+    _inlineDurSub = null;
+    _inlineReadyTimer = null;
+    _inlineOpening = null;
+    _inlinePlayer = null;
+    _inlineCtl = null;
+    _inlineId = null;
+    _inlineReady = false;
+    _inlineVisible = false;
+    _inlinePlaying = false;
+    _inlinePos = Duration.zero;
+    _inlineDur = Duration.zero;
     if (player != null) {
       Future<void>.delayed(const Duration(milliseconds: 100), () => player.dispose());
     }
   }
 
-  Future<void> _stopLive() async {
-    _detachLive();
+  Future<void> _stopInline() async {
+    _detachInline();
     if (mounted) setState(() {});
+  }
+
+  /// 视频：点画面暂停/继续（动态照片点一下就收）
+  Future<void> _toggleInline() async {
+    final player = _inlinePlayer;
+    if (player == null) return;
+    if (player.state.playing) {
+      await player.pause();
+    } else {
+      await player.play();
+    }
   }
 
   void _precacheNeighbors() {
@@ -553,12 +602,12 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
           ],
         ),
         actions: [
-          // 动态照片的入口在左上角那个图标上，这里只留视频的
+          // 视频：点画面就就地播；这里的按钮是「进播放页」（倍速 / 播放列表）
           if (item.isVideo)
             IconButton(
-              tooltip: tr('photo.media.playVideo'),
+              tooltip: tr('player.fullscreen'),
               icon: const Icon(Icons.play_circle_outline),
-              onPressed: () => _play(item),
+              onPressed: () => _playFullscreen(item),
             ),
           IconButton(
             tooltip: tr('photo.info.title'),
@@ -635,16 +684,16 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                 controller: _controller,
                 itemCount: _items.length,
                 onPageChanged: (i) {
-                  // 翻页就停掉上一张的动态播放，别让视频盖在新照片上；
-                  // 新一页若是动态照片，顺便后台预加载
-                  if (_livePlayer != null) unawaited(_stopLive());
+                  // 翻页就停掉上一张的就地播放，别让视频盖在新照片上；
+                  // 新一页若是视频 / 动态照片，顺便后台预加载
+                  if (_inlinePlayer != null) unawaited(_stopInline());
                   setState(() {
                     _index = i;
                     _zoomed = false;
                   });
                   _precacheNeighbors();
                   final next = _items[i];
-                  if (next.isLive) unawaited(_ensureLive(next));
+                  if (next.isLive || next.isVideo) unawaited(_ensureInline(next));
                 },
                 itemBuilder: (context, i) {
                   final current = _items[i];
@@ -702,7 +751,7 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                                 borderRadius: BorderRadius.circular(27),
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(27),
-                                  onTap: () => _playLive(current),
+                                  onTap: () => unawaited(_playInline(current)),
                                   child: const Padding(
                                     padding: EdgeInsets.symmetric(
                                       horizontal: 14,
@@ -722,7 +771,7 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                               color: Colors.transparent,
                               child: InkWell(
                                 customBorder: const CircleBorder(),
-                                onTap: () => _play(current),
+                                onTap: () => unawaited(_playInline(current)),
                                 child: Container(
                                   width: 72,
                                   height: 72,
@@ -774,7 +823,8 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                       item.path,
                       if (item.width != null && item.height != null)
                         '${item.width}×${item.height}',
-                      if (item.isVideo && formatDurationMs(item.durationMs ?? 0).isNotEmpty)
+                      // 时长未知（探针没跑通）就别写一个假的 0:00
+                      if (item.isVideo && (item.durationMs ?? 0) > 0)
                         formatDurationMs(item.durationMs ?? 0),
                       if (item.isLive) tr('photo.media.live'),
                       _formatTime(item.takenAt),
@@ -785,24 +835,133 @@ class _PhotoViewerPageState extends State<PhotoViewerPage> {
                   ),
                 ),
               ),
-              // 动态照片就地播放层：首帧就绪才盖上来（之前是黑屏等加载），
-              // 尺寸跟照片一样铺满可视区（之前是 16:9 小窗，很割裂）
-              if (_liveVisible && _liveReady && _liveCtl != null)
+              // 就地播放层：视频 / 动态照片都盖在这张的画框里，播完自动收起。
+              // 尺寸铺满可视区（不再是小窗），和封面同一块区域，切进切出不跳动。
+              if (_inlineVisible && _inlineCtl != null)
                 Positioned.fill(
-                  child: GestureDetector(
-                    onTap: () => unawaited(_stopLive()),
-                    child: ColoredBox(
-                      color: Colors.black,
-                      child: Video(
-                        controller: _liveCtl!,
-                        controls: NoVideoControls,
-                        fit: BoxFit.contain,
-                      ),
+                  child: ColoredBox(
+                    color: Colors.black,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        GestureDetector(
+                          // 视频：点画面暂停/继续；动态照片：点一下收回到封面
+                          onTap: _inlineIsVideo
+                              ? () => unawaited(_toggleInline())
+                              : () => unawaited(_stopInline()),
+                          child: Video(
+                            controller: _inlineCtl!,
+                            controls: NoVideoControls,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                        if (!_inlineReady)
+                          const Center(
+                            child: SizedBox(
+                              width: 30,
+                              height: 30,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        if (_inlineIsVideo && _inlineReady && !_inlinePlaying)
+                          Center(
+                            child: Container(
+                              width: 64,
+                              height: 64,
+                              decoration: const BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                iconSize: 34,
+                                color: Colors.white,
+                                icon: const Icon(Icons.play_arrow),
+                                onPressed: () => unawaited(_toggleInline()),
+                              ),
+                            ),
+                          ),
+                        if (_inlineIsVideo)
+                          Positioned(left: 0, right: 0, bottom: 0, child: _inlineBar(item)),
+                      ],
                     ),
                   ),
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  /// 就地播放的底部控件条：暂停 / 进度 / 时间 / 全屏 / 收起。
+  ///
+  /// 只给普通视频用 —— 动态照片是一两秒的快照，弹一排控件反而更割裂。
+  Widget _inlineBar(ViewerPhoto item) {
+    final total = _inlineDur.inMilliseconds;
+    final value = total <= 0
+        ? 0.0
+        : (_inlinePos.inMilliseconds / total).clamp(0.0, 1.0).toDouble();
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Colors.black87, Colors.transparent],
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(4, 28, 4, 4),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            IconButton(
+              color: Colors.white,
+              iconSize: 28,
+              icon: Icon(_inlinePlaying ? Icons.pause : Icons.play_arrow),
+              onPressed: () => unawaited(_toggleInline()),
+            ),
+            Text(
+              formatDurationMs(_inlinePos.inMilliseconds),
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 2,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                ),
+                child: Slider(
+                  value: value,
+                  activeColor: Colors.white,
+                  inactiveColor: Colors.white24,
+                  onChanged: total <= 0
+                      ? null
+                      : (v) {
+                          final target = Duration(milliseconds: (v * total).round());
+                          // ignore: discarded_futures
+                          _inlinePlayer?.seek(target);
+                        },
+                ),
+              ),
+            ),
+            Text(
+              total > 0 ? formatDurationMs(total) : '--:--',
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+            IconButton(
+              tooltip: tr('player.fullscreen'),
+              color: Colors.white,
+              icon: const Icon(Icons.fullscreen),
+              onPressed: () => _playFullscreen(item),
+            ),
+            IconButton(
+              tooltip: tr('common.close'),
+              color: Colors.white,
+              icon: const Icon(Icons.close),
+              onPressed: () => unawaited(_stopInline()),
+            ),
+          ],
         ),
       ),
     );

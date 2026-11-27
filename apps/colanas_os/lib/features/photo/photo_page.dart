@@ -1911,12 +1911,12 @@ class _PhotoTile extends StatelessWidget {
                   ),
                 ),
               ),
-            // 视频：中央播放标 + 右下角时长
+            // 视频：中央播放标 + 左下角时长（时长未知就不显示，别写 0:00）
             if (isVideoItem(item)) ...[
               const Center(
                 child: Icon(Icons.play_circle_fill, size: 34, color: Colors.white70),
               ),
-              if (formatDurationMs(item.durationMs ?? 0).isNotEmpty)
+              if ((item.durationMs ?? 0) > 0)
                 Positioned(
                   // 日期占右下角了，时长挪到左下角，两者不再叠在一起
                   left: 4,

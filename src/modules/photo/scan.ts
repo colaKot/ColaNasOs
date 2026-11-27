@@ -40,6 +40,9 @@ interface ExistingRow {
   taken_at: number;
   media_ver: number;
   live_kind: string | null;
+  media_kind: string | null;
+  duration_ms: number | null;
+  width: number | null;
 }
 
 export interface ScanResult {
@@ -117,7 +120,8 @@ export async function scanLibrary(
 
   const existing = new Map<string, ExistingRow>();
   const rows = await sql<ExistingRow>`
-    select rel_path, size, mtime, taken_at, media_ver, live_kind from photo_items where library_id = ${lib.id}
+    select rel_path, size, mtime, taken_at, media_ver, live_kind, media_kind, duration_ms, width
+      from photo_items where library_id = ${lib.id}
   `.execute(db);
   for (const r of rows.rows) existing.set(r.rel_path, r);
 
@@ -221,7 +225,14 @@ export async function scanLibrary(
     const prevPlausible = !!prev && prev.taken_at > 86400 && prev.taken_at < nowSec + 2 * 86400;
     // media_ver 落后的行必须重读：老数据里 live_kind 空既可能是「真不是动态照片」，
     // 也可能是「当年没认」，只有重读文件头才能补上。
-    const prevFresh = !!prev && prev.media_ver >= MEDIA_VER;
+    //
+    // 视频再加一条：ffprobe 那一次可能因为超时 / 磁盘忙 / 二进制没就绪而失败，
+    // 只留下空的宽高和时长。这种行若按「已是新版」跳过，库里就永远显示 0 秒
+    // （2026-11-27 反馈）—— 所以探测结果还是空就再探，探通一次即自愈。
+    const probeMissing =
+      prev?.media_kind === 'video' &&
+      (prev.duration_ms == null || prev.duration_ms <= 0 || prev.width == null);
+    const prevFresh = !!prev && prev.media_ver >= MEDIA_VER && !probeMissing;
     const pairedNow = pairCache.get(abs) ?? null;
     // 补传的实况视频：主图一个字节都没变（size/mtime 相同），但同一目录这次
     // 多出了同名视频 —— 不重读的话 live_kind 永远补不上，客户端也就永远没有
