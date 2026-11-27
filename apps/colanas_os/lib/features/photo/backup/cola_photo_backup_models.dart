@@ -48,7 +48,6 @@ class BackupTask {
     this.sourceNames = const <String>[],
     this.targetDir = '',
     this.dirStyle = BackupDirStyle.byYear,
-    this.uploadLivePhotoVideo = false,
     this.onlyPhotos = false,
     this.renameByDate = false,
     this.useCellular = false,
@@ -66,8 +65,7 @@ class BackupTask {
   final String targetDir;
   final BackupDirStyle dirStyle;
 
-  /// 苹果实况 / 鸿蒙动态照片的视频分量是否单独上传。
-  final bool uploadLivePhotoVideo;
+  /// 动态照片的视频分量**总是**一起上传（开关已移除，见 2026-11-27 反馈）。
   final bool onlyPhotos;
   final bool renameByDate;
   final bool useCellular;
@@ -83,7 +81,6 @@ class BackupTask {
     List<String>? sourceNames,
     String? targetDir,
     BackupDirStyle? dirStyle,
-    bool? uploadLivePhotoVideo,
     bool? onlyPhotos,
     bool? renameByDate,
     bool? useCellular,
@@ -97,7 +94,6 @@ class BackupTask {
         sourceNames: sourceNames ?? this.sourceNames,
         targetDir: targetDir ?? this.targetDir,
         dirStyle: dirStyle ?? this.dirStyle,
-        uploadLivePhotoVideo: uploadLivePhotoVideo ?? this.uploadLivePhotoVideo,
         onlyPhotos: onlyPhotos ?? this.onlyPhotos,
         renameByDate: renameByDate ?? this.renameByDate,
         useCellular: useCellular ?? this.useCellular,
@@ -112,7 +108,6 @@ class BackupTask {
         'sourceNames': sourceNames,
         'targetDir': targetDir,
         'dirStyle': dirStyle.key,
-        'uploadLivePhotoVideo': uploadLivePhotoVideo,
         'onlyPhotos': onlyPhotos,
         'renameByDate': renameByDate,
         'useCellular': useCellular,
@@ -127,7 +122,6 @@ class BackupTask {
         sourceNames: _strings(json['sourceNames']),
         targetDir: json['targetDir'] as String? ?? '',
         dirStyle: BackupDirStyleX.fromKey(json['dirStyle'] as String?),
-        uploadLivePhotoVideo: json['uploadLivePhotoVideo'] as bool? ?? false,
         onlyPhotos: json['onlyPhotos'] as bool? ?? false,
         renameByDate: json['renameByDate'] as bool? ?? false,
         useCellular: json['useCellular'] as bool? ?? false,
@@ -251,16 +245,29 @@ class BackupFileRecord {
 
 /// 一轮备份的实时计数。UI 直接读这些字段，Controller 每次变化都 notifyListeners()。
 ///
-/// 进度口径（2026-11-07 修）：扫描结束时把 `runTotal` 一次定死，
-/// `done` 只增不减，进度条 = done / runTotal，单调递增。
-/// 不能拿「已完成字节 / 已加入的字节」当分母，每跑完一批就 100%，
-/// 下一批又把分母撑大，进度条来回跳；退出页面再进来 rt.reset() 又全清零。
+/// 进度口径（2026-11-27 改）：
+///   - 分母 = 相册里的**全部资产数**（扫描结束时定死，`totalAssets`）；
+///   - 分子 = **上次已备份数 + 本轮完成数**（`baseDone + done`），只增不减；
+///   - 扫描还没数完时分母给 0，界面显示「正在统计相册…」而不是 0/N。
+///
+/// 之前的分子只算本轮，于是每轮都从 0 开始，看起来像「又从头备份一遍」。
+/// 也不能拿「已完成字节 / 已加入字节」当分母：每跑完一批就 100%，下一批
+/// 又把分母撑大，进度条来回跳。
 class BackupRuntime {
   BackupPhase phase = BackupPhase.off;
   bool running = false;
   bool paused = false;
   int checked = 0;
   int alreadyBackedUp = 0;
+  /// 相册里的全部资产数（含已备份的）。本轮扫描时统计，0 = 还没数完。
+  int totalAssets = 0;
+  /// 扫描是否已经数完。没数完时进度按「不确定」显示，避免用户看到
+  /// 一个 0/逐渐变大 的分数，误以为又从零开始备份。
+  bool assetsCounted = false;
+  /// 本轮开始前已经备份过的数量：进度分子的起点。
+  ///
+  /// 以前分子只算本轮，每轮都从 0 开始，用户看到的就是「又从头备份一遍」。
+  int baseDone = 0;
   int runTotal = 0;
   int omitted = 0;
   int uploaded = 0;
@@ -271,13 +278,20 @@ class BackupRuntime {
   String currentFile = '';
   String error = '';
 
-  /// 本轮已处理的条目数。每个 entry 恰好贡献一次：上传成功 / 服务端已有 /
-  /// 失败 / 原文件取不到，四种结果都记一笔，分母才对得上。
+  /// 每个 entry 恰好贡献一次：上传成功 / 服务端已有 / 失败 / 原文件取不到，
+  /// 四种结果都记一笔，分母才对得上。
   int get done => uploaded + skipped + failed + omitted;
 
+  /// 展示用的分子：**上次备份数 + 本轮完成数**，只增不减。
+  int get shownDone => baseDone + done;
+
+  /// 展示用的分母：相册全部资产数；还没统计出来时退回本轮待办数。
+  int get shownTotal =>
+      assetsCounted ? (totalAssets > 0 ? totalAssets : runTotal) : 0;
+
   double? get progress {
-    if (runTotal <= 0) return null;
-    return (done / runTotal).clamp(0.0, 1.0).toDouble();
+    if (shownTotal <= 0) return null;
+    return (shownDone / shownTotal).clamp(0.0, 1.0).toDouble();
   }
 
   void reset() {
@@ -286,6 +300,9 @@ class BackupRuntime {
     paused = false;
     checked = 0;
     alreadyBackedUp = 0;
+    totalAssets = 0;
+    assetsCounted = false;
+    baseDone = 0;
     runTotal = 0;
     omitted = 0;
     uploaded = 0;

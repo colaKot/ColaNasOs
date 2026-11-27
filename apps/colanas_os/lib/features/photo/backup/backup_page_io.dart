@@ -223,10 +223,13 @@ class _PhotoBackupPageState extends State<PhotoBackupPage> {
     final String title;
     switch (phase) {
       case BackupPhase.running:
-        title = tr('photo.backup.statusRunning', <String, Object>{
-          'done': '${rt.done}',
-          'total': '${rt.runTotal}',
-        });
+        // 还在枚举资产时不露分数：否则会看到 0/N 一路涨，像重新备份
+        title = rt.assetsCounted
+            ? tr('photo.backup.statusRunning', <String, Object>{
+                'done': '${rt.shownDone}',
+                'total': '${rt.shownTotal}',
+              })
+            : tr('photo.backup.counting');
       case BackupPhase.done:
         title = tr('photo.backup.statusDone', {'count': '${rt.uploaded}'});
       case BackupPhase.paused:
@@ -372,12 +375,6 @@ class _PhotoBackupPageState extends State<PhotoBackupPage> {
     return _sectionCard(
       children: [
         sw(
-          title: tr('photo.backup.uploadLiveVideo'),
-          hint: tr('photo.backup.uploadLiveVideoHint'),
-          value: task.uploadLivePhotoVideo,
-          onChanged: (v) => _c.setUploadLivePhotoVideo(v),
-        ),
-        sw(
           title: tr('photo.backup.onlyPhotos'),
           hint: tr('photo.backup.onlyPhotosHint'),
           value: task.onlyPhotos,
@@ -429,18 +426,19 @@ class _PhotoBackupPageState extends State<PhotoBackupPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 分母是扫描结束时一次定死的 runTotal，分子只增不减。
-              // 若按「已完成字节 / 已加入字节」算，每批结束就 100%，
-              // 下一批又撑大分母，进度条来回跳。
+              // 分母是「相册全部资产数」，分子从「上次已备份」起步；
+              // 两个值都在扫描结束那一刻定死，之后只增不减。
               if (active) ...[
                 LinearProgressIndicator(value: rt.progress, minHeight: 6),
                 const SizedBox(height: NasTokens.spaceSm),
               ],
               Text(
-                tr('photo.backup.progressCount', <String, Object>{
-                  'done': '${rt.done}',
-                  'total': '${rt.runTotal}',
-                }),
+                rt.assetsCounted
+                    ? tr('photo.backup.progressCount', <String, Object>{
+                        'done': '${rt.shownDone}',
+                        'total': '${rt.shownTotal}',
+                      })
+                    : tr('photo.backup.counting'),
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: 2),

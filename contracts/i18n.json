@@ -1446,6 +1446,7 @@
     "photo.backup.pickSource": {},
     "photo.backup.pickSourceHint": {},
     "photo.backup.pickTitle": {},
+    "photo.backup.counting": {},
     "photo.backup.progressCount": {
       "done": {},
       "total": {}

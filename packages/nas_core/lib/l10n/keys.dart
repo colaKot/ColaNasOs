@@ -1135,6 +1135,7 @@ class I18nKeys {
   static const photoBackupPickSource = 'photo.backup.pickSource';
   static const photoBackupPickSourceHint = 'photo.backup.pickSourceHint';
   static const photoBackupPickTitle = 'photo.backup.pickTitle';
+  static const photoBackupCounting = 'photo.backup.counting';
   static const photoBackupProgressCount = 'photo.backup.progressCount';
   static const photoBackupRenameByDate = 'photo.backup.renameByDate';
   static const photoBackupRenameByDateHint = 'photo.backup.renameByDateHint';
@@ -3282,4 +3283,4 @@ class I18nKeys {
 }
 
 /// 契约键总数（生成时确定），供完整性自检使用。
-const int i18nKeyCount = 3230;
+const int i18nKeyCount = 3231;

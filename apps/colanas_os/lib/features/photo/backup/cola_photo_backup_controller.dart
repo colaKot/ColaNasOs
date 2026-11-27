@@ -308,8 +308,8 @@ class PhotoBackupController extends ChangeNotifier {
         enabled: task?.enabled ?? false,
         running: _running,
         waitingWifi: rt.paused,
-        done: rt.done,
-        total: rt.runTotal,
+        done: rt.shownDone,
+        total: rt.shownTotal,
         uploaded: rt.uploaded,
         skipped: rt.skipped,
         failed: rt.failed,
@@ -417,12 +417,6 @@ class PhotoBackupController extends ChangeNotifier {
     final t = task;
     if (t == null || _running) return;
     await _save(t.copyWith(dirStyle: style));
-  }
-
-  Future<void> setUploadLivePhotoVideo(bool v) async {
-    final t = task;
-    if (t == null || _running) return;
-    await _save(t.copyWith(uploadLivePhotoVideo: v));
   }
 
   Future<void> setOnlyPhotos(bool v) async {
@@ -587,6 +581,9 @@ class PhotoBackupController extends ChangeNotifier {
       final entries = await _scanAlbums(t);
       // 分母在这一刻定死，之后只增分子 —— 进度条不会再「跑满又倒退」。
       rt.runTotal = entries.length;
+      // 不从头开始：分子= 上次已备份 + 本轮新完成（2026-11-27 反馈）。
+      rt.baseDone = rt.alreadyBackedUp;
+      rt.assetsCounted = true;
       notifyListeners();
       for (var i = 0; i < entries.length; i += _batchSize) {
         if (_cancelled) break;
@@ -680,6 +677,12 @@ class PhotoBackupController extends ChangeNotifier {
 
     final out = <_Entry>[];
     final seen = <String>{};
+    // 动态照片固定连视频一起备份（开关已删，2026-11-27）。Android 必须自己
+    // 找配对视频：photo_manager 的 `originFileWithSubtype` 只对 iOS 生效，
+    // 拿到的还是主图 JPEG，会被 _looksLikeImage 当假视频丢掉。
+    final videoByStem = !kIsWeb && Platform.isAndroid
+        ? await _androidVideoIndex()
+        : const <String, pm.AssetEntity>{};
     for (final path in selected) {
       for (var page = 0; !_cancelled; page += 1) {
         final list = await path.getAssetListPaged(page: page, size: _pageSize);
@@ -693,9 +696,10 @@ class PhotoBackupController extends ChangeNotifier {
           final id = asset.id;
           if (!seen.add(id)) continue;
           rt.checked += 1;
+          // 分母口径：相册里**全部**资产（含早就备份过的），不是「本轮待办」。
+          rt.totalAssets += 1;
           final liveId = '$id#live';
-          final liveWanted = t.uploadLivePhotoVideo &&
-              asset.type == pm.AssetType.image;
+          final liveWanted = asset.type == pm.AssetType.image;
           final imageDone = !_rescanAll && handled.contains(id);
           final liveDone = !liveWanted || handled.contains(liveId);
           if (imageDone && liveDone) {
@@ -719,11 +723,16 @@ class PhotoBackupController extends ChangeNotifier {
             ));
           }
           if (liveWanted && !liveDone) {
+            // Android：同目录同名视频（荣耀 / 华为 / 小米的双文件形态）；
+            // 配对不到就交给 iOS 那套 subtype，Android 会因取到图片而自然跳过。
+            final paired = videoByStem[_stemOf(name)];
             out.add(_Entry(
               id: liveId,
-              asset: asset,
-              displayName: _pairedVideoName(name),
+              asset: paired ?? asset,
+              displayName: paired?.title ?? _pairedVideoName(name),
               albumName: path.name,
+              // 必须跟主图同一个 createMs：「按日期重命名」时两者才会得到
+              // 相同主文件名（只差扩展名），服务端才能重新配对。
               createMs: createMs,
               isLiveVideo: true,
             ));
@@ -896,8 +905,12 @@ class PhotoBackupController extends ChangeNotifier {
 
   Future<_Materialized?> _materialize(_Entry e) async {
     try {
+      // Android 的 live 条目已经是配对到的视频 asset，取原文件即可；
+      // subtype 只在 iOS 有效（见 _androidVideoIndex 注释）。
       final file = e.isLiveVideo
-          ? await e.asset.originFileWithSubtype
+          ? (Platform.isAndroid
+              ? await e.asset.originFile
+              : await e.asset.originFileWithSubtype)
           : await e.asset.originFile;
       if (file == null) return null;
       // Android 上没有动图的普通 JPEG，originFileWithSubtype 会原样返回图片本身，
@@ -1001,7 +1014,45 @@ class PhotoBackupController extends ChangeNotifier {
     return i > 0 ? name.substring(i) : '.jpg';
   }
 
-  /// 实况视频必须与主图同名，服务端才能按 basename 配对。
+  /// Android：按「文件名去扩展名、小写」建视频索引，给实况照片配对用。
+  ///
+  /// 荣耀 / 华为 / 小米的动态照片是「主图 + 同名视频」双文件，
+  /// `originFileWithSubtype` 在 Android 上拿不到那条视频（插件没实现），
+  /// 只能自己把视频相册枚举一遍按名字对上。枚举失败不阻断备份：
+  /// 主图照常传，只是这一张退化成静态图。
+  Future<Map<String, pm.AssetEntity>> _androidVideoIndex() async {
+    final out = <String, pm.AssetEntity>{};
+    try {
+      final paths = await pm.PhotoManager.getAssetPathList(
+        type: pm.RequestType.video,
+        hasAll: true,
+      );
+      if (paths.isEmpty) return out;
+      final all = paths.where((p) => p.isAll).toList();
+      final src = all.isNotEmpty ? all.first : paths.first;
+      for (var page = 0; page < 400; page += 1) {
+        final list = await src.getAssetListPaged(page: page, size: 500);
+        if (list.isEmpty) break;
+        for (final a in list) {
+          final title = a.title;
+          if (title == null || title.isEmpty) continue;
+          out.putIfAbsent(_stemOf(title), () => a);
+          if (out.length >= 20000) return out;
+        }
+      }
+    } catch (_) {
+      // 枚举失败 = 没有配对视频
+    }
+    return out;
+  }
+
+  String _stemOf(String name) {
+    final i = name.lastIndexOf('.');
+    return (i > 0 ? name.substring(0, i) : name).toLowerCase();
+  }
+
+  /// 实况视频必须与主图同名（只差扩展名），服务端才能按 basename 配对。
+  /// iOS 的 subtype 拿不到原始扩展名，统一给 .mov。
   String _pairedVideoName(String imageName) {
     final i = imageName.lastIndexOf('.');
     final stem = i > 0 ? imageName.substring(0, i) : imageName;
