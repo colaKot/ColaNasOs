@@ -302,14 +302,22 @@ class NasSelectionOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final current = bar;
-    if (current == null) return child;
+    // 根节点**必须恒定**是同一个 Stack：以前 `bar == null` 直接 `return child`，
+    // 一进多选就变成 Stack，runtimeType 变了又都没有 key，Flutter 只能把整棵
+    // 子树卸载重建 —— 里面的网格 / 列表跟着重来，滚动位置跳回顶部
+    // （2026-11-27 反馈：相册时间轴右键进入多选，从当前位置弹回第一张）。
+    //
+    // `StackFit.passthrough` + 非 Positioned 的 child：无 bar 时 Stack 的尺寸
+    // 完全等于 child，等价于原来的 `return child`，不会改变任何页面的布局。
     return Stack(
+      fit: StackFit.passthrough,
       children: [
-        Positioned.fill(child: child),
-        Align(
-          alignment: Alignment.bottomRight,
-          child: Padding(padding: margin, child: current),
-        ),
+        child,
+        if (current != null)
+          Align(
+            alignment: Alignment.bottomRight,
+            child: Padding(padding: margin, child: current),
+          ),
       ],
     );
   }
