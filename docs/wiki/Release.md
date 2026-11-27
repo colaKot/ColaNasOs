@@ -4,10 +4,10 @@
 
 ## 版本号
 
-语义化 `MAJOR.MINOR.PATCH`，**每轮打包/发版把补丁位 +1**（例如 1.5.6 → 1.5.7）。当前公开版 **v1.5.0**，主干 **1.5.7**（Android buildCode 78）。
+语义化 `MAJOR.MINOR.PATCH`，**每轮打包/发版把补丁位 +1**（例如 1.6.1 → 1.7.0）。当前公开版 **v1.7.0**（Android buildCode 92）。
 
 ```bash
-node tool/version.js --set=1.5.7   # 等价 npm run version:sync -- --set=1.5.7
+node tool/version.js --set=1.7.0   # 等价 npm run version:sync -- --set=1.7.0
 npm run sbom                        # ⚠️ 改完版本号必须跑，否则 sbom.check 会红
 npm run version:check
 ```
@@ -35,7 +35,8 @@ ColaNasOs-Client-<ver>-Setup.exe           桌面客户端安装版
 ColaNasOs-Client-<ver>-windows-x64.zip     桌面客户端便携包
 ColaNasOs-Client-<ver>-android-arm64.apk   手机 / 平板
 ColaNasOs-Client-<ver>-android-arm64-tv.apk 电视 / 盒子
-ColaNasOs-Photo-<ver>-android-arm64.apk    相册独立端（待正式发版）
+ColaNasOs-Photo-<ver>-android-arm64.apk    相册独立端（安卓）
+ColaNasOs-Photo-<ver>-harmony-arm64.hap    相册独立端（鸿蒙）
 ```
 
 ⚠️ 三份安卓包 `apk` / `apk_tv` / `apk_photo` 身份不同、**绝不互通**：客户端检查更新分别带 `build=phone|tv|photo`，服务端只回对应身份的包（本地调试可用 `COLANAS_LOCAL_PHOTO_APK_DIR` 指向相册包）。它们**体积可能一样**但 AOT 快照/applicationId 不同 —— 校验要用 `libapp.so` 的哈希与 manifest，不是看大小。
@@ -54,7 +55,7 @@ node tool/check/installer.js    # 产物结构：asar / web / contracts / 文件
 | --- | --- | --- |
 | 服务端 | asar 内 `dist/electron/main.js`、`dist/kernel/index.js` | `app.getVersion()` 版本、`trayTip` |
 | PC 客户端 | `data/app.so`（exe 只有 ~196 KB 启动壳，Dart AOT 在这） | `github.com/colaKot/ColaNasOs`、`player.stall/` |
-| APK | `lib/arm64-v8a/libapp.so` | 版本串（如 `1.5.7`）、页面地址；相册包再核对 applicationId `com.colanas.photo` |
+| APK | `lib/arm64-v8a/libapp.so` | 版本串（如 `1.7.0`）、页面地址；相册包再核对 applicationId `com.colanas.photo` |
 | Web | `build/web/main.dart.js` | ASCII 指纹 |
 
 ⚠️ **中文串在 dart2js / AOT 产物里会被转义**，用中文 grep 验证恒为 0 —— 必须用 ASCII 指纹。
@@ -77,11 +78,11 @@ cd dist_installer && sha256sum *<ver>*
 ## GitHub Release
 
 ```bash
-git tag -a v1.5.7 -m "ColaNasOs 1.5.7"
-git push origin main v1.5.7
+git tag -a v1.7.0 -m "ColaNasOs 1.7.0"
+git push gitcode main v1.7.0   # 默认只推 GitCode；推 GitHub 需用户明确要求
 ```
 
-release 说明按主题分组（新增 / 播放器 / 影视相册音乐 / 运维 / 升级说明 / 校验），资产一次性挂当前产物（相册端正式发版后为 6 个）。更新发布：`client_android.assets` 含 `apk` / `apk_tv` / `apk_photo` 三份包（`tool/release/release.js` 已加映射），`release/update.json` 当前尚未挂 `apk_photo`，发相册包时要补上。
+release 说明按主题分组（新增 / 播放器 / 影视相册音乐 / 运维 / 升级说明 / 校验），资产一次性挂当前产物（7 个，含相册端安卓 / 鸿蒙）。更新发布：`client_android.assets` 含 `apk` / `apk_tv` / `apk_photo` 三份包（`tool/release/release.js` 已加映射），`release/update.json` 已挂 `apk_photo`。
 
 > 上传大文件（服务端 550 MB）建议后台执行，别在前台等超时。
 
@@ -91,7 +92,7 @@ release 说明按主题分组（新增 / 播放器 / 影视相册音乐 / 运维
 
 发版时要同步的内容：
 
-1. 版本号（页面里所有 `1.5.x`）；
+1. 版本号（页面里所有 `1.7.x`）；
 2. 下载表的**文件名、体积、链接**（新增产物就加一行）；
 3. SHA256 清单；
 4. 「已知限制 / 需要自行构建」这类描述（例如 Android TV 从「需自行构建」改成「已发布」）。

@@ -2,7 +2,7 @@
 
 > 在一台 Windows 主机上自托管的 NAS OS：相册、影视、音乐、文件、下载、同步与本地 AI 收进同一个服务端；桌面 / 手机 / Web / Android TV / Apple TV / 鸿蒙共用一套 Flutter 界面。数据只留在本机。
 
-**当前版本：[v1.5.0](https://github.com/colaKot/ColaNasOs/releases/tag/v1.5.0)**（[GitCode 国内镜像](https://gitcode.com/cocacola23/ColaNasOs/releases/tag/v1.5.0)）　·　[官网](https://cola.gexuan.net/)　·　[源码](https://github.com/colaKot/ColaNasOs)　·　许可 GPL-3.0
+**当前版本：[v1.7.0](https://github.com/colaKot/ColaNasOs/releases/tag/v1.7.0)**（[GitCode 国内镜像](https://gitcode.com/cocacola23/ColaNasOs/releases/tag/v1.7.0)）　·　[官网](https://cola.gexuan.net/)　·　[源码](https://github.com/colaKot/ColaNasOs)　·　许可 GPL-3.0
 
 ---
 
@@ -16,22 +16,21 @@ ColaNasOs 把「一台常开的 Windows 电脑」变成一台 NAS：
 
 ## 快速开始
 
-1. 下载并安装 **服务端**（`ColaNasOs-Server-1.5.0-Setup.exe`）→ 装完右下角只有一个托盘图标。
+1. 下载并安装 **服务端**（`ColaNasOs-Server-1.7.0-Setup.exe`）→ 装完右下角只有一个托盘图标。
 2. 在「设置」里登记**相册库 / 影视库 / 音乐库**（都是「文件」根下的子目录）。
 3. 想在别的电脑上用，装 **客户端**（Windows / Android / Android TV 各一个包），填服务端地址登录。
 
 → 详见 [快速开始](Getting-Started)
 
-## 最新变化（v1.5.0 之后的主干，尚未发版）
+## 最新变化（v1.7.0）
 
-当前公开安装包是 v1.5.0，主干版本已推进到 1.5.7（Android buildCode 78）。下面这些已在主干，需等下一个安装包才会在设备上生效：
-
-- **相册独立端（新增端）**：从同一份 `apps/colanas_os` 用 `build-photo.bat` 构建，入口 `lib/main_photo.dart`，登录后**直进相册时间轴**（没有回工作台的房子）。applicationId `com.colanas.photo`，可与主客户端**并存安装**；「更多」页新增「关于」，可查版本 / 更新 / 当前 NAS 地址 / 项目主页。更新通道已加 `apk_photo` 身份（`build=photo` 只回相册包），**正式安装包待发版**。
+- **动态照片完整支持**：识别荣耀这类「JPEG 尾部直接跟 MP4、不写 XMP MotionPhoto」的格式；查看器点一下图标即**就地播放**那段视频，播完自动回到照片，不再跳独立播放页；视频后台预加载、首帧就绪才盖上来，画面按照片同尺寸铺满。
+- **相册体验**：「扫描全部」改成后台任务，扫完自动刷新时间轴，不再 30 秒超时；时间轴日期移到右下角、动态照片标志改为左下角仅图标；查看器左右箭头点击范围收进按钮内，进入多选不再跳回列表顶部。
+- **视频时长修复**：扫描对时长 / 宽高缺失的视频强制重探，历史脏数据自动补齐；时长未知时不再显示 `0:00`。
+- **手机备份**：进度改累计口径（从上次已备份数往上加），统计资产阶段显示「正在统计相册…」；动态照片默认连视频一起备份。
+- **相册独立端**：从同一份 `apps/colanas_os` 用 `build-photo.bat` 构建，入口 `lib/main_photo.dart`，登录后**直进相册时间轴**；applicationId `com.colanas.photo`，可与主客户端**并存安装**。安卓 / 鸿蒙安装包已随 v1.7.0 发版，更新通道 `apk_photo` 身份（`build=photo` 只回相册包）。
 - **安卓三包身份**：`apk`（主客户端）/ `apk_tv`（电视）/ `apk_photo`（相册独立端）三者身份不同、绝不互通；检查更新时客户端分别带 `build=phone|tv|photo`。
-- **电视播放器交互**：遥控器**长按左右键 420 ms 后加速拖动进度**（4×→180× 指数增长，松开才真正 seek）；支持**上下滑跟手切集**（原生层同步平移、相邻抽帧占位、无转场，修复换集黑屏）；混合库播放页改成「列表 + 删除当前影片」，去掉快退 / 快进。
-- **杜比视界兼容**：DV 电视必须**关隧道**并钉住 DV 视频轨 + AAC 音轨（MTK 电视开隧道只拿到 HEVC 解码器、输出会退化成 HDR10 基础层）；`.m3u8` 按 HLS 声明，解码诊断落日志。
-- **影视 / 图片混合库**：同名图片作视频封面（`foo.mp4` + `foo.jpg` 只显示一条），图片点开全屏查看器、上下滑翻页；服务端回传封面宽高按真实比例排版；删除视频时**同名图片一并删除**（避免孤儿图片）；修复 SMB / UNC 路径斜杠折叠导致的 403 与文件夹丢失；日本榜单入口移到「发现」页。
-- **音乐 / 播客**：Android 改用**自建 MediaStyle 前台服务**，通知栏 / 锁屏显示媒体卡与上一首 / 播放暂停 / 下一首（规避国产 ROM 不显示 audio_service 通知）；起停与 TTS 分块加淡入淡出，消除切源 / 段间爆音。
+- **其它**：博客进度字段兼容 1.5.x 服务端。
 
 ## Wiki 导航
 

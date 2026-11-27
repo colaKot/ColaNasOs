@@ -19,15 +19,15 @@
 - **可验证的交付**：错误码登记、i18n 缺键检查、权限域清单、迁移顺序对账、行为用例覆盖矩阵，全部纳入本地门禁。
 - **电视端按遥控器设计**：TV 独立入口用顶部 tab + D-pad 逐行焦点；返回键先回当前栏目 tab、在 tab 上连按两次才退出；播放器把操作栏与快进/暂停拆成独立键位。大屏按视口等比缩放，4K 电视也能一屏看到多行海报。
 
-## 最新变化（v1.5.0 正式版）
+## 最新变化（v1.7.0 正式版）
 
-当前公开安装包是 **v1.5.0**，1.5.0 之后的第一个正式版（v1.4.1 是预览版，附件已下线）。1.5.0 及更早版本的完整更新记录见官网 v1.5.0 说明。本版要点：
+当前公开安装包是 **v1.7.0**，更早版本的完整更新记录见官网与 Release 页面。本版要点：
 
-- **影视媒体浏览重做**：改成「库 → 来源 → 目录」三层，封面卡与影视列表同一套，可切 2:3 封面 / 横版缩略图；单影片文件夹直接铺影片、点一下即播，右键删文件 / 文件夹（进回收站），面包屑可点。
-- **混合库同名图片作封面**：`foo.mp4` + `foo.jpg` 只出一条，视频留下、同名图片当封面；图片点开进全屏查看器，上下滑动在同目录图片 / 视频之间翻页；日本库影片可右键设为封面，番号封面下载补 `Referer` 修 403。
-- **播客与音频**：新闻期次显示播报稿并按播放进度高亮；音乐 / 播客改用自建 MediaStyle 前台服务，修国产 ROM 通知不显示；起停加淡入淡出消除切源爆音，TTS 分块首尾 12ms 淡入淡出消除段间咔哒声。
-- **电视端播放与交互**：杜比视界一律关隧道，合并播放钉住 DV 轨 + AAC 轨；遥控器长按左右键加速拖动进度（短按仍是 ±10s / +30s）；主界面左右键只在同一行内移动，修掉「左键变成向上跳」。
-- **自动更新**：服务端默认走增量更新，只下变化文件、校验失败自动降级全量；正式版清单 `update.json` 与预发布清单 `update-pre.json` 互不干扰，1.4.1 附件清理后预发布清单已同步指向 1.5.0。
+- **动态照片完整支持**：识别荣耀这类「JPEG 尾部直接跟 MP4、不写 XMP MotionPhoto」的格式；查看器点一下图标即就地播放那段视频，播完自动回到照片，不再跳独立播放页；视频后台预加载，首帧就绪才盖上来，画面按照片同尺寸铺满。
+- **相册体验**：「扫描全部」改成后台任务，扫完自动刷新时间轴，不再 30 秒超时；时间轴日期移到右下角，动态照片标志改为左下角仅图标；查看器左右箭头点击范围收进按钮内，进入多选不再跳回列表顶部。
+- **视频时长修复**：扫描对时长 / 宽高缺失的视频强制重探，历史脏数据自动补齐；时长未知时不再显示 `0:00`。
+- **手机备份**：进度改累计口径（从上次已备份数往上加），统计资产阶段显示「正在统计相册…」；动态照片默认连视频一起备份。
+- **其它**：博客进度字段兼容 1.5.x 服务端；相册独立端（安卓 / 鸿蒙）正式发版。
 
 ## 功能模块
 
@@ -78,15 +78,16 @@ Wiki 的源文件在 [`docs/wiki/`](docs/wiki)，改完跑 `node tool/sync-wiki.
 
 ## 快速开始
 
-下载安装（当前版本 **1.5.0**）：国内直连 [GitCode Releases](https://gitcode.com/cocacola23/ColaNasOs/releases/latest)，GitHub 备份 [Releases](https://github.com/colaKot/ColaNasOs/releases/latest)。
+下载安装（当前版本 **1.7.0**）：国内直连 [GitCode Releases](https://gitcode.com/cocacola23/ColaNasOs/releases/tag/v1.7.0)，GitHub 备份 [Releases](https://github.com/colaKot/ColaNasOs/releases/tag/v1.7.0)。官网下载页：<https://cola.gexuan.net/#download>。
 
 | 平台 | 产物 | 说明 |
 | --- | --- | --- |
-| Windows 服务端 | `ColaNasOs-Server-1.5.0-Setup.exe` | 安装版：托盘 + 内核 + Web 界面 + 本地 AI 运行时 |
-| Windows 客户端 | `ColaNasOs-Client-1.5.0-Setup.exe` | Flutter 桌面客户端，装完连本机或局域网里的服务端 |
-| Windows 客户端便携 | `ColaNasOs-Client-1.5.0-windows-x64.zip` | 解压即用，适合不想安装的场景 |
-| Android 客户端 | `ColaNasOs-Client-1.5.0-android-arm64.apk` | arm64 手机 / 平板 |
-| Android TV 客户端 | `ColaNasOs-Client-1.5.0-android-arm64-tv.apk` | arm64 电视 / 盒子，遥控器操作（与手机包不是同一个包） |
+| Windows 服务端 | `ColaNasOs-Server-1.7.0-Setup.exe` | 安装版：托盘 + 内核 + Web 界面 + 本地 AI 运行时 |
+| Windows 客户端 | `ColaNasOs-Client-1.7.0-Setup.exe` | Flutter 桌面客户端，装完连本机或局域网里的服务端 |
+| Windows 客户端便携 | `ColaNasOs-Client-1.7.0-windows-x64.zip` | 解压即用，适合不想安装的场景 |
+| Android 客户端 | `ColaNasOs-Client-1.7.0-android-arm64.apk` | arm64 手机 / 平板 |
+| Android TV 客户端 | `ColaNasOs-Client-1.7.0-android-arm64-tv.apk` | arm64 电视 / 盒子，遥控器操作（与手机包不是同一个包） |
+| 相册独立端（安卓 / 鸿蒙） | `ColaNasOs-Photo-1.7.0-android-arm64.apk` / `ColaNasOs-Photo-1.7.0-harmony-arm64.hap` | 登录后直进相册时间轴，与主客户端并存安装 |
 
 服务端与客户端分开打包：服务端负责内核与 Web 界面，客户端是 Flutter 桌面端，可以只装在另一台电脑上连局域网服务端。
 

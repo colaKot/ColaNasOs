@@ -8,13 +8,14 @@ ColaNasOs **服务端和客户端是分开的两个包**：
 
 | 包 | 装在哪 | 干什么 |
 | --- | --- | --- |
-| `ColaNasOs-Server-1.5.0-Setup.exe` | 那台**常开的 Windows 主机**（NAS 本体） | 内核 + Web 界面 + 转码 + 本地 AI 运行时 + 内置下载器 |
-| `ColaNasOs-Client-1.5.0-Setup.exe` | 你**平时用的电脑** | 桌面客户端，连服务端用 |
-| `ColaNasOs-Client-1.5.0-windows-x64.zip` | 同上 | 便携版，解压即用，不想装就选它 |
-| `ColaNasOs-Client-1.5.0-android-arm64.apk` | 手机 / 平板 | 连服务端用 |
-| `ColaNasOs-Client-1.5.0-android-arm64-tv.apk` | 电视 / 盒子 | **和手机包不是同一个包**，遥控器操作 |
+| `ColaNasOs-Server-1.7.0-Setup.exe` | 那台**常开的 Windows 主机**（NAS 本体） | 内核 + Web 界面 + 转码 + 本地 AI 运行时 + 内置下载器 |
+| `ColaNasOs-Client-1.7.0-Setup.exe` | 你**平时用的电脑** | 桌面客户端，连服务端用 |
+| `ColaNasOs-Client-1.7.0-windows-x64.zip` | 同上 | 便携版，解压即用，不想装就选它 |
+| `ColaNasOs-Client-1.7.0-android-arm64.apk` | 手机 / 平板 | 连服务端用 |
+| `ColaNasOs-Client-1.7.0-android-arm64-tv.apk` | 电视 / 盒子 | **和手机包不是同一个包**，遥控器操作 |
+| `ColaNasOs-Photo-1.7.0-android-arm64.apk` / `ColaNasOs-Photo-1.7.0-harmony-arm64.hap` | 手机 / 平板 / 鸿蒙设备 | 相册独立端，登录后直进时间轴，可与主客户端并存 |
 
-> 另有**相册独立端** `ColaNasOs-Photo-<ver>-android-arm64.apk`（applicationId `com.colanas.photo`，可与主客户端并存、单独更新）：构建与更新通道已就绪，**正式安装包待发版**，目前官网下载表还没有这一项。
+> 相册独立端（applicationId `com.colanas.photo`）已随 v1.7.0 发版，官网下载表可获取安卓与鸿蒙安装包。
 
 Web 端不用单独下载：服务端内置了 Web 界面，浏览器打开 `http://服务端地址:7788` 就能用。
 
@@ -22,7 +23,7 @@ Web 端不用单独下载：服务端内置了 Web 界面，浏览器打开 `htt
 
 ## 1. 装服务端
 
-1. 下载 `ColaNasOs-Server-1.5.0-Setup.exe`（约 550 MB，含 FFmpeg 与本地 AI 运行时）。
+1. 下载 `ColaNasOs-Server-1.7.0-Setup.exe`（约 551 MB，含 FFmpeg 与本地 AI 运行时）。
 2. 安装。**安装包未做代码签名**，SmartScreen 会提示「未知发布者」——确认文件来自官网或 GitHub Releases、并核对 SHA256 之后，选「更多信息 → 仍要运行」。
 3. 装完**右下角只有一个托盘图标**，没有窗口。托盘右键可以看到版本号、开机自启开关、打开 Web 界面、退出。
 4. 浏览器打开 `http://127.0.0.1:7788`，用首次启动时的管理员账号登录。
@@ -82,7 +83,7 @@ Web 端不用单独下载：服务端内置了 Web 界面，浏览器打开 `htt
 - 播放器画面停住超过 8 秒会自动自救（续转 + 重新定位），再不行就重建会话。
 - 手机 / 平板 / TV 端与桌面端是同一套播放器逻辑。
 - TV 遥控器**长按左右键**会加速拖动进度（松开才真正 seek），**上下滑**跟手切集；DV 电视若画面发灰，去播放器设置关闭隧道模式。
-- 相册想单独用一个 App：装**相册独立端**（登录后直进时间轴，更多页有「关于」可查版本 / 更新 / NAS 地址），它与主客户端可并存；待正式发版后从下载表获取。
+- 相册想单独用一个 App：装**相册独立端**（登录后直进时间轴，更多页有「关于」可查版本 / 更新 / NAS 地址），它与主客户端可并存；安卓 / 鸿蒙安装包在官网下载表获取。
 
 ## 7. 本地 AI（可选）
 
