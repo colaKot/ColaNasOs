@@ -39,6 +39,7 @@ interface ExistingRow {
   mtime: number;
   taken_at: number;
   media_ver: number;
+  live_kind: string | null;
 }
 
 export interface ScanResult {
@@ -116,7 +117,7 @@ export async function scanLibrary(
 
   const existing = new Map<string, ExistingRow>();
   const rows = await sql<ExistingRow>`
-    select rel_path, size, mtime, taken_at, media_ver from photo_items where library_id = ${lib.id}
+    select rel_path, size, mtime, taken_at, media_ver, live_kind from photo_items where library_id = ${lib.id}
   `.execute(db);
   for (const r of rows.rows) existing.set(r.rel_path, r);
 
@@ -221,8 +222,14 @@ export async function scanLibrary(
     // media_ver 落后的行必须重读：老数据里 live_kind 空既可能是「真不是动态照片」，
     // 也可能是「当年没认」，只有重读文件头才能补上。
     const prevFresh = !!prev && prev.media_ver >= MEDIA_VER;
+    const pairedNow = pairCache.get(abs) ?? null;
+    // 补传的实况视频：主图一个字节都没变（size/mtime 相同），但同一目录这次
+    // 多出了同名视频 —— 不重读的话 live_kind 永远补不上，客户端也就永远没有
+    // 那个角标（2026-11-27：备份补传视频后重扫仍显示静态图）。
+    const liveBackfilled = !!pairedNow && !prev?.live_kind;
     if (
       !opts.force &&
+      liveBackfilled === false &&
       prev &&
       prevPlausible &&
       prevFresh &&
@@ -233,7 +240,7 @@ export async function scanLibrary(
       continue;
     }
 
-    const paired = pairCache.get(abs) ?? null;
+    const paired = pairedNow;
     const meta = await readMediaMeta(abs, st.size, paired);
     const nowSecForMeta = Math.floor(Date.now() / 1000);
     const rawTaken = meta.takenAt;

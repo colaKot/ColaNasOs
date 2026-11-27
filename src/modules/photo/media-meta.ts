@@ -18,7 +18,7 @@ const withProbeSlot = createLimiter(4);
  * 改动解析口径（新增 live_kind 判定、加扩展名等）就 +1，升级后第一次扫描
  * 会自动把版本落后的行重读一遍。
  */
-export const MEDIA_VER = 2;
+export const MEDIA_VER = 3;
 
 interface ProbeStream {
   codec_type?: string;

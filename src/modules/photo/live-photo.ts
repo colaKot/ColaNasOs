@@ -153,6 +153,46 @@ export function scanFtyp(tail: Buffer, fileSize: number): { offset: number; size
 }
 
 /**
+ * JPEG 主图 EOI 之后紧跟 MP4 —— 荣耀 / 部分国产 ROM 的动态照片形态。
+ *
+ * 这类文件**不写** XMP 的 `MotionPhoto` / `MicroVideo` 声明，`hasLiveHint`
+ * 不会触发尾部扫描，视频就永远认不出来（2026-11-27：荣耀拍的 11 MB 照片，
+ * 前 1.19 MB 是 JPEG、后面 9.9 MB 是 ftyp+moov+mdat，全被当成静态图）。
+ *
+ * 判定只看结构：从主图 SOS 之后找第一个 EOI（熵编码里 0xFF 后面只会跟
+ * 0x00 / RST，不会出现 0xFFD9），EOI 之后最多允许 32 字节对齐填充，
+ * 紧接着必须是合法的 ftyp box（复用 scanFtyp 的结构校验）。
+ */
+export function detectTrailingJpegMp4(buf: Buffer, fileSize: number): EmbeddedVideo | null {
+  if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return null;
+  // 注意不能「从 SOS 往后找第一个 EOI」：荣耀这类文件是**多帧 JPEG**
+  // （实测第一段 EOI 在 886 KB，主图实际结束在 1.19 MB），必须反过来
+  // 以 ftyp 为锚点、向前找最近的 EOI，再看间距是否像厂商扩展段。
+  const eoiMark = Buffer.from([0xff, 0xd9]);
+  let from = 0;
+  while (from < buf.length) {
+    const p = buf.indexOf('ftyp', from, 'latin1');
+    if (p < 0) return null;
+    from = p + 4;
+    const offset = p - 4;
+    if (offset < 4) continue;
+    const boxSize = buf.readUInt32BE(offset);
+    if (!(boxSize >= 16 && boxSize <= 1 << 20)) continue;
+    if (offset + boxSize > buf.length) continue;
+    if (!isPrintableAscii(buf, p + 4, 4)) continue;
+    if (offset + LIVE_MIN_BYTES > fileSize) continue;
+    const eoi = buf.lastIndexOf(eoiMark, offset);
+    if (eoi < 0) continue;
+    // EOI 与 ftyp 之间允许一段厂商扩展（实测荣耀写 181 字节的
+    // `HiHonor_ExtInfo`）。上限 4 KB：再远就不像同一张动态照片了。
+    const gap = offset - (eoi + 2);
+    if (gap < 0 || gap > 4096) continue;
+    return { offset, size: fileSize - offset, mime: 'video/mp4', vendor: 'generic' };
+  }
+  return null;
+}
+
+/**
  * HEIF 容器扩展：mpvd box 存放视频，视频未必在文件末尾，
  * 需要 offset + size 两个值。box 为「4 字节大端 size + 4 字节 type」。
  * 在文件头缓冲区里找 mpvd，读它前面的 size 字段，校验视频净荷 >= 64KB、

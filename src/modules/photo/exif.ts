@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';
-import { detectEmbeddedVideo, hasLiveHint, TAIL_SCAN_BYTES } from './live-photo';
+import { detectEmbeddedVideo, detectTrailingJpegMp4, hasLiveHint, TAIL_SCAN_BYTES } from './live-photo';
 
 /**
  * 最小图片元数据读取（零依赖）：
@@ -466,6 +466,8 @@ export function parseFileNameDate(file: string): number | null {
 export async function readImageMeta(file: string, fileSize?: number): Promise<ImageMeta> {
   let head: Buffer;
   let tail: Buffer | null = null;
+  /** JPEG 主图 EOI 之后的 MP4（荣耀这类不写 XMP 的形态） */
+  let trailing: ReturnType<typeof detectTrailingJpegMp4> = null;
   let size = fileSize ?? 0;
   try {
     const handle = await fs.open(file, 'r');
@@ -484,6 +486,21 @@ export async function readImageMeta(file: string, fileSize?: number): Promise<Im
           tail = tb.subarray(0, rb);
         } else {
           tail = head;
+        }
+      } else {
+        // 荣耀/部分国产 ROM 不写 MotionPhoto 声明，视频直接跟在主图 EOI 后面。
+        // 只对大 JPEG 探测：普通图主体一般 < 3 MB，不值得每张多读 4 MB；
+        // 增量扫描下这只会发生在新增 / 变更的文件上。
+        const e = extensionOf(file);
+        if ((e === 'jpg' || e === 'jpeg') && size > 3 * 1024 * 1024) {
+          const want = Math.min(size, 4 * 1024 * 1024);
+          if (want > head.length) {
+            const jb = Buffer.alloc(want);
+            const { bytesRead: jr } = await handle.read(jb, 0, want, 0);
+            trailing = detectTrailingJpegMp4(jb.subarray(0, jr), size);
+          } else {
+            trailing = detectTrailingJpegMp4(head, size);
+          }
         }
       }
     } finally {
@@ -527,7 +544,8 @@ export async function readImageMeta(file: string, fileSize?: number): Promise<Im
   }
 
   // 动态照片判定委托给统一模块：head + 可选 tail（ftyp 兜底）+ 真实文件大小。
-  const live = detectMotionPhoto(head, size, tail, ext);
+  // trailing 是「JPEG EOI 之后跟 MP4」的预判结果，命中就不再重复扫。
+  const live = detectMotionPhoto(head, size, tail, ext, trailing);
 
   return {
     width: parsed.width ?? null,
@@ -564,8 +582,9 @@ function detectMotionPhoto(
   fileSize: number,
   tail: Buffer | null,
   ext: string,
+  trailing?: ReturnType<typeof detectTrailingJpegMp4>,
 ): { size: number | null; offset: number | null; vendor: string } {
-  const v = detectEmbeddedVideo(head, fileSize, tail, ext);
+  const v = trailing ?? detectEmbeddedVideo(head, fileSize, tail, ext);
   if (!v) return { size: null, offset: null, vendor: '' };
   return { size: v.size, offset: v.offset, vendor: v.vendor };
 }
